@@ -19,6 +19,10 @@ time, each tied to a specific gardening action and a specific math skill.
 - **Math as magic.** Casting a spell (solving a minigame) is how you
   interact with the garden. No separate "quiz mode" bolted on the side.
 - **Isometric pixel-art world.** Explored on foot, tile by tile.
+- **Learning over gating.** Every spell is available from the start — the
+  goal is to encourage learning, not to reward progression with content.
+  NPC teachers explain a spell and train it with partially solved
+  problems (worked examples), but nothing is ever locked behind them.
 
 ## Core loop
 
@@ -48,6 +52,15 @@ Not designed yet beyond the concept above — to be specified one at a time,
 each mapped to one gardening action (plant / tend / harvest / ...) and one
 math skill. Nothing here should be assumed until a minigame is actually
 speced.
+
+What is settled: spells are grouped by mathematical theme, and a spell's
+in-game effect mirrors that theme rather than being an arbitrary skin —
+e.g. a multiplication spell makes copies of an object, because that's
+what multiplication is. All spells are available from the start (see
+"Learning over gating" above); NPC teachers found around the world teach
+and drill a spell's theme, they don't gate access to it. See
+[`WORLD_GENERATION.md`](WORLD_GENERATION.md) for how teachers and spell
+themes map onto specific areas.
 
 ## Current milestone
 
