@@ -16,5 +16,10 @@ new Phaser.Game({
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
+  // >1 so holding a d-pad touch button and tapping the plant button at the
+  // same time both register (default of 1 only tracks a single pointer).
+  input: {
+    activePointers: 3,
+  },
   scene: [BootScene, GameScene],
 });
