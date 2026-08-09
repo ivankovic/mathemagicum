@@ -3,9 +3,18 @@
 
 import Phaser from "phaser";
 import { WorldGrid } from "../world/grid";
-import { type ScreenPoint, TILE_HEIGHT, TILE_WIDTH, gridToScreen, isoDepth } from "../world/iso";
+import {
+  type GridPoint,
+  type ScreenPoint,
+  TILE_HEIGHT,
+  TILE_WIDTH,
+  gridToScreen,
+  isoDepth,
+  screenToGrid,
+} from "../world/iso";
 import { PLAYER_START, STARTER_MAP } from "../world/mapData";
 import { PLANT_COLORS, TERRAIN_COLORS } from "../world/palette";
+import { findPath } from "../world/pathfinding";
 import { PlantType } from "../world/plants";
 
 const MOVE_DURATION_MS = 160;
@@ -50,6 +59,7 @@ export class GameScene extends Phaser.Scene {
 
   private mobileControls = false;
   private touchDirection: DirectionTag | null = null;
+  private path: GridPoint[] = [];
 
   constructor() {
     super("game");
@@ -80,12 +90,23 @@ export class GameScene extends Phaser.Scene {
 
     this.setupInput();
     if (this.mobileControls) this.createTouchControls();
+
+    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer, over: unknown[]) => {
+      if (over.length > 0) return; // a UI button handles its own pointerdown
+      this.handleTileClick(pointer.worldX, pointer.worldY);
+    });
   }
 
   override update(): void {
     if (!this.isMoving) {
       const dir = this.pressedDirection();
-      if (dir) this.tryMove(dir.dCol, dir.dRow);
+      if (dir) {
+        this.path = []; // manual input overrides an in-progress click path
+        this.tryMove(dir.dCol, dir.dRow);
+      } else if (this.path.length > 0) {
+        const next = this.path.shift();
+        if (next) this.tryMove(next.col - this.playerCol, next.row - this.playerRow);
+      }
     }
 
     for (const [index, key] of this.plantKeys.entries()) {
@@ -177,6 +198,20 @@ export class GameScene extends Phaser.Scene {
     this.setMessage(`Planted ${plant}`);
   }
 
+  private handleTileClick(screenX: number, screenY: number): void {
+    const target = this.toGrid(screenX, screenY);
+    if (!this.grid.isPassable(target.col, target.row)) {
+      this.setMessage("Can't walk there");
+      return;
+    }
+    const path = findPath(this.grid, { col: this.playerCol, row: this.playerRow }, target);
+    if (!path) {
+      this.setMessage("Can't walk there");
+      return;
+    }
+    this.path = path;
+  }
+
   private selectNextPlant(): void {
     this.selectedPlantIndex = (this.selectedPlantIndex + 1) % PLANT_TYPES.length;
     this.updateStatusText();
@@ -259,6 +294,10 @@ export class GameScene extends Phaser.Scene {
   private toScreen(col: number, row: number): ScreenPoint {
     const p = gridToScreen(col, row);
     return { x: p.x + this.originX, y: p.y + this.originY };
+  }
+
+  private toGrid(screenX: number, screenY: number): GridPoint {
+    return screenToGrid(screenX - this.originX, screenY - this.originY);
   }
 
   private updateStatusText(): void {
