@@ -4,12 +4,15 @@
 import type { WorldGrid } from "./grid";
 import { Habitat } from "./habitat";
 import { type Rng, pick, randInt } from "./rng";
+import { VILLAGE_SIZE } from "./villageLayout";
 
-// Reserved bounding boxes only — story area *interiors* (steps 7-8 of
-// docs/WORLD_GENERATION.md) are deliberately not built yet, since they
-// depend on story-object content that doesn't exist. Tiles inside a
-// placement stay at the grid's default terrain (passable Grass) so
-// connectivity checks have something real to reach.
+// Reserved bounding boxes for the 4 anchors whose interiors aren't built
+// yet (Harbour, Big City, Observatory, Enchanted Forest — steps 7-8 of
+// docs/WORLD_GENERATION.md). Tiles inside those stay at the grid's default
+// terrain (passable Grass) so connectivity checks have something real to
+// reach. The Village is sized separately (see VILLAGE_SIZE in
+// villageLayout.ts) since its interior *is* built — a fixed 24 doesn't
+// comfortably fit the square, 7 buildings, and gardens.
 const ANCHOR_SIZE = 24;
 const PADDING = 3;
 const MAX_ATTEMPTS = 500;
@@ -194,7 +197,11 @@ export function placeAnchors(grid: WorldGrid, rng: Rng): AnchorPlacements {
   const placed: AreaPlacement[] = [];
   const spec = (id: string): AnchorSpec => ({ id, width: ANCHOR_SIZE, height: ANCHOR_SIZE });
 
-  const village = placeVillage(grid.width, grid.height, spec("village"));
+  const village = placeVillage(grid.width, grid.height, {
+    id: "village",
+    width: VILLAGE_SIZE,
+    height: VILLAGE_SIZE,
+  });
   placed.push(village);
 
   const harbour = placeAgainstBorder(grid, spec("harbour"), Habitat.Coastal, placed, rng);

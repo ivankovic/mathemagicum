@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Phaser from "phaser";
+import type { AreaPlacement } from "../world/anchors";
 import {
   CHUNK_SIZE,
   type ChunkCoord,
@@ -20,10 +21,16 @@ import {
   isoDepth,
   screenToGrid,
 } from "../world/iso";
-import { PLANT_COLORS, TERRAIN_COLORS } from "../world/palette";
+import {
+  DEFAULT_OBJECT_COLOR,
+  OBJECT_COLORS,
+  PLANT_COLORS,
+  TERRAIN_COLORS,
+} from "../world/palette";
 import { findPath } from "../world/pathfinding";
 import { PlantType } from "../world/plants";
-import type { TerrainType } from "../world/terrain";
+import { NIGHT_TINT_COLOR, isDaytime, nightTintAlpha, timeOfDay } from "../world/time";
+import type { VillageNpcSpec } from "../world/villageLayout";
 import { generateWorld } from "../world/worldGenerator";
 
 const WORLD_SIZE = 500;
@@ -34,17 +41,49 @@ const WORLD_SEED = 12345;
 const MOVE_DURATION_MS = 160;
 const PLANT_TYPES = Object.values(PlantType);
 const TOUCH_UI_DEPTH = 2000;
+const NIGHT_TINT_DEPTH = 500;
 const CHUNK_DEPTH = -1000;
 const CHUNK_VIEW_MARGIN = 1;
 // Generous cache so panning back and forth doesn't constantly re-render —
 // well above what's ever simultaneously visible on screen.
 const CHUNK_CACHE_LIMIT = 60;
 
+const NPC_COLOR = 0x8e24aa;
+const NPC_MOVE_DURATION_MS = 500;
+const NPC_STEP_MIN_MS = 1500;
+const NPC_STEP_MAX_MS = 4000;
+// Villagers/teacher/shopkeeper wander near their own building; the postal
+// worker patrols the whole village (see docs/WORLD_GENERATION.md's "Village
+// NPC roles" — only the postal worker's movement covers the full square).
+const LOCAL_WANDER_RADIUS = 5;
+const PATROL_WANDER_RADIUS = 16;
+
 type DirectionTag = "up" | "down" | "left" | "right";
 
 interface Direction {
   dCol: number;
   dRow: number;
+}
+
+const STEP_DIRECTIONS: readonly Direction[] = [
+  { dCol: 0, dRow: -1 },
+  { dCol: 0, dRow: 1 },
+  { dCol: -1, dRow: 0 },
+  { dCol: 1, dRow: 0 },
+];
+
+interface NpcRuntime {
+  id: string;
+  homeCol: number;
+  homeRow: number;
+  wanderCenterCol: number;
+  wanderCenterRow: number;
+  wanderRadius: number;
+  col: number;
+  row: number;
+  sprite: Phaser.GameObjects.Arc;
+  isMoving: boolean;
+  nextStepAt: number;
 }
 
 interface Wasd {
@@ -94,6 +133,9 @@ export class GameScene extends Phaser.Scene {
   private chunkScratch!: Phaser.GameObjects.Graphics;
   private frameCounter = 0;
 
+  private nightOverlay!: Phaser.GameObjects.Rectangle;
+  private npcs: NpcRuntime[] = [];
+
   constructor() {
     super("game");
   }
@@ -122,6 +164,8 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player);
     this.refreshVisibleChunks();
 
+    this.spawnNpcs(world.village.npcs, world.anchors.village);
+
     this.statusText = this.add
       .text(8, 8, "", { fontFamily: "monospace", fontSize: "13px", color: "#ffffff" })
       .setScrollFactor(0)
@@ -131,6 +175,12 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(1000);
     this.updateStatusText();
+
+    this.nightOverlay = this.add
+      .rectangle(0, 0, this.scale.width, this.scale.height, NIGHT_TINT_COLOR, 0)
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(NIGHT_TINT_DEPTH);
 
     this.setupInput();
     if (this.mobileControls) this.createTouchControls();
@@ -144,6 +194,10 @@ export class GameScene extends Phaser.Scene {
   override update(): void {
     this.frameCounter++;
     this.refreshVisibleChunks();
+
+    const hour = timeOfDay(new Date());
+    this.nightOverlay.setFillStyle(NIGHT_TINT_COLOR, nightTintAlpha(hour));
+    this.updateNpcs(isDaytime(hour));
 
     if (!this.isMoving) {
       const dir = this.pressedDirection();
@@ -232,7 +286,11 @@ export class GameScene extends Phaser.Scene {
     for (let row = rowStart; row < rowEnd; row++) {
       for (let col = colStart; col < colEnd; col++) {
         const p = gridToScreen(col, row);
-        this.drawDiamond(this.chunkScratch, p.x - minX, p.y - minY, this.grid.getTerrain(col, row));
+        const object = this.grid.getObjectAt(col, row);
+        const color = object
+          ? (OBJECT_COLORS[object.type] ?? DEFAULT_OBJECT_COLOR)
+          : TERRAIN_COLORS[this.grid.getTerrain(col, row)];
+        this.drawDiamond(this.chunkScratch, p.x - minX, p.y - minY, color);
       }
     }
 
@@ -263,9 +321,9 @@ export class GameScene extends Phaser.Scene {
     graphics: Phaser.GameObjects.Graphics,
     x: number,
     y: number,
-    terrain: TerrainType,
+    color: number,
   ): void {
-    graphics.fillStyle(TERRAIN_COLORS[terrain], 1);
+    graphics.fillStyle(color, 1);
     graphics.beginPath();
     graphics.moveTo(x, y - TILE_HEIGHT / 2);
     graphics.lineTo(x + TILE_WIDTH / 2, y);
@@ -368,6 +426,109 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.path = path;
+  }
+
+  // --- NPCs --------------------------------------------------------------
+  //
+  // Visual/positional only — no dialogue, requests, or shop exist yet (see
+  // docs/WORLD_GENERATION.md's "Village NPC roles"). Every NPC wanders near
+  // its home building by day (the postal worker patrols the whole village
+  // instead) and greedily steps home at night, but nothing here restricts
+  // interacting with them — there's no interaction system at all yet for
+  // that restriction to apply to.
+
+  private spawnNpcs(specs: readonly VillageNpcSpec[], village: AreaPlacement): void {
+    const villageCenter = {
+      col: village.col + Math.floor(village.width / 2),
+      row: village.row + Math.floor(village.height / 2),
+    };
+    this.npcs = specs.map((spec) => {
+      const isPostalWorker = spec.id === "postal-worker";
+      const wanderCenter = isPostalWorker ? villageCenter : spec.home;
+      const screen = this.toScreen(spec.home.col, spec.home.row);
+      const sprite = this.add.circle(screen.x, screen.y, 8, NPC_COLOR).setStrokeStyle(2, 0xffffff);
+      sprite.setDepth(isoDepth(spec.home.col, spec.home.row) + 0.4);
+      return {
+        id: spec.id,
+        homeCol: spec.home.col,
+        homeRow: spec.home.row,
+        wanderCenterCol: wanderCenter.col,
+        wanderCenterRow: wanderCenter.row,
+        wanderRadius: isPostalWorker ? PATROL_WANDER_RADIUS : LOCAL_WANDER_RADIUS,
+        col: spec.home.col,
+        row: spec.home.row,
+        sprite,
+        isMoving: false,
+        nextStepAt: this.time.now + Phaser.Math.Between(NPC_STEP_MIN_MS, NPC_STEP_MAX_MS),
+      };
+    });
+  }
+
+  private updateNpcs(daytime: boolean): void {
+    const now = this.time.now;
+    for (const npc of this.npcs) {
+      if (npc.isMoving || now < npc.nextStepAt) continue;
+      npc.nextStepAt = now + Phaser.Math.Between(NPC_STEP_MIN_MS, NPC_STEP_MAX_MS);
+      if (daytime) this.npcWanderStep(npc);
+      else this.npcRetreatStep(npc);
+    }
+  }
+
+  // A bounded random walk, not a route to a chosen destination — simple,
+  // and "wanders near home" doesn't need anything stronger.
+  private npcWanderStep(npc: NpcRuntime): void {
+    const direction = STEP_DIRECTIONS[Phaser.Math.Between(0, STEP_DIRECTIONS.length - 1)];
+    if (!direction) return;
+    const col = npc.col + direction.dCol;
+    const row = npc.row + direction.dRow;
+    if (!this.grid.isPassable(col, row)) return;
+    const withinRadius =
+      Math.max(Math.abs(col - npc.wanderCenterCol), Math.abs(row - npc.wanderCenterRow)) <=
+      npc.wanderRadius;
+    if (!withinRadius) return;
+    this.moveNpcTo(npc, col, row);
+  }
+
+  // Greedy step toward home, preferring whichever axis is further off —
+  // not a real path, but the village's open square-and-spokes layout means
+  // a straight-ish line home rarely needs to route around anything.
+  private npcRetreatStep(npc: NpcRuntime): void {
+    if (npc.col === npc.homeCol && npc.row === npc.homeRow) return;
+    const dCol = Math.sign(npc.homeCol - npc.col);
+    const dRow = Math.sign(npc.homeRow - npc.row);
+    const attempts: Direction[] = [];
+    if (Math.abs(npc.homeCol - npc.col) >= Math.abs(npc.homeRow - npc.row)) {
+      if (dCol !== 0) attempts.push({ dCol, dRow: 0 });
+      if (dRow !== 0) attempts.push({ dCol: 0, dRow });
+    } else {
+      if (dRow !== 0) attempts.push({ dCol: 0, dRow });
+      if (dCol !== 0) attempts.push({ dCol, dRow: 0 });
+    }
+    for (const attempt of attempts) {
+      const col = npc.col + attempt.dCol;
+      const row = npc.row + attempt.dRow;
+      if (this.grid.isPassable(col, row)) {
+        this.moveNpcTo(npc, col, row);
+        return;
+      }
+    }
+  }
+
+  private moveNpcTo(npc: NpcRuntime, col: number, row: number): void {
+    npc.isMoving = true;
+    npc.col = col;
+    npc.row = row;
+    npc.sprite.setDepth(isoDepth(col, row) + 0.4);
+    const target = this.toScreen(col, row);
+    this.tweens.add({
+      targets: npc.sprite,
+      x: target.x,
+      y: target.y,
+      duration: NPC_MOVE_DURATION_MS,
+      onComplete: () => {
+        npc.isMoving = false;
+      },
+    });
   }
 
   private selectNextPlant(): void {

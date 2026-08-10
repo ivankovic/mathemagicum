@@ -76,7 +76,10 @@ describe("generateWorld seed sweep", () => {
 
       assertBorderImpassable(grid);
 
-      expect(playerStart).toEqual(centerOf(anchors.village));
+      // Stronger invariant than "playerStart is the village box's centre"
+      // (no longer true — the well sits there now): playerStart must
+      // actually be somewhere the player can stand.
+      expect(grid.isPassable(playerStart.col, playerStart.row)).toBe(true);
       const reachable = floodFillReachable(grid, playerStart);
       for (const area of [
         anchors.harbour,

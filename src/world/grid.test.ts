@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { WorldGrid } from "./grid";
 import { Habitat } from "./habitat";
+import type { PlacedObject } from "./objects";
 import { PlantType } from "./plants";
 import { TerrainType } from "./terrain";
 
@@ -126,6 +127,57 @@ describe("WorldGrid.empty", () => {
     expect(grid.height).toBe(500);
     expect(grid.getTerrain(0, 0)).toBe(TerrainType.Grass);
     expect(grid.getTerrain(499, 499)).toBe(TerrainType.Grass);
+  });
+});
+
+describe("WorldGrid placed objects", () => {
+  function building(overrides: Partial<PlacedObject> = {}): PlacedObject {
+    return {
+      id: "school",
+      type: "school",
+      col: 1,
+      row: 1,
+      width: 2,
+      height: 2,
+      blocksMovement: true,
+      ...overrides,
+    };
+  }
+
+  test("a blocking object makes every tile of its footprint impassable", () => {
+    const grid = WorldGrid.empty(5, 5, TerrainType.Grass);
+    grid.placeObject(building());
+    expect(grid.isPassable(1, 1)).toBe(false);
+    expect(grid.isPassable(2, 2)).toBe(false);
+    expect(grid.isPassable(0, 0)).toBe(true); // outside the footprint
+    expect(grid.isPassable(3, 1)).toBe(true);
+  });
+
+  test("a non-blocking object leaves its footprint passable", () => {
+    const grid = WorldGrid.empty(5, 5, TerrainType.Grass);
+    grid.placeObject(building({ blocksMovement: false }));
+    expect(grid.isPassable(1, 1)).toBe(true);
+  });
+
+  test("getObjectAt returns the object covering a tile, or null", () => {
+    const grid = WorldGrid.empty(5, 5, TerrainType.Grass);
+    const well = building({ id: "well", type: "well", col: 3, row: 3, width: 1, height: 1 });
+    grid.placeObject(well);
+    expect(grid.getObjectAt(3, 3)).toEqual(well);
+    expect(grid.getObjectAt(0, 0)).toBe(null);
+    expect(grid.getObjectAt(99, 99)).toBe(null); // out of bounds
+  });
+
+  test("listObjects enumerates every placed object exactly once", () => {
+    const grid = WorldGrid.empty(10, 10, TerrainType.Grass);
+    grid.placeObject(building({ id: "a", col: 0, row: 0 }));
+    grid.placeObject(building({ id: "b", col: 5, row: 5 }));
+    expect(
+      grid
+        .listObjects()
+        .map((o) => o.id)
+        .sort(),
+    ).toEqual(["a", "b"]);
   });
 });
 

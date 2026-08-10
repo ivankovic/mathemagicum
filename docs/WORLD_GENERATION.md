@@ -345,3 +345,217 @@ So the story-object manifest per area now has (at least) three
 archetypes with distinct placement-default profiles: spell teacher
 (unique, easy to find), collectible (many, scattered/hidden), and plain
 decoration/props (no count semantics, purely environmental).
+
+## Starting Village interior — first concrete story area design
+
+Step 7 (story area interiors) has been "deliberately not built yet" up to
+now. This is the first real instance of it, for the Village specifically
+— and it establishes patterns the other four anchors will likely reuse.
+
+### Layout: a ring around a square
+
+- A central open square/plaza, with a **well** at its exact center — a
+  story object, blocks movement, small (1x1 or 2x2) footprint.
+- Buildings arranged in a ring around the square's perimeter, entrances
+  facing inward, roughly evenly spaced around it.
+- Dirt paths connect the square (hub) to each building (spokes) — this is
+  the "layout pre-pass" the Settlement fill strategy already called for,
+  now concretely hub-and-spoke rather than an unspecified path network.
+- Gardens sit on each building's *outward* side (away from the square),
+  so the square stays open and gardens read as back-yards, not
+  front-yards.
+
+### Buildings and their NPCs
+
+Seven buildings, six NPCs (the player's own house has no NPC — it's the
+player's):
+
+| Building | NPC | Garden |
+|---|---|---|
+| Player's house | — | **Big** garden — the player's main farm plot |
+| School | Teacher | none |
+| Villager house 1 | Villager | small garden |
+| Villager house 2 | Villager | small garden |
+| Villager house 3 | Villager | small garden |
+| Post office | Postal worker | none |
+| Village store | Shopkeeper | none |
+
+### A building is two linked story objects, not one
+
+A building (footprint, blocks movement, has an entrance-facing tile) and
+its NPC (usually 1x1, standing just outside the entrance, facing the
+square) are placed together but stay separate story objects — not merged
+into one. The player needs to be able to walk up and talk to the NPC
+independently of the building itself blocking that tile.
+
+### A garden is terrain, not an object
+
+A garden isn't a story object with a footprint — it's a designated
+rectangle of Dirt terrain (pre-tilled, plantable, non-blocking) that the
+layout pre-pass carves directly, the same mechanism as the paths. This is
+the line between "things you interact with" (story objects) and "ground
+you plant in" (terrain) — worth keeping consistent for every future area.
+
+### Village NPC roles
+
+**Teacher** — the spell-teacher pattern already established: explains +
+trains arithmetic via worked examples (per the Village's spot in the
+illustrative theme table), doesn't gate anything.
+
+**Postal worker — patrols, and heralds the wider world.** Two things
+resolved here, one of them structural:
+- They *move* — patrolling the village (naturally the ring-and-spoke path
+  network already laid out) rather than standing still, but only during
+  the day. At night they retreat to their building (the post office),
+  same as every other villager — see "Day-night cycle" below. Every story
+  object so far has been a fixed placement; this is the first one that
+  isn't, so the story-object model needs a real schedule, not just a
+  `behavior: "static" | "patrol"` flag — something like a home building
+  plus a day-behavior and a night-behavior. Not implemented yet, but a
+  design object property, not "content."
+- Talking to them is how the player learns Harbour/Big City/Observatory/
+  Enchanted Forest exist. Since only the Village's position is fixed —
+  the other four are procedurally placed — this dialogue is naturally
+  partly *data-driven off the generated world*, not fully authored text:
+  something like a compass direction/rough distance from Village to each
+  anchor, turned into a hint. Real architectural consequence: whatever
+  eventually implements "content hooks" needs read access to the
+  generated world's anchor placements, not just static per-object text.
+  Whether all four are revealed at once or progressively is undecided.
+
+**Villagers — always have a request available or active.** Superseded:
+not "occasionally" anymore — each villager's request slot is never empty.
+A request lifecycle: **available** (offered, not yet accepted) →
+**active** (accepted, in progress) → completed → immediately becomes
+available again. No random trigger needed at all, which resolves last
+round's open question about what triggers a request. No reward cooldown
+either — see "No manipulative engagement mechanics" (`GAME_DESIGN.md`):
+this is a single-player educational game, not something designed around
+retention mechanics, and each completion still requires genuinely solving
+a minigame, so the "cost" is real engagement, not an artificial timer.
+Villagers do retreat indoors at night (see "Day-night cycle"), but stay
+reachable there — requests can still be offered/turned in at night, same
+as during the day.
+- Requests are naturally spell-themed — a villager's struggling plant is
+  a reason to go cast a gardening spell, giving practice a purpose beyond
+  the player's own farm. Still nothing gated (see "Learning over
+  gating") — just an optional reason to use what's already available.
+- Reward is money + items — **the first real mention of a currency**.
+  Worth a short note in `GAME_DESIGN.md` once this is closer to real, not
+  just here.
+- Loose idea, not decided: if the 3 villagers' gardens each grow a
+  different existing plant type (Carrot/Sunflower/Cactus), their requests
+  naturally vary. Convenient that there are exactly 3 of each right now —
+  probably coincidence, not something to lock in, since more plant types
+  will likely exist eventually.
+
+**Shopkeeper — sells basic seeds and supplies.** Confirms the earlier
+guess. "Supplies" beyond seeds is undefined (tools? fertilizer?). Needs
+the same currency the villagers pay out: shopkeeper and villagers are two
+ends of one small loop — earn money helping villagers, spend it at the
+store on seeds/supplies, which is what lets the player grow what the
+villagers' requests and the teacher's lessons need.
+
+**Player's house** — likely the save/home-base point, and where the
+player's own primary garden lives. No save system exists yet, so this
+isn't designed either.
+
+### Money, as a resource (new, first mention)
+
+Nothing about an economy is designed — no prices, no balance, no earning
+curve. Just noting it now exists as a concept (villager rewards, shop
+purchases) so it doesn't get lost, and flagging that once it's closer to
+real it deserves a short mention in `GAME_DESIGN.md`'s systems list
+alongside Terrain/Plants/Spells, the same way "Learning over gating"
+graduated from a passing mention here into an actual pillar there.
+
+## Day-night cycle
+
+Reflects the player's *actual, real-world* time of day — not a simulated
+in-game clock that ticks at some scaled rate. If it's 3pm for the player,
+it's afternoon in-game; 11pm, it's night. This is a cross-cutting game
+system, not really a world-generation concern, but it's captured here
+because it came up in this conversation and immediately resolves an open
+question from the Village NPC brainstorm above.
+
+**Technical shape**: a pure function of `Date` (local time — using the
+player's system clock as-is is obviously correct here; UTC would feel
+wrong to almost everyone), independent of Phaser, same "Phaser-free
+logic" pattern as the rest of `src/world/`. Deriving time live from the
+system clock rather than simulating and persisting an in-game clock is a
+genuine simplification: no time state to save, no drift to correct for
+after time away from the game.
+
+**Rendering**: a global tint (dark blue at night, warm at dawn/dusk,
+plain at midday) makes far more sense as a screen-space overlay —
+`setScrollFactor(0)`, sits above the chunk layer, updated as time
+changes — than baking time-of-day into chunk textures, which would mean
+re-rendering every active chunk's `RenderTexture` continuously just for
+lighting.
+
+**Correction: does not gate reward money.** Money being effectively
+unlimited if a player enjoys the villager-request loop is explicitly
+fine — see "No manipulative engagement mechanics" in `GAME_DESIGN.md`.
+This is a single-player educational game; nothing here is meant to
+engineer retention the way a live-service game's daily-cooldown economy
+would. Each completion still requires genuinely solving a minigame, so
+the real limiter is the player's own engagement, not an artificial timer.
+
+**What it does gate: NPC presence, not access.** At night, every NPC in
+the village — postal worker, the 3 villagers, the teacher, and the
+shopkeeper alike — retreats indoors to their home building (school and
+store count as "home" for the teacher and shopkeeper the same way a
+house does for a villager). During the day, villagers actively move
+around too, not just the postal worker's village-wide patrol — presumably
+a smaller area local to their house/garden rather than the whole village,
+though the exact range is unspecified. Every NPC needs a home building
+plus a day-behavior and a night-behavior in the story-object model, not
+just the postal worker.
+
+Despite retreating, **every NPC is always reachable** — walking up to
+their building at night still lets the player interact with them, same
+as during the day. Retreat is purely positional/atmospheric (where they
+are, whether they're visibly out and about), never a lock on
+interaction. This is consistent with — really required by — "No
+manipulative engagement mechanics": restricting *access* to certain
+hours would itself be exactly the kind of artificial friction that
+pillar rules out. The day/night cycle affects what the village looks and
+feels like, never what the player can do.
+
+**Thematic aside, not a commitment**: telling time is a natural math
+topic this maps onto unusually well for an educational game, given the
+cycle is already tied to a real clock — worth keeping in mind whenever
+spell themes actually get designed, not a sixth theme being added now.
+
+### Open questions (day-night cycle)
+
+1. **Exact wander range for villagers** — local to their house/garden,
+   presumably, versus the postal worker's village-wide patrol. Tuning,
+   not a fork: the rule (everyone moves by day, retreats by night, always
+   reachable) is settled regardless of exact range.
+2. **Seasons/calendar are out of scope** — real-time games like this
+   often pair a day cycle with a real-calendar season/weather system;
+   nothing said about that here, not assuming it's wanted.
+
+### Open questions
+
+1. **Village's anchor size.** A square plus seven building-and-garden
+   clusters likely doesn't comfortably fit the uniform `ANCHOR_SIZE = 24`
+   every anchor currently uses (src/world/anchors.ts). Anchors probably
+   need per-anchor sizes rather than one shared constant — a real
+   implementation-affecting discovery from this design pass, not just
+   tuning.
+2. **Path shape.** Going with hub-and-spoke (a direct line from the
+   square to each building) as the simplest match for "arranged around
+   the square" — flag if a more organic path network was intended
+   instead.
+3. **NPC behavior model.** Every NPC (not just the postal worker) needs a
+   day-behavior, a night-behavior, and a home building it retreats to —
+   resolved as a rule, not yet as an implementation. See "Day-night
+   cycle" below.
+4. **Content hooks need generated-world data.** At minimum the postal
+   worker's dialogue needs the actual anchor placements (for direction
+   hints) — whatever ends up implementing "content hooks" can't be fully
+   isolated from generation output.
+5. **Tuning only**: ring radius, building spacing, garden sizes, villager
+   wander range.

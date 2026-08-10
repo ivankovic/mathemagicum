@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { Habitat } from "./habitat";
+import type { PlacedObject } from "./objects";
 import { type PlantType, canPlantOn } from "./plants";
 import { TerrainType, isPassable } from "./terrain";
 
@@ -48,6 +49,12 @@ export class WorldGrid {
   // Plants are sparse (most tiles are never planted), so a map of only the
   // planted tiles is far cheaper than a dense array sized to the whole grid.
   private readonly plants = new Map<number, PlantType>();
+  // Static structures (buildings, the village well) placed at generation
+  // time. Sparse for the same reason as plants; a multi-tile object appears
+  // once per occupied tile so lookups by (col, row) stay O(1), plus a flat
+  // list for callers that need to enumerate every object once (rendering).
+  private readonly objectsByTile = new Map<number, PlacedObject>();
+  private readonly objectList: PlacedObject[] = [];
   readonly width: number;
   readonly height: number;
 
@@ -119,7 +126,33 @@ export class WorldGrid {
   }
 
   isPassable(col: number, row: number): boolean {
-    return this.inBounds(col, row) && isPassable(this.getTerrain(col, row));
+    if (!this.inBounds(col, row)) return false;
+    if (!isPassable(this.getTerrain(col, row))) return false;
+    const object = this.objectsByTile.get(this.index(col, row));
+    return !object?.blocksMovement;
+  }
+
+  // Stamps the object onto every tile of its footprint. Callers are
+  // responsible for footprints not overlapping — generation-time layout
+  // code controls its own placement, so there's no runtime conflict to
+  // detect here (unlike plant(), which is called from live gameplay).
+  placeObject(object: PlacedObject): void {
+    this.objectList.push(object);
+    for (let row = object.row; row < object.row + object.height; row++) {
+      for (let col = object.col; col < object.col + object.width; col++) {
+        if (!this.inBounds(col, row)) continue;
+        this.objectsByTile.set(this.index(col, row), object);
+      }
+    }
+  }
+
+  getObjectAt(col: number, row: number): PlacedObject | null {
+    if (!this.inBounds(col, row)) return null;
+    return this.objectsByTile.get(this.index(col, row)) ?? null;
+  }
+
+  listObjects(): readonly PlacedObject[] {
+    return this.objectList;
   }
 
   canPlant(col: number, row: number, plant: PlantType): boolean {

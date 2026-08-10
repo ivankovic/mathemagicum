@@ -23,6 +23,13 @@ time, each tied to a specific gardening action and a specific math skill.
   goal is to encourage learning, not to reward progression with content.
   NPC teachers explain a spell and train it with partially solved
   problems (worked examples), but nothing is ever locked behind them.
+- **No manipulative engagement mechanics.** This is a single-player
+  educational game, not a live-service one — no artificial scarcity, no
+  daily-login hooks, no grind economy engineered to maximize retention.
+  If a player can earn effectively unlimited money by genuinely enjoying
+  the loop of helping villagers (each time still requires actually
+  solving a minigame — the friction is real engagement, not a timer),
+  that's fine. Nothing here is trying to control how often someone plays.
 
 ## Core loop
 
@@ -61,6 +68,24 @@ what multiplication is. All spells are available from the start (see
 and drill a spell's theme, they don't gate access to it. See
 [`WORLD_GENERATION.md`](WORLD_GENERATION.md) for how teachers and spell
 themes map onto specific areas.
+
+### Day-night cycle
+
+Reflects the player's actual real-world time of day (local clock), not a
+simulated in-game clock — no time state to save, nothing to drift. Gates
+NPC presence (every villager retreats indoors at night; the postal
+worker's patrol is day-only) but explicitly *not* money or rewards — see
+"No manipulative engagement mechanics" above. See
+[`WORLD_GENERATION.md`](WORLD_GENERATION.md#day-night-cycle) for the
+fuller brainstorm.
+
+### Economy (embryonic)
+
+Money exists as a concept — villagers reward it (alongside items) for
+help with their plants, the village shopkeeper sells seeds/supplies for
+it — but no prices, balance, or earning curve are designed. First
+mentioned in [`WORLD_GENERATION.md`](WORLD_GENERATION.md) while designing
+the Starting Village's NPCs.
 
 ## Current milestone
 
