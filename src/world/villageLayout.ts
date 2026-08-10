@@ -214,6 +214,7 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
 
   const buildings: PlacedObject[] = [];
   const npcs: VillageNpcSpec[] = [];
+  let playerSpawn: GridPoint | undefined;
 
   for (const spec of BUILDINGS) {
     const buildingCenter = alongDirection(center, spec.direction, RING_RADIUS);
@@ -242,19 +243,21 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
       );
     }
 
-    if (spec.npcId) {
-      const nearEdge = boxHalfExtentAlong(spec.direction, BUILDING_SIZE / 2);
-      const home = alongDirection(
-        center,
-        spec.direction,
-        RING_RADIUS - nearEdge - NPC_HOME_CLEARANCE,
-      );
-      npcs.push({ id: spec.npcId, homeBuildingId: spec.id, home });
-    }
+    // The doorstep: a tile between the square and the building, just
+    // outside its footprint, on the path — where an NPC retreats to at
+    // night, and where the player starts if this is their own house.
+    const nearEdge = boxHalfExtentAlong(spec.direction, BUILDING_SIZE / 2);
+    const doorstep = alongDirection(
+      center,
+      spec.direction,
+      RING_RADIUS - nearEdge - NPC_HOME_CLEARANCE,
+    );
+
+    if (spec.npcId) npcs.push({ id: spec.npcId, homeBuildingId: spec.id, home: doorstep });
+    if (spec.id === "player-house") playerSpawn = doorstep;
   }
 
-  // A tile inside the square, offset from centre so it's never the well.
-  const playerSpawn: GridPoint = { col: center.col + 2, row: center.row };
+  if (!playerSpawn) throw new Error('BUILDINGS is missing "player-house"');
 
   return { well, buildings, npcs, playerSpawn };
 }

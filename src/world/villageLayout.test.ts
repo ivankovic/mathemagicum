@@ -103,10 +103,26 @@ describe("layoutVillage", () => {
     }
   });
 
-  test("playerSpawn is passable and distinct from the well", () => {
+  test("playerSpawn is the player's own doorstep, not just anywhere in the square", () => {
     const { grid, village } = villageGrid();
-    const { playerSpawn, well } = layoutVillage(grid, village);
+    const { playerSpawn, well, buildings } = layoutVillage(grid, village);
+    const playerHouse = buildings.find((b) => b.id === "player-house");
+    expect(playerHouse).toBeDefined();
+    if (!playerHouse) return;
+
     expect(grid.isPassable(playerSpawn.col, playerSpawn.row)).toBe(true);
     expect(playerSpawn).not.toEqual({ col: well.col, row: well.row });
+
+    // "Doorstep" means adjacent to the house, not just somewhere in the
+    // village: within a couple of tiles of the footprint, and strictly
+    // between the house and the square's centre (i.e. player-house sits
+    // north, so the doorstep's row is below the house but above centre).
+    const center = {
+      col: village.col + Math.floor(village.width / 2),
+      row: village.row + Math.floor(village.height / 2),
+    };
+    expect(playerSpawn.row).toBeGreaterThan(playerHouse.row + playerHouse.height - 1);
+    expect(playerSpawn.row).toBeLessThan(center.row);
+    expect(Math.abs(playerSpawn.col - (playerHouse.col + playerHouse.width / 2))).toBeLessThan(3);
   });
 });
