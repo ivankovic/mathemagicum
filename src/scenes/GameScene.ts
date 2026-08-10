@@ -23,10 +23,14 @@ import {
 import { PLANT_COLORS, TERRAIN_COLORS } from "../world/palette";
 import { findPath } from "../world/pathfinding";
 import { PlantType } from "../world/plants";
-import { generateStubWorld } from "../world/stubWorld";
 import type { TerrainType } from "../world/terrain";
+import { generateWorld } from "../world/worldGenerator";
 
 const WORLD_SIZE = 500;
+// Fixed for now so the world is reproducible during development; will
+// likely become player-chosen (or randomized per new game) once there's a
+// save/new-game flow to hang that choice off of.
+const WORLD_SEED = 12345;
 const MOVE_DURATION_MS = 160;
 const PLANT_TYPES = Object.values(PlantType);
 const TOUCH_UI_DEPTH = 2000;
@@ -59,9 +63,10 @@ interface ActiveChunk {
 // gameplay/entity/isometric-projection design lives here beyond that — the
 // actual gardening spells (math minigames) come later, one at a time.
 //
-// World terrain (src/world/stubWorld.ts) is a temporary stand-in for the
-// real generator (docs/WORLD_GENERATION.md) while rendering/camera/chunking
-// gets built and proven out — see docs task tracking for the swap-over.
+// World terrain comes from src/world/worldGenerator.ts (steps 0-6 of
+// docs/WORLD_GENERATION.md — story area interiors and stitching, steps
+// 7-8, aren't built yet, so anchor areas are just plain passable ground
+// for now).
 export class GameScene extends Phaser.Scene {
   private grid!: WorldGrid;
   private originX = 0;
@@ -96,7 +101,7 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.mobileControls = !this.sys.game.device.os.desktop;
 
-    const world = generateStubWorld(WORLD_SIZE);
+    const world = generateWorld(WORLD_SIZE, WORLD_SIZE, WORLD_SEED);
     this.grid = world.grid;
     this.playerCol = world.playerStart.col;
     this.playerRow = world.playerStart.row;
