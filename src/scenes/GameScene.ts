@@ -2,24 +2,39 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Phaser from "phaser";
-import { WorldGrid } from "../world/grid";
+import {
+  CHUNK_SIZE,
+  type ChunkCoord,
+  chunkKey,
+  chunkScreenBounds,
+  chunksCoveringTileRange,
+} from "../world/chunks";
+import type { WorldGrid } from "../world/grid";
 import {
   type GridPoint,
   type ScreenPoint,
   TILE_HEIGHT,
   TILE_WIDTH,
+  computeMapScreenBounds,
   gridToScreen,
   isoDepth,
   screenToGrid,
 } from "../world/iso";
-import { PLAYER_START, STARTER_MAP } from "../world/mapData";
 import { PLANT_COLORS, TERRAIN_COLORS } from "../world/palette";
 import { findPath } from "../world/pathfinding";
 import { PlantType } from "../world/plants";
+import { generateStubWorld } from "../world/stubWorld";
+import type { TerrainType } from "../world/terrain";
 
+const WORLD_SIZE = 500;
 const MOVE_DURATION_MS = 160;
 const PLANT_TYPES = Object.values(PlantType);
 const TOUCH_UI_DEPTH = 2000;
+const CHUNK_DEPTH = -1000;
+const CHUNK_VIEW_MARGIN = 1;
+// Generous cache so panning back and forth doesn't constantly re-render —
+// well above what's ever simultaneously visible on screen.
+const CHUNK_CACHE_LIMIT = 60;
 
 type DirectionTag = "up" | "down" | "left" | "right";
 
@@ -35,17 +50,26 @@ interface Wasd {
   right: Phaser.Input.Keyboard.Key;
 }
 
+interface ActiveChunk {
+  texture: Phaser.GameObjects.RenderTexture;
+  lastUsedAt: number;
+}
+
 // Renders the world and lets the player walk it and plant on it. No
 // gameplay/entity/isometric-projection design lives here beyond that — the
 // actual gardening spells (math minigames) come later, one at a time.
+//
+// World terrain (src/world/stubWorld.ts) is a temporary stand-in for the
+// real generator (docs/WORLD_GENERATION.md) while rendering/camera/chunking
+// gets built and proven out — see docs task tracking for the swap-over.
 export class GameScene extends Phaser.Scene {
   private grid!: WorldGrid;
   private originX = 0;
   private originY = 0;
 
   private player!: Phaser.GameObjects.Arc;
-  private playerCol = PLAYER_START.col;
-  private playerRow = PLAYER_START.row;
+  private playerCol = 0;
+  private playerRow = 0;
   private isMoving = false;
 
   private selectedPlantIndex = 0;
@@ -61,6 +85,10 @@ export class GameScene extends Phaser.Scene {
   private touchDirection: DirectionTag | null = null;
   private path: GridPoint[] = [];
 
+  private activeChunks = new Map<string, ActiveChunk>();
+  private chunkScratch!: Phaser.GameObjects.Graphics;
+  private frameCounter = 0;
+
   constructor() {
     super("game");
   }
@@ -68,23 +96,34 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.mobileControls = !this.sys.game.device.os.desktop;
 
-    this.grid = new WorldGrid(STARTER_MAP);
+    const world = generateStubWorld(WORLD_SIZE);
+    this.grid = world.grid;
+    this.playerCol = world.playerStart.col;
+    this.playerRow = world.playerStart.row;
 
-    const mapScreenHeight = (this.grid.width + this.grid.height) * (TILE_HEIGHT / 2);
-    this.originX = this.scale.width / 2;
-    this.originY = (this.scale.height - mapScreenHeight) / 2 + TILE_HEIGHT / 2;
+    const bounds = computeMapScreenBounds(this.grid.width, this.grid.height);
+    this.originX = -bounds.minX;
+    this.originY = -bounds.minY;
+    const mapPixelWidth = bounds.maxX - bounds.minX;
+    const mapPixelHeight = bounds.maxY - bounds.minY;
 
-    this.drawTerrain();
+    this.chunkScratch = this.add.graphics().setVisible(false);
 
     const start = this.toScreen(this.playerCol, this.playerRow);
     this.player = this.add.circle(start.x, start.y, 10, 0xff5252).setStrokeStyle(2, 0xffffff);
     this.player.setDepth(isoDepth(this.playerCol, this.playerRow) + 0.5);
 
+    this.cameras.main.setBounds(0, 0, mapPixelWidth, mapPixelHeight);
+    this.cameras.main.startFollow(this.player);
+    this.refreshVisibleChunks();
+
     this.statusText = this.add
       .text(8, 8, "", { fontFamily: "monospace", fontSize: "13px", color: "#ffffff" })
+      .setScrollFactor(0)
       .setDepth(1000);
     this.messageText = this.add
       .text(8, 26, "", { fontFamily: "monospace", fontSize: "13px", color: "#ffeb3b" })
+      .setScrollFactor(0)
       .setDepth(1000);
     this.updateStatusText();
 
@@ -98,6 +137,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   override update(): void {
+    this.frameCounter++;
+    this.refreshVisibleChunks();
+
     if (!this.isMoving) {
       const dir = this.pressedDirection();
       if (dir) {
@@ -120,6 +162,117 @@ export class GameScene extends Phaser.Scene {
       this.tryPlant();
     }
   }
+
+  // --- Chunked terrain rendering ------------------------------------
+
+  private refreshVisibleChunks(): void {
+    const view = this.cameras.main.worldView;
+    const minLocal = { x: view.x - this.originX, y: view.y - this.originY };
+    const maxLocal = {
+      x: view.x + view.width - this.originX,
+      y: view.y + view.height - this.originY,
+    };
+    const corners = [
+      screenToGrid(minLocal.x, minLocal.y),
+      screenToGrid(maxLocal.x, minLocal.y),
+      screenToGrid(minLocal.x, maxLocal.y),
+      screenToGrid(maxLocal.x, maxLocal.y),
+    ];
+    const cols = corners.map((c) => c.col);
+    const rows = corners.map((c) => c.row);
+    const visible = chunksCoveringTileRange(
+      {
+        minCol: Math.min(...cols),
+        maxCol: Math.max(...cols),
+        minRow: Math.min(...rows),
+        maxRow: Math.max(...rows),
+      },
+      this.grid.width,
+      this.grid.height,
+      CHUNK_VIEW_MARGIN,
+    );
+    const visibleKeys = new Set(visible.map(chunkKey));
+
+    for (const chunk of visible) {
+      const key = chunkKey(chunk);
+      const entry = this.activeChunks.get(key);
+      if (entry) {
+        entry.texture.setVisible(true);
+        entry.lastUsedAt = this.frameCounter;
+      } else {
+        this.activateChunk(chunk);
+      }
+    }
+
+    for (const [key, entry] of this.activeChunks) {
+      if (!visibleKeys.has(key)) entry.texture.setVisible(false);
+    }
+
+    this.evictColdChunks(visibleKeys);
+  }
+
+  private activateChunk(chunk: ChunkCoord): void {
+    const raw = chunkScreenBounds(chunk, TILE_WIDTH, TILE_HEIGHT);
+    const minX = Math.floor(raw.minX);
+    const minY = Math.floor(raw.minY);
+    const width = Math.ceil(raw.maxX) - minX;
+    const height = Math.ceil(raw.maxY) - minY;
+
+    const colStart = chunk.chunkCol * CHUNK_SIZE;
+    const rowStart = chunk.chunkRow * CHUNK_SIZE;
+    const colEnd = Math.min(colStart + CHUNK_SIZE, this.grid.width);
+    const rowEnd = Math.min(rowStart + CHUNK_SIZE, this.grid.height);
+
+    this.chunkScratch.clear();
+    for (let row = rowStart; row < rowEnd; row++) {
+      for (let col = colStart; col < colEnd; col++) {
+        const p = gridToScreen(col, row);
+        this.drawDiamond(this.chunkScratch, p.x - minX, p.y - minY, this.grid.getTerrain(col, row));
+      }
+    }
+
+    const texture = this.add.renderTexture(this.originX + minX, this.originY + minY, width, height);
+    texture.setOrigin(0, 0);
+    texture.setDepth(CHUNK_DEPTH);
+    texture.draw(this.chunkScratch, 0, 0);
+
+    this.activeChunks.set(chunkKey(chunk), { texture, lastUsedAt: this.frameCounter });
+  }
+
+  private evictColdChunks(protectedKeys: ReadonlySet<string>): void {
+    if (this.activeChunks.size <= CHUNK_CACHE_LIMIT) return;
+    const evictable = [...this.activeChunks.entries()]
+      .filter(([key]) => !protectedKeys.has(key))
+      .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt);
+    const overBy = this.activeChunks.size - CHUNK_CACHE_LIMIT;
+    for (let i = 0; i < overBy && i < evictable.length; i++) {
+      const item = evictable[i];
+      if (!item) continue;
+      const [key, entry] = item;
+      entry.texture.destroy();
+      this.activeChunks.delete(key);
+    }
+  }
+
+  private drawDiamond(
+    graphics: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    terrain: TerrainType,
+  ): void {
+    graphics.fillStyle(TERRAIN_COLORS[terrain], 1);
+    graphics.beginPath();
+    graphics.moveTo(x, y - TILE_HEIGHT / 2);
+    graphics.lineTo(x + TILE_WIDTH / 2, y);
+    graphics.lineTo(x, y + TILE_HEIGHT / 2);
+    graphics.lineTo(x - TILE_WIDTH / 2, y);
+    graphics.closePath();
+    graphics.fillPath();
+    graphics.lineStyle(1, 0x000000, 0.15);
+    graphics.strokePath();
+  }
+
+  // --- Input -----------------------------------------------------------
 
   private setupInput(): void {
     const keyboard = this.input.keyboard;
@@ -263,33 +416,18 @@ export class GameScene extends Phaser.Scene {
     const button = this.add
       .rectangle(x, y, size, size, 0x000000, 0.45)
       .setStrokeStyle(2, 0xffffff, 0.6)
+      .setScrollFactor(0)
       .setDepth(TOUCH_UI_DEPTH)
       .setInteractive({ useHandCursor: true });
     this.add
       .text(x, y, label, { fontFamily: "monospace", fontSize: `${fontSize}px`, color: "#ffffff" })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(TOUCH_UI_DEPTH + 1);
     return button;
   }
 
-  private drawTerrain(): void {
-    const graphics = this.add.graphics().setDepth(-1);
-    for (let row = 0; row < this.grid.height; row++) {
-      for (let col = 0; col < this.grid.width; col++) {
-        const { x, y } = this.toScreen(col, row);
-        graphics.fillStyle(TERRAIN_COLORS[this.grid.getTerrain(col, row)], 1);
-        graphics.beginPath();
-        graphics.moveTo(x, y - TILE_HEIGHT / 2);
-        graphics.lineTo(x + TILE_WIDTH / 2, y);
-        graphics.lineTo(x, y + TILE_HEIGHT / 2);
-        graphics.lineTo(x - TILE_WIDTH / 2, y);
-        graphics.closePath();
-        graphics.fillPath();
-        graphics.lineStyle(1, 0x000000, 0.15);
-        graphics.strokePath();
-      }
-    }
-  }
+  // --- Coordinates -------------------------------------------------------
 
   private toScreen(col: number, row: number): ScreenPoint {
     const p = gridToScreen(col, row);

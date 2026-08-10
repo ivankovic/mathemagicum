@@ -2,40 +2,74 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { type PlantType, canPlantOn } from "./plants";
-import { type TerrainType, isPassable } from "./terrain";
+import { TerrainType, isPassable } from "./terrain";
 
-interface Tile {
-  terrain: TerrainType;
-  plant: PlantType | null;
+// Flat, numerically-indexed storage. At world scale (hundreds of thousands
+// of tiles) an array of {terrain, plant} objects is real GC pressure, while
+// a Uint8Array is a few hundred KB. TerrainType stays a string union for
+// readability at every call site — it's coded to a small integer only at
+// this storage boundary.
+const TERRAIN_CODES: readonly TerrainType[] = Object.values(TerrainType);
+const TERRAIN_TO_CODE = new Map<TerrainType, number>(TERRAIN_CODES.map((t, i) => [t, i]));
+
+function terrainToCode(terrain: TerrainType): number {
+  const code = TERRAIN_TO_CODE.get(terrain);
+  if (code === undefined) throw new Error(`Unknown terrain type "${terrain}"`);
+  return code;
+}
+
+function codeToTerrain(code: number): TerrainType {
+  const terrain = TERRAIN_CODES[code];
+  if (!terrain) throw new RangeError(`Unknown terrain code ${code}`);
+  return terrain;
 }
 
 export class WorldGrid {
-  private readonly tiles: Tile[][];
+  private readonly terrainCodes: Uint8Array;
+  // Plants are sparse (most tiles are never planted), so a map of only the
+  // planted tiles is far cheaper than a dense array sized to the whole grid.
+  private readonly plants = new Map<number, PlantType>();
   readonly width: number;
   readonly height: number;
 
   constructor(terrain: readonly (readonly TerrainType[])[]) {
     this.height = terrain.length;
     this.width = terrain[0]?.length ?? 0;
-    this.tiles = terrain.map((row) => row.map((t) => ({ terrain: t, plant: null })));
+    this.terrainCodes = new Uint8Array(this.width * this.height);
+    for (let row = 0; row < this.height; row++) {
+      const rowTiles = terrain[row];
+      if (!rowTiles) continue;
+      for (let col = 0; col < this.width; col++) {
+        const t = rowTiles[col];
+        if (!t) continue;
+        this.terrainCodes[this.index(col, row)] = terrainToCode(t);
+      }
+    }
+  }
+
+  private index(col: number, row: number): number {
+    return row * this.width + col;
   }
 
   inBounds(col: number, row: number): boolean {
     return col >= 0 && col < this.width && row >= 0 && row < this.height;
   }
 
-  private tileAt(col: number, row: number): Tile {
-    const tile = this.tiles[row]?.[col];
-    if (!tile) throw new RangeError(`(${col}, ${row}) is out of bounds`);
-    return tile;
+  private requireInBounds(col: number, row: number): number {
+    if (!this.inBounds(col, row)) throw new RangeError(`(${col}, ${row}) is out of bounds`);
+    return this.index(col, row);
   }
 
   getTerrain(col: number, row: number): TerrainType {
-    return this.tileAt(col, row).terrain;
+    const idx = this.requireInBounds(col, row);
+    const code = this.terrainCodes[idx];
+    if (code === undefined) throw new RangeError(`(${col}, ${row}) has no terrain code`);
+    return codeToTerrain(code);
   }
 
   getPlant(col: number, row: number): PlantType | null {
-    return this.tileAt(col, row).plant;
+    const idx = this.requireInBounds(col, row);
+    return this.plants.get(idx) ?? null;
   }
 
   isPassable(col: number, row: number): boolean {
@@ -52,7 +86,7 @@ export class WorldGrid {
 
   plant(col: number, row: number, plant: PlantType): boolean {
     if (!this.canPlant(col, row, plant)) return false;
-    this.tileAt(col, row).plant = plant;
+    this.plants.set(this.index(col, row), plant);
     return true;
   }
 }

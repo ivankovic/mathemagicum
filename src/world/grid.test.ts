@@ -77,3 +77,43 @@ describe("WorldGrid planting", () => {
     expect(grid.plant(9, 9, PlantType.Sunflower)).toBe(false);
   });
 });
+
+describe("WorldGrid at world scale", () => {
+  // The flat Uint8Array storage this backs onto is the whole reason this
+  // class exists at world size (500x500 = 250k tiles) — a grid this large
+  // would be real GC pressure as an array of {terrain, plant} objects.
+  function bigGrid(size: number): WorldGrid {
+    const row = Array.from({ length: size }, () => TerrainType.Grass);
+    return new WorldGrid(
+      Array.from({ length: size }, (_, r) =>
+        r === 0 || r === size - 1 ? Array.from({ length: size }, () => TerrainType.Water) : row,
+      ),
+    );
+  }
+
+  test("reads back terrain correctly at every corner of a large grid", () => {
+    const size = 500;
+    const grid = bigGrid(size);
+    expect(grid.width).toBe(size);
+    expect(grid.height).toBe(size);
+    expect(grid.getTerrain(0, 0)).toBe(TerrainType.Water); // top border row
+    expect(grid.getTerrain(size - 1, 0)).toBe(TerrainType.Water);
+    expect(grid.getTerrain(0, size - 1)).toBe(TerrainType.Water); // bottom border row
+    expect(grid.getTerrain(size - 1, size - 1)).toBe(TerrainType.Water);
+    expect(grid.getTerrain(size / 2, size / 2)).toBe(TerrainType.Grass); // interior
+  });
+
+  test("passability holds at scale for both the border and interior", () => {
+    const grid = bigGrid(500);
+    expect(grid.isPassable(250, 0)).toBe(false);
+    expect(grid.isPassable(250, 250)).toBe(true);
+  });
+
+  test("planting at scale only affects the targeted tile", () => {
+    const grid = bigGrid(500);
+    expect(grid.plant(300, 300, PlantType.Sunflower)).toBe(true);
+    expect(grid.getPlant(300, 300)).toBe(PlantType.Sunflower);
+    expect(grid.getPlant(299, 300)).toBe(null);
+    expect(grid.getPlant(301, 300)).toBe(null);
+  });
+});

@@ -44,3 +44,30 @@ export function screenToGrid(x: number, y: number): GridPoint {
 export function isoDepth(col: number, row: number): number {
   return col + row;
 }
+
+export interface PixelRect {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+// Screen-space AABB of the whole (col, row) in [0,width) x [0,height) grid,
+// in the map's own unshifted projection space. Used to place a fixed
+// origin and camera bounds for a world bigger than the viewport.
+export function computeMapScreenBounds(width: number, height: number): PixelRect {
+  const corners: ScreenPoint[] = [
+    gridToScreen(0, 0),
+    gridToScreen(width - 1, 0),
+    gridToScreen(0, height - 1),
+    gridToScreen(width - 1, height - 1),
+  ];
+  const xs = corners.map((p) => p.x);
+  const ys = corners.map((p) => p.y);
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+  };
+}
