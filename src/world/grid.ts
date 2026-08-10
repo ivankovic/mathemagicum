@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { Habitat } from "./habitat";
 import { type PlantType, canPlantOn } from "./plants";
 import { TerrainType, isPassable } from "./terrain";
 
 // Flat, numerically-indexed storage. At world scale (hundreds of thousands
 // of tiles) an array of {terrain, plant} objects is real GC pressure, while
-// a Uint8Array is a few hundred KB. TerrainType stays a string union for
-// readability at every call site — it's coded to a small integer only at
+// a Uint8Array is a few hundred KB. TerrainType/Habitat stay string unions
+// for readability at every call site — coded to a small integer only at
 // this storage boundary.
 const TERRAIN_CODES: readonly TerrainType[] = Object.values(TerrainType);
 const TERRAIN_TO_CODE = new Map<TerrainType, number>(TERRAIN_CODES.map((t, i) => [t, i]));
@@ -24,8 +25,26 @@ function codeToTerrain(code: number): TerrainType {
   return terrain;
 }
 
+const HABITAT_CODES: readonly Habitat[] = Object.values(Habitat);
+const HABITAT_TO_CODE = new Map<Habitat, number>(HABITAT_CODES.map((h, i) => [h, i]));
+
+function habitatToCode(habitat: Habitat): number {
+  const code = HABITAT_TO_CODE.get(habitat);
+  if (code === undefined) throw new Error(`Unknown habitat "${habitat}"`);
+  return code;
+}
+
+function codeToHabitat(code: number): Habitat {
+  const habitat = HABITAT_CODES[code];
+  if (!habitat) throw new RangeError(`Unknown habitat code ${code}`);
+  return habitat;
+}
+
 export class WorldGrid {
   private readonly terrainCodes: Uint8Array;
+  // Defaults to habitat code 0 (Meadow) for any tile a caller never sets —
+  // fine for hand-built test/stub grids that don't care about habitat.
+  private readonly habitatCodes: Uint8Array;
   // Plants are sparse (most tiles are never planted), so a map of only the
   // planted tiles is far cheaper than a dense array sized to the whole grid.
   private readonly plants = new Map<number, PlantType>();
@@ -36,6 +55,7 @@ export class WorldGrid {
     this.height = terrain.length;
     this.width = terrain[0]?.length ?? 0;
     this.terrainCodes = new Uint8Array(this.width * this.height);
+    this.habitatCodes = new Uint8Array(this.width * this.height);
     for (let row = 0; row < this.height; row++) {
       const rowTiles = terrain[row];
       if (!rowTiles) continue;
@@ -45,6 +65,15 @@ export class WorldGrid {
         this.terrainCodes[this.index(col, row)] = terrainToCode(t);
       }
     }
+  }
+
+  // A width x height grid uniformly filled with one terrain, for the
+  // generator to progressively overwrite via setTerrain/setHabitat.
+  static empty(width: number, height: number, defaultTerrain: TerrainType): WorldGrid {
+    const rows: TerrainType[][] = Array.from({ length: height }, () =>
+      Array.from({ length: width }, () => defaultTerrain),
+    );
+    return new WorldGrid(rows);
   }
 
   private index(col: number, row: number): number {
@@ -65,6 +94,23 @@ export class WorldGrid {
     const code = this.terrainCodes[idx];
     if (code === undefined) throw new RangeError(`(${col}, ${row}) has no terrain code`);
     return codeToTerrain(code);
+  }
+
+  setTerrain(col: number, row: number, terrain: TerrainType): void {
+    const idx = this.requireInBounds(col, row);
+    this.terrainCodes[idx] = terrainToCode(terrain);
+  }
+
+  getHabitat(col: number, row: number): Habitat {
+    const idx = this.requireInBounds(col, row);
+    const code = this.habitatCodes[idx];
+    if (code === undefined) throw new RangeError(`(${col}, ${row}) has no habitat code`);
+    return codeToHabitat(code);
+  }
+
+  setHabitat(col: number, row: number, habitat: Habitat): void {
+    const idx = this.requireInBounds(col, row);
+    this.habitatCodes[idx] = habitatToCode(habitat);
   }
 
   getPlant(col: number, row: number): PlantType | null {

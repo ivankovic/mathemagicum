@@ -3,6 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { WorldGrid } from "./grid";
+import { Habitat } from "./habitat";
 import { PlantType } from "./plants";
 import { TerrainType } from "./terrain";
 
@@ -115,5 +116,33 @@ describe("WorldGrid at world scale", () => {
     expect(grid.getPlant(300, 300)).toBe(PlantType.Sunflower);
     expect(grid.getPlant(299, 300)).toBe(null);
     expect(grid.getPlant(301, 300)).toBe(null);
+  });
+});
+
+describe("WorldGrid.empty", () => {
+  test("fills a grid of the given size with the default terrain", () => {
+    const grid = WorldGrid.empty(500, 500, TerrainType.Grass);
+    expect(grid.width).toBe(500);
+    expect(grid.height).toBe(500);
+    expect(grid.getTerrain(0, 0)).toBe(TerrainType.Grass);
+    expect(grid.getTerrain(499, 499)).toBe(TerrainType.Grass);
+  });
+});
+
+describe("WorldGrid terrain/habitat mutation", () => {
+  test("setTerrain overwrites a single tile without affecting neighbours", () => {
+    const grid = WorldGrid.empty(5, 5, TerrainType.Grass);
+    grid.setTerrain(2, 2, TerrainType.Water);
+    expect(grid.getTerrain(2, 2)).toBe(TerrainType.Water);
+    expect(grid.getTerrain(1, 2)).toBe(TerrainType.Grass);
+    expect(grid.getTerrain(2, 1)).toBe(TerrainType.Grass);
+  });
+
+  test("habitat defaults to Meadow and can be overwritten per tile", () => {
+    const grid = WorldGrid.empty(5, 5, TerrainType.Grass);
+    expect(grid.getHabitat(0, 0)).toBe(Habitat.Meadow);
+    grid.setHabitat(0, 0, Habitat.Woodland);
+    expect(grid.getHabitat(0, 0)).toBe(Habitat.Woodland);
+    expect(grid.getHabitat(1, 0)).toBe(Habitat.Meadow);
   });
 });
