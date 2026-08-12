@@ -28,12 +28,18 @@ export default defineConfig({
         icons: [],
       },
       workbox: {
-        // NOTE: no runtime-loaded assets exist yet. Phaser loads
-        // spritesheets/tilemaps/audio via its own loader at runtime, which
-        // the Vite build never sees — Workbox's default globPatterns will
-        // NOT cover them. Once real assets land under public/assets, glob
-        // them explicitly here and raise maximumFileSizeToCacheInBytes for
-        // large atlases before claiming offline play works.
+        // Phaser loads images/spritesheets/tilemaps/audio via its own
+        // loader at runtime (see BootScene.ts), which the Vite build never
+        // sees — Workbox's default globPatterns (**/*.{js,wasm,css,html})
+        // does NOT cover them, so they'd silently be missing from the
+        // offline precache. `png` covers the tileset from
+        // tools/tileset-gen (public/assets/tiles/*.png, ~4KB each, well
+        // under the default per-file cap); extend this list again for
+        // whatever other asset types actually land under public/assets
+        // (audio, atlases, ...) rather than guessing ahead of them now.
+        globPatterns: ["**/*.{js,wasm,css,html,png}"],
+        // Raise maximumFileSizeToCacheInBytes (default 2MB) once a real
+        // spritesheet atlas exists — the current tiles are nowhere near it.
         // Workbox's SW bundler unconditionally `require`s terser, whose
         // serialize-javascript dependency calls crypto.getRandomValues() at
         // module load — that throws under the host's system Node if it's

@@ -7,3 +7,6 @@ pre-commit:
     typecheck:
       glob: "*.{ts,tsx}"
       run: bunx tsc --noEmit
+    python-lint:
+      glob: "tools/tileset-gen/**/*.py"
+      run: cd tools/tileset-gen && uv run ruff check . && uv run ruff format --check .

@@ -6,7 +6,8 @@ SPDX-PackageDownloadLocation = "https://github.com/ivankovic/mathemagicum"
 # Source code: PolyForm-Noncommercial-1.0.0 (source-available, not OSI/FSF
 # "open source" — noncommercial use only). See LICENSE for the Required
 # Notice this license mandates be propagated with the software.
-# Add per-file SPDX headers to new .ts/.tsx files:
+# Add per-file SPDX headers to new .ts/.tsx files (and .py files, e.g.
+# tools/tileset-gen — `#` instead of `//`, same three lines):
 #   SPDX-FileCopyrightText: <year> Marko Ivankovic
 #   SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
@@ -19,6 +20,13 @@ SPDX-License-Identifier = "CC-BY-NC-ND-4.0"
 
 # Config/data files with no natural comment syntax for a header.
 [[annotations]]
-path = ["package.json", "bun.lock", "*.json", "*.svg"]
+path = [
+  "package.json",
+  "bun.lock",
+  "*.json",
+  "*.svg",
+  "tools/tileset-gen/pyproject.toml",
+  "tools/tileset-gen/uv.lock",
+]
 SPDX-FileCopyrightText = "Marko Ivankovic"
 SPDX-License-Identifier = "PolyForm-Noncommercial-1.0.0"
