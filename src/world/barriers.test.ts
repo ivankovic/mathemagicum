@@ -20,7 +20,7 @@ const SEED = 17;
 
 function walled(corner: HighCorner, boxes: readonly AreaPlacement[] = []) {
   const grid = WorldGrid.empty(SIZE, SIZE, TerrainType.Grass);
-  fillFromElevation(grid, corner, SEED, boxes);
+  fillFromElevation(grid, corner, SEED);
   sealFarEdges(grid, corner);
   return { grid, placed: placeEdgeBarriers(grid, corner, boxes, SEED) };
 }

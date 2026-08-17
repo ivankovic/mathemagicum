@@ -8,7 +8,7 @@ import { type HighCorner, elevationAt, pickHighCorner } from "./elevation";
 import { WorldGrid } from "./grid";
 import { createRng, randInt } from "./rng";
 import { TerrainType } from "./terrain";
-import { fillFromElevation, sealFarEdges } from "./terrainFill";
+import { fillFromElevation, flattenReservedAreas, sealFarEdges } from "./terrainFill";
 import type { GridPoint } from "./topdown";
 import { type VillageLayout, layoutVillage } from "./villageLayout";
 
@@ -59,14 +59,19 @@ export function generateWorld(width: number, height: number, seed: number): Gene
     anchors.enchantedForest,
   ];
 
-  // Before the fill, which skips every reserved box outright, so whatever
-  // the layout carves (the square, gardens, paths) is exactly what survives
-  // — and before ensureConnectivity, since the Village's centre tile is the
+  fillFromElevation(grid, highCorner, fieldSeed);
+  // Between the fill and the seal. After the fill so a story area is cut
+  // from the ground it actually sits in; before the seal so the world's
+  // water edge still wins where a story area reaches it — the Harbour is
+  // supposed to touch the sea, and the far edges are the world's boundary.
+  flattenReservedAreas(grid, reservedBoxes);
+  sealFarEdges(grid, highCorner);
+
+  // After the fill rather than before it: the village carves paths and
+  // gardens, which are not natural ground and must not be painted over. Also
+  // before ensureConnectivity, since the Village's centre tile ends up the
   // well (impassable), not a safe start point.
   const village = layoutVillage(grid, anchors.village);
-
-  fillFromElevation(grid, highCorner, fieldSeed, reservedBoxes);
-  sealFarEdges(grid, highCorner);
   // Before the connectivity check, so it sees the walled rim and reports
   // honestly. Carving cannot clear an object, so the barrier is confined to
   // the rim where it has nothing to cut off.

@@ -12,33 +12,57 @@ import { TerrainType } from "./terrain";
 // world whose "sea" is a one-tile trim of beach does not read as a sea.
 const SHORE_DEPTH = 2;
 
-function isInsideAnyBox(col: number, row: number, boxes: readonly AreaPlacement[]): boolean {
-  return boxes.some(
-    (b) => col >= b.col && col < b.col + b.width && row >= b.row && row < b.row + b.height,
-  );
-}
-
 /**
  * Paints every tile from its height on the slope (see elevation.ts).
  *
- * Reserved anchor boxes are skipped — that is story-area interior
- * generation, deliberately not built yet — and so is anything the village
- * already carved, since layout runs first and its paths and gardens are not
- * natural ground.
+ * Every tile, story areas included. They used to be skipped and left at the
+ * grid's default grass, which made each one a green rectangle sitting in
+ * whatever it had been placed in — a lawn in the mountains, a lawn on the
+ * beach. A story area should look like it belongs where it is; what makes it
+ * *usable* is `flattenReservedAreas`, not a different terrain.
  */
-export function fillFromElevation(
-  grid: WorldGrid,
-  corner: HighCorner,
-  seed: number,
-  reservedBoxes: readonly AreaPlacement[],
-): void {
+export function fillFromElevation(grid: WorldGrid, corner: HighCorner, seed: number): void {
   for (let row = 0; row < grid.height; row++) {
     for (let col = 0; col < grid.width; col++) {
-      if (isInsideAnyBox(col, row, reservedBoxes)) continue;
       const elevation = elevationAt(col, row, grid.width, grid.height, corner, seed);
       const ground = groundAt(col, row, elevation, seed);
       grid.setTerrain(col, row, ground.terrain);
       grid.setHabitat(col, row, ground.habitat);
+    }
+  }
+}
+
+// What impassable ground becomes inside a story area: the next band in
+// toward the walkable middle. Rock gives way to the slope below it and sea
+// to the shore above it, so a cleared area still reads as part of the
+// landscape it was cut from rather than as a patch of something else.
+const WALKABLE_INSTEAD: Partial<Record<TerrainType, TerrainType>> = {
+  [TerrainType.Mountain]: TerrainType.Hilly,
+  [TerrainType.Water]: TerrainType.Sand,
+};
+
+/**
+ * Makes the ground inside each story area walkable without flattening how it
+ * looks.
+ *
+ * These are the five places the game will build content in, so a player has
+ * to be able to stand in them — but the Observatory sits in the mountain and
+ * the Harbour on the shore, and both would otherwise be largely rock and
+ * sea. Only the impassable tiles change, and each becomes the band next to
+ * it, so the Observatory reads as a shelf in the rock and the Harbour as a
+ * beach rather than either becoming a lawn.
+ */
+export function flattenReservedAreas(
+  grid: WorldGrid,
+  reservedBoxes: readonly AreaPlacement[],
+): void {
+  for (const box of reservedBoxes) {
+    for (let row = box.row; row < box.row + box.height; row++) {
+      for (let col = box.col; col < box.col + box.width; col++) {
+        if (!grid.inBounds(col, row)) continue;
+        const instead = WALKABLE_INSTEAD[grid.getTerrain(col, row)];
+        if (instead) grid.setTerrain(col, row, instead);
+      }
     }
   }
 }

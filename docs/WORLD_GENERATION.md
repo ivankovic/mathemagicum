@@ -219,6 +219,23 @@ ground and slowly through costly ground bends those boundaries into
 curves. A tile is claimed when it is *reached* rather than when it is
 queued, which is what lets the varying cost decide who gets it.
 
+### Story areas are cut from the ground they sit in
+
+Reserved anchor boxes used to be skipped by the fill and left at the grid's
+default Grass, so that connectivity had something passable to reach. The
+result was a green rectangle in whatever the area had been placed in — a lawn
+in the mountains for the Observatory, a lawn on the beach for the Harbour.
+
+They are painted from the slope like everywhere else now, and made usable
+afterwards by converting only the *impassable* tiles inside them: rock
+becomes the slope below it, sea becomes the shore above it. So the
+Observatory reads as a shelf cut into the mountain and the Harbour as a
+beach, and both are still walkable end to end.
+
+The one thing that outranks a story area is the world's own water edge: the
+flattening runs before the far edges are sealed, so a Harbour that reaches
+the map's boundary keeps sea in it, which is what a harbour wants anyway.
+
 **5. Terrain + decoration.** Terrain comes from cutting a smooth,
 seeded elevation field at each habitat's weights — see
 [Terrain from elevation](#terrain-from-elevation). Decoration objects are
