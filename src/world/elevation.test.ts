@@ -7,6 +7,7 @@ import {
   HighCorner,
   bandFloor,
   elevationAt,
+  groundAt,
   habitatForElevation,
   highEdges,
   pickHighCorner,
@@ -200,5 +201,64 @@ describe("pickHighCorner", () => {
   test("reaches all four corners over many seeds", () => {
     const seen = new Set(Array.from({ length: 60 }, (_, i) => pickHighCorner(createRng(i))));
     expect(seen.size).toBe(4);
+  });
+});
+
+describe("groundAt", () => {
+  test("puts marsh between the meadow and the trees, and nowhere else", () => {
+    // Wetland is not a height, it is ground at a height that happens to hold
+    // water — so it can only appear where the meadow gives way to the wood.
+    const heights: number[] = [];
+    for (let i = 0; i <= 400; i++) {
+      const e = i / 400;
+      for (let col = 0; col < 60; col += 3) {
+        if (groundAt(col, col * 7, e, 3).habitat === Habitat.Wetland) heights.push(e);
+      }
+    }
+    expect(heights.length).toBeGreaterThan(0);
+    expect(Math.min(...heights)).toBeGreaterThan(bandFloor(TerrainType.Grass));
+    expect(Math.max(...heights)).toBeLessThan(bandFloor(TerrainType.Hilly));
+  });
+
+  test("marsh is water or boggy grass, never anything else", () => {
+    for (let i = 0; i <= 200; i++) {
+      for (let col = 0; col < 40; col += 2) {
+        const ground = groundAt(col, col * 3, i / 200, 5);
+        if (ground.habitat !== Habitat.Wetland) continue;
+        const marshTerrain: TerrainType[] = [TerrainType.Water, TerrainType.Grass];
+        expect(marshTerrain).toContain(ground.terrain);
+      }
+    }
+  });
+
+  test("falls back to the plain band away from the marsh zone", () => {
+    for (const e of [0.02, 0.5, 0.7, 0.95]) {
+      const ground = groundAt(11, 23, e, 5);
+      expect(ground.terrain).toBe(terrainForElevation(e));
+      expect(ground.habitat).toBe(habitatForElevation(e));
+    }
+  });
+
+  test("marsh comes in patches rather than speckle", () => {
+    // Thresholded on a smooth field, so neighbours agree — the same reason
+    // the terrain bands are coherent.
+    // Sampled right on the seam the marsh straddles — halfway up the grass
+    // band is below the marsh zone entirely.
+    const e = bandFloor(TerrainType.Woodland);
+    let flips = 0;
+    let wet = 0;
+    let previous = groundAt(0, 40, e, 9).habitat === Habitat.Wetland;
+    for (let col = 1; col < 400; col++) {
+      const now = groundAt(col, 40, e, 9).habitat === Habitat.Wetland;
+      if (now) wet++;
+      if (now !== previous) flips++;
+      previous = now;
+    }
+    expect(wet).toBeGreaterThan(0);
+    expect(flips).toBeLessThan(20);
+  });
+
+  test("is deterministic", () => {
+    expect(groundAt(9, 9, 0.36, 2)).toEqual(groundAt(9, 9, 0.36, 2));
   });
 });

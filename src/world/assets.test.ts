@@ -554,4 +554,36 @@ describe("the shipped scenery", () => {
       expect(sidecar.blocked_cells_relative_to_anchor.length).toBe(4);
     }
   });
+
+  test("ships several distinct individuals", () => {
+    // One silhouette repeated along a wall hundreds long reads as wallpaper,
+    // which is the whole reason the generator renders more than one.
+    for (const [name, sidecar] of sidecars) {
+      expect({ name, enough: sidecar.instances >= 2 }).toEqual({ name, enough: true });
+    }
+  });
+
+  test("names a frame range for every individual, covering the whole sheet", () => {
+    for (const [name, sidecar] of sidecars) {
+      const names = Object.keys(sidecar.animations);
+      expect({ name, count: names.length }).toEqual({ name, count: sidecar.instances });
+      const claimed = new Set<number>();
+      for (const range of Object.values(sidecar.animations)) {
+        expect(range.end).toBeLessThan(sidecar.frame_count);
+        for (let i = range.start; i <= range.end; i++) claimed.add(i);
+      }
+      expect({ name, covered: claimed.size }).toEqual({ name, covered: sidecar.frame_count });
+    }
+  });
+
+  test("puts each individual on its own sheet row", () => {
+    for (const sidecar of sidecars.values()) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error("no sheet");
+      expect(sheet.rows).toBe(sidecar.instances);
+      for (const range of Object.values(sidecar.animations)) {
+        expect(range.start % sheet.columns).toBe(0);
+      }
+    }
+  });
 });

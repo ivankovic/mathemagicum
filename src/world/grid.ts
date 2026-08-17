@@ -146,6 +146,29 @@ export class WorldGrid {
     }
   }
 
+  /**
+   * Removes whatever object occupies this cell, footprint and all.
+   *
+   * Used when carving a guaranteed route: an object blocks a tile whatever
+   * the terrain under it is, so a carve that only rewrites terrain cannot
+   * open a way through one.
+   */
+  removeObjectAt(col: number, row: number): PlacedObject | null {
+    const object = this.getObjectAt(col, row);
+    if (!object) return null;
+    for (let r = object.row; r < object.row + object.height; r++) {
+      for (let c = object.col; c < object.col + object.width; c++) {
+        if (!this.inBounds(c, r)) continue;
+        if (this.objectsByTile.get(this.index(c, r)) === object) {
+          this.objectsByTile.delete(this.index(c, r));
+        }
+      }
+    }
+    const at = this.objectList.indexOf(object);
+    if (at >= 0) this.objectList.splice(at, 1);
+    return object;
+  }
+
   getObjectAt(col: number, row: number): PlacedObject | null {
     if (!this.inBounds(col, row)) return null;
     return this.objectsByTile.get(this.index(col, row)) ?? null;

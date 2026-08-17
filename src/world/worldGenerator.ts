@@ -70,7 +70,7 @@ export function generateWorld(width: number, height: number, seed: number): Gene
   // Before the connectivity check, so it sees the walled rim and reports
   // honestly. Carving cannot clear an object, so the barrier is confined to
   // the rim where it has nothing to cut off.
-  placeEdgeBarriers(grid, highCorner, reservedBoxes);
+  placeEdgeBarriers(grid, highCorner, reservedBoxes, fieldSeed);
 
   ensureConnectivity(grid, village.playerSpawn, [
     centerOf(anchors.harbour),

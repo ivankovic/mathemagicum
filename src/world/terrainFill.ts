@@ -2,14 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { AreaPlacement } from "./anchors";
-import {
-  type HighCorner,
-  bandFloor,
-  elevationAt,
-  habitatForElevation,
-  highEdges,
-  terrainForElevation,
-} from "./elevation";
+import { type HighCorner, bandFloor, elevationAt, groundAt, highEdges } from "./elevation";
 import type { WorldGrid } from "./grid";
 import { Habitat } from "./habitat";
 import { TerrainType } from "./terrain";
@@ -43,8 +36,9 @@ export function fillFromElevation(
     for (let col = 0; col < grid.width; col++) {
       if (isInsideAnyBox(col, row, reservedBoxes)) continue;
       const elevation = elevationAt(col, row, grid.width, grid.height, corner, seed);
-      grid.setTerrain(col, row, terrainForElevation(elevation));
-      grid.setHabitat(col, row, habitatForElevation(elevation));
+      const ground = groundAt(col, row, elevation, seed);
+      grid.setTerrain(col, row, ground.terrain);
+      grid.setHabitat(col, row, ground.habitat);
     }
   }
 }

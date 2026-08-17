@@ -66,6 +66,11 @@ export interface BuildingSidecar extends SpriteSidecar {
 
 export interface ObjectSidecar extends SpriteSidecar {
   terrain: string;
+  // One frame range per distinct individual, keyed `instance_N`. A wall
+  // packs hundreds of these in a row, so which one a tile gets is what stops
+  // the formation reading as wallpaper.
+  animations: Record<string, AnimationRange>;
+  instances: number;
 }
 
 // A built prop standing on one cell, which it blocks.

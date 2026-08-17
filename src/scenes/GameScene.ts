@@ -553,17 +553,22 @@ export class GameScene extends Phaser.Scene {
       const sidecar = this.cache.json.get(scenerySidecarKey(kind)) as ObjectSidecar | undefined;
       if (!sidecar) throw new Error(`missing sidecar for scenery "${kind}"`);
       this.scenerySidecars.set(kind, sidecar);
-      const key = sceneryAnimKey(kind);
-      if (this.anims.exists(key)) continue;
-      this.anims.create({
-        key,
-        frames: this.anims.generateFrameNumbers(scenerySheetKey(kind), {
-          start: 0,
-          end: sidecar.frame_count - 1,
-        }),
-        frameRate: SCENERY_ANIM_FPS,
-        repeat: -1,
-      });
+      // One animation per individual, from the ranges the sidecar names.
+      for (const [name, range] of Object.entries(sidecar.animations)) {
+        const instance = Number(name.replace(/^instance_/, ""));
+        if (!Number.isInteger(instance)) continue;
+        const key = sceneryAnimKey(kind, instance);
+        if (this.anims.exists(key)) continue;
+        this.anims.create({
+          key,
+          frames: this.anims.generateFrameNumbers(scenerySheetKey(kind), {
+            start: range.start,
+            end: range.end,
+          }),
+          frameRate: SCENERY_ANIM_FPS,
+          repeat: -1,
+        });
+      }
     }
   }
 
@@ -995,11 +1000,17 @@ export class GameScene extends Phaser.Scene {
     if (kind) {
       const sidecar = this.scenerySidecars.get(kind);
       if (!sidecar) throw new Error(`no art loaded for scenery "${kind}"`);
-      // Mirrored on half the tiles. Every boulder and conifer comes from
-      // one instance of its generator, so a wall of them is the same
-      // silhouette repeated hundreds of times; flipping breaks the repeat
-      // for free, where a second instance would mean more art to ship.
-      this.spawnFootprintSprite(object, sidecar, scenerySheetKey(kind), sceneryAnimKey(kind), true);
+      // Which individual this tile gets, and whether it faces the other
+      // way. Four shapes times a mirror is eight silhouettes, which is
+      // enough that a wall hundreds long stops reading as a repeat.
+      const instance = variationFor(object.col, object.row, Math.max(1, sidecar.instances));
+      this.spawnFootprintSprite(
+        object,
+        sidecar,
+        scenerySheetKey(kind),
+        sceneryAnimKey(kind, instance),
+        true,
+      );
       return;
     }
     throw new Error(`placed object "${object.type}" has no art`);

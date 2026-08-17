@@ -47,6 +47,7 @@ export function scenerySidecarKey(kind: string): string {
   return `scenery-sidecar-${kind}`;
 }
 
-export function sceneryAnimKey(kind: string): string {
-  return `scenery-anim-${kind}`;
+// Matches the sidecar's own animation naming: `instance_N`.
+export function sceneryAnimKey(kind: string, instance: number): string {
+  return `scenery-anim-${kind}-${instance}`;
 }

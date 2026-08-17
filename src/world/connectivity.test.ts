@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { ensureConnectivity, findCarvePath, floodFillReachable, isReachable } from "./connectivity";
 import { WorldGrid } from "./grid";
 import { TerrainType } from "./terrain";
+import type { GridPoint } from "./topdown";
 
 function gridFromRows(rows: readonly string[]): WorldGrid {
   const legend: Record<string, TerrainType> = { G: TerrainType.Grass, W: TerrainType.Water };
@@ -111,6 +112,84 @@ describe("ensureConnectivity", () => {
     const visited = floodFillReachable(grid, start);
     for (const t of targets) {
       expect(isReachable(visited, grid, t)).toBe(true);
+    }
+  });
+});
+
+describe("ensureConnectivity through blocking objects", () => {
+  function ringed(): { grid: WorldGrid; target: GridPoint } {
+    // A pocket of open ground walled in by objects rather than by terrain —
+    // exactly the shape a story area takes when the map's edge barrier
+    // closes around it.
+    const grid = WorldGrid.empty(21, 21, TerrainType.Grass);
+    for (let row = 4; row <= 10; row++) {
+      for (let col = 4; col <= 10; col++) {
+        const onRing = row === 4 || row === 10 || col === 4 || col === 10;
+        if (!onRing) continue;
+        grid.placeObject({
+          id: `wall-${col}-${row}`,
+          type: "scenery-mountain",
+          col,
+          row,
+          width: 1,
+          height: 1,
+          blocksMovement: true,
+          anchorCol: col,
+          anchorRow: row,
+        });
+      }
+    }
+    return { grid, target: { col: 7, row: 7 } };
+  }
+
+  test("a pocket walled in by objects starts out unreachable", () => {
+    const { grid, target } = ringed();
+    const reachable = floodFillReachable(grid, { col: 0, row: 0 });
+    expect(isReachable(reachable, grid, target)).toBe(false);
+  });
+
+  test("carves through them, not just through terrain", () => {
+    // Rewriting terrain alone leaves the boulder standing in the gap. This
+    // failed silently once: a story area sealed into the mountain stayed
+    // sealed while the generator reported success.
+    const { grid, target } = ringed();
+    ensureConnectivity(grid, { col: 0, row: 0 }, [target]);
+    const reachable = floodFillReachable(grid, { col: 0, row: 0 });
+    expect(isReachable(reachable, grid, target)).toBe(true);
+  });
+
+  test("removes as little of the wall as it can", () => {
+    const { grid, target } = ringed();
+    const before = grid.listObjects().length;
+    ensureConnectivity(grid, { col: 0, row: 0 }, [target]);
+    const removed = before - grid.listObjects().length;
+    expect(removed).toBeGreaterThan(0);
+    expect(removed).toBeLessThan(4);
+  });
+
+  test("throws rather than reporting success it did not achieve", () => {
+    // The guarantee is the whole point of this function, so a target it
+    // cannot open a route to has to be loud. Nothing inside the grid
+    // qualifies any more — carving now clears objects as well as terrain,
+    // so any in-bounds target is reachable — which leaves off the map as
+    // the only genuinely impossible ask.
+    const grid = WorldGrid.empty(9, 9, TerrainType.Grass);
+    expect(() => ensureConnectivity(grid, { col: 0, row: 0 }, [{ col: 40, row: 40 }])).toThrow();
+  });
+
+  test("opens a route to any target that is actually on the map", () => {
+    // The flip side of the above, and the stronger statement: with objects
+    // clearable there is no in-bounds arrangement this cannot solve.
+    const grid = WorldGrid.empty(15, 15, TerrainType.Water);
+    grid.setTerrain(0, 0, TerrainType.Grass);
+    for (const target of [
+      { col: 14, row: 14 },
+      { col: 0, row: 14 },
+      { col: 7, row: 7 },
+    ]) {
+      ensureConnectivity(grid, { col: 0, row: 0 }, [target]);
+      const reachable = floodFillReachable(grid, { col: 0, row: 0 });
+      expect(isReachable(reachable, grid, target)).toBe(true);
     }
   });
 });

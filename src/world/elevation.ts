@@ -124,6 +124,49 @@ export function habitatForElevation(elevation: number): Habitat {
   return Habitat.Coastal;
 }
 
+// Marshland sits across the seam where the meadow gives way to the trees:
+// low enough to hold water, high enough that it is not simply the shore.
+// The zone straddles the grass/woodland floor rather than sitting inside
+// either, so a marsh reads as the boundary being wet rather than as a patch
+// dropped into one band.
+const WETLAND_LOW = 0.28;
+const WETLAND_HIGH = 0.44;
+// How much of that zone is actually marsh, and how much of the marsh is open
+// water rather than boggy grass. Both are thresholds on a field of their
+// own, so wetland comes in patches with ponds at their centres.
+const WETLAND_THRESHOLD = 0.6;
+const POND_THRESHOLD = 0.76;
+const WETLAND_PERIOD = 37;
+// Offset so the marsh field is independent of the one that warps the slope;
+// sharing it would put every marsh in the same place on the hillside.
+const WETLAND_SEED_OFFSET = 7717;
+
+export interface Ground {
+  terrain: TerrainType;
+  habitat: Habitat;
+}
+
+/**
+ * The ground at a tile, marsh included.
+ *
+ * Elevation alone cannot express wetland: a marsh is not a height, it is a
+ * place where the ground at that height happens to hold water. So it is a
+ * second field laid over the band — which is also why `terrainForElevation`
+ * stays a pure function of height and this is the one callers should use.
+ */
+export function groundAt(col: number, row: number, elevation: number, seed: number): Ground {
+  if (elevation >= WETLAND_LOW && elevation < WETLAND_HIGH) {
+    const wetness = smoothNoise(col, row, WETLAND_PERIOD, seed + WETLAND_SEED_OFFSET);
+    if (wetness >= WETLAND_THRESHOLD) {
+      return {
+        terrain: wetness >= POND_THRESHOLD ? TerrainType.Water : TerrainType.Grass,
+        habitat: Habitat.Wetland,
+      };
+    }
+  }
+  return { terrain: terrainForElevation(elevation), habitat: habitatForElevation(elevation) };
+}
+
 /** The lowest elevation still counted as the given terrain's band. */
 export function bandFloor(terrain: TerrainType): number {
   const band = BANDS.find((b) => b.terrain === terrain);

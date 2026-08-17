@@ -267,11 +267,18 @@ packs it with no one-tile corridor straight out of the map, and it stops at
 the waterline: the sea already blocks, and a boulder standing in it is not a
 barrier but a mistake.
 
-Only the rim is walled, and reserved story areas are left clear. Both matter
-for the same reason: `ensureConnectivity` carves *terrain*, and an object
-blocks a tile whatever the terrain under it is — so a wall anywhere it could
-cut the map in two, or across the Observatory that sits in the mountain it is
-thickest in, would be unrescuable.
+Its depth varies along its length, between one and four objects, so it reads
+as a thicket that happens to be impassable rather than a fence someone built
+along the edge of the map. Each terrain ships several distinct individuals
+and half are mirrored, because one silhouette repeated for hundreds of tiles
+reads as wallpaper.
+
+Only the rim is walled, and reserved story areas are left clear — but that is
+belt and braces rather than the guarantee. The guarantee is that
+`ensureConnectivity` can now clear a blocking object as well as rewrite
+terrain, and verifies afterwards. It could not before: a carve that only
+rewrote terrain left the boulder standing in the gap, so an Observatory
+walled into the mountain stayed sealed while generation reported success.
 
 Because the area below a height is quadratic in it, band thresholds cannot be
 read as area shares: measured over eight seeds the world comes out roughly
@@ -279,9 +286,14 @@ read as area shares: measured over eight seeds the world comes out roughly
 mountain.
 
 **Habitat** survives as a per-tile tag derived from the band, for systems that
-want to key off "this is woodland" directly. **Wetland now has no home** —
-nothing on the slope produces it. Whether it returns as a band of its own or
-is dropped is an open question.
+want to key off "this is woodland" directly.
+
+**Wetland** is the one habitat that is not a band, because a marsh is not a
+height: it is ground at a height that happens to hold water. So it is a
+second smooth field laid over the seam where the meadow gives way to the
+trees — where that field runs high the ground becomes marsh, and where it
+runs highest, open water. That gives ponds with boggy margins in patches
+rather than a ring at one elevation.
 
 **6. Guarantee connectivity.** Flood-fill from Starting Village; check
 every other story area has a reachable tile (terrain passable *and*

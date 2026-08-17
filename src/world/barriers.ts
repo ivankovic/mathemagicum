@@ -4,6 +4,7 @@
 import type { AreaPlacement } from "./anchors";
 import { type HighCorner, highEdges } from "./elevation";
 import type { WorldGrid } from "./grid";
+import { smoothNoise } from "./noise";
 import type { PlacedObject } from "./objects";
 import { sceneryOn, sceneryType } from "./scenery";
 
@@ -22,9 +23,17 @@ import { sceneryOn, sceneryType } from "./scenery";
  * blocks a tile whatever the terrain under it is.
  */
 
-// Two objects deep. One is enough to block; two is what reads as a thicket
-// or a rockfall rather than a fence.
-export const BARRIER_DEPTH = 4;
+// How deep the wall runs, in objects, at its thinnest and thickest. One is
+// enough to block; varying between one and four is what makes it read as a
+// thicket that happens to be impassable rather than as a fence someone
+// built along the edge of the map.
+export const MIN_BARRIER_OBJECTS = 1;
+export const MAX_BARRIER_OBJECTS = 4;
+export const BARRIER_DEPTH = MAX_BARRIER_OBJECTS * 2;
+// Over what distance the depth varies, in tiles. Long enough that the wall
+// thickens and thins in stretches rather than tile by tile.
+const DEPTH_PERIOD = 41;
+const DEPTH_SEED_OFFSET = 5231;
 
 // Every scenery object is a 2x2 footprint, so anchors sit on a 2-tile
 // lattice and the formation packs with no gaps for the player to slip
@@ -63,9 +72,19 @@ export function placeEdgeBarriers(
   grid: WorldGrid,
   corner: HighCorner,
   reservedBoxes: readonly AreaPlacement[],
+  seed: number,
 ): PlacedObject[] {
   const edges = highEdges(corner);
   const placed: PlacedObject[] = [];
+
+  // How many objects deep the wall is at a point along its length. Sampled
+  // from the coordinate that runs *along* the edge, so the depth is constant
+  // through the wall's thickness and varies as you walk beside it.
+  const depthAt = (along: number): number => {
+    const t = smoothNoise(along, 0, DEPTH_PERIOD, seed + DEPTH_SEED_OFFSET);
+    const span = MAX_BARRIER_OBJECTS - MIN_BARRIER_OBJECTS;
+    return MIN_BARRIER_OBJECTS + Math.min(span, Math.floor(t * (span + 1)));
+  };
 
   const tryPlace = (col: number, row: number): void => {
     if (insideAnyBox(col, row, OBJECT_SIZE, reservedBoxes)) return;
@@ -87,24 +106,18 @@ export function placeEdgeBarriers(
   };
 
   // Anchors step by the footprint size so the two bands interlock at the
-  // corner instead of fighting over the same cells.
-  const depth = BARRIER_DEPTH;
-  if (edges.top) {
-    for (let row = 0; row < depth; row += OBJECT_SIZE) {
-      for (let col = 0; col < grid.width; col += OBJECT_SIZE) tryPlace(col, row);
-    }
-  } else {
-    for (let row = grid.height - depth; row < grid.height; row += OBJECT_SIZE) {
-      for (let col = 0; col < grid.width; col += OBJECT_SIZE) tryPlace(col, row);
+  // corner instead of fighting over the same cells. The horizontal edge is
+  // laid first and the vertical one fills whatever it left.
+  for (let col = 0; col < grid.width; col += OBJECT_SIZE) {
+    for (let d = 0; d < depthAt(col); d++) {
+      const row = edges.top ? d * OBJECT_SIZE : grid.height - (d + 1) * OBJECT_SIZE;
+      tryPlace(col, row);
     }
   }
-  if (edges.left) {
-    for (let col = 0; col < depth; col += OBJECT_SIZE) {
-      for (let row = 0; row < grid.height; row += OBJECT_SIZE) tryPlace(col, row);
-    }
-  } else {
-    for (let col = grid.width - depth; col < grid.width; col += OBJECT_SIZE) {
-      for (let row = 0; row < grid.height; row += OBJECT_SIZE) tryPlace(col, row);
+  for (let row = 0; row < grid.height; row += OBJECT_SIZE) {
+    for (let d = 0; d < depthAt(row + grid.width); d++) {
+      const col = edges.left ? d * OBJECT_SIZE : grid.width - (d + 1) * OBJECT_SIZE;
+      tryPlace(col, row);
     }
   }
   return placed;

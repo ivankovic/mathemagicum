@@ -3,7 +3,12 @@
 
 import { describe, expect, test } from "bun:test";
 import type { AreaPlacement } from "./anchors";
-import { BARRIER_DEPTH, placeEdgeBarriers } from "./barriers";
+import {
+  BARRIER_DEPTH,
+  MAX_BARRIER_OBJECTS,
+  MIN_BARRIER_OBJECTS,
+  placeEdgeBarriers,
+} from "./barriers";
 import { HIGH_CORNERS, type HighCorner, highEdges } from "./elevation";
 import { WorldGrid } from "./grid";
 import { SCENERY_KINDS, sceneryKind, sceneryType } from "./scenery";
@@ -17,7 +22,7 @@ function walled(corner: HighCorner, boxes: readonly AreaPlacement[] = []) {
   const grid = WorldGrid.empty(SIZE, SIZE, TerrainType.Grass);
   fillFromElevation(grid, corner, SEED, boxes);
   sealFarEdges(grid, corner);
-  return { grid, placed: placeEdgeBarriers(grid, corner, boxes) };
+  return { grid, placed: placeEdgeBarriers(grid, corner, boxes, SEED) };
 }
 
 function nearHighEdge(corner: HighCorner, col: number, row: number): boolean {
@@ -130,6 +135,24 @@ describe("placeEdgeBarriers", () => {
         row: object.row,
         overlaps: false,
       });
+    }
+  });
+
+  test("varies in depth along its length", () => {
+    // A constant depth reads as a fence built along the map's edge; the
+    // point of jittering it is that the wall thickens and thins like a
+    // thicket does.
+    const { placed } = walled("north-west" as HighCorner);
+    const depthByColumn = new Map<number, number>();
+    for (const o of placed) {
+      if (o.row >= MAX_BARRIER_OBJECTS * 2) continue;
+      depthByColumn.set(o.col, (depthByColumn.get(o.col) ?? 0) + 1);
+    }
+    const depths = new Set(depthByColumn.values());
+    expect(depths.size).toBeGreaterThan(1);
+    for (const d of depths) {
+      expect(d).toBeGreaterThanOrEqual(MIN_BARRIER_OBJECTS);
+      expect(d).toBeLessThanOrEqual(MAX_BARRIER_OBJECTS);
     }
   });
 

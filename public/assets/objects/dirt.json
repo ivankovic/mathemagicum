@@ -3,9 +3,9 @@
     "file": "dirt_sheet.png",
     "frame_width": 64,
     "frame_height": 120,
-    "frame_count": 8,
+    "frame_count": 32,
     "columns": 8,
-    "rows": 1,
+    "rows": 4,
     "margin": 1,
     "spacing": 2
   },
@@ -41,5 +41,28 @@
     "width": 64,
     "height": 120
   },
-  "frame_count": 8
+  "frame_count": 32,
+  "animations": {
+    "instance_0": {
+      "start": 0,
+      "end": 7,
+      "frame_count": 8
+    },
+    "instance_1": {
+      "start": 8,
+      "end": 15,
+      "frame_count": 8
+    },
+    "instance_2": {
+      "start": 16,
+      "end": 23,
+      "frame_count": 8
+    },
+    "instance_3": {
+      "start": 24,
+      "end": 31,
+      "frame_count": 8
+    }
+  },
+  "instances": 4
 }

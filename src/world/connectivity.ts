@@ -114,11 +114,11 @@ export function findCarvePath(grid: WorldGrid, from: GridPoint, to: GridPoint): 
 }
 
 // Guarantees every target is reachable from `start`, carving the minimal
-// set of impassable tiles (converted to Grass) for any that aren't
-// already reachable through existing terrain. findCarvePath's 0-cost-first
-// preference means it naturally routes through existing passable terrain
-// wherever possible, so "cheapest path" and "minimal carve" are the same
-// search, not two separate concerns.
+// set of impassable tiles for any that aren't already reachable through
+// existing terrain. findCarvePath's 0-cost-first preference means it
+// naturally routes through existing passable terrain wherever possible, so
+// "cheapest path" and "minimal carve" are the same search, not two separate
+// concerns.
 export function ensureConnectivity(
   grid: WorldGrid,
   start: GridPoint,
@@ -135,8 +135,23 @@ export function ensureConnectivity(
       );
     }
     for (const { col, row } of path) {
+      // Both, and in this order. A tile can be impassable because of its
+      // terrain, because something is standing on it, or both — and
+      // rewriting only the terrain leaves a boulder sitting in the gap. That
+      // failed silently once: a story area walled into the mountain stayed
+      // sealed while this reported success.
+      grid.removeObjectAt(col, row);
       if (!grid.isPassable(col, row)) grid.setTerrain(col, row, TerrainType.Grass);
     }
     reachable = floodFillReachable(grid, start);
+  }
+
+  // Verify rather than assume. This function's entire job is a guarantee,
+  // and the failure it is guarding against is invisible from inside the
+  // generator — it shows up as a story area nobody can walk to.
+  for (const target of targets) {
+    if (!isReachable(reachable, grid, target)) {
+      throw new Error(`Carved a route to (${target.col}, ${target.row}) but it is still cut off`);
+    }
   }
 }
