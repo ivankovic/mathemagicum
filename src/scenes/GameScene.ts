@@ -86,6 +86,13 @@ const NIGHT_TINT_DEPTH = WORLD_DEPTH_CEILING + 1000;
 const HUD_DEPTH = WORLD_DEPTH_CEILING + 2000;
 const TOUCH_UI_DEPTH = WORLD_DEPTH_CEILING + 3000;
 const CHUNK_DEPTH = -1000;
+// Integer, so every world pixel lands on a whole number of screen pixels —
+// the point of filling the viewport rather than scaling a fixed canvas into
+// it. 2 keeps roughly the framing the old 800x600 canvas gave on a desktop
+// while doubling how big a character reads on a phone.
+const CAMERA_ZOOM = 2;
+const HUD_MARGIN = 8;
+const HUD_LINE_GAP = 4;
 const CHUNK_VIEW_MARGIN = 1;
 // Generous cache so panning back and forth doesn't constantly re-render —
 // well above what's ever simultaneously visible on screen.
@@ -139,6 +146,12 @@ interface Wasd {
   right: Phaser.Input.Keyboard.Key;
 }
 
+// Something pinned to a screen edge, which has to move when the viewport
+// does — rotation on a phone, a window drag on a desktop.
+interface EdgeAnchored {
+  place(width: number, height: number): void;
+}
+
 interface ActiveChunk {
   texture: Phaser.GameObjects.RenderTexture;
   lastUsedAt: number;
@@ -186,6 +199,12 @@ export class GameScene extends Phaser.Scene {
 
   private nightOverlay!: Phaser.GameObjects.Rectangle;
   private npcs: NpcRuntime[] = [];
+  // A second camera at zoom 1 for anything measured in screen pixels. Camera
+  // zoom scales scrollFactor(0) objects too, so without this the HUD and the
+  // joystick would be magnified along with the world and a "64px" button
+  // would not be 64px on screen.
+  private uiCamera!: Phaser.Cameras.Scene2D.Camera;
+  private edgeAnchored: EdgeAnchored[] = [];
 
   constructor() {
     super("game");
@@ -216,30 +235,58 @@ export class GameScene extends Phaser.Scene {
       .setDepth(start.y);
 
     this.cameras.main.setBounds(0, 0, mapPixelWidth, mapPixelHeight);
+    this.cameras.main.setZoom(CAMERA_ZOOM);
     this.cameras.main.startFollow(this.player);
+    this.uiCamera = this.cameras.add(0, 0, this.scale.width, this.scale.height);
+    // Added after the world camera, so it draws over it; depth still orders
+    // things within it.
+    this.uiCamera.setScroll(0, 0);
+    this.world(this.player);
     this.refreshVisibleChunks();
 
     this.spawnBuildings([world.village.well, ...world.village.buildings]);
     this.spawnNpcs(world.village.npcs, world.anchors.village);
 
-    this.statusText = this.add
-      .text(8, 8, "", { fontFamily: "monospace", fontSize: "13px", color: "#ffffff" })
-      .setScrollFactor(0)
-      .setDepth(HUD_DEPTH);
-    this.messageText = this.add
-      .text(8, 26, "", { fontFamily: "monospace", fontSize: "13px", color: "#ffeb3b" })
-      .setScrollFactor(0)
-      .setDepth(HUD_DEPTH);
+    this.statusText = this.ui(
+      this.add
+        .text(HUD_MARGIN, HUD_MARGIN, "", {
+          fontFamily: "monospace",
+          fontSize: "13px",
+          color: "#ffffff",
+        })
+        .setScrollFactor(0)
+        .setDepth(HUD_DEPTH),
+    );
+    this.messageText = this.ui(
+      this.add
+        .text(HUD_MARGIN, 0, "", {
+          fontFamily: "monospace",
+          fontSize: "13px",
+          color: "#ffeb3b",
+        })
+        .setScrollFactor(0)
+        .setDepth(HUD_DEPTH),
+    );
     this.updateStatusText();
 
-    this.nightOverlay = this.add
-      .rectangle(0, 0, this.scale.width, this.scale.height, NIGHT_TINT_COLOR, 0)
-      .setOrigin(0, 0)
-      .setScrollFactor(0)
-      .setDepth(NIGHT_TINT_DEPTH);
+    this.nightOverlay = this.ui(
+      this.add
+        .rectangle(0, 0, this.scale.width, this.scale.height, NIGHT_TINT_COLOR, 0)
+        .setOrigin(0, 0)
+        .setScrollFactor(0)
+        .setDepth(NIGHT_TINT_DEPTH),
+    );
 
     this.setupInput();
     if (this.mobileControls) this.createTouchControls();
+    this.layoutForViewport();
+
+    // The viewport changes on rotation and on any desktop window resize, and
+    // every screen-space thing here is positioned from its size.
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.layoutForViewport, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.layoutForViewport, this);
+    });
 
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer, over: unknown[]) => {
       if (over.length > 0) return; // a UI button handles its own pointerdown
@@ -299,6 +346,47 @@ export class GameScene extends Phaser.Scene {
     if (Phaser.Input.Keyboard.JustDown(this.plantActionKey)) {
       this.tryPlant();
     }
+  }
+
+  // --- Cameras -----------------------------------------------------------
+  //
+  // `ignore` sets a filter flag on the object itself rather than adding it to
+  // a list on the camera, so there is no bookkeeping to keep in sync and a
+  // destroyed object needs no cleanup. Every object this scene creates has to
+  // go through one of these two, or it renders twice — once magnified by the
+  // world camera and once at 1:1 by the UI camera.
+
+  /** Part of the world: drawn by the zoomed camera only. */
+  private world<T extends Phaser.GameObjects.GameObject>(object: T): T {
+    this.uiCamera.ignore(object);
+    return object;
+  }
+
+  /** Part of the interface: drawn at 1:1 by the UI camera only. */
+  private ui<T extends Phaser.GameObjects.GameObject>(object: T): T {
+    this.cameras.main.ignore(object);
+    return object;
+  }
+
+  // Everything anchored to a screen edge, re-placed whenever the viewport
+  // changes. Called once at setup and again on every resize.
+  private layoutForViewport(): void {
+    const { width, height } = this.scale;
+    this.uiCamera?.setSize(width, height);
+    this.nightOverlay?.setSize(width, height);
+    for (const button of this.edgeAnchored) button.place(width, height);
+    this.layoutHud();
+  }
+
+  // The HUD is a single run of text that has to fit a phone held upright as
+  // well as a desktop window, so it wraps rather than running off the edge,
+  // and the message line follows whatever height the status line wrapped to.
+  private layoutHud(): void {
+    if (!this.statusText || !this.messageText) return;
+    const wrap = Math.max(120, this.scale.width - HUD_MARGIN * 2);
+    this.statusText.setWordWrapWidth(wrap);
+    this.messageText.setWordWrapWidth(wrap);
+    this.messageText.setY(this.statusText.y + this.statusText.height + HUD_LINE_GAP);
   }
 
   // --- Asset metadata ----------------------------------------------------
@@ -437,6 +525,7 @@ export class GameScene extends Phaser.Scene {
     );
     texture.setOrigin(0, 0);
     texture.setDepth(CHUNK_DEPTH);
+    this.world(texture);
 
     // Buildings are standalone animated Sprites with their own depth sort
     // (see spawnBuildings), not baked into this RenderTexture — a building
@@ -570,7 +659,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     const { x, y } = this.toScreen(this.playerCol, this.playerRow);
-    this.add.circle(x, y, 6, PLANT_COLORS[plant]).setDepth(this.entityDepth(this.playerRow));
+    this.world(
+      this.add.circle(x, y, 6, PLANT_COLORS[plant]).setDepth(this.entityDepth(this.playerRow)),
+    );
     this.setMessage(`Planted ${plant}`);
   }
 
@@ -607,11 +698,13 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       const origin = spriteOrigin(sidecar, object.col, object.row);
-      this.add
-        .sprite(this.originX + origin.x, this.originY + origin.y, spriteSheetKey(sprite))
-        .setOrigin(0, 0)
-        .setDepth(depthFor(footprintBottomY(sidecar, object.row)))
-        .play(buildingAnimKey(sprite));
+      this.world(
+        this.add
+          .sprite(this.originX + origin.x, this.originY + origin.y, spriteSheetKey(sprite))
+          .setOrigin(0, 0)
+          .setDepth(depthFor(footprintBottomY(sidecar, object.row)))
+          .play(buildingAnimKey(sprite)),
+      );
     }
   }
 
@@ -620,10 +713,12 @@ export class GameScene extends Phaser.Scene {
   // placeholder disc it was before, so the square still reads as a square.
   private spawnUnartedObject(object: PlacedObject): void {
     const { x, y } = this.toScreen(object.anchorCol, object.anchorRow);
-    this.add
-      .circle(x, y, WELL_RADIUS, OBJECT_COLORS[object.type] ?? DEFAULT_OBJECT_COLOR)
-      .setStrokeStyle(2, 0x37474f)
-      .setDepth(this.entityDepth(object.row));
+    this.world(
+      this.add
+        .circle(x, y, WELL_RADIUS, OBJECT_COLORS[object.type] ?? DEFAULT_OBJECT_COLOR)
+        .setStrokeStyle(2, 0x37474f)
+        .setDepth(this.entityDepth(object.row)),
+    );
   }
 
   // --- NPCs --------------------------------------------------------------
@@ -650,10 +745,12 @@ export class GameScene extends Phaser.Scene {
       const character = characterFor(spec.id, genericIndex);
       if (character.startsWith("villager-")) genericIndex++;
       const feet = this.toFeet(spec.home.col, spec.home.row);
-      const sprite = this.add
-        .sprite(feet.x, feet.y, characterSheetKey(character))
-        .setOrigin(0.5, 1)
-        .setDepth(feet.y);
+      const sprite = this.world(
+        this.add
+          .sprite(feet.x, feet.y, characterSheetKey(character))
+          .setOrigin(0.5, 1)
+          .setDepth(feet.y),
+      );
       return {
         id: spec.id,
         character,
@@ -754,36 +851,53 @@ export class GameScene extends Phaser.Scene {
   // the thumb that summoned it does not, and it costs no permanent screen
   // space on the display where space is tightest.
   private createTouchControls(): void {
-    this.joystick = new VirtualJoystick(this, TOUCH_UI_DEPTH);
-    const actionX = this.scale.width - 70;
-    this.addTapButton(actionX, this.scale.height - 70, 64, "Plant", () => this.tryPlant());
-    this.addTapButton(actionX, this.scale.height - 142, 48, "Next", () => this.selectNextPlant());
+    this.joystick = new VirtualJoystick(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
+    // Sizes are in real screen pixels now that the UI camera draws at 1:1, so
+    // 64 here is 64 device-independent pixels — comfortably past the ~9mm a
+    // fingertip needs, which the old fractionally-scaled canvas was not.
+    this.addTapButton(
+      64,
+      "Plant",
+      (w, h) => ({ x: w - 70, y: h - 70 }),
+      () => this.tryPlant(),
+    );
+    this.addTapButton(
+      48,
+      "Next",
+      (w, h) => ({ x: w - 70, y: h - 142 }),
+      () => this.selectNextPlant(),
+    );
   }
 
-  private addTapButton(x: number, y: number, size: number, label: string, onTap: () => void): void {
-    const button = this.addButtonBase(x, y, size, label, 15);
-    button.on("pointerdown", onTap);
-  }
-
-  private addButtonBase(
-    x: number,
-    y: number,
+  private addTapButton(
     size: number,
     label: string,
-    fontSize: number,
-  ): Phaser.GameObjects.Rectangle {
-    const button = this.add
-      .rectangle(x, y, size, size, 0x000000, 0.45)
-      .setStrokeStyle(2, 0xffffff, 0.6)
-      .setScrollFactor(0)
-      .setDepth(TOUCH_UI_DEPTH)
-      .setInteractive({ useHandCursor: true });
-    this.add
-      .text(x, y, label, { fontFamily: "monospace", fontSize: `${fontSize}px`, color: "#ffffff" })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(TOUCH_UI_DEPTH + 1);
-    return button;
+    at: (width: number, height: number) => { x: number; y: number },
+    onTap: () => void,
+  ): void {
+    const box = this.ui(
+      this.add
+        .rectangle(0, 0, size, size, 0x000000, 0.45)
+        .setStrokeStyle(2, 0xffffff, 0.6)
+        .setScrollFactor(0)
+        .setDepth(TOUCH_UI_DEPTH)
+        .setInteractive({ useHandCursor: true }),
+    );
+    const text = this.ui(
+      this.add
+        .text(0, 0, label, { fontFamily: "monospace", fontSize: "15px", color: "#ffffff" })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(TOUCH_UI_DEPTH + 1),
+    );
+    box.on("pointerdown", onTap);
+    this.edgeAnchored.push({
+      place: (width, height) => {
+        const { x, y } = at(width, height);
+        box.setPosition(x, y);
+        text.setPosition(x, y);
+      },
+    });
   }
 
   // --- Coordinates -------------------------------------------------------
@@ -816,15 +930,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateStatusText(): void {
-    const plant = PLANT_TYPES[this.selectedPlantIndex];
-    this.statusText.setText(
-      this.mobileControls
-        ? `Drag anywhere to walk  Plant: ${plant}  (tap Next to change, Plant to plant)`
-        : `Move: arrows/WASD  Plant: ${plant}  (keys 1-${PLANT_TYPES.length} to choose)  Space: plant here`,
-    );
+    this.statusText.setText(this.statusLine);
+    // Wrapping changes the status line's height, which the message line sits
+    // under — so re-place it whenever the text changes, not only on resize.
+    this.layoutHud();
   }
 
   private setMessage(text: string): void {
     this.messageText.setText(text);
+  }
+
+  private get statusLine(): string {
+    const plant = PLANT_TYPES[this.selectedPlantIndex];
+    return this.mobileControls
+      ? `Drag anywhere to walk  Plant: ${plant}  (tap Next to change, Plant to plant)`
+      : `Move: arrows/WASD  Plant: ${plant}  (keys 1-${PLANT_TYPES.length} to choose)  Space: plant here`;
   }
 }

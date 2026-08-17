@@ -41,9 +41,16 @@ export class VirtualJoystick {
   // reuses pointer ids, so this is only ever compared while active.
   private pointerId: number | null = null;
 
+  /**
+   * `register` is handed every object the widget draws with, so the scene can
+   * assign them to its UI camera. The joystick has to be measured in real
+   * screen pixels rather than magnified with the world, and the scene owns
+   * that split — see GameScene's `ui`.
+   */
   constructor(
     private readonly scene: Phaser.Scene,
     depth: number,
+    register?: (object: Phaser.GameObjects.GameObject) => void,
   ) {
     const add = scene.add;
     this.base = add.circle(0, 0, BASE_RADIUS, BASE_FILL, BASE_ALPHA);
@@ -51,6 +58,7 @@ export class VirtualJoystick {
     this.thumb = add.circle(0, 0, THUMB_RADIUS, THUMB_FILL, THUMB_ALPHA);
     for (const part of this.parts()) {
       part.setScrollFactor(0).setDepth(depth).setVisible(false);
+      register?.(part);
     }
   }
 
