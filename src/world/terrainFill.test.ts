@@ -15,7 +15,7 @@ function world(corner: HighCorner, boxes: readonly AreaPlacement[] = []): WorldG
   const grid = WorldGrid.empty(SIZE, SIZE, TerrainType.Grass);
   fillFromElevation(grid, corner, SEED);
   sealFarEdges(grid, corner);
-  flattenReservedAreas(grid, boxes);
+  flattenReservedAreas(grid, boxes, corner, SEED);
   return grid;
 }
 
@@ -133,24 +133,25 @@ describe("flattenReservedAreas", () => {
       for (let col = box.col; col < box.col + box.width; col++)
         before.push(grid.getTerrain(col, row));
     }
-    flattenReservedAreas(grid, [box]);
+    flattenReservedAreas(grid, [box], corner, SEED);
     sealFarEdges(grid, corner);
     return { grid, before };
   }
 
-  test("leaves a story area entirely walkable", () => {
-    // These are the five places content gets built in, so a player has to be
-    // able to stand anywhere in them. Boxes are kept clear of the sealed
-    // shore here, which the generator lets outrank a story area — a Harbour
-    // reaching the map's edge is meant to have sea in it.
+  test("leaves the inside of a story area walkable", () => {
+    // Content gets built in these, so a player has to be able to stand in
+    // the part of one that is actually the clearing. The rim is deliberately
+    // left as whatever the surroundings are — that is what stops the area
+    // reading as a rectangle — so the guarantee is about the inside.
+    const margin = 8;
     for (const corner of HIGH_CORNERS) {
       for (const box of [
         { id: "high", col: 4, row: 4, width: 24, height: 24 },
         { id: "low", col: SIZE - 32, row: SIZE - 32, width: 24, height: 24 },
       ] as AreaPlacement[]) {
         const { grid } = boxed(corner, box);
-        for (let row = box.row; row < box.row + box.height; row++) {
-          for (let col = box.col; col < box.col + box.width; col++) {
+        for (let row = box.row + margin; row < box.row + box.height - margin; row++) {
+          for (let col = box.col + margin; col < box.col + box.width - margin; col++) {
             expect({ corner, col, row, walkable: grid.isPassable(col, row) }).toEqual({
               corner,
               col,
@@ -163,24 +164,43 @@ describe("flattenReservedAreas", () => {
     }
   });
 
-  test("changes only the tiles that were impassable", () => {
-    const box: AreaPlacement = { id: "mid", col: 40, row: 40, width: 20, height: 20 };
-    const { grid, before } = boxed(HighCorner.NorthWest, box);
-    let i = 0;
+  test("a clearing in the mountain is not one flat colour", () => {
+    // The failure this replaced: converting every impassable tile gave an
+    // Observatory that came out 100% hilly — still a rectangle, just a
+    // different one, with a hard line where it met the rock. So the test is
+    // that no single terrain dominates, not merely that two appear.
+    const box: AreaPlacement = { id: "high", col: 4, row: 4, width: 24, height: 24 };
+    const { grid } = boxed(HighCorner.NorthWest, box);
+    const counts = new Map<TerrainType, number>();
     for (let row = box.row; row < box.row + box.height; row++) {
       for (let col = box.col; col < box.col + box.width; col++) {
-        const was = before[i++] as TerrainType;
-        const now = grid.getTerrain(col, row);
-        const wasWalkable = was !== TerrainType.Water && was !== TerrainType.Mountain;
-        if (wasWalkable) expect({ col, row, now }).toEqual({ col, row, now: was });
+        const t = grid.getTerrain(col, row);
+        counts.set(t, (counts.get(t) ?? 0) + 1);
       }
+    }
+    const cells = box.width * box.height;
+    expect(counts.size).toBeGreaterThan(1);
+    expect(Math.max(...counts.values()) / cells).toBeLessThan(0.85);
+  });
+
+  test("a clearing meets its surroundings on a slope, not a line", () => {
+    // The outermost ring of the box is left exactly as it was, so there is
+    // no edge to see.
+    const box: AreaPlacement = { id: "high", col: 20, row: 20, width: 30, height: 30 };
+    const plain = world(HighCorner.NorthWest);
+    const { grid } = boxed(HighCorner.NorthWest, box);
+    for (let col = box.col; col < box.col + box.width; col++) {
+      expect({ col, t: grid.getTerrain(col, box.row) }).toEqual({
+        col,
+        t: plain.getTerrain(col, box.row),
+      });
     }
   });
 
   test("keeps a story area looking like the ground it was cut from", () => {
-    // Rock becomes the slope below it and sea the shore above it, so the
-    // Observatory reads as a shelf in the mountain rather than as a lawn.
-    const box: AreaPlacement = { id: "high", col: 2, row: 2, width: 24, height: 24 };
+    // A clearing in the mountain runs hilly and wooded, never sand or sea:
+    // lowering the ground walks it down the bands, it does not teleport it.
+    const box: AreaPlacement = { id: "high", col: 4, row: 4, width: 24, height: 24 };
     const { grid } = boxed(HighCorner.NorthWest, box);
     const inside = new Set<TerrainType>();
     for (let row = box.row; row < box.row + box.height; row++) {
@@ -188,7 +208,8 @@ describe("flattenReservedAreas", () => {
         inside.add(grid.getTerrain(col, row));
     }
     expect(inside.has(TerrainType.Hilly)).toBe(true);
-    expect(inside.has(TerrainType.Grass)).toBe(false);
+    expect(inside.has(TerrainType.Water)).toBe(false);
+    expect(inside.has(TerrainType.Sand)).toBe(false);
   });
 
   test("leaves everything outside the box alone", () => {

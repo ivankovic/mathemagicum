@@ -133,14 +133,25 @@ function placeInBand(
   throw new Error(`Could not place "${spec.id}" anywhere without overlapping`);
 }
 
+/**
+ * Near another area, and on ground it can actually stand on.
+ *
+ * The band matters as much as the distance. Placed on proximity alone, the
+ * Big City came out half underwater — it is put near the Harbour, and the
+ * Harbour is on the shore, so "near the Harbour" includes the sea.
+ */
 function placeNear(
   worldWidth: number,
   worldHeight: number,
   spec: AnchorSpec,
   anchor: AreaPlacement,
+  elevation: ElevationAt,
+  floor: number,
+  ceiling: number,
   placed: readonly AreaPlacement[],
   rng: Rng,
 ): AreaPlacement {
+  let fallback: AreaPlacement | null = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const col = clamp(
       anchor.col + randInt(rng, -NEAR_DISTANCE, NEAR_DISTANCE),
@@ -154,8 +165,13 @@ function placeNear(
     );
     const box: AreaPlacement = { id: spec.id, col, row, width: spec.width, height: spec.height };
     if (overlapsAny(box, placed)) continue;
-    return box;
+    fallback ??= box;
+    const height = boxElevation(box, elevation);
+    if (height >= floor && height <= ceiling) return box;
   }
+  // Somewhere near beats nowhere: proximity is the point of this placement,
+  // and the clearing pass still makes the middle of it habitable.
+  if (fallback) return fallback;
   throw new Error(
     `Could not place "${spec.id}" near "${anchor.id}" after ${MAX_ATTEMPTS} attempts`,
   );
@@ -209,7 +225,19 @@ export function placeAnchors(
   );
   placed.push(harbour);
 
-  const bigCity = placeNear(worldWidth, worldHeight, spec("big-city"), harbour, placed, rng);
+  // Near the Harbour, but up out of the water: a city on the coastal plain
+  // rather than in the shallows beside the docks.
+  const bigCity = placeNear(
+    worldWidth,
+    worldHeight,
+    spec("big-city"),
+    harbour,
+    elevation,
+    bandFloor(TerrainType.Grass),
+    bandFloor(TerrainType.Woodland),
+    placed,
+    rng,
+  );
   placed.push(bigCity);
 
   const enchantedForest = placeInBand(

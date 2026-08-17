@@ -64,7 +64,7 @@ export function generateWorld(width: number, height: number, seed: number): Gene
   // from the ground it actually sits in; before the seal so the world's
   // water edge still wins where a story area reaches it — the Harbour is
   // supposed to touch the sea, and the far edges are the world's boundary.
-  flattenReservedAreas(grid, reservedBoxes);
+  flattenReservedAreas(grid, reservedBoxes, highCorner, fieldSeed);
   sealFarEdges(grid, highCorner);
 
   // After the fill rather than before it: the village carves paths and

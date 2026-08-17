@@ -32,36 +32,104 @@ export function fillFromElevation(grid: WorldGrid, corner: HighCorner, seed: num
   }
 }
 
-// What impassable ground becomes inside a story area: the next band in
-// toward the walkable middle. Rock gives way to the slope below it and sea
-// to the shore above it, so a cleared area still reads as part of the
-// landscape it was cut from rather than as a patch of something else.
+// What impassable ground becomes when a story area still needs opening up
+// after the ground beneath it has been lowered: the next band in toward the
+// walkable middle.
 const WALKABLE_INSTEAD: Partial<Record<TerrainType, TerrainType>> = {
   [TerrainType.Mountain]: TerrainType.Hilly,
   [TerrainType.Water]: TerrainType.Sand,
 };
 
+// Over how many tiles the clearing fades in from the area's edge, and how
+// much clearance it keeps from the bands it must not land in.
+const CLEARING_FEATHER = 7;
+const CLEARING_MARGIN = 0.06;
+
+// 0 at the box's edge, 1 once CLEARING_FEATHER tiles inside it. Smoothstep
+// rather than linear so the clearing has no crease where the fade ends.
+function clearingStrength(col: number, row: number, box: AreaPlacement): number {
+  const inset = Math.min(
+    col - box.col,
+    box.col + box.width - 1 - col,
+    row - box.row,
+    box.row + box.height - 1 - row,
+  );
+  const t = Math.min(1, Math.max(0, inset / CLEARING_FEATHER));
+  return t * t * (3 - 2 * t);
+}
+
 /**
- * Makes the ground inside each story area walkable without flattening how it
- * looks.
+ * Opens each story area up into a clearing, without turning it into a
+ * rectangle of one colour.
  *
  * These are the five places the game will build content in, so a player has
  * to be able to stand in them — but the Observatory sits in the mountain and
- * the Harbour on the shore, and both would otherwise be largely rock and
- * sea. Only the impassable tiles change, and each becomes the band next to
- * it, so the Observatory reads as a shelf in the rock and the Harbour as a
- * beach rather than either becoming a lawn.
+ * the Harbour on the shore, so both are mostly rock and sea to begin with.
+ *
+ * Simply converting the impassable tiles was not enough. An Observatory
+ * placed wholly in the mountain came out 100% hilly: still a flat rectangle,
+ * just a different flat rectangle, with a hard line where it met the rock.
+ *
+ * So the whole area is *shifted* into walkable ground instead — by one
+ * amount, fading in from its edge, and re-read through the same bands as
+ * everywhere else. Shifting rather than squeezing is the point: pulling
+ * every tile toward one habitable height lands them all on it, which is the
+ * flat rectangle again. A shift moves the area bodily and leaves its own
+ * rise and fall intact, so the clearing follows the terrain's noise — a bowl
+ * in the hillside, a rise out of the shallows.
+ *
+ * And only as far as it must. An area already on walkable ground does not
+ * move at all, which is what stopped an earlier version dragging the
+ * Enchanted Forest out of its trees and onto grass.
  */
 export function flattenReservedAreas(
   grid: WorldGrid,
   reservedBoxes: readonly AreaPlacement[],
+  corner: HighCorner,
+  seed: number,
 ): void {
+  const lowest = bandFloor(TerrainType.Sand) + CLEARING_MARGIN;
+  const highest = bandFloor(TerrainType.Mountain) - CLEARING_MARGIN;
+
   for (const box of reservedBoxes) {
+    const heightAt = (col: number, row: number) =>
+      elevationAt(col, row, grid.width, grid.height, corner, seed);
+
+    // The whole area is shifted by one amount, not squeezed toward one
+    // value. Squeezing is what produced the flat rectangle: pull every tile
+    // toward the same habitable height and they all arrive at it. Shifting
+    // moves the area bodily into walkable ground and leaves its own rise and
+    // fall intact.
+    let total = 0;
+    let cells = 0;
     for (let row = box.row; row < box.row + box.height; row++) {
       for (let col = box.col; col < box.col + box.width; col++) {
         if (!grid.inBounds(col, row)) continue;
-        const instead = WALKABLE_INSTEAD[grid.getTerrain(col, row)];
-        if (instead) grid.setTerrain(col, row, instead);
+        total += heightAt(col, row);
+        cells++;
+      }
+    }
+    if (cells === 0) continue;
+    const mean = total / cells;
+    // Only as far as it has to go. An area already on walkable ground —
+    // the Enchanted Forest in its trees, the Harbour on its sand — does not
+    // move at all, which is what keeps it the place it was chosen to be.
+    const shift = Math.min(highest, Math.max(lowest, mean)) - mean;
+
+    for (let row = box.row; row < box.row + box.height; row++) {
+      for (let col = box.col; col < box.col + box.width; col++) {
+        if (!grid.inBounds(col, row)) continue;
+        const strength = clearingStrength(col, row, box);
+        if (strength <= 0) continue;
+        const ground = groundAt(col, row, heightAt(col, row) + shift * strength, seed);
+        grid.setTerrain(col, row, ground.terrain);
+        grid.setHabitat(col, row, ground.habitat);
+        // Well inside the clearing the player must be able to stand
+        // anywhere, whatever the shifted ground came out as.
+        if (strength > 0.5) {
+          const instead = WALKABLE_INSTEAD[grid.getTerrain(col, row)];
+          if (instead) grid.setTerrain(col, row, instead);
+        }
       }
     }
   }
