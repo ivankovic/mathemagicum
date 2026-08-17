@@ -4,7 +4,7 @@
 import type { AreaPlacement } from "./anchors";
 import type { WorldGrid } from "./grid";
 import { Habitat, terrainAtElevation } from "./habitat";
-import { uniform } from "./noise";
+import { smoothNoise, uniform } from "./noise";
 import { type Rng, pick, randInt } from "./rng";
 import type { GridPoint } from "./topdown";
 
@@ -13,10 +13,86 @@ const INTERIOR_HABITATS: readonly Habitat[] = [Habitat.Meadow, Habitat.Woodland,
 // knob (docs/WORLD_GENERATION.md open questions), not a design fork.
 const SEED_SPACING = 60;
 
-interface QueueItem {
+// How much the ground resists a habitat spreading through it, and over what
+// distance that resistance varies. A region advances slowly through costly
+// ground and races through cheap ground, which is what bends the boundary
+// between two regions into a curve instead of the straight bisector equal
+// rates produce. The period is deliberately shorter than the elevation
+// field's: this shapes the outline of a region, not the terrain inside it.
+const SPREAD_COST_RANGE = 6;
+const SPREAD_COST_PERIOD = 34;
+
+interface Frontier {
+  cost: number;
+  // Insertion index, used only to break ties. Two paths of exactly equal
+  // cost are common on a grid, and without this the winner would depend on
+  // heap internals rather than the seed.
+  order: number;
   col: number;
   row: number;
   habitat: Habitat;
+}
+
+// A binary min-heap. Growth is no longer uniform-cost, so a FIFO queue no
+// longer visits tiles in the order they are actually reached.
+class FrontierHeap {
+  private readonly items: Frontier[] = [];
+
+  get size(): number {
+    return this.items.length;
+  }
+
+  private static before(a: Frontier, b: Frontier): boolean {
+    return a.cost !== b.cost ? a.cost < b.cost : a.order < b.order;
+  }
+
+  push(item: Frontier): void {
+    const items = this.items;
+    items.push(item);
+    let i = items.length - 1;
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      const a = items[i] as Frontier;
+      const b = items[parent] as Frontier;
+      if (!FrontierHeap.before(a, b)) break;
+      items[i] = b;
+      items[parent] = a;
+      i = parent;
+    }
+  }
+
+  pop(): Frontier | undefined {
+    const items = this.items;
+    const top = items[0];
+    const last = items.pop();
+    if (last !== undefined && items.length > 0) {
+      items[0] = last;
+      let i = 0;
+      for (;;) {
+        const left = i * 2 + 1;
+        const right = left + 1;
+        let best = i;
+        if (
+          left < items.length &&
+          FrontierHeap.before(items[left] as Frontier, items[best] as Frontier)
+        ) {
+          best = left;
+        }
+        if (
+          right < items.length &&
+          FrontierHeap.before(items[right] as Frontier, items[best] as Frontier)
+        ) {
+          best = right;
+        }
+        if (best === i) break;
+        const a = items[i] as Frontier;
+        items[i] = items[best] as Frontier;
+        items[best] = a;
+        i = best;
+      }
+    }
+    return top;
+  }
 }
 
 function isInsideAnyBox(col: number, row: number, boxes: readonly AreaPlacement[]): boolean {
@@ -46,7 +122,13 @@ export function growHabitats(
 ): void {
   const claimed = new Uint8Array(grid.width * grid.height);
   const index = (col: number, row: number) => row * grid.width + col;
-  const queue: QueueItem[] = [];
+  const heap = new FrontierHeap();
+  const costSeed = randInt(rng, 0, 0x7ffffffe);
+  let order = 0;
+
+  // What it costs a region to spread onto this tile.
+  const spreadCost = (col: number, row: number): number =>
+    1 + SPREAD_COST_RANGE * smoothNoise(col, row, SPREAD_COST_PERIOD, costSeed);
 
   function seedIgnoringBoxes(col: number, row: number, habitat: Habitat): void {
     if (!grid.inBounds(col, row)) return;
@@ -54,7 +136,7 @@ export function growHabitats(
     if (claimed[idx]) return;
     claimed[idx] = 1;
     grid.setHabitat(col, row, habitat);
-    queue.push({ col, row, habitat });
+    heap.push({ cost: 0, order: order++, col, row, habitat });
   }
 
   // Every seed except the border respects reserved boxes — including the
@@ -97,9 +179,12 @@ export function growHabitats(
     { dCol: 1, dRow: 0 },
   ];
 
-  for (let head = 0; head < queue.length; head++) {
-    const current = queue[head];
-    if (!current) continue;
+  // Cheapest-first, and a tile is claimed when it is *reached* rather than
+  // when it is queued: the region whose cheapest path arrives first owns it,
+  // which is what makes the varying cost shape the boundary at all.
+  while (heap.size > 0) {
+    const current = heap.pop();
+    if (!current) break;
     for (const { dCol, dRow } of deltas) {
       const col = current.col + dCol;
       const row = current.row + dRow;
@@ -109,7 +194,13 @@ export function growHabitats(
       if (claimed[idx]) continue;
       claimed[idx] = 1;
       grid.setHabitat(col, row, current.habitat);
-      queue.push({ col, row, habitat: current.habitat });
+      heap.push({
+        cost: current.cost + spreadCost(col, row),
+        order: order++,
+        col,
+        row,
+        habitat: current.habitat,
+      });
     }
   }
 }

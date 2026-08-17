@@ -209,6 +209,16 @@ Woodland seed from step 2, and enough additional random seeds to cover
 the rest of the map — until every non-reserved tile belongs to a habitat
 region.
 
+Growth is cheapest-first over a *cost* that varies smoothly across the
+map, not uniform flood fill. Uniform expansion advances every region at
+the same rate, so the boundary between two of them is the straight line
+equidistant from both — the whole map came out as Voronoi cells with
+45-degree diagonals, which stayed invisible only while the terrain on top
+of it was per-tile noise. Making regions advance quickly through cheap
+ground and slowly through costly ground bends those boundaries into
+curves. A tile is claimed when it is *reached* rather than when it is
+queued, which is what lets the varying cost decide who gets it.
+
 **5. Terrain + decoration.** Terrain comes from cutting a smooth,
 seeded elevation field at each habitat's weights — see
 [Terrain from elevation](#terrain-from-elevation). Decoration objects are

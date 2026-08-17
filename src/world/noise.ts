@@ -44,7 +44,14 @@ function fade(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
-function valueNoise(x: number, y: number, period: number, seed: number): number {
+/**
+ * One octave of smooth value noise at an arbitrary period.
+ *
+ * Exported for callers that want a smooth field but not this module's
+ * elevation semantics — habitat growth uses it to vary how fast a region
+ * spreads, where all that matters is that the variation is gradual.
+ */
+export function smoothNoise(x: number, y: number, period: number, seed: number): number {
   const gx = Math.floor(x / period);
   const gy = Math.floor(y / period);
   const fx = fade(x / period - gx);
@@ -65,7 +72,7 @@ export function fieldAt(col: number, row: number, seed: number): number {
   let normalizer = 0;
   let period = BASE_PERIOD;
   for (let octave = 0; octave < OCTAVES; octave++) {
-    total += valueNoise(col, row, period, seed + octave * 1013) * amplitude;
+    total += smoothNoise(col, row, period, seed + octave * 1013) * amplitude;
     normalizer += amplitude;
     amplitude *= GAIN;
     period /= LACUNARITY;
