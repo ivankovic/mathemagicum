@@ -8,8 +8,10 @@ import {
   BUILDING_SPRITES,
   type BuildingRole,
   type BuildingSprite,
+  DoorState,
   ROLE_SPRITES,
   buildingAnimKey,
+  doorStateForDistance,
   spriteSheetKey,
 } from "../world/buildings";
 import {
@@ -44,6 +46,7 @@ import { PlantType } from "../world/plants";
 import {
   type BuildingSidecar,
   type CharacterSidecar,
+  doorCell,
   footprintBottomY,
   spriteOrigin,
 } from "../world/spriteSidecar";
@@ -152,6 +155,17 @@ interface EdgeAnchored {
   place(width: number, height: number): void;
 }
 
+// A placed building and the door the player can walk up to. Kept per
+// instance rather than per type: the village has three cottages, and each
+// has to open its own door.
+interface BuildingRuntime {
+  sprite: BuildingSprite;
+  image: Phaser.GameObjects.Sprite;
+  doorCol: number;
+  doorRow: number;
+  door: DoorState;
+}
+
 interface ActiveChunk {
   texture: Phaser.GameObjects.RenderTexture;
   lastUsedAt: number;
@@ -196,6 +210,7 @@ export class GameScene extends Phaser.Scene {
   // loaded texture rather than hardcoded — see terrainAtlas.ts.
   private terrainVariations = new Map<string, number>();
   private buildingSidecars = new Map<BuildingSprite, BuildingSidecar>();
+  private buildings: BuildingRuntime[] = [];
 
   private nightOverlay!: Phaser.GameObjects.Rectangle;
   private npcs: NpcRuntime[] = [];
@@ -324,6 +339,7 @@ export class GameScene extends Phaser.Scene {
       npc.sprite.setDepth(npc.sprite.y);
       this.playCharacterAnim(npc.sprite, npc.character, npc.facing, npc.isMoving);
     }
+    this.updateDoors();
 
     if (!this.isMoving) {
       const dir = this.pressedDirection();
@@ -406,17 +422,23 @@ export class GameScene extends Phaser.Scene {
       const sidecar = this.cache.json.get(sidecarKey(sprite)) as BuildingSidecar | undefined;
       if (!sidecar) throw new Error(`missing sidecar for building "${sprite}"`);
       this.buildingSidecars.set(sprite, sidecar);
-      const animKey = buildingAnimKey(sprite);
-      if (this.anims.exists(animKey)) continue;
-      this.anims.create({
-        key: animKey,
-        frames: this.anims.generateFrameNumbers(spriteSheetKey(sprite), {
-          start: 0,
-          end: sidecar.frame_count - 1,
-        }),
-        frameRate: BUILDING_ANIM_FPS,
-        repeat: -1,
-      });
+      // One looping smoke animation per door position, built from the ranges
+      // the sidecar names — so the door opens by switching animation, and
+      // the smoke keeps drifting either way.
+      for (const [name, range] of Object.entries(sidecar.animations)) {
+        const state = name.replace(/^door_/, "") as DoorState;
+        const key = buildingAnimKey(sprite, state);
+        if (this.anims.exists(key)) continue;
+        this.anims.create({
+          key,
+          frames: this.anims.generateFrameNumbers(spriteSheetKey(sprite), {
+            start: range.start,
+            end: range.end,
+          }),
+          frameRate: BUILDING_ANIM_FPS,
+          repeat: -1,
+        });
+      }
     }
 
     this.registerCharacterAnims();
@@ -589,6 +611,23 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // Swing each door according to how close the player is. Chebyshev
+  // distance, so approaching a door diagonally opens it at the same range as
+  // walking straight at it. Only re-plays the animation when the state
+  // actually changes, or the smoke would restart every frame.
+  private updateDoors(): void {
+    for (const building of this.buildings) {
+      const distance = Math.max(
+        Math.abs(this.playerCol - building.doorCol),
+        Math.abs(this.playerRow - building.doorRow),
+      );
+      const state = doorStateForDistance(distance);
+      if (state === building.door) continue;
+      building.door = state;
+      building.image.play(buildingAnimKey(building.sprite, state), true);
+    }
+  }
+
   // --- Input -----------------------------------------------------------
 
   private setupInput(): void {
@@ -698,13 +737,21 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       const origin = spriteOrigin(sidecar, object.col, object.row);
-      this.world(
+      const image = this.world(
         this.add
           .sprite(this.originX + origin.x, this.originY + origin.y, spriteSheetKey(sprite))
           .setOrigin(0, 0)
           .setDepth(depthFor(footprintBottomY(sidecar, object.row)))
-          .play(buildingAnimKey(sprite)),
+          .play(buildingAnimKey(sprite, DoorState.Closed)),
       );
+      const door = doorCell(sidecar, object.col, object.row);
+      this.buildings.push({
+        sprite,
+        image,
+        doorCol: door.col,
+        doorRow: door.row,
+        door: DoorState.Closed,
+      });
     }
   }
 

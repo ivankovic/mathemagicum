@@ -55,6 +55,35 @@ export function spriteSheetKey(sprite: BuildingSprite): string {
   return `building-${sprite}`;
 }
 
-export function buildingAnimKey(sprite: BuildingSprite): string {
-  return `building-${sprite}-idle`;
+// How far open a building's door is drawn. The generator ships one row of
+// frames per position (see its README's "Doors"), so this is a choice the
+// game makes each frame rather than an animation it starts.
+export const DoorState = {
+  Closed: "closed",
+  Half: "half",
+  Open: "open",
+} as const;
+
+export type DoorState = (typeof DoorState)[keyof typeof DoorState];
+
+export const DOOR_STATES: readonly DoorState[] = Object.values(DoorState);
+
+/**
+ * Which door position suits a player this far from the doorstep.
+ *
+ * Distance drives it directly instead of a timer or a state machine, so
+ * walking up to a house swings the door open over the last two steps and
+ * walking away closes it again, with no transition to get stuck in. It also
+ * means the door is fully open exactly when the player is close enough to
+ * step through it.
+ */
+export function doorStateForDistance(distance: number): DoorState {
+  if (distance <= 1) return DoorState.Open;
+  if (distance <= 2) return DoorState.Half;
+  return DoorState.Closed;
+}
+
+// Matches the sidecar's own animation names: `door_{state}`.
+export function buildingAnimKey(sprite: BuildingSprite, state: DoorState): string {
+  return `building-${sprite}-door_${state}`;
 }

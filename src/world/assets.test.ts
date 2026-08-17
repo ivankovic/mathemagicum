@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, ROLE_SPRITES } from "./buildings";
+import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, DOOR_STATES, ROLE_SPRITES } from "./buildings";
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
 import type { BuildingSidecar, CharacterSidecar } from "./spriteSidecar";
 import { TERRAIN_TYPES } from "./terrain";
@@ -246,6 +246,63 @@ describe("the shipped character sheets", () => {
       if (!sheet) throw new Error(`${name} has no sheet`);
       expect(sheet.columns * sheet.rows).toBeGreaterThanOrEqual(sidecar.frame_count);
       expect(sheet.frame_count).toBe(sidecar.frame_count);
+    }
+  });
+});
+
+describe("the shipped building doors", () => {
+  const sidecars = new Map(
+    BUILDING_SPRITES.map((sprite) => [
+      sprite,
+      readJson<BuildingSidecar>("buildings", `${sprite}.json`),
+    ]),
+  );
+
+  test("ship a frame range for every door state the game asks for", () => {
+    for (const [name, sidecar] of sidecars) {
+      const named = new Set(Object.keys(sidecar.animations));
+      expect({ name, named }).toEqual({
+        name,
+        named: new Set(DOOR_STATES.map((s) => `door_${s}`)),
+      });
+    }
+  });
+
+  test("name ranges that are inside the sheet and do not overlap", () => {
+    for (const [name, sidecar] of sidecars) {
+      const claimed = new Set<number>();
+      for (const range of Object.values(sidecar.animations)) {
+        expect(range.end - range.start + 1).toBe(range.frame_count);
+        expect(range.end).toBeLessThan(sidecar.frame_count);
+        for (let i = range.start; i <= range.end; i++) {
+          expect({ name, i, seen: claimed.has(i) }).toEqual({ name, i, seen: false });
+          claimed.add(i);
+        }
+      }
+      // Every frame in the sheet belongs to some door state.
+      expect(claimed.size).toBe(sidecar.frame_count);
+    }
+  });
+
+  test("put each door state on its own sheet row", () => {
+    for (const sidecar of sidecars.values()) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error("no sheet");
+      expect(sheet.rows).toBe(DOOR_STATES.length);
+      for (const range of Object.values(sidecar.animations)) {
+        expect(range.start % sheet.columns).toBe(0);
+        expect(range.frame_count).toBe(sheet.columns);
+      }
+    }
+  });
+
+  test("put the door on the footprint's front row, reachable from outside", () => {
+    for (const sidecar of sidecars.values()) {
+      const [doorRow] = sidecar.door_cell_relative_to_anchor;
+      // The tile the player stands on to enter is one past the footprint, so
+      // the door has to be on its last row or that tile is inside the
+      // building.
+      expect(doorRow).toBe(sidecar.footprint_tiles.height - 1);
     }
   });
 });

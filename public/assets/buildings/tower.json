@@ -3,9 +3,9 @@
     "file": "tower_sheet.png",
     "frame_width": 64,
     "frame_height": 180,
-    "frame_count": 8,
+    "frame_count": 24,
     "columns": 8,
-    "rows": 1,
+    "rows": 3,
     "margin": 1,
     "spacing": 2
   },
@@ -45,7 +45,29 @@
     "width": 64,
     "height": 180
   },
-  "frame_count": 8,
+  "frame_count": 24,
+  "animations": {
+    "door_closed": {
+      "start": 0,
+      "end": 7,
+      "frame_count": 8
+    },
+    "door_half": {
+      "start": 8,
+      "end": 15,
+      "frame_count": 8
+    },
+    "door_open": {
+      "start": 16,
+      "end": 23,
+      "frame_count": 8
+    }
+  },
+  "door_states": [
+    "closed",
+    "half",
+    "open"
+  ],
   "example_placement": {
     "building": "tower",
     "anchor": [

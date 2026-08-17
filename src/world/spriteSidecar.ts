@@ -42,6 +42,13 @@ export interface SheetSprite {
   frame_count: number;
 }
 
+// A frame range within the sheet, inclusive at both ends.
+export interface AnimationRange {
+  start: number;
+  end: number;
+  frame_count: number;
+}
+
 // Things placed once at generation time, which the world marks as occupied.
 export interface SpriteSidecar extends SheetSprite {
   blocked_cells_relative_to_anchor: readonly (readonly [number, number])[];
@@ -50,17 +57,15 @@ export interface SpriteSidecar extends SheetSprite {
 export interface BuildingSidecar extends SpriteSidecar {
   building: string;
   door_cell_relative_to_anchor: readonly [number, number];
+  // One frame range per door position, keyed `door_{state}`. The door is
+  // state rather than a transition that plays, so each range is its own
+  // looping row of smoke frames and opening the door means switching rows.
+  animations: Record<string, AnimationRange>;
+  door_states: readonly string[];
 }
 
 export interface ObjectSidecar extends SpriteSidecar {
   terrain: string;
-}
-
-// A frame range within the sheet, inclusive at both ends.
-export interface AnimationRange {
-  start: number;
-  end: number;
-  frame_count: number;
 }
 
 // Characters carry no blocked-cells list, and deliberately so: they move, so
