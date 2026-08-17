@@ -1034,12 +1034,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Cast the addition spell on the tile the player is standing on.
+   * Cast the addition spell on the tile the player is facing.
    *
    * The spell adds, and adding to a plant is what makes it grow — one cast,
    * one stage. Refusals are stated rather than silent: the player has to be
    * told the tile is bare or the crop is finished, or a spell that declines
    * to open reads as a broken button.
+   *
+   * The same tile planting works, and deliberately so: two gardening actions
+   * that target different tiles would mean planting a crop and then having to
+   * step onto it to tend it.
    */
   private castGrowthSpell(): void {
     // The one guard here that is not merely defensive: the spellbook button
@@ -1051,11 +1055,14 @@ export class GameScene extends Phaser.Scene {
       this.setMessage("Nothing grows indoors");
       return;
     }
-    const col = this.playerCol;
-    const row = this.playerRow;
+    const { col, row } = this.facingTile();
+    if (!this.grid.inBounds(col, row)) {
+      this.setMessage("Face something you planted to grow it");
+      return;
+    }
     const crop = this.grid.getCrop(col, row);
     if (!crop) {
-      this.setMessage("Stand on something you planted to grow it");
+      this.setMessage("Face something you planted to grow it");
       return;
     }
     if (crop.stage === PlantStage.Mature) {
@@ -1082,6 +1089,23 @@ export class GameScene extends Phaser.Scene {
     this.setMessage(`Your ${grown.plant} is now ${grown.stage}`);
   }
 
+  /**
+   * The tile the player is facing — the one every gardening action works on.
+   *
+   * Gardening used to happen on the tile the player was *standing* on, which
+   * has two problems the moment a crop is something you come back to. A
+   * seedling under the player's own feet is drawn behind them and invisible,
+   * so planting appeared to do nothing; and standing on a tile is the one
+   * position from which you cannot see what is on it. Working the tile in
+   * front puts the crop where the player is looking, and makes which tile is
+   * about to be worked something they can already read off the character's
+   * facing.
+   */
+  private facingTile(): GridPoint {
+    const step = stepForFacing(this.playerFacing);
+    return { col: this.playerCol + step.dCol, row: this.playerRow + step.dRow };
+  }
+
   private tryPlant(): void {
     if (this.spellPopup.isOpen) return;
     const plant = PLANT_TYPES[this.selectedPlantIndex];
@@ -1092,17 +1116,25 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (this.grid.getPlant(this.playerCol, this.playerRow) !== null) {
-      this.setMessage("Something is already planted here");
+    const { col, row } = this.facingTile();
+    // The tile underfoot was passable by definition; the one ahead is not.
+    // Checked before anything reads the terrain there, because both the
+    // world's edge and a tile occupied by a tree are now reachable states
+    // and `getTerrain` throws off the edge of the grid.
+    if (!this.grid.isPassable(col, row)) {
+      this.setMessage("There's no room to plant there");
       return;
     }
-    if (!this.grid.plant(this.playerCol, this.playerRow, plant)) {
-      const terrain = this.grid.getTerrain(this.playerCol, this.playerRow);
-      this.setMessage(`${plant} can't grow on ${terrain}`);
+    if (this.grid.getPlant(col, row) !== null) {
+      this.setMessage("Something is already planted there");
+      return;
+    }
+    if (!this.grid.plant(col, row, plant)) {
+      this.setMessage(`${plant} can't grow on ${this.grid.getTerrain(col, row)}`);
       return;
     }
 
-    const feet = this.toFeet(this.playerCol, this.playerRow);
+    const feet = this.toFeet(col, row);
     const sprite = this.world(
       this.add
         .sprite(feet.x, feet.y, plantSheetKey(plant))
@@ -1113,7 +1145,7 @@ export class GameScene extends Phaser.Scene {
         .setDepth(feet.y - 0.5)
         .play(plantAnimKey(plant, PLANTED_STAGE)),
     );
-    this.cropSprites.set(cropKey(this.playerCol, this.playerRow), sprite);
+    this.cropSprites.set(cropKey(col, row), sprite);
     this.setMessage(`Planted a ${plant} seedling — cast the plus rune to grow it`);
   }
 
@@ -1542,9 +1574,9 @@ export class GameScene extends Phaser.Scene {
   // and a third of a portrait screen is too much to spend on a caption.
   private get statusLine(): string {
     const plant = PLANT_TYPES[this.selectedPlantIndex];
-    const spell = this.spellTrayOpen ? "tap + to grow this tile" : "spellbook";
+    const spell = this.spellTrayOpen ? "tap + to grow the tile ahead" : "spellbook";
     return this.mobileControls
-      ? `Drag to walk  Plant: ${plant}  Book: ${spell}`
-      : `Arrows/WASD  Plant: ${plant} (1-${PLANT_TYPES.length})  Space: plant  B: ${spell}`;
+      ? `Drag to walk  Plant ahead: ${plant}  Book: ${spell}`
+      : `Arrows/WASD  Plant ahead: ${plant} (1-${PLANT_TYPES.length})  Space: plant  B: ${spell}`;
   }
 }
