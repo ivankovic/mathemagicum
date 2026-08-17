@@ -53,8 +53,15 @@ const WORLD_SIZE = 500;
 const WORLD_SEED = 12345;
 const MOVE_DURATION_MS = 160;
 const PLANT_TYPES = Object.values(PlantType);
-const TOUCH_UI_DEPTH = 2000;
-const NIGHT_TINT_DEPTH = 500;
+// Depth is a pixel y now (see topdown.ts's depthFor), not the tile-unit
+// col + row the isometric projection sorted on — so it runs to the world's
+// pixel height rather than topping out around 1000. Anything that has to
+// float above the world has to clear that, and deriving these from
+// WORLD_SIZE keeps them right if the world grows.
+const WORLD_DEPTH_CEILING = WORLD_SIZE * TILE_SIZE;
+const NIGHT_TINT_DEPTH = WORLD_DEPTH_CEILING + 1000;
+const HUD_DEPTH = WORLD_DEPTH_CEILING + 2000;
+const TOUCH_UI_DEPTH = WORLD_DEPTH_CEILING + 3000;
 const CHUNK_DEPTH = -1000;
 const CHUNK_VIEW_MARGIN = 1;
 // Generous cache so panning back and forth doesn't constantly re-render —
@@ -190,11 +197,11 @@ export class GameScene extends Phaser.Scene {
     this.statusText = this.add
       .text(8, 8, "", { fontFamily: "monospace", fontSize: "13px", color: "#ffffff" })
       .setScrollFactor(0)
-      .setDepth(1000);
+      .setDepth(HUD_DEPTH);
     this.messageText = this.add
       .text(8, 26, "", { fontFamily: "monospace", fontSize: "13px", color: "#ffeb3b" })
       .setScrollFactor(0)
-      .setDepth(1000);
+      .setDepth(HUD_DEPTH);
     this.updateStatusText();
 
     this.nightOverlay = this.add
