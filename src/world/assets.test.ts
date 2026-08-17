@@ -6,7 +6,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, DOOR_STATES, ROLE_SPRITES } from "./buildings";
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
-import type { BuildingSidecar, CharacterSidecar } from "./spriteSidecar";
+import { INTERIOR_ROOMS, interiorFor } from "./interiors";
+import type { BuildingSidecar, CharacterSidecar, InteriorSidecar } from "./spriteSidecar";
 import { TERRAIN_TYPES } from "./terrain";
 import { TERRAIN_ATLAS_KEY, buildVariationIndex, comboKey } from "./terrainAtlas";
 import type { CornerTerrains } from "./terrainAtlas";
@@ -303,6 +304,81 @@ describe("the shipped building doors", () => {
       // the door has to be on its last row or that tile is inside the
       // building.
       expect(doorRow).toBe(sidecar.footprint_tiles.height - 1);
+    }
+  });
+});
+
+describe("the shipped interiors", () => {
+  const rooms = new Map(
+    INTERIOR_ROOMS.map((r) => [r, readJson<InteriorSidecar>("interiors", `${r}.json`)]),
+  );
+
+  test("exist for every building the village can place", () => {
+    for (const sprite of Object.values(ROLE_SPRITES)) {
+      expect(rooms.has(interiorFor(sprite))).toBe(true);
+    }
+  });
+
+  test("ship the sheet PNG they name", () => {
+    for (const [name, sidecar] of rooms) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error(`${name} has no sheet`);
+      expect(existsSync(join(ASSETS, "interiors", sheet.file))).toBe(true);
+    }
+  });
+
+  test("have art exactly as large as the grid they describe, plus the wall", () => {
+    // The renderer places cell (0,0) at wall_rise_px down from the image's
+    // top-left. If the art and the grid disagreed, every position indoors
+    // would drift by the difference.
+    for (const [name, sidecar] of rooms) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error(`${name} has no sheet`);
+      expect({ name, w: sheet.frame_width, h: sheet.frame_height }).toEqual({
+        name,
+        w: sidecar.size_cells.cols * TILE_SIZE,
+        h: sidecar.size_cells.rows * TILE_SIZE + sidecar.wall_rise_px,
+      });
+    }
+  });
+
+  test("use the tile size the projection is built on", () => {
+    for (const sidecar of rooms.values()) expect(sidecar.tile_size).toBe(TILE_SIZE);
+  });
+
+  test("put the door on the last row and leave it unblocked", () => {
+    for (const [name, sidecar] of rooms) {
+      const [row, col] = sidecar.door_cell;
+      expect({ name, row }).toEqual({ name, row: sidecar.size_cells.rows - 1 });
+      expect(col).toBeGreaterThanOrEqual(0);
+      expect(col).toBeLessThan(sidecar.size_cells.cols);
+      const blocked = sidecar.blocked_cells.some(([r, c]) => r === row && c === col);
+      expect({ name, doorBlocked: blocked }).toEqual({ name, doorBlocked: false });
+    }
+  });
+
+  test("list only cells that exist", () => {
+    for (const [name, sidecar] of rooms) {
+      const { cols, rows } = sidecar.size_cells;
+      for (const [r, c] of sidecar.blocked_cells) {
+        expect({ name, inRange: r >= 0 && r < rows && c >= 0 && c < cols }).toEqual({
+          name,
+          inRange: true,
+        });
+      }
+    }
+  });
+
+  test("leave a walkable route off the doorway, so entering is not a dead end", () => {
+    for (const [name, sidecar] of rooms) {
+      const [doorRow, doorCol] = sidecar.door_cell;
+      const blocked = new Set(sidecar.blocked_cells.map(([r, c]) => `${c},${r}`));
+      // The cell straight ahead of the door has to be free, or walking in
+      // leaves the player stuck in the doorway.
+      expect({ name, ahead: blocked.has(`${doorCol},${doorRow - 1}`) }).toEqual({
+        name,
+        ahead: false,
+      });
     }
   });
 });

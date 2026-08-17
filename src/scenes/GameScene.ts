@@ -18,7 +18,7 @@ import {
   ALL_CHARACTERS,
   CHARACTER_ANIMATIONS,
   DEFAULT_FACING,
-  type Facing,
+  Facing,
   IDLE,
   IDLE_FPS,
   PLAYER_CHARACTER,
@@ -39,6 +39,16 @@ import {
   dualTileRange,
 } from "../world/chunks";
 import type { WorldGrid } from "../world/grid";
+import {
+  INTERIOR_ROOMS,
+  buildInteriorGrid,
+  interiorAnimKey,
+  interiorDoor,
+  interiorFor,
+  interiorOriginY,
+  interiorSheetKey,
+  interiorSidecarKey,
+} from "../world/interiors";
 import type { PlacedObject } from "../world/objects";
 import { DEFAULT_OBJECT_COLOR, OBJECT_COLORS, PLANT_COLORS } from "../world/palette";
 import { findPath } from "../world/pathfinding";
@@ -46,6 +56,7 @@ import { PlantType } from "../world/plants";
 import {
   type BuildingSidecar,
   type CharacterSidecar,
+  type InteriorSidecar,
   doorCell,
   footprintBottomY,
   spriteOrigin,
@@ -166,6 +177,19 @@ interface BuildingRuntime {
   door: DoorState;
 }
 
+// The room the player is currently standing in, or null outdoors. Interiors
+// are a mode of this scene rather than a scene of their own: the player,
+// camera, input, joystick and HUD are all the same ones, and only the grid
+// under them and the layer being drawn change.
+interface InteriorRuntime {
+  room: string;
+  grid: WorldGrid;
+  image: Phaser.GameObjects.Sprite;
+  exit: GridPoint;
+  returnTo: GridPoint;
+  originY: number;
+}
+
 interface ActiveChunk {
   texture: Phaser.GameObjects.RenderTexture;
   lastUsedAt: number;
@@ -211,6 +235,18 @@ export class GameScene extends Phaser.Scene {
   private terrainVariations = new Map<string, number>();
   private buildingSidecars = new Map<BuildingSprite, BuildingSidecar>();
   private buildings: BuildingRuntime[] = [];
+  private interiorSidecars = new Map<string, InteriorSidecar>();
+  private interior: InteriorRuntime | null = null;
+  // The outdoor grid and its camera bounds, kept so stepping back outside
+  // restores exactly what was there rather than regenerating it.
+  private worldGrid!: WorldGrid;
+  private worldPixelWidth = 0;
+  private worldPixelHeight = 0;
+  // Everything drawn outdoors and everything drawn indoors, so entering a
+  // building is one setVisible on each rather than hunting down every sprite
+  // and chunk texture that happens to exist.
+  private worldLayer!: Phaser.GameObjects.Layer;
+  private interiorLayer!: Phaser.GameObjects.Layer;
 
   private nightOverlay!: Phaser.GameObjects.Rectangle;
   private npcs: NpcRuntime[] = [];
@@ -227,10 +263,13 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.mobileControls = !this.sys.game.device.os.desktop;
+    this.worldLayer = this.add.layer();
+    this.interiorLayer = this.add.layer().setVisible(false);
     this.loadAssetMetadata();
 
     const world = generateWorld(WORLD_SIZE, WORLD_SIZE, WORLD_SEED);
     this.grid = world.grid;
+    this.worldGrid = world.grid;
     this.playerCol = world.playerStart.col;
     this.playerRow = world.playerStart.row;
 
@@ -239,6 +278,8 @@ export class GameScene extends Phaser.Scene {
     this.originY = -bounds.minY;
     const mapPixelWidth = bounds.maxX - bounds.minX;
     const mapPixelHeight = bounds.maxY - bounds.minY;
+    this.worldPixelWidth = mapPixelWidth;
+    this.worldPixelHeight = mapPixelHeight;
 
     const start = this.toFeet(this.playerCol, this.playerRow);
     this.player = this.add
@@ -325,11 +366,14 @@ export class GameScene extends Phaser.Scene {
 
   override update(): void {
     this.frameCounter++;
-    this.refreshVisibleChunks();
-
     const hour = timeOfDay(new Date());
+    if (!this.interior) {
+      this.refreshVisibleChunks();
+      this.updateNpcs(isDaytime(hour));
+    }
+    // The tint still applies indoors: it is the time of day, not the weather
+    // outside a window.
     this.nightOverlay.setFillStyle(NIGHT_TINT_COLOR, nightTintAlpha(hour));
-    this.updateNpcs(isDaytime(hour));
 
     // Depth follows the sprite's own y, which is its feet — so it stays
     // correct part-way through a step rather than only at whole tiles.
@@ -339,7 +383,7 @@ export class GameScene extends Phaser.Scene {
       npc.sprite.setDepth(npc.sprite.y);
       this.playCharacterAnim(npc.sprite, npc.character, npc.facing, npc.isMoving);
     }
-    this.updateDoors();
+    if (!this.interior) this.updateDoors();
 
     if (!this.isMoving) {
       const dir = this.pressedDirection();
@@ -375,7 +419,25 @@ export class GameScene extends Phaser.Scene {
   /** Part of the world: drawn by the zoomed camera only. */
   private world<T extends Phaser.GameObjects.GameObject>(object: T): T {
     this.uiCamera.ignore(object);
+    this.sceneryLayer().add(object);
     return object;
+  }
+
+  // Whichever layer is currently on screen. Entering a building hides one and
+  // shows the other, so anything created after that point belongs to the new
+  // one.
+  private sceneryLayer(): Phaser.GameObjects.Layer {
+    return this.interior ? this.interiorLayer : this.worldLayer;
+  }
+
+  // The player exists in both modes, so they move between the layers rather
+  // than living in one. They cannot simply sit outside both: a Layer renders
+  // as a unit at its own depth, so a player left on the scene's display list
+  // would always draw over the buildings instead of sorting against them.
+  private movePlayerToLayer(): void {
+    this.worldLayer.remove(this.player);
+    this.interiorLayer.remove(this.player);
+    this.sceneryLayer().add(this.player);
   }
 
   /** Part of the interface: drawn at 1:1 by the UI camera only. */
@@ -442,6 +504,30 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.registerCharacterAnims();
+    this.registerInteriorAnims();
+  }
+
+  private registerInteriorAnims(): void {
+    for (const room of INTERIOR_ROOMS) {
+      const sidecar = this.cache.json.get(interiorSidecarKey(room)) as InteriorSidecar | undefined;
+      if (!sidecar) throw new Error(`missing sidecar for interior "${room}"`);
+      this.interiorSidecars.set(room, sidecar);
+      const frames = sidecar.sheet?.frame_count ?? 1;
+      // Most rooms are a single still frame; only the ones with something
+      // moving in them (a fire) ship more, so there is nothing to loop.
+      if (frames < 2) continue;
+      const key = interiorAnimKey(room);
+      if (this.anims.exists(key)) continue;
+      this.anims.create({
+        key,
+        frames: this.anims.generateFrameNumbers(interiorSheetKey(room), {
+          start: 0,
+          end: frames - 1,
+        }),
+        frameRate: BUILDING_ANIM_FPS,
+        repeat: -1,
+      });
+    }
   }
 
   // One Phaser animation per (character, animation, facing), built straight
@@ -665,6 +751,29 @@ export class GameScene extends Phaser.Scene {
     // into a wall should still turn the character, which is what makes the
     // controls feel like they are being listened to.
     this.playerFacing = facingFor(dCol, dRow, this.playerFacing);
+
+    if (this.interior) {
+      // Walking off the room's edge means nothing except at the door, which
+      // is the one cell in the wall that is not blocked.
+      if (
+        !this.grid.inBounds(targetCol, targetRow) &&
+        this.playerCol === this.interior.exit.col &&
+        this.playerRow === this.interior.exit.row
+      ) {
+        this.leaveInterior();
+        return;
+      }
+    } else {
+      // Pressing into a door enters, rather than bumping off it. The door
+      // cell is part of the footprint and so already impassable, which is
+      // what makes this unambiguous: nothing else wants that step.
+      const building = this.buildingWithDoorAt(targetCol, targetRow);
+      if (building) {
+        this.enterInterior(building);
+        return;
+      }
+    }
+
     if (!this.grid.isPassable(targetCol, targetRow)) return;
 
     this.isMoving = true;
@@ -686,6 +795,11 @@ export class GameScene extends Phaser.Scene {
   private tryPlant(): void {
     const plant = PLANT_TYPES[this.selectedPlantIndex];
     if (!plant) return;
+
+    if (this.interior) {
+      this.setMessage("Nothing grows indoors");
+      return;
+    }
 
     if (this.grid.getPlant(this.playerCol, this.playerRow) !== null) {
       this.setMessage("Something is already planted here");
@@ -766,6 +880,91 @@ export class GameScene extends Phaser.Scene {
         .setStrokeStyle(2, 0x37474f)
         .setDepth(this.entityDepth(object.row)),
     );
+  }
+
+  // --- Interiors ---------------------------------------------------------
+
+  private buildingWithDoorAt(col: number, row: number): BuildingRuntime | undefined {
+    return this.buildings.find((b) => b.doorCol === col && b.doorRow === row);
+  }
+
+  /**
+   * Step inside.
+   *
+   * Swaps the grid the player walks on, the origin their tiles are measured
+   * from and the layer being drawn. Everything else — the camera, the
+   * joystick, the depth sort, the animation state — carries on untouched,
+   * which is the whole reason interiors are a mode here rather than a scene
+   * of their own.
+   */
+  private enterInterior(building: BuildingRuntime): void {
+    const room = interiorFor(building.sprite);
+    const sidecar = this.interiorSidecars.get(room);
+    if (!sidecar) throw new Error(`no interior for "${room}"`);
+
+    const door = interiorDoor(sidecar);
+    this.interior = {
+      room,
+      grid: buildInteriorGrid(sidecar),
+      // Placed below, once `world` will file it under the interior layer.
+      image: undefined as unknown as Phaser.GameObjects.Sprite,
+      exit: door,
+      // Back onto the doorstep: the door cell itself is part of the
+      // building's footprint and so is never stood on.
+      returnTo: { col: building.doorCol, row: building.doorRow + 1 },
+      originY: interiorOriginY(sidecar),
+    };
+
+    const image = this.world(
+      this.add.sprite(0, 0, interiorSheetKey(room)).setOrigin(0, 0).setDepth(CHUNK_DEPTH),
+    );
+    if ((sidecar.sheet?.frame_count ?? 1) > 1) image.play(interiorAnimKey(room));
+    this.interior.image = image;
+
+    this.grid = this.interior.grid;
+    this.originX = 0;
+    this.originY = this.interior.originY;
+    this.worldLayer.setVisible(false);
+    this.interiorLayer.setVisible(true);
+    this.movePlayerToLayer();
+
+    const { cols, rows } = sidecar.size_cells;
+    this.cameras.main.setBounds(0, 0, cols * TILE_SIZE, this.originY + rows * TILE_SIZE);
+    // Facing up: they just walked in through the wall behind them.
+    this.placePlayer(door.col, door.row, Facing.Up);
+    this.setMessage(`Entered the ${room}. Step back out through the door.`);
+  }
+
+  private leaveInterior(): void {
+    const interior = this.interior;
+    if (!interior) return;
+    interior.image.destroy();
+    this.interiorLayer.setVisible(false);
+    this.worldLayer.setVisible(true);
+    this.interior = null;
+    this.movePlayerToLayer();
+
+    this.grid = this.worldGrid;
+    this.originX = 0;
+    this.originY = 0;
+    this.cameras.main.setBounds(0, 0, this.worldPixelWidth, this.worldPixelHeight);
+    this.placePlayer(interior.returnTo.col, interior.returnTo.row, Facing.Down);
+    this.setMessage("");
+    this.refreshVisibleChunks();
+  }
+
+  // Teleport rather than walk: used at both ends of a doorway, where the two
+  // positions are in different coordinate spaces and tweening between them
+  // would send the player across the room.
+  private placePlayer(col: number, row: number, facing: Facing): void {
+    this.tweens.killTweensOf(this.player);
+    this.isMoving = false;
+    this.path = [];
+    this.playerCol = col;
+    this.playerRow = row;
+    this.playerFacing = facing;
+    const feet = this.toFeet(col, row);
+    this.player.setPosition(feet.x, feet.y).setDepth(feet.y);
   }
 
   // --- NPCs --------------------------------------------------------------

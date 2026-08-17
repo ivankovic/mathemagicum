@@ -68,6 +68,24 @@ export interface ObjectSidecar extends SpriteSidecar {
   terrain: string;
 }
 
+// A room the player can walk around inside. Unlike a building, which is one
+// sprite standing on the world grid, an interior *is* a little grid of its
+// own — so it carries its size and its own blocked cells rather than a
+// footprint and an offset.
+export interface InteriorSidecar {
+  sheet: SheetLayout | null;
+  room: string;
+  size_cells: { cols: number; rows: number };
+  tile_size: number;
+  // The north wall is the one surface facing the viewer, so it has real
+  // height: the art is this many pixels taller than the grid it describes,
+  // and cell (0,0) starts below it.
+  wall_rise_px: number;
+  door_cell: readonly [number, number];
+  blocked_cells: readonly (readonly [number, number])[];
+  furniture: readonly { name: string; cell: readonly [number, number]; blocks: boolean }[];
+}
+
 // Characters carry no blocked-cells list, and deliberately so: they move, so
 // nothing ever stamps them into the grid the way a building is stamped.
 export interface CharacterSidecar extends SheetSprite {

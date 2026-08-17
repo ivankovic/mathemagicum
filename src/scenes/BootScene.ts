@@ -4,7 +4,13 @@
 import Phaser from "phaser";
 import { BUILDING_SPRITES, type BuildingSprite, spriteSheetKey } from "../world/buildings";
 import { ALL_CHARACTERS, characterSheetKey, characterSidecarKey } from "../world/characters";
-import type { BuildingSidecar, CharacterSidecar, SheetLayout } from "../world/spriteSidecar";
+import { INTERIOR_ROOMS, interiorSheetKey, interiorSidecarKey } from "../world/interiors";
+import type {
+  BuildingSidecar,
+  CharacterSidecar,
+  InteriorSidecar,
+  SheetLayout,
+} from "../world/spriteSidecar";
 import { TERRAIN_ATLAS_KEY } from "../world/terrainAtlas";
 
 export function sidecarKey(sprite: BuildingSprite): string {
@@ -44,6 +50,9 @@ export class BootScene extends Phaser.Scene {
         `${this.base()}assets/characters/${character}.json`,
       );
     }
+    for (const room of INTERIOR_ROOMS) {
+      this.load.json(interiorSidecarKey(room), `${this.base()}assets/interiors/${room}.json`);
+    }
   }
 
   create(): void {
@@ -56,6 +65,10 @@ export class BootScene extends Phaser.Scene {
         | CharacterSidecar
         | undefined;
       this.queueSheet(characterSheetKey(character), "characters", character, sidecar?.sheet);
+    }
+    for (const room of INTERIOR_ROOMS) {
+      const sidecar = this.cache.json.get(interiorSidecarKey(room)) as InteriorSidecar | undefined;
+      this.queueSheet(interiorSheetKey(room), "interiors", room, sidecar?.sheet);
     }
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
       this.verifyFrameCounts();
@@ -99,6 +112,10 @@ export class BootScene extends Phaser.Scene {
     for (const character of ALL_CHARACTERS) {
       const sidecar = this.cache.json.get(characterSidecarKey(character)) as CharacterSidecar;
       expected.push([character, characterSheetKey(character), sidecar.frame_count]);
+    }
+    for (const room of INTERIOR_ROOMS) {
+      const sheet = (this.cache.json.get(interiorSidecarKey(room)) as InteriorSidecar).sheet;
+      if (sheet) expected.push([room, interiorSheetKey(room), sheet.frame_count]);
     }
     for (const [name, key, count] of expected) {
       // Phaser counts its own __BASE frame alongside the sliced ones.

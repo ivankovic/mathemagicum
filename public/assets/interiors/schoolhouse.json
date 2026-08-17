@@ -1,0 +1,307 @@
+{
+  "sheet": {
+    "file": "schoolhouse_sheet.png",
+    "frame_width": 288,
+    "frame_height": 210,
+    "frame_count": 1,
+    "columns": 1,
+    "rows": 1,
+    "margin": 1,
+    "spacing": 2
+  },
+  "room": "schoolhouse",
+  "size_cells": {
+    "cols": 9,
+    "rows": 6
+  },
+  "tile_size": 32,
+  "wall_rise_px": 18,
+  "door_cell": [
+    5,
+    4
+  ],
+  "blocked_cells": [
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      1
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      0,
+      3
+    ],
+    [
+      0,
+      4
+    ],
+    [
+      0,
+      5
+    ],
+    [
+      0,
+      6
+    ],
+    [
+      0,
+      7
+    ],
+    [
+      0,
+      8
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      1,
+      4
+    ],
+    [
+      1,
+      7
+    ],
+    [
+      1,
+      8
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      2,
+      8
+    ],
+    [
+      3,
+      0
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      3,
+      6
+    ],
+    [
+      3,
+      7
+    ],
+    [
+      3,
+      8
+    ],
+    [
+      4,
+      0
+    ],
+    [
+      4,
+      1
+    ],
+    [
+      4,
+      2
+    ],
+    [
+      4,
+      6
+    ],
+    [
+      4,
+      7
+    ],
+    [
+      4,
+      8
+    ],
+    [
+      5,
+      0
+    ],
+    [
+      5,
+      1
+    ],
+    [
+      5,
+      2
+    ],
+    [
+      5,
+      3
+    ],
+    [
+      5,
+      5
+    ],
+    [
+      5,
+      6
+    ],
+    [
+      5,
+      7
+    ],
+    [
+      5,
+      8
+    ]
+  ],
+  "furniture": [
+    {
+      "name": "blackboard",
+      "cell": [
+        1,
+        3
+      ],
+      "footprint": [
+        2,
+        1
+      ],
+      "blocks": true
+    },
+    {
+      "name": "bookshelf",
+      "cell": [
+        1,
+        1
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true
+    },
+    {
+      "name": "bookshelf",
+      "cell": [
+        1,
+        7
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true
+    },
+    {
+      "name": "desk",
+      "cell": [
+        3,
+        1
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true
+    },
+    {
+      "name": "desk",
+      "cell": [
+        3,
+        2
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true
+    },
+    {
+      "name": "desk",
+      "cell": [
+        3,
+        6
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true
+    },
+    {
+      "name": "desk",
+      "cell": [
+        3,
+        7
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true
+    },
+    {
+      "name": "desk",
+      "cell": [
+        4,
+        1
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true
+    },
+    {
+      "name": "desk",
+      "cell": [
+        4,
+        2
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true
+    },
+    {
+      "name": "desk",
+      "cell": [
+        4,
+        6
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true
+    },
+    {
+      "name": "desk",
+      "cell": [
+        4,
+        7
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true
+    }
+  ]
+}

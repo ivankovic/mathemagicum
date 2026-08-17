@@ -28,6 +28,7 @@ cd ../asset-generator
 uv run asset-generator terrain-atlas   --seed 7 --out-dir output/terrain_atlas
 uv run asset-generator terrain-buildings --seed 7 --sheets --out-dir output/terrain_buildings
 uv run asset-generator terrain-characters --seed 7 --out-dir output/terrain_characters
+uv run asset-generator terrain-interiors --seed 7 --sheets --out-dir output/terrain_interiors
 
 cd -
 OUT=../asset-generator/output
@@ -35,6 +36,9 @@ cp $OUT/terrain_atlas/terrain*.{png,json} public/assets/terrain/
 cp $OUT/terrain_buildings/{cottage,barn,tower,schoolhouse}{.json,_sheet.png} public/assets/buildings/
 for c in player teacher postal-worker shopkeeper villager-0 villager-1 villager-2; do
   cp $OUT/terrain_characters/$c{.json,_sheet.png} public/assets/characters/
+done
+for r in cottage barn tower schoolhouse; do
+  cp $OUT/terrain_interiors/$r{.json,_sheet.png} public/assets/interiors/
 done
 bun test   # src/world/assets.test.ts checks the sync
 ```
@@ -57,6 +61,14 @@ Three things are worth knowing about what gets copied:
   will roll as many generic villagers as you ask for; the list in the loop
   above has to stay in step with `VILLAGER_CHARACTERS` in
   `src/world/characters.ts`, which is what the game loads.
+
+An interior's art is exactly as large as the grid it describes plus its north
+wall, and `assets.test.ts` checks that: cell (0,0) is drawn `wall_rise_px`
+below the image's top-left, so art and grid disagreeing would put the player
+inside the furniture everywhere in the room. It also checks every open cell
+is reachable from the doorway — two rooms once shipped with furniture
+directly in front of their own door, which renders perfectly and only shows
+up by walking it.
 
 A character sheet is the only asset here laid out as a 2D grid, and both of
 its axes are an exact multiple of the frame pitch with no slack — so a loader
