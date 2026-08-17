@@ -18,23 +18,33 @@ export interface SheetLayout {
   frame_width: number;
   frame_height: number;
   frame_count: number;
+  // The sheet's grid. Buildings and objects are a single row; a character is
+  // several, one animation per row.
+  columns: number;
+  rows: number;
   // Extrusion, expressed the way a uniform-grid spritesheet loader wants it:
-  // frame i starts at margin + i * (frame_width + spacing).
+  // the frame at grid position (col, row) starts at
+  // margin + col * (frame_width + spacing).
   margin: number;
   spacing: number;
 }
 
-export interface SpriteSidecar {
+// Common to everything the generator draws standing on the ground.
+export interface SheetSprite {
   sheet: SheetLayout | null;
   tile_size: number;
   footprint_tiles: { width: number; height: number };
-  blocked_cells_relative_to_anchor: readonly (readonly [number, number])[];
   // Where to draw the sprite relative to the anchor cell's top-left corner.
   // y is negative: the sprite is drawn from the front and rises above the
   // footprint it stands on, which is what makes the view read as 3/4.
   sprite_offset_px: { x: number; y: number };
   sprite_size_px: { width: number; height: number };
   frame_count: number;
+}
+
+// Things placed once at generation time, which the world marks as occupied.
+export interface SpriteSidecar extends SheetSprite {
+  blocked_cells_relative_to_anchor: readonly (readonly [number, number])[];
 }
 
 export interface BuildingSidecar extends SpriteSidecar {
@@ -44,6 +54,21 @@ export interface BuildingSidecar extends SpriteSidecar {
 
 export interface ObjectSidecar extends SpriteSidecar {
   terrain: string;
+}
+
+// A frame range within the sheet, inclusive at both ends.
+export interface AnimationRange {
+  start: number;
+  end: number;
+  frame_count: number;
+}
+
+// Characters carry no blocked-cells list, and deliberately so: they move, so
+// nothing ever stamps them into the grid the way a building is stamped.
+export interface CharacterSidecar extends SheetSprite {
+  character: string;
+  directions: readonly string[];
+  animations: Record<string, AnimationRange>;
 }
 
 export function blockedCells(

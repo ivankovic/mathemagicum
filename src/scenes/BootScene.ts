@@ -3,7 +3,8 @@
 
 import Phaser from "phaser";
 import { BUILDING_SPRITES, type BuildingSprite, spriteSheetKey } from "../world/buildings";
-import type { BuildingSidecar } from "../world/spriteSidecar";
+import { ALL_CHARACTERS, characterSheetKey, characterSidecarKey } from "../world/characters";
+import type { BuildingSidecar, CharacterSidecar, SheetLayout } from "../world/spriteSidecar";
 import { TERRAIN_ATLAS_KEY } from "../world/terrainAtlas";
 
 export function sidecarKey(sprite: BuildingSprite): string {
@@ -37,25 +38,74 @@ export class BootScene extends Phaser.Scene {
     for (const sprite of BUILDING_SPRITES) {
       this.load.json(sidecarKey(sprite), `${this.base()}assets/buildings/${sprite}.json`);
     }
+    for (const character of ALL_CHARACTERS) {
+      this.load.json(
+        characterSidecarKey(character),
+        `${this.base()}assets/characters/${character}.json`,
+      );
+    }
   }
 
   create(): void {
     for (const sprite of BUILDING_SPRITES) {
       const sidecar = this.cache.json.get(sidecarKey(sprite)) as BuildingSidecar | undefined;
-      const sheet = sidecar?.sheet;
-      if (!sheet) throw new Error(`${sprite}.json has no "sheet" — regenerate it with --sheets`);
-      this.load.spritesheet(
-        spriteSheetKey(sprite),
-        `${this.base()}assets/buildings/${sheet.file}`,
-        {
-          frameWidth: sheet.frame_width,
-          frameHeight: sheet.frame_height,
-          margin: sheet.margin,
-          spacing: sheet.spacing,
-        },
-      );
+      this.queueSheet(spriteSheetKey(sprite), "buildings", sprite, sidecar?.sheet);
     }
-    this.load.once(Phaser.Loader.Events.COMPLETE, () => this.scene.start("game"));
+    for (const character of ALL_CHARACTERS) {
+      const sidecar = this.cache.json.get(characterSidecarKey(character)) as
+        | CharacterSidecar
+        | undefined;
+      this.queueSheet(characterSheetKey(character), "characters", character, sidecar?.sheet);
+    }
+    this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+      this.verifyFrameCounts();
+      this.scene.start("game");
+    });
     this.load.start();
+  }
+
+  private queueSheet(
+    key: string,
+    directory: string,
+    name: string,
+    sheet: SheetLayout | null | undefined,
+  ): void {
+    if (!sheet) throw new Error(`${name}.json has no "sheet" — regenerate it with --sheets`);
+    this.load.spritesheet(key, `${this.base()}assets/${directory}/${sheet.file}`, {
+      frameWidth: sheet.frame_width,
+      frameHeight: sheet.frame_height,
+      margin: sheet.margin,
+      spacing: sheet.spacing,
+    });
+  }
+
+  /**
+   * Check every sheet sliced into as many frames as its sidecar promised.
+   *
+   * A character sheet is the only asset here laid out as a 2D grid, and both
+   * of its axes are an exact multiple of the frame pitch with no slack. A
+   * loader that miscounts a row loses it *silently*: the animations whose
+   * frame range falls in the missing row simply have no frames, while every
+   * other facing still plays. That surfaces in game as one direction where
+   * the character freezes — a long way from the cause. One assertion here
+   * turns it into a load-time error naming the sheet.
+   */
+  private verifyFrameCounts(): void {
+    const expected: [string, string, number][] = [];
+    for (const sprite of BUILDING_SPRITES) {
+      const sidecar = this.cache.json.get(sidecarKey(sprite)) as BuildingSidecar;
+      expected.push([sprite, spriteSheetKey(sprite), sidecar.frame_count]);
+    }
+    for (const character of ALL_CHARACTERS) {
+      const sidecar = this.cache.json.get(characterSidecarKey(character)) as CharacterSidecar;
+      expected.push([character, characterSheetKey(character), sidecar.frame_count]);
+    }
+    for (const [name, key, count] of expected) {
+      // Phaser counts its own __BASE frame alongside the sliced ones.
+      const actual = this.textures.get(key).frameTotal - 1;
+      if (actual !== count) {
+        throw new Error(`${name} sliced into ${actual} frames, sidecar declares ${count}`);
+      }
+    }
   }
 }

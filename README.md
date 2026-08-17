@@ -27,15 +27,19 @@ To re-sync after regenerating them there:
 cd ../asset-generator
 uv run asset-generator terrain-atlas   --seed 7 --out-dir output/terrain_atlas
 uv run asset-generator terrain-buildings --seed 7 --sheets --out-dir output/terrain_buildings
+uv run asset-generator terrain-characters --seed 7 --out-dir output/terrain_characters
 
 cd -
-cp ../asset-generator/output/terrain_atlas/terrain*.{png,json} public/assets/terrain/
-cp ../asset-generator/output/terrain_buildings/*_sheet.png public/assets/buildings/
-cp ../asset-generator/output/terrain_buildings/{cottage,barn,tower,schoolhouse}.json public/assets/buildings/
+OUT=../asset-generator/output
+cp $OUT/terrain_atlas/terrain*.{png,json} public/assets/terrain/
+cp $OUT/terrain_buildings/{cottage,barn,tower,schoolhouse}{.json,_sheet.png} public/assets/buildings/
+for c in player teacher postal-worker shopkeeper villager-0 villager-1 villager-2; do
+  cp $OUT/terrain_characters/$c{.json,_sheet.png} public/assets/characters/
+done
 bun test   # src/world/assets.test.ts checks the sync
 ```
 
-Two things are worth knowing about what gets copied:
+Three things are worth knowing about what gets copied:
 
 - **The terrain atlas holds a finished tile for every one of the 7⁴ ways
   terrain can meet at a tile's four corners**, including the cells where
@@ -47,7 +51,20 @@ Two things are worth knowing about what gets copied:
   that coverage against the shipped file.
 - **Sprite sheets must come from `--sheets`**, which always writes 1:1 art.
   The GIFs and PNGs those commands write alongside are QA renders scaled up
-  by `--scale`, and would draw several times too large.
+  by `--scale`, and would draw several times too large. (`terrain-characters`
+  needs no flag — it only ever writes game-ready output.)
+- **Only the characters the world actually places are copied.** The generator
+  will roll as many generic villagers as you ask for; the list in the loop
+  above has to stay in step with `VILLAGER_CHARACTERS` in
+  `src/world/characters.ts`, which is what the game loads.
+
+A character sheet is the only asset here laid out as a 2D grid, and both of
+its axes are an exact multiple of the frame pitch with no slack — so a loader
+that miscounts a row drops it *silently*, and the animations in that row
+simply have no frames while every other facing still plays. `BootScene`
+asserts each sheet sliced into as many frames as its sidecar declares, which
+turns that into a load-time error instead of one direction where the
+character mysteriously freezes.
 
 `assets.test.ts` is the guard on all of this: it reads the committed files
 and fails if they drift from what the renderer assumes, since a bad sync is

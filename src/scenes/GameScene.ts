@@ -12,6 +12,22 @@ import {
   spriteSheetKey,
 } from "../world/buildings";
 import {
+  ALL_CHARACTERS,
+  CHARACTER_ANIMATIONS,
+  DEFAULT_FACING,
+  type Facing,
+  IDLE,
+  IDLE_FPS,
+  PLAYER_CHARACTER,
+  WALK,
+  WALK_FPS,
+  characterAnimKey,
+  characterFor,
+  characterSheetKey,
+  characterSidecarKey,
+  facingFor,
+} from "../world/characters";
+import {
   type ChunkCoord,
   chunkKey,
   chunksCoveringTileRange,
@@ -23,7 +39,12 @@ import type { PlacedObject } from "../world/objects";
 import { DEFAULT_OBJECT_COLOR, OBJECT_COLORS, PLANT_COLORS } from "../world/palette";
 import { findPath } from "../world/pathfinding";
 import { PlantType } from "../world/plants";
-import { type BuildingSidecar, footprintBottomY, spriteOrigin } from "../world/spriteSidecar";
+import {
+  type BuildingSidecar,
+  type CharacterSidecar,
+  footprintBottomY,
+  spriteOrigin,
+} from "../world/spriteSidecar";
 import {
   DUAL_OFFSET,
   DUAL_ORIGIN,
@@ -72,7 +93,6 @@ const CHUNK_CACHE_LIMIT = 60;
 const BUILDING_ANIM_FPS = 6;
 const WELL_RADIUS = 9;
 
-const NPC_COLOR = 0x8e24aa;
 const NPC_MOVE_DURATION_MS = 500;
 const NPC_STEP_MIN_MS = 1500;
 const NPC_STEP_MAX_MS = 4000;
@@ -98,6 +118,8 @@ const STEP_DIRECTIONS: readonly Direction[] = [
 
 interface NpcRuntime {
   id: string;
+  character: string;
+  facing: Facing;
   homeCol: number;
   homeRow: number;
   wanderCenterCol: number;
@@ -105,7 +127,7 @@ interface NpcRuntime {
   wanderRadius: number;
   col: number;
   row: number;
-  sprite: Phaser.GameObjects.Arc;
+  sprite: Phaser.GameObjects.Sprite;
   isMoving: boolean;
   nextStepAt: number;
 }
@@ -135,9 +157,10 @@ export class GameScene extends Phaser.Scene {
   private originX = 0;
   private originY = 0;
 
-  private player!: Phaser.GameObjects.Arc;
+  private player!: Phaser.GameObjects.Sprite;
   private playerCol = 0;
   private playerRow = 0;
+  private playerFacing: Facing = DEFAULT_FACING;
   private isMoving = false;
 
   private selectedPlantIndex = 0;
@@ -183,9 +206,14 @@ export class GameScene extends Phaser.Scene {
     const mapPixelWidth = bounds.maxX - bounds.minX;
     const mapPixelHeight = bounds.maxY - bounds.minY;
 
-    const start = this.toScreen(this.playerCol, this.playerRow);
-    this.player = this.add.circle(start.x, start.y, 10, 0xff5252).setStrokeStyle(2, 0xffffff);
-    this.player.setDepth(this.entityDepth(this.playerRow) + 0.5);
+    const start = this.toFeet(this.playerCol, this.playerRow);
+    this.player = this.add
+      .sprite(start.x, start.y, characterSheetKey(PLAYER_CHARACTER))
+      // Anchored at the feet: that point is both where the character stands
+      // and what they depth-sort on, so there is only one number to keep
+      // right as they walk.
+      .setOrigin(0.5, 1)
+      .setDepth(start.y);
 
     this.cameras.main.setBounds(0, 0, mapPixelWidth, mapPixelHeight);
     this.cameras.main.startFollow(this.player);
@@ -226,6 +254,15 @@ export class GameScene extends Phaser.Scene {
     const hour = timeOfDay(new Date());
     this.nightOverlay.setFillStyle(NIGHT_TINT_COLOR, nightTintAlpha(hour));
     this.updateNpcs(isDaytime(hour));
+
+    // Depth follows the sprite's own y, which is its feet — so it stays
+    // correct part-way through a step rather than only at whole tiles.
+    this.player.setDepth(this.player.y);
+    this.playCharacterAnim(this.player, PLAYER_CHARACTER, this.playerFacing, this.isMoving);
+    for (const npc of this.npcs) {
+      npc.sprite.setDepth(npc.sprite.y);
+      this.playCharacterAnim(npc.sprite, npc.character, npc.facing, npc.isMoving);
+    }
 
     if (!this.isMoving) {
       const dir = this.pressedDirection();
@@ -279,6 +316,50 @@ export class GameScene extends Phaser.Scene {
         repeat: -1,
       });
     }
+
+    this.registerCharacterAnims();
+  }
+
+  // One Phaser animation per (character, animation, facing), built straight
+  // from the frame ranges the sidecar names. Nothing here knows how many
+  // frames a walk cycle has or which row it sits on — that is the sheet's
+  // business, and reading it back is what keeps the two in step.
+  private registerCharacterAnims(): void {
+    for (const character of ALL_CHARACTERS) {
+      const sidecar = this.cache.json.get(characterSidecarKey(character)) as
+        | CharacterSidecar
+        | undefined;
+      if (!sidecar) throw new Error(`missing sidecar for character "${character}"`);
+      for (const [name, range] of Object.entries(sidecar.animations)) {
+        const [animation, facing] = name.split("_");
+        if (!animation || !facing) throw new Error(`${character}: odd animation name "${name}"`);
+        if (!CHARACTER_ANIMATIONS.includes(animation)) continue;
+        const key = characterAnimKey(character, animation, facing as Facing);
+        if (this.anims.exists(key)) continue;
+        this.anims.create({
+          key,
+          frames: this.anims.generateFrameNumbers(characterSheetKey(character), {
+            start: range.start,
+            end: range.end,
+          }),
+          frameRate: animation === WALK ? WALK_FPS : IDLE_FPS,
+          repeat: -1,
+        });
+      }
+    }
+  }
+
+  // Idle or walk, in whichever direction they last moved. Called every frame
+  // rather than at each transition: `play` with ignoreIfPlaying means
+  // re-asserting the current animation costs nothing, and it removes the
+  // class of bug where a state change forgets to update the sprite.
+  private playCharacterAnim(
+    sprite: Phaser.GameObjects.Sprite,
+    character: string,
+    facing: Facing,
+    moving: boolean,
+  ): void {
+    sprite.play(characterAnimKey(character, moving ? WALK : IDLE, facing), true);
   }
 
   // --- Chunked terrain rendering ------------------------------------
@@ -444,14 +525,17 @@ export class GameScene extends Phaser.Scene {
   private tryMove(dCol: number, dRow: number): void {
     const targetCol = this.playerCol + dCol;
     const targetRow = this.playerRow + dRow;
+    // Turn to face a blocked direction even though the step fails: pressing
+    // into a wall should still turn the character, which is what makes the
+    // controls feel like they are being listened to.
+    this.playerFacing = facingFor(dCol, dRow, this.playerFacing);
     if (!this.grid.isPassable(targetCol, targetRow)) return;
 
     this.isMoving = true;
     this.playerCol = targetCol;
     this.playerRow = targetRow;
-    this.player.setDepth(this.entityDepth(targetRow) + 0.5);
 
-    const target = this.toScreen(targetCol, targetRow);
+    const target = this.toFeet(targetCol, targetRow);
     this.tweens.add({
       targets: this.player,
       x: target.x,
@@ -548,14 +632,24 @@ export class GameScene extends Phaser.Scene {
       col: village.col + Math.floor(village.width / 2),
       row: village.row + Math.floor(village.height / 2),
     };
+    // Counts only the NPCs without art of their own, so the generic
+    // villagers are handed out in order and a given NPC keeps the same face
+    // every time the world is regenerated from the same seed.
+    let genericIndex = 0;
     this.npcs = specs.map((spec) => {
       const isPostalWorker = spec.id === "postal-worker";
       const wanderCenter = isPostalWorker ? villageCenter : spec.home;
-      const screen = this.toScreen(spec.home.col, spec.home.row);
-      const sprite = this.add.circle(screen.x, screen.y, 8, NPC_COLOR).setStrokeStyle(2, 0xffffff);
-      sprite.setDepth(this.entityDepth(spec.home.row) + 0.4);
+      const character = characterFor(spec.id, genericIndex);
+      if (character.startsWith("villager-")) genericIndex++;
+      const feet = this.toFeet(spec.home.col, spec.home.row);
+      const sprite = this.add
+        .sprite(feet.x, feet.y, characterSheetKey(character))
+        .setOrigin(0.5, 1)
+        .setDepth(feet.y);
       return {
         id: spec.id,
+        character,
+        facing: DEFAULT_FACING,
         homeCol: spec.home.col,
         homeRow: spec.home.row,
         wanderCenterCol: wanderCenter.col,
@@ -621,11 +715,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private moveNpcTo(npc: NpcRuntime, col: number, row: number): void {
+    npc.facing = facingFor(col - npc.col, row - npc.row, npc.facing);
     npc.isMoving = true;
     npc.col = col;
     npc.row = row;
-    npc.sprite.setDepth(this.entityDepth(row) + 0.4);
-    const target = this.toScreen(col, row);
+    const target = this.toFeet(col, row);
     this.tweens.add({
       targets: npc.sprite,
       x: target.x,
@@ -707,6 +801,15 @@ export class GameScene extends Phaser.Scene {
   private toScreen(col: number, row: number): ScreenPoint {
     const p = gridToScreen(col, row);
     return { x: p.x + this.originX + TILE_SIZE / 2, y: p.y + this.originY + TILE_SIZE / 2 };
+  }
+
+  // Where a character's feet go: the bottom-centre of their tile. Sprites
+  // are anchored here rather than at their own centre, because it is the
+  // point that both places them on the ground and sorts them against
+  // everything else standing on it.
+  private toFeet(col: number, row: number): ScreenPoint {
+    const p = gridToScreen(col, row);
+    return { x: p.x + this.originX + TILE_SIZE / 2, y: p.y + this.originY + TILE_SIZE };
   }
 
   // Depth for something standing on a tile: the y of its feet, which is the

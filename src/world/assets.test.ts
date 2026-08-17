@@ -5,7 +5,8 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, ROLE_SPRITES } from "./buildings";
-import type { BuildingSidecar } from "./spriteSidecar";
+import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
+import type { BuildingSidecar, CharacterSidecar } from "./spriteSidecar";
 import { TERRAIN_TYPES } from "./terrain";
 import { TERRAIN_ATLAS_KEY, buildVariationIndex, comboKey } from "./terrainAtlas";
 import type { CornerTerrains } from "./terrainAtlas";
@@ -22,6 +23,8 @@ const ASSETS = join(import.meta.dir, "..", "..", "public", "assets");
 function readJson<T>(...parts: string[]): T {
   return JSON.parse(readFileSync(join(ASSETS, ...parts), "utf8")) as T;
 }
+
+const FACINGS = Object.values(Facing);
 
 interface MultiAtlas {
   textures: { image: string; size: { w: number; h: number }; frames: { filename: string }[] }[];
@@ -162,6 +165,87 @@ describe("the shipped building sidecars", () => {
   test("exist for every role the village places", () => {
     for (const sprite of Object.values(ROLE_SPRITES)) {
       expect(sidecars.has(sprite)).toBe(true);
+    }
+  });
+});
+
+describe("the shipped character sheets", () => {
+  const sidecars = new Map(
+    ALL_CHARACTERS.map((c) => [c, readJson<CharacterSidecar>("characters", `${c}.json`)]),
+  );
+
+  test("exist for the player and every NPC the village places", () => {
+    for (const character of ALL_CHARACTERS) {
+      expect(sidecars.get(character)?.character).toBe(character);
+    }
+  });
+
+  test("ship the sheet PNG they name", () => {
+    for (const [name, sidecar] of sidecars) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error(`${name} has no sheet`);
+      expect(existsSync(join(ASSETS, "characters", sheet.file))).toBe(true);
+    }
+  });
+
+  test("are 1:1 art one cell wide, overhanging upward", () => {
+    for (const sidecar of sidecars.values()) {
+      expect(sidecar.tile_size).toBe(TILE_SIZE);
+      expect(sidecar.footprint_tiles).toEqual({ width: 1, height: 1 });
+      expect(sidecar.sprite_size_px.width).toBe(TILE_SIZE);
+      // The head rises into the cell above; the offset is exactly that rise.
+      const overhang = sidecar.sprite_size_px.height - TILE_SIZE;
+      expect(overhang).toBeGreaterThan(0);
+      expect(sidecar.sprite_offset_px).toEqual({ x: 0, y: -overhang });
+    }
+  });
+
+  test("carry an idle and a walk animation for all four facings", () => {
+    const expected = new Set(CHARACTER_ANIMATIONS.flatMap((a) => FACINGS.map((f) => `${a}_${f}`)));
+    for (const [name, sidecar] of sidecars) {
+      expect({ name, keys: new Set(Object.keys(sidecar.animations)) }).toEqual({
+        name,
+        keys: expected,
+      });
+    }
+  });
+
+  test("name frame ranges that are inside the sheet and do not overlap", () => {
+    for (const [name, sidecar] of sidecars) {
+      const claimed = new Set<number>();
+      for (const [anim, range] of Object.entries(sidecar.animations)) {
+        expect(range.end - range.start + 1).toBe(range.frame_count);
+        expect(range.start).toBeGreaterThanOrEqual(0);
+        // Out of range is the dangerous one: Phaser yields missing frames
+        // rather than erroring, so that facing would silently freeze.
+        expect(range.end).toBeLessThan(sidecar.frame_count);
+        for (let i = range.start; i <= range.end; i++) {
+          expect({ name, anim, i, seen: claimed.has(i) }).toEqual({ name, anim, i, seen: false });
+          claimed.add(i);
+        }
+      }
+    }
+  });
+
+  test("lay each animation out on its own sheet row", () => {
+    for (const sidecar of sidecars.values()) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error("no sheet");
+      for (const range of Object.values(sidecar.animations)) {
+        expect(range.start % sheet.columns).toBe(0);
+        expect(range.frame_count).toBeLessThanOrEqual(sheet.columns);
+      }
+    }
+  });
+
+  test("declare a grid whose cells account for every frame", () => {
+    // If columns x rows were smaller than frame_count the last animations
+    // would have no frames at all — the silent failure this guards.
+    for (const [name, sidecar] of sidecars) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error(`${name} has no sheet`);
+      expect(sheet.columns * sheet.rows).toBeGreaterThanOrEqual(sidecar.frame_count);
+      expect(sheet.frame_count).toBe(sidecar.frame_count);
     }
   });
 });
