@@ -4,6 +4,8 @@
     "frame_width": 64,
     "frame_height": 180,
     "frame_count": 8,
+    "columns": 8,
+    "rows": 1,
     "margin": 1,
     "spacing": 2
   },
