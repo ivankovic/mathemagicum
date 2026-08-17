@@ -224,35 +224,50 @@ seeded elevation field at each habitat's weights — see
 [Terrain from elevation](#terrain-from-elevation). Decoration objects are
 still rolled from the habitat's density table (not built yet).
 
-### Terrain from elevation
+### The world is one slope
 
-Habitat weights were originally read as per-tile odds: each tile rolled its
-own terrain from its habitat's distribution. That gets the proportions right
-and the shapes catastrophically wrong. Measured on a 500x500 world, it gave
-37,000 water tiles whose largest connected body was **289 tiles**, 28% of
-mountain sitting as isolated single tiles, and 40% of dirt. There was no
-lake, no sea and no mountain range anywhere on the map — just static at the
-right density.
+Superseded: habitats no longer grow as scattered blobs, and terrain is no
+longer sampled from their weights. Both produced a map with no shape — some
+of everything, everywhere, in no relation to anything else.
 
-What the weights actually describe is how much of a *region* each terrain
-covers. So the fill reads a smooth seeded scalar field (`src/world/noise.ts`)
-and cuts it at each habitat's weight boundaries in order. Adjacent tiles
-sample nearly the same value, so they land in the same band, so terrain
-arrives in patches. The same 500x500 world then gives a largest water body
-of **18,565 tiles** and essentially zero isolated specks.
+The world is now a single slope running down from one randomly chosen
+**high corner**:
 
-Two consequences worth knowing:
+- that corner is **mountain**, which is where the **Observatory** always sits
+- it falls away through **hilly**, then **woodland**
+- the middle of the map is **grass**, which is where the Village sits
+- the two edges *furthest* from the corner are **water**, with **sand**
+  inland of them
+- **dirt** is not natural ground at all: it is what the village carves for
+  paths and gardens, so bare earth always means somebody worked it
 
-- **The field is elevation.** Each habitat lists its terrains low ground
-  first, so water fills hollows and mountain caps rises. Reordering a
-  habitat's entries moves its terrain around the map.
-- **One field serves every habitat**, which is why a lake runs on across the
-  boundary from a wetland into the coast rather than stopping dead at it.
+Height is `1 - max(dx, dy)` from the high corner, warped by a smooth noise
+field so the bands read as coastline and treeline rather than as contours.
+Chebyshev distance rather than Euclidean is load-bearing: `max` is exactly 1
+along the *whole* of both far edges, which is what puts water along all of
+them. A Euclidean distance reaches 1 only at their midpoints and would leave
+the ends nearest the high corner dry.
 
-The field is remapped through its own measured distribution before use.
-Interpolated noise clusters around its mean, so cutting the raw field at 0.3
-would not put 30% of tiles below it, and every habitat's proportions would
-drift.
+Two consequences worth stating plainly:
+
+- **Every world has the same structure**; only its orientation and detail
+  vary. That is the point — a player who has learned that water is downhill
+  and rock is uphill knows which way to walk in a world they have never seen.
+- **The two edges at the high corner descend to meet the water edges.** They
+  cannot stay high along their whole length: their far ends *are* the water
+  edges' ends. So they read as a ridge running down to the sea, and are meant
+  to be walled by tight formations of boulders and tall trees rather than by
+  terrain (not built yet — see below).
+
+Because the area below a height is quadratic in it, band thresholds cannot be
+read as area shares: measured over eight seeds the world comes out roughly
+13-22% water, 11-18% sand, 23-30% grass, 26-29% woodland, 8-9% hilly and 4-8%
+mountain.
+
+**Habitat** survives as a per-tile tag derived from the band, for systems that
+want to key off "this is woodland" directly. **Wetland now has no home** —
+nothing on the slope produces it. Whether it returns as a band of its own or
+is dropped is an open question.
 
 **6. Guarantee connectivity.** Flood-fill from Starting Village; check
 every other story area has a reachable tile (terrain passable *and*

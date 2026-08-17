@@ -2,21 +2,20 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { type AnchorPlacements, type AreaPlacement, placeAnchors } from "./anchors";
-import { generateBorder } from "./border";
-import { WorldGrid } from "./grid";
+import { type AreaPlacement, placeAnchors } from "./anchors";
+import { HighCorner, bandFloor, elevationAt } from "./elevation";
 import { createRng } from "./rng";
 import { TerrainType } from "./terrain";
 
-const WORLD_SIZE = 500;
+const SIZE = 500;
 
-function generatedGrid(seed: number): WorldGrid {
-  const grid = WorldGrid.empty(WORLD_SIZE, WORLD_SIZE, TerrainType.Grass);
-  generateBorder(grid, createRng(seed));
-  return grid;
+function place(seed: number, corner: HighCorner = HighCorner.NorthWest) {
+  const elevation = (col: number, row: number) =>
+    elevationAt(col, row, SIZE, SIZE, corner, seed * 31 + 7);
+  return { anchors: placeAnchors(SIZE, SIZE, elevation, createRng(seed)), elevation };
 }
 
-function allPlacements(anchors: AnchorPlacements): AreaPlacement[] {
+function all(anchors: ReturnType<typeof place>["anchors"]): AreaPlacement[] {
   return [
     anchors.village,
     anchors.harbour,
@@ -26,16 +25,7 @@ function allPlacements(anchors: AnchorPlacements): AreaPlacement[] {
   ];
 }
 
-function withinBounds(area: AreaPlacement, width: number, height: number): boolean {
-  return (
-    area.col >= 0 &&
-    area.row >= 0 &&
-    area.col + area.width <= width &&
-    area.row + area.height <= height
-  );
-}
-
-function boxesOverlap(a: AreaPlacement, b: AreaPlacement): boolean {
+function overlap(a: AreaPlacement, b: AreaPlacement): boolean {
   return !(
     a.col + a.width <= b.col ||
     b.col + b.width <= a.col ||
@@ -44,78 +34,96 @@ function boxesOverlap(a: AreaPlacement, b: AreaPlacement): boolean {
   );
 }
 
-describe("placeAnchors", () => {
-  test("all five anchors are placed within world bounds", () => {
-    const grid = generatedGrid(1);
-    const anchors = placeAnchors(grid, createRng(1));
-    for (const area of allPlacements(anchors)) {
-      expect(withinBounds(area, grid.width, grid.height)).toBe(true);
-    }
-  });
+function centreHeight(box: AreaPlacement, elevation: (c: number, r: number) => number): number {
+  return elevation(box.col + Math.floor(box.width / 2), box.row + Math.floor(box.height / 2));
+}
 
-  test("no two anchors overlap", () => {
-    const grid = generatedGrid(2);
-    const anchors = placeAnchors(grid, createRng(2));
-    const areas = allPlacements(anchors);
-    for (let i = 0; i < areas.length; i++) {
-      for (let j = i + 1; j < areas.length; j++) {
-        const a = areas[i];
-        const b = areas[j];
-        if (!a || !b) continue;
-        expect(boxesOverlap(a, b)).toBe(false);
+describe("placeAnchors", () => {
+  test("puts every area fully inside the world", () => {
+    for (let seed = 1; seed <= 8; seed++) {
+      for (const box of all(place(seed).anchors)) {
+        expect(box.col).toBeGreaterThanOrEqual(0);
+        expect(box.row).toBeGreaterThanOrEqual(0);
+        expect(box.col + box.width).toBeLessThanOrEqual(SIZE);
+        expect(box.row + box.height).toBeLessThanOrEqual(SIZE);
       }
     }
   });
 
-  test("Starting Village sits at the world center", () => {
-    const grid = generatedGrid(3);
-    const anchors = placeAnchors(grid, createRng(3));
-    const centerCol = Math.floor((grid.width - anchors.village.width) / 2);
-    const centerRow = Math.floor((grid.height - anchors.village.height) / 2);
-    expect(anchors.village.col).toBe(centerCol);
-    expect(anchors.village.row).toBe(centerRow);
+  test("never overlaps two areas", () => {
+    for (let seed = 1; seed <= 8; seed++) {
+      const boxes = all(place(seed).anchors);
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          expect({
+            i,
+            j,
+            hit: overlap(boxes[i] as AreaPlacement, boxes[j] as AreaPlacement),
+          }).toEqual({ i, j, hit: false });
+        }
+      }
+    }
   });
 
-  test("Harbour touches the world edge on a Coastal border span", () => {
-    const grid = generatedGrid(4);
-    const anchors = placeAnchors(grid, createRng(4));
-    const h = anchors.harbour;
-    const touchesEdge =
-      h.col === 0 ||
-      h.row === 0 ||
-      h.col + h.width === grid.width ||
-      h.row + h.height === grid.height;
-    expect(touchesEdge).toBe(true);
+  test("centres the village, whatever the seed", () => {
+    for (let seed = 1; seed <= 5; seed++) {
+      const { village } = place(seed).anchors;
+      expect(village.col + Math.floor(village.width / 2)).toBe(Math.floor(SIZE / 2));
+    }
   });
 
-  test("Mountain Star Observatory touches the world edge on a Highland border span", () => {
-    const grid = generatedGrid(5);
-    const anchors = placeAnchors(grid, createRng(5));
-    const o = anchors.observatory;
-    const touchesEdge =
-      o.col === 0 ||
-      o.row === 0 ||
-      o.col + o.width === grid.width ||
-      o.row + o.height === grid.height;
-    expect(touchesEdge).toBe(true);
+  test("puts the observatory up in the rock", () => {
+    // The one placement the design names explicitly: an observatory belongs
+    // on the mountain, and the mountain is always the high corner.
+    for (let seed = 1; seed <= 8; seed++) {
+      const { anchors, elevation } = place(seed);
+      expect(centreHeight(anchors.observatory, elevation)).toBeGreaterThan(
+        bandFloor(TerrainType.Hilly),
+      );
+    }
   });
 
-  test("Big City is placed near the Harbour, not arbitrarily far away", () => {
-    const grid = generatedGrid(6);
-    const anchors = placeAnchors(grid, createRng(6));
-    const dCol = anchors.bigCity.col - anchors.harbour.col;
-    const dRow = anchors.bigCity.row - anchors.harbour.row;
-    const distance = Math.sqrt(dCol * dCol + dRow * dRow);
-    // Generous bound: near-placement retries with clamping can land further
-    // than the raw offset range when clamped against a world edge.
-    expect(distance).toBeLessThan(200);
+  test("puts the harbour lower than the forest, and the forest lower than the observatory", () => {
+    // Each area asks for its own band, so their heights have to come out in
+    // this order — that ordering is what makes the world legible.
+    for (let seed = 1; seed <= 8; seed++) {
+      const { anchors, elevation } = place(seed);
+      const harbour = centreHeight(anchors.harbour, elevation);
+      const forest = centreHeight(anchors.enchantedForest, elevation);
+      const observatory = centreHeight(anchors.observatory, elevation);
+      expect(harbour).toBeLessThan(forest);
+      expect(forest).toBeLessThan(observatory);
+    }
   });
 
-  test("is deterministic for the same seed", () => {
-    const gridA = generatedGrid(7);
-    const gridB = generatedGrid(7);
-    const anchorsA = placeAnchors(gridA, createRng(7));
-    const anchorsB = placeAnchors(gridB, createRng(7));
-    expect(anchorsA).toEqual(anchorsB);
+  test("puts the harbour down by the water", () => {
+    for (let seed = 1; seed <= 8; seed++) {
+      const { anchors, elevation } = place(seed);
+      expect(centreHeight(anchors.harbour, elevation)).toBeLessThan(bandFloor(TerrainType.Grass));
+    }
+  });
+
+  test("keeps the big city within reach of the harbour", () => {
+    for (let seed = 1; seed <= 8; seed++) {
+      const { harbour, bigCity } = place(seed).anchors;
+      const distance = Math.hypot(harbour.col - bigCity.col, harbour.row - bigCity.row);
+      expect(distance).toBeLessThan(120);
+    }
+  });
+
+  test("is deterministic for a seed", () => {
+    expect(place(4242).anchors).toEqual(place(4242).anchors);
+  });
+
+  test("follows the high corner around the map", () => {
+    // The observatory tracks the mountain, so choosing a different corner
+    // has to move it — otherwise the corner is decorative.
+    const centres = new Set(
+      Object.values(HighCorner).map((corner) => {
+        const { observatory } = place(9, corner).anchors;
+        return `${observatory.col},${observatory.row}`;
+      }),
+    );
+    expect(centres.size).toBe(4);
   });
 });

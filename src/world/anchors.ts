@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { WorldGrid } from "./grid";
-import { Habitat } from "./habitat";
-import { type Rng, pick, randInt } from "./rng";
+import { bandFloor } from "./elevation";
+import { type Rng, randInt } from "./rng";
+import { TerrainType } from "./terrain";
 import { VILLAGE_SIZE } from "./villageLayout";
 
 // Reserved bounding boxes for the 4 anchors whose interiors aren't built
@@ -67,77 +67,70 @@ function placeVillage(worldWidth: number, worldHeight: number, spec: AnchorSpec)
   };
 }
 
-const SIDES = ["top", "bottom", "left", "right"] as const;
-type Side = (typeof SIDES)[number];
+/**
+ * Where each story area sits, given the slope the world is built on.
+ *
+ * Anchors are placed against *elevation* rather than against terrain that
+ * has been painted yet, so this runs before the fill and needs nothing on
+ * the grid. Each one asks for the band it belongs in — the observatory up in
+ * the rock, the harbour down on the shore, the forest in the trees — which
+ * is what makes a world legible: you can guess where to look for a place you
+ * have not found.
+ */
+type ElevationAt = (col: number, row: number) => number;
 
-function candidateBoxOnSide(
-  side: Side,
-  spec: AnchorSpec,
+function boxElevation(box: AreaPlacement, elevation: ElevationAt): number {
+  // The centre alone is a poor test for a 24-tile box on a slope; sampling
+  // the centre and the four corners rejects boxes that straddle a band edge.
+  const right = box.col + box.width - 1;
+  const bottom = box.row + box.height - 1;
+  const midCol = box.col + Math.floor(box.width / 2);
+  const midRow = box.row + Math.floor(box.height / 2);
+  const samples = [
+    elevation(midCol, midRow),
+    elevation(box.col, box.row),
+    elevation(right, box.row),
+    elevation(box.col, bottom),
+    elevation(right, bottom),
+  ];
+  return samples.reduce((sum, v) => sum + v, 0) / samples.length;
+}
+
+function placeInBand(
   worldWidth: number,
   worldHeight: number,
-  rng: Rng,
-): AreaPlacement | null {
-  if (side === "top" || side === "bottom") {
-    if (spec.width > worldWidth) return null;
-    return {
-      id: spec.id,
-      col: randInt(rng, 0, worldWidth - spec.width),
-      row: side === "top" ? 0 : worldHeight - spec.height,
-      width: spec.width,
-      height: spec.height,
-    };
-  }
-  if (spec.height > worldHeight) return null;
-  return {
-    id: spec.id,
-    col: side === "left" ? 0 : worldWidth - spec.width,
-    row: randInt(rng, 0, worldHeight - spec.height),
-    width: spec.width,
-    height: spec.height,
-  };
-}
-
-function edgeMatchesHabitat(
-  grid: WorldGrid,
-  side: Side,
-  box: AreaPlacement,
-  habitat: Habitat,
-): boolean {
-  if (side === "top" || side === "bottom") {
-    const row = side === "top" ? 0 : grid.height - 1;
-    for (let col = box.col; col < box.col + box.width; col++) {
-      if (grid.getHabitat(col, row) !== habitat) return false;
-    }
-    return true;
-  }
-  const col = side === "left" ? 0 : grid.width - 1;
-  for (let row = box.row; row < box.row + box.height; row++) {
-    if (grid.getHabitat(col, row) !== habitat) return false;
-  }
-  return true;
-}
-
-// Placed flush against a world edge whose border habitat (from
-// generateBorder) matches the given habitat along the whole touching span
-// — e.g. Harbour needs a stretch of Coastal border, not just one tile.
-function placeAgainstBorder(
-  grid: WorldGrid,
   spec: AnchorSpec,
-  requiredHabitat: typeof Habitat.Coastal | typeof Habitat.Highland,
+  elevation: ElevationAt,
+  floor: number,
+  ceiling: number,
   placed: readonly AreaPlacement[],
   rng: Rng,
 ): AreaPlacement {
+  let best: AreaPlacement | null = null;
+  let bestMiss = Number.POSITIVE_INFINITY;
+  const target = (floor + ceiling) / 2;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const side = pick(rng, SIDES);
-    const box = candidateBoxOnSide(side, spec, grid.width, grid.height, rng);
-    if (!box) continue;
+    const box: AreaPlacement = {
+      id: spec.id,
+      col: randInt(rng, 0, worldWidth - spec.width),
+      row: randInt(rng, 0, worldHeight - spec.height),
+      width: spec.width,
+      height: spec.height,
+    };
     if (overlapsAny(box, placed)) continue;
-    if (!edgeMatchesHabitat(grid, side, box, requiredHabitat)) continue;
-    return box;
+    const height = boxElevation(box, elevation);
+    if (height >= floor && height <= ceiling) return box;
+    // Remember the near miss: a band can be small enough that random
+    // sampling never lands squarely in it, and a story area slightly out of
+    // its band beats throwing.
+    const miss = Math.abs(height - target);
+    if (miss < bestMiss) {
+      bestMiss = miss;
+      best = box;
+    }
   }
-  throw new Error(
-    `Could not place "${spec.id}" against a ${requiredHabitat} border after ${MAX_ATTEMPTS} attempts`,
-  );
+  if (best) return best;
+  throw new Error(`Could not place "${spec.id}" anywhere without overlapping`);
 }
 
 function placeNear(
@@ -168,55 +161,64 @@ function placeNear(
   );
 }
 
-function placeWithSpacing(
+// Placement order is load-bearing: each later anchor can be constrained
+// relative to an earlier one (Big City needs Harbour's placement), never the
+// reverse. See docs/WORLD_GENERATION.md's "Anchor areas" table.
+export function placeAnchors(
   worldWidth: number,
   worldHeight: number,
-  spec: AnchorSpec,
-  placed: readonly AreaPlacement[],
+  elevation: ElevationAt,
   rng: Rng,
-): AreaPlacement {
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const box: AreaPlacement = {
-      id: spec.id,
-      col: randInt(rng, 0, worldWidth - spec.width),
-      row: randInt(rng, 0, worldHeight - spec.height),
-      width: spec.width,
-      height: spec.height,
-    };
-    if (overlapsAny(box, placed)) continue;
-    return box;
-  }
-  throw new Error(`Could not place "${spec.id}" after ${MAX_ATTEMPTS} attempts`);
-}
-
-// Placement order is load-bearing: each later anchor can be constrained
-// relative to an earlier one (Harbour needs the border from generateBorder;
-// Big City needs Harbour's placement), never the reverse. See
-// docs/WORLD_GENERATION.md's "Anchor areas" table.
-export function placeAnchors(grid: WorldGrid, rng: Rng): AnchorPlacements {
+): AnchorPlacements {
   const placed: AreaPlacement[] = [];
   const spec = (id: string): AnchorSpec => ({ id, width: ANCHOR_SIZE, height: ANCHOR_SIZE });
 
-  const village = placeVillage(grid.width, grid.height, {
+  const village = placeVillage(worldWidth, worldHeight, {
     id: "village",
     width: VILLAGE_SIZE,
     height: VILLAGE_SIZE,
   });
   placed.push(village);
 
-  const harbour = placeAgainstBorder(grid, spec("harbour"), Habitat.Coastal, placed, rng);
-  placed.push(harbour);
-
-  const bigCity = placeNear(grid.width, grid.height, spec("big-city"), harbour, placed, rng);
-  placed.push(bigCity);
-
-  const observatory = placeAgainstBorder(grid, spec("observatory"), Habitat.Highland, placed, rng);
+  // Up in the rock, which is where an observatory wants to be and is also
+  // the one band whose location the player can always find: it is the high
+  // corner.
+  const observatory = placeInBand(
+    worldWidth,
+    worldHeight,
+    spec("observatory"),
+    elevation,
+    bandFloor(TerrainType.Mountain),
+    1,
+    placed,
+    rng,
+  );
   placed.push(observatory);
 
-  const enchantedForest = placeWithSpacing(
-    grid.width,
-    grid.height,
+  // On the shore. The sand band is thin, so this asks for anything from the
+  // waterline up to the bottom of the grass.
+  const harbour = placeInBand(
+    worldWidth,
+    worldHeight,
+    spec("harbour"),
+    elevation,
+    bandFloor(TerrainType.Sand),
+    bandFloor(TerrainType.Grass),
+    placed,
+    rng,
+  );
+  placed.push(harbour);
+
+  const bigCity = placeNear(worldWidth, worldHeight, spec("big-city"), harbour, placed, rng);
+  placed.push(bigCity);
+
+  const enchantedForest = placeInBand(
+    worldWidth,
+    worldHeight,
     spec("enchanted-forest"),
+    elevation,
+    bandFloor(TerrainType.Woodland),
+    bandFloor(TerrainType.Hilly),
     placed,
     rng,
   );

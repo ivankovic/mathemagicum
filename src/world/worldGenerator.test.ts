@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AnchorPlacements, AreaPlacement } from "./anchors";
 import { floodFillReachable, isReachable } from "./connectivity";
+import { type HighCorner, highEdges } from "./elevation";
 import type { WorldGrid } from "./grid";
 import { generateWorld } from "./worldGenerator";
 
@@ -38,15 +39,39 @@ function boxesOverlap(a: AreaPlacement, b: AreaPlacement): boolean {
   );
 }
 
-function assertBorderImpassable(grid: WorldGrid): void {
+/**
+ * The world's two far edges are open water along their whole length.
+ *
+ * Only two: the world slopes down from one corner, so the two edges *at*
+ * that corner are the high ground it descends from. They are meant to be
+ * walled by rock and forest rather than by sea, and are checked separately.
+ */
+function assertFarEdgesAreWater(grid: WorldGrid, corner: HighCorner): void {
+  const edges = highEdges(corner);
+  const farCol = edges.left ? grid.width - 1 : 0;
+  const farRow = edges.top ? grid.height - 1 : 0;
   for (let col = 0; col < grid.width; col++) {
-    expect(grid.isPassable(col, 0)).toBe(false);
-    expect(grid.isPassable(col, grid.height - 1)).toBe(false);
+    expect({ col, passable: grid.isPassable(col, farRow) }).toEqual({ col, passable: false });
   }
   for (let row = 0; row < grid.height; row++) {
-    expect(grid.isPassable(0, row)).toBe(false);
-    expect(grid.isPassable(grid.width - 1, row)).toBe(false);
+    expect({ row, passable: grid.isPassable(farCol, row) }).toEqual({ row, passable: false });
   }
+}
+
+/**
+ * The high corner really is the top of the slope.
+ *
+ * Cheap to state and the thing most likely to break silently: get the
+ * corner's axes crossed and the world still generates, still connects, and
+ * is simply upside down.
+ */
+function assertHighCornerIsHighest(grid: WorldGrid, corner: HighCorner): void {
+  const edges = highEdges(corner);
+  const cornerCol = edges.left ? 0 : grid.width - 1;
+  const cornerRow = edges.top ? 0 : grid.height - 1;
+  expect(grid.getTerrain(cornerCol, cornerRow)).toBe("mountain");
+  // ...and the corner diagonally opposite is the bottom of it.
+  expect(grid.getTerrain(grid.width - 1 - cornerCol, grid.height - 1 - cornerRow)).toBe("water");
 }
 
 describe("generateWorld seed sweep", () => {
@@ -74,7 +99,8 @@ describe("generateWorld seed sweep", () => {
         }
       }
 
-      assertBorderImpassable(grid);
+      assertFarEdgesAreWater(grid, world.highCorner);
+      assertHighCornerIsHighest(grid, world.highCorner);
 
       // Stronger invariant than "playerStart is the village box's centre"
       // (no longer true — the well sits there now): playerStart must
@@ -119,7 +145,8 @@ describe("generateWorld at full target scale", () => {
 
     expect(grid.width).toBe(500);
     expect(grid.height).toBe(500);
-    assertBorderImpassable(grid);
+    assertFarEdgesAreWater(grid, world.highCorner);
+    assertHighCornerIsHighest(grid, world.highCorner);
 
     const reachable = floodFillReachable(grid, playerStart);
     for (const area of [

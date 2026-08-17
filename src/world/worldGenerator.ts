@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { type AnchorPlacements, type AreaPlacement, placeAnchors } from "./anchors";
-import { generateBorder } from "./border";
 import { ensureConnectivity } from "./connectivity";
+import { type HighCorner, elevationAt, pickHighCorner } from "./elevation";
 import { WorldGrid } from "./grid";
-import { fillTerrainFromHabitats, growHabitats } from "./habitatGrowth";
-import { createRng } from "./rng";
+import { createRng, randInt } from "./rng";
 import { TerrainType } from "./terrain";
+import { fillFromElevation, sealFarEdges } from "./terrainFill";
 import type { GridPoint } from "./topdown";
 import { type VillageLayout, layoutVillage } from "./villageLayout";
 
@@ -16,27 +16,16 @@ export interface GeneratedWorld {
   anchors: AnchorPlacements;
   playerStart: GridPoint;
   village: VillageLayout;
+  // Which corner the world slopes down from. Everything else about the
+  // layout follows from it, so it is worth handing back rather than making
+  // callers infer it from the terrain.
+  highCorner: HighCorner;
 }
 
 function centerOf(area: AreaPlacement): GridPoint {
   return {
     col: area.col + Math.floor(area.width / 2),
     row: area.row + Math.floor(area.height / 2),
-  };
-}
-
-// Just past the box's right edge, clamped to world bounds — arbitrary but
-// deterministic "outside, adjacent" point. growHabitats treats Enchanted
-// Forest's own reserved interior like every other anchor's (untouched), so
-// the seed has to sit outside the box for Woodland to actually grow.
-function forestSeedPoint(
-  forest: AreaPlacement,
-  worldWidth: number,
-  worldHeight: number,
-): GridPoint {
-  return {
-    col: Math.min(worldWidth - 1, forest.col + forest.width + 1),
-    row: Math.min(worldHeight - 1, forest.row + Math.floor(forest.height / 2)),
   };
 }
 
@@ -50,8 +39,17 @@ export function generateWorld(width: number, height: number, seed: number): Gene
   const rng = createRng(seed);
   const grid = WorldGrid.empty(width, height, TerrainType.Grass);
 
-  generateBorder(grid, rng);
-  const anchors = placeAnchors(grid, rng);
+  // The whole map hangs off this one choice: which corner is the top of the
+  // slope. Drawn first so every later decision can be made against it.
+  const highCorner = pickHighCorner(rng);
+  const fieldSeed = randInt(rng, 0, 0x7ffffffe);
+  const elevation = (col: number, row: number) =>
+    elevationAt(col, row, width, height, highCorner, fieldSeed);
+
+  // Anchors are placed against elevation rather than against painted
+  // terrain, so this needs nothing on the grid yet — which is what lets the
+  // village carve its paths before the fill runs and skips over them.
+  const anchors = placeAnchors(width, height, elevation, rng);
   const reservedBoxes = [
     anchors.village,
     anchors.harbour,
@@ -60,16 +58,14 @@ export function generateWorld(width: number, height: number, seed: number): Gene
     anchors.enchantedForest,
   ];
 
-  // Must run before growHabitats/fillTerrainFromHabitats: both skip every
-  // reserved anchor box outright, so whatever the layout carves here (the
-  // square, gardens, paths) is exactly what survives — and before
-  // ensureConnectivity, since the Village's centre tile is now the well
-  // (impassable), not a safe start point.
+  // Before the fill, which skips every reserved box outright, so whatever
+  // the layout carves (the square, gardens, paths) is exactly what survives
+  // — and before ensureConnectivity, since the Village's centre tile is the
+  // well (impassable), not a safe start point.
   const village = layoutVillage(grid, anchors.village);
 
-  const forestSeed = forestSeedPoint(anchors.enchantedForest, grid.width, grid.height);
-  growHabitats(grid, reservedBoxes, forestSeed, rng);
-  fillTerrainFromHabitats(grid, reservedBoxes, rng);
+  fillFromElevation(grid, highCorner, fieldSeed, reservedBoxes);
+  sealFarEdges(grid, highCorner);
 
   ensureConnectivity(grid, village.playerSpawn, [
     centerOf(anchors.harbour),
@@ -78,5 +74,5 @@ export function generateWorld(width: number, height: number, seed: number): Gene
     centerOf(anchors.enchantedForest),
   ]);
 
-  return { grid, anchors, playerStart: village.playerSpawn, village };
+  return { grid, anchors, playerStart: village.playerSpawn, village, highCorner };
 }
