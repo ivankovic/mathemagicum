@@ -13,7 +13,8 @@ commercial use.
 Early. A generated 500×500 world you can walk around, with the Starting
 Village laid out in it, and the first spell in place: crops are planted as
 seedlings and grown by casting **addition** on them, a number-line minigame
-opened from the spellbook. Seeds and spells are picked from two icon trays
+opened from the spellbook. The player bends to plant, and a golden plus
+sinks into the tile a spell lands on. Seeds and spells are picked from two icon trays
 in the corner of the screen, and both act on the tile the player faces.
 Planting itself is still a direct action — the planting spell is not
 speced. Nothing is saved between sessions.
@@ -35,6 +36,7 @@ uv run asset-generator terrain-characters --seed 7 --out-dir output/terrain_char
 uv run asset-generator terrain-interiors --seed 7 --sheets --out-dir output/terrain_interiors
 uv run asset-generator terrain-plants --seed 7 --out-dir output/terrain_plants
 uv run asset-generator terrain-fixtures --seed 7 --out-dir output/terrain_fixtures
+uv run asset-generator terrain-effects --seed 7 --out-dir output/terrain_effects
 uv run asset-generator terrain-objects --seed 7 --sheets --out-dir output/terrain_objects
 uv run asset-generator ui --seed 7 --out-dir output/ui
 
@@ -52,6 +54,7 @@ for p in carrot sunflower cactus; do
   cp $OUT/terrain_plants/$p{.json,_sheet.png} public/assets/plants/
 done
 cp $OUT/terrain_fixtures/well{.json,_sheet.png} public/assets/fixtures/
+cp $OUT/terrain_effects/plus{.json,_sheet.png} public/assets/effects/
 for t in grass woodland dirt hilly mountain sand; do
   cp $OUT/terrain_objects/$t{.json,_sheet.png} public/assets/objects/
 done

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { UI_ASSETS, UiAsset, type UiIndex, uiEntry } from "../ui/assets";
 import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, DOOR_STATES, ROLE_SPRITES } from "./buildings";
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
+import { EFFECT_TYPES, effectAnimKey, effectSidecarKey } from "./effects";
 import { FIXTURE_TYPES, fixtureFor } from "./fixtures";
 import { INTERIOR_ROOMS, interiorFor } from "./interiors";
 import { PLANT_STAGES, PLANT_TYPES } from "./plants";
@@ -14,6 +15,7 @@ import { SCENERY_KINDS, sceneryKind } from "./scenery";
 import type {
   BuildingSidecar,
   CharacterSidecar,
+  EffectSidecar,
   FixtureSidecar,
   InteriorSidecar,
   ObjectSidecar,
@@ -626,5 +628,67 @@ describe("the shipped interface art", () => {
     expect(fill.tiles).toBe(true);
     expect(fill.width).toBeLessThanOrEqual(256);
     expect(fill.height).toBeLessThanOrEqual(256);
+  });
+});
+
+describe("the shipped spell effects", () => {
+  const sidecars = new Map(
+    EFFECT_TYPES.map((e) => [e, readJson<EffectSidecar>("effects", `${e}.json`)] as const),
+  );
+
+  test("each names the animation the game asks for", () => {
+    for (const [effect, sidecar] of sidecars) {
+      expect({ effect, key: `effect-${effect}-cast` }).toEqual({
+        effect,
+        key: effectAnimKey(effect),
+      });
+      expect(Object.keys(sidecar.animations)).toContain("cast");
+    }
+  });
+
+  test("declares itself as playing once, not looping", () => {
+    // The game reads this rather than deciding it. An effect left looping is
+    // a sprite that never goes away, sitting on top of the crop it landed on.
+    for (const [effect, sidecar] of sidecars) {
+      expect({ effect, loops: sidecar.loops }).toEqual({ effect, loops: false });
+    }
+  });
+
+  test("covers exactly one tile and hangs above it", () => {
+    for (const [effect, sidecar] of sidecars) {
+      expect({ effect, w: sidecar.footprint_tiles.width }).toEqual({ effect, w: 1 });
+      expect({ effect, h: sidecar.footprint_tiles.height }).toEqual({ effect, h: 1 });
+      expect(sidecar.sprite_size_px.width).toBe(TILE_SIZE);
+      // Taller than its tile, and the offset that lifts it is exactly the
+      // overhang — the same contract every sprite that rises above its cell
+      // follows, and what puts the plus over the crop rather than beside it.
+      expect(sidecar.sprite_size_px.height).toBeGreaterThan(TILE_SIZE);
+      expect(sidecar.sprite_offset_px.y).toBe(TILE_SIZE - sidecar.sprite_size_px.height);
+    }
+  });
+
+  test("its animation range covers the whole sheet", () => {
+    for (const [effect, sidecar] of sidecars) {
+      const range = sidecar.animations.cast;
+      if (!range) throw new Error(`${effect} has no cast range`);
+      expect({ effect, start: range.start }).toEqual({ effect, start: 0 });
+      expect({ effect, end: range.end }).toEqual({ effect, end: sidecar.frame_count - 1 });
+    }
+  });
+
+  test("the sheet holds as many frames as the sidecar declares", () => {
+    for (const [effect, sidecar] of sidecars) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error(`${effect} has no sheet`);
+      expect({ effect, count: sheet.frame_count }).toEqual({
+        effect,
+        count: sidecar.frame_count,
+      });
+      expect(existsSync(join(ASSETS, "effects", sheet.file))).toBe(true);
+    }
+  });
+
+  test("its sidecar key is distinct from every other asset's", () => {
+    expect(new Set(EFFECT_TYPES.map(effectSidecarKey)).size).toBe(EFFECT_TYPES.length);
   });
 });

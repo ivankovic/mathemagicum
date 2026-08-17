@@ -112,9 +112,20 @@ export function characterAnimKey(character: string, animation: string, facing: F
 
 export const IDLE = "idle";
 export const WALK = "walk";
-export const CHARACTER_ANIMATIONS: readonly string[] = [IDLE, WALK];
+export const PLANT = "plant";
+export const CHARACTER_ANIMATIONS: readonly string[] = [IDLE, WALK, PLANT];
+
+// The one animation that is not a loop. It is a gesture with a beginning and
+// an end, so it plays once and the character returns to whatever they would
+// otherwise be doing — which is why the scene has to know it is different
+// rather than just picking it as a third state.
+export const ONE_SHOT_ANIMATIONS: readonly string[] = [PLANT];
 
 // Fast enough that a four-frame cycle covers one tile-step without visibly
 // stalling, slow enough not to read as a scurry.
 export const WALK_FPS = 8;
 export const IDLE_FPS = 3;
+// Six frames at this rate is about half a second — long enough to read as
+// deliberate, short enough that it never feels like the game stopped
+// listening.
+export const PLANT_FPS = 12;

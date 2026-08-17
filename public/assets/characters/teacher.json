@@ -3,9 +3,9 @@
     "file": "teacher_sheet.png",
     "frame_width": 32,
     "frame_height": 48,
-    "frame_count": 32,
-    "columns": 4,
-    "rows": 8,
+    "frame_count": 72,
+    "columns": 6,
+    "rows": 12,
     "margin": 1,
     "spacing": 2
   },
@@ -23,7 +23,7 @@
     "width": 32,
     "height": 48
   },
-  "frame_count": 32,
+  "frame_count": 72,
   "animations": {
     "idle_down": {
       "start": 0,
@@ -31,39 +31,59 @@
       "frame_count": 4
     },
     "idle_up": {
-      "start": 4,
-      "end": 7,
+      "start": 6,
+      "end": 9,
       "frame_count": 4
     },
     "idle_left": {
-      "start": 8,
-      "end": 11,
-      "frame_count": 4
-    },
-    "idle_right": {
       "start": 12,
       "end": 15,
       "frame_count": 4
     },
+    "idle_right": {
+      "start": 18,
+      "end": 21,
+      "frame_count": 4
+    },
     "walk_down": {
-      "start": 16,
-      "end": 19,
-      "frame_count": 4
-    },
-    "walk_up": {
-      "start": 20,
-      "end": 23,
-      "frame_count": 4
-    },
-    "walk_left": {
       "start": 24,
       "end": 27,
       "frame_count": 4
     },
-    "walk_right": {
-      "start": 28,
-      "end": 31,
+    "walk_up": {
+      "start": 30,
+      "end": 33,
       "frame_count": 4
+    },
+    "walk_left": {
+      "start": 36,
+      "end": 39,
+      "frame_count": 4
+    },
+    "walk_right": {
+      "start": 42,
+      "end": 45,
+      "frame_count": 4
+    },
+    "plant_down": {
+      "start": 48,
+      "end": 53,
+      "frame_count": 6
+    },
+    "plant_up": {
+      "start": 54,
+      "end": 59,
+      "frame_count": 6
+    },
+    "plant_left": {
+      "start": 60,
+      "end": 65,
+      "frame_count": 6
+    },
+    "plant_right": {
+      "start": 66,
+      "end": 71,
+      "frame_count": 6
     }
   },
   "directions": [

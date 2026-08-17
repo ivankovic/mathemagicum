@@ -78,6 +78,17 @@ export interface FixtureSidecar extends SpriteSidecar {
   fixture: string;
 }
 
+// A spell landing on a tile. Blocks nothing and is never walked round; the
+// only thing it shares with a prop is that it happens at a cell.
+export interface EffectSidecar extends SheetSprite {
+  effect: string;
+  animations: Record<string, AnimationRange>;
+  // Whether the generator drew this as something that repeats. Read rather
+  // than assumed: an effect left looping never goes away, and the sidecar is
+  // where the art says what it is.
+  loops: boolean;
+}
+
 // A crop. Like a character it carries no blocked cells — a field is walked
 // across, not around — and like a building its frames are grouped into named
 // ranges, one per growth stage.

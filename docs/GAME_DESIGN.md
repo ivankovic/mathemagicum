@@ -91,7 +91,13 @@ mapping is the theme rule above applied literally — the spell that adds is
 the one that makes things grow, so planting drops a *seedling* and growth
 is something the player does rather than something a timer does.
 
-**Icon:** a plus.
+**Icon:** a plus, on the rune in the spellbook.
+
+**Effect:** the same plus appears in the world, high over the tile being
+added to, and sinks *into* it with a burst of sparks where it lands. The
+direction is the point: a symbol that rose would read as something being
+taken away. Planting has its own gesture — the character bends, holds the
+low pose while the seed goes in, and straightens up.
 
 **The minigame:** two randomly chosen three-digit numbers whose sum is
 still under 1000, laid out on a number line. Three semicircular arrows jump

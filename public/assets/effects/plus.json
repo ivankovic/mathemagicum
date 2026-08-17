@@ -1,0 +1,35 @@
+{
+  "sheet": {
+    "file": "plus_sheet.png",
+    "frame_width": 32,
+    "frame_height": 60,
+    "frame_count": 8,
+    "columns": 8,
+    "rows": 1,
+    "margin": 1,
+    "spacing": 2
+  },
+  "effect": "plus",
+  "tile_size": 32,
+  "footprint_tiles": {
+    "width": 1,
+    "height": 1
+  },
+  "sprite_offset_px": {
+    "x": 0,
+    "y": -28
+  },
+  "sprite_size_px": {
+    "width": 32,
+    "height": 60
+  },
+  "frame_count": 8,
+  "animations": {
+    "cast": {
+      "start": 0,
+      "end": 7,
+      "frame_count": 8
+    }
+  },
+  "loops": false
+}

@@ -5,6 +5,7 @@ import Phaser from "phaser";
 import { UI_ASSETS, UI_SIDECAR_KEY, type UiIndex, uiEntry, uiTextureKey } from "../ui/assets";
 import { BUILDING_SPRITES, type BuildingSprite, spriteSheetKey } from "../world/buildings";
 import { ALL_CHARACTERS, characterSheetKey, characterSidecarKey } from "../world/characters";
+import { EFFECT_TYPES, effectSheetKey, effectSidecarKey } from "../world/effects";
 import { FIXTURE_TYPES, fixtureSheetKey, fixtureSidecarKey } from "../world/fixtures";
 import { INTERIOR_ROOMS, interiorSheetKey, interiorSidecarKey } from "../world/interiors";
 import { PLANT_TYPES, plantSheetKey, plantSidecarKey } from "../world/plants";
@@ -12,6 +13,7 @@ import { SCENERY_KINDS, scenerySheetKey, scenerySidecarKey } from "../world/scen
 import type {
   BuildingSidecar,
   CharacterSidecar,
+  EffectSidecar,
   FixtureSidecar,
   InteriorSidecar,
   ObjectSidecar,
@@ -69,6 +71,9 @@ export class BootScene extends Phaser.Scene {
     for (const kind of SCENERY_KINDS) {
       this.load.json(scenerySidecarKey(kind), `${this.base()}assets/objects/${kind}.json`);
     }
+    for (const effect of EFFECT_TYPES) {
+      this.load.json(effectSidecarKey(effect), `${this.base()}assets/effects/${effect}.json`);
+    }
     // One index for the whole interface set rather than one per file — the
     // generator writes it that way because a panel has no frames to describe.
     this.load.json(UI_SIDECAR_KEY, `${this.base()}assets/ui/ui.json`);
@@ -100,6 +105,10 @@ export class BootScene extends Phaser.Scene {
     for (const kind of SCENERY_KINDS) {
       const sidecar = this.cache.json.get(scenerySidecarKey(kind)) as ObjectSidecar | undefined;
       this.queueSheet(scenerySheetKey(kind), "objects", kind, sidecar?.sheet);
+    }
+    for (const effect of EFFECT_TYPES) {
+      const sidecar = this.cache.json.get(effectSidecarKey(effect)) as EffectSidecar | undefined;
+      this.queueSheet(effectSheetKey(effect), "effects", effect, sidecar?.sheet);
     }
     // Plain images, not spritesheets: the parchment and the icons are single
     // frames, and the index says how big each one is so nothing here has to.
@@ -167,6 +176,10 @@ export class BootScene extends Phaser.Scene {
     for (const kind of SCENERY_KINDS) {
       const sidecar = this.cache.json.get(scenerySidecarKey(kind)) as ObjectSidecar;
       expected.push([kind, scenerySheetKey(kind), sidecar.frame_count]);
+    }
+    for (const effect of EFFECT_TYPES) {
+      const sidecar = this.cache.json.get(effectSidecarKey(effect)) as EffectSidecar;
+      expected.push([effect, effectSheetKey(effect), sidecar.frame_count]);
     }
     for (const [name, key, count] of expected) {
       // Phaser counts its own __BASE frame alongside the sliced ones.

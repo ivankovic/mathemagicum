@@ -25,6 +25,9 @@ import {
   Facing,
   IDLE,
   IDLE_FPS,
+  ONE_SHOT_ANIMATIONS,
+  PLANT,
+  PLANT_FPS,
   PLAYER_CHARACTER,
   WALK,
   WALK_FPS,
@@ -42,6 +45,14 @@ import {
   dualChunkScreenBounds,
   dualTileRange,
 } from "../world/chunks";
+import {
+  EFFECT_FPS,
+  EFFECT_TYPES,
+  EffectType,
+  effectAnimKey,
+  effectSheetKey,
+  effectSidecarKey,
+} from "../world/effects";
 import {
   FIXTURE_TYPES,
   fixtureAnimKey,
@@ -82,6 +93,7 @@ import {
 import {
   type BuildingSidecar,
   type CharacterSidecar,
+  type EffectSidecar,
   type FixtureSidecar,
   type InteriorSidecar,
   type ObjectSidecar,
@@ -172,6 +184,16 @@ interface Direction {
   dRow: number;
 }
 
+// How fast each character animation runs. Walk is tied to the step duration,
+// idle is a slow breath, and the planting gesture sits between them: six
+// frames at 12 is about half a second, long enough to read as deliberate and
+// short enough that it never feels like the game stopped listening.
+const FPS_FOR_ANIMATION: Record<string, number> = {
+  [WALK]: WALK_FPS,
+  [IDLE]: IDLE_FPS,
+  [PLANT]: PLANT_FPS,
+};
+
 // Crops are sparse and looked up by tile, so they are keyed by position
 // rather than held in a grid-sized array.
 function cropKey(col: number, row: number): string {
@@ -261,6 +283,16 @@ export class GameScene extends Phaser.Scene {
   private playerRow = 0;
   private playerFacing: Facing = DEFAULT_FACING;
   private isMoving = false;
+  // A gesture the player is part-way through, or null. While it is set the
+  // per-frame idle/walk assertion leaves the sprite alone — see
+  // playCharacterAnim, which is called every frame precisely so that no state
+  // change can forget to update the sprite, and which would therefore
+  // overwrite a one-shot on the very next frame.
+  //
+  // The player only. Every character's sheet carries the planting frames
+  // because the generator draws one cast the same way, but nothing an NPC
+  // does is a gardening action, so there is no per-NPC equivalent of this.
+  private playerGesture: string | null = null;
 
   private selectedPlantIndex = 0;
   private statusText!: Phaser.GameObjects.Text;
@@ -457,7 +489,13 @@ export class GameScene extends Phaser.Scene {
     // Depth follows the sprite's own y, which is its feet — so it stays
     // correct part-way through a step rather than only at whole tiles.
     this.player.setDepth(this.player.y);
-    this.playCharacterAnim(this.player, PLAYER_CHARACTER, this.playerFacing, this.isMoving);
+    this.playCharacterAnim(
+      this.player,
+      PLAYER_CHARACTER,
+      this.playerFacing,
+      this.isMoving,
+      this.playerGesture,
+    );
     for (const npc of this.npcs) {
       npc.sprite.setDepth(npc.sprite.y);
       this.playCharacterAnim(npc.sprite, npc.character, npc.facing, npc.isMoving);
@@ -599,6 +637,31 @@ export class GameScene extends Phaser.Scene {
     this.registerPlantAnims();
     this.registerFixtureAnims();
     this.registerSceneryAnims();
+    this.registerEffectAnims();
+  }
+
+  // Spell effects. Unlike every other animation registered here these do not
+  // repeat: `loops` comes from the sidecar rather than being decided in this
+  // file, because whether something is a loop or a gesture is a property of
+  // how it was drawn.
+  private registerEffectAnims(): void {
+    for (const effect of EFFECT_TYPES) {
+      const sidecar = this.cache.json.get(effectSidecarKey(effect)) as EffectSidecar | undefined;
+      if (!sidecar) throw new Error(`missing sidecar for effect "${effect}"`);
+      for (const [name, range] of Object.entries(sidecar.animations)) {
+        const key = `effect-${effect}-${name}`;
+        if (this.anims.exists(key)) continue;
+        this.anims.create({
+          key,
+          frames: this.anims.generateFrameNumbers(effectSheetKey(effect), {
+            start: range.start,
+            end: range.end,
+          }),
+          frameRate: EFFECT_FPS,
+          repeat: sidecar.loops ? -1 : 0,
+        });
+      }
+    }
   }
 
   private registerSceneryAnims(): void {
@@ -712,8 +775,16 @@ export class GameScene extends Phaser.Scene {
             start: range.start,
             end: range.end,
           }),
-          frameRate: animation === WALK ? WALK_FPS : IDLE_FPS,
-          repeat: -1,
+          frameRate: FPS_FOR_ANIMATION[animation] ?? IDLE_FPS,
+          // A gesture plays once; idle and walk loop. Registering a one-shot
+          // with repeat -1 does not merely make it repeat: ANIMATION_COMPLETE
+          // never fires, so the flag that says "a gesture is running" is never
+          // cleared and the character bows for the rest of the session,
+          // walking included. Nothing on screen says so either — a plant
+          // animation that loops passes through the standing pose twice a
+          // cycle, so it reads as a character with a twitch rather than as a
+          // stuck state.
+          repeat: ONE_SHOT_ANIMATIONS.includes(animation) ? 0 : -1,
         });
       }
     }
@@ -728,8 +799,47 @@ export class GameScene extends Phaser.Scene {
     character: string,
     facing: Facing,
     moving: boolean,
+    gesture: string | null = null,
   ): void {
+    if (gesture) return; // a one-shot is playing; leave it to finish
     sprite.play(characterAnimKey(character, moving ? WALK : IDLE, facing), true);
+  }
+
+  /**
+   * Play a one-shot gesture on the player, then hand the sprite back.
+   *
+   * Every frame `playCharacterAnim` re-asserts idle or walk, which is what
+   * makes it impossible for a state change to forget the sprite — and what
+   * makes a one-shot impossible without somewhere to record that one is
+   * running. `playerGesture` is that record, and it is cleared on completion
+   * rather than on a timer so it cannot drift out of step with the animation.
+   */
+  private playGesture(animation: string): void {
+    this.playerGesture = animation;
+    this.player.play(characterAnimKey(PLAYER_CHARACTER, animation, this.playerFacing));
+    this.player.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+      this.playerGesture = null;
+    });
+  }
+
+  /**
+   * Show a spell landing on a tile.
+   *
+   * Drawn a hair in front of whatever is on the tile — the crop it is being
+   * added to — rather than behind it, and destroyed when the animation ends.
+   * Nothing else in the scene creates sprites at runtime that are meant to go
+   * away, so the cleanup is here rather than in a general sweep.
+   */
+  private playEffect(effect: EffectType, col: number, row: number): void {
+    const feet = this.toFeet(col, row);
+    const sprite = this.world(
+      this.add
+        .sprite(feet.x, feet.y, effectSheetKey(effect))
+        .setOrigin(0.5, 1)
+        .setDepth(feet.y + 0.5)
+        .play(effectAnimKey(effect)),
+    );
+    sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => sprite.destroy());
   }
 
   // --- Chunked terrain rendering ------------------------------------
@@ -1068,6 +1178,9 @@ export class GameScene extends Phaser.Scene {
   private growCropAt(col: number, row: number): void {
     const grown = this.grid.growCrop(col, row);
     if (!grown) return;
+    // The plus lands on the tile it is being added to, which is the whole of
+    // what the effect has to say.
+    this.playEffect(EffectType.Plus, col, row);
     // Growth is a change of animation, not of sprite: the generator ships one
     // sheet per crop with a row per stage, so the same object keeps playing
     // further along its own reel.
@@ -1132,6 +1245,7 @@ export class GameScene extends Phaser.Scene {
         .play(plantAnimKey(plant, PLANTED_STAGE)),
     );
     this.cropSprites.set(cropKey(col, row), sprite);
+    this.playGesture(PLANT);
     this.setMessage(`Planted a ${plant} seedling — cast the plus rune to grow it`);
   }
 
