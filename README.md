@@ -30,6 +30,7 @@ uv run asset-generator terrain-buildings --seed 7 --sheets --out-dir output/terr
 uv run asset-generator terrain-characters --seed 7 --out-dir output/terrain_characters
 uv run asset-generator terrain-interiors --seed 7 --sheets --out-dir output/terrain_interiors
 uv run asset-generator terrain-plants --seed 7 --out-dir output/terrain_plants
+uv run asset-generator terrain-fixtures --seed 7 --out-dir output/terrain_fixtures
 
 cd -
 OUT=../asset-generator/output
@@ -44,6 +45,7 @@ done
 for p in carrot sunflower cactus; do
   cp $OUT/terrain_plants/$p{.json,_sheet.png} public/assets/plants/
 done
+cp $OUT/terrain_fixtures/well{.json,_sheet.png} public/assets/fixtures/
 bun test   # src/world/assets.test.ts checks the sync
 ```
 
@@ -65,6 +67,13 @@ Three things are worth knowing about what gets copied:
   will roll as many generic villagers as you ask for; the list in the loop
   above has to stay in step with `VILLAGER_CHARACTERS` in
   `src/world/characters.ts`, which is what the game loads.
+
+Nothing in the game draws a placeholder any more. An object the world places
+that resolves to neither a building sprite nor a fixture throws at spawn
+rather than falling back to a coloured disc — a silent grey circle is how a
+missing sprite survives to a release. `assets.test.ts` generates a world and
+checks every placed object resolves, so that throw is unreachable in
+practice and provably so.
 
 Crops ship all three growth stages even though planting currently shows the
 finished one: the tending spells that would move between them are still

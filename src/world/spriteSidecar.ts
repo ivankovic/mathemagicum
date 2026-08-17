@@ -68,6 +68,11 @@ export interface ObjectSidecar extends SpriteSidecar {
   terrain: string;
 }
 
+// A built prop standing on one cell, which it blocks.
+export interface FixtureSidecar extends SpriteSidecar {
+  fixture: string;
+}
+
 // A crop. Like a character it carries no blocked cells — a field is walked
 // across, not around — and like a building its frames are grouped into named
 // ranges, one per growth stage.

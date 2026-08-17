@@ -4,11 +4,13 @@
 import Phaser from "phaser";
 import { BUILDING_SPRITES, type BuildingSprite, spriteSheetKey } from "../world/buildings";
 import { ALL_CHARACTERS, characterSheetKey, characterSidecarKey } from "../world/characters";
+import { FIXTURE_TYPES, fixtureSheetKey, fixtureSidecarKey } from "../world/fixtures";
 import { INTERIOR_ROOMS, interiorSheetKey, interiorSidecarKey } from "../world/interiors";
 import { PLANT_TYPES, plantSheetKey, plantSidecarKey } from "../world/plants";
 import type {
   BuildingSidecar,
   CharacterSidecar,
+  FixtureSidecar,
   InteriorSidecar,
   PlantSidecar,
   SheetLayout,
@@ -58,6 +60,9 @@ export class BootScene extends Phaser.Scene {
     for (const plant of PLANT_TYPES) {
       this.load.json(plantSidecarKey(plant), `${this.base()}assets/plants/${plant}.json`);
     }
+    for (const fixture of FIXTURE_TYPES) {
+      this.load.json(fixtureSidecarKey(fixture), `${this.base()}assets/fixtures/${fixture}.json`);
+    }
   }
 
   create(): void {
@@ -78,6 +83,10 @@ export class BootScene extends Phaser.Scene {
     for (const plant of PLANT_TYPES) {
       const sidecar = this.cache.json.get(plantSidecarKey(plant)) as PlantSidecar | undefined;
       this.queueSheet(plantSheetKey(plant), "plants", plant, sidecar?.sheet);
+    }
+    for (const fixture of FIXTURE_TYPES) {
+      const sidecar = this.cache.json.get(fixtureSidecarKey(fixture)) as FixtureSidecar | undefined;
+      this.queueSheet(fixtureSheetKey(fixture), "fixtures", fixture, sidecar?.sheet);
     }
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
       this.verifyFrameCounts();
@@ -129,6 +138,10 @@ export class BootScene extends Phaser.Scene {
     for (const plant of PLANT_TYPES) {
       const sidecar = this.cache.json.get(plantSidecarKey(plant)) as PlantSidecar;
       expected.push([plant, plantSheetKey(plant), sidecar.frame_count]);
+    }
+    for (const fixture of FIXTURE_TYPES) {
+      const sidecar = this.cache.json.get(fixtureSidecarKey(fixture)) as FixtureSidecar;
+      expected.push([fixture, fixtureSheetKey(fixture), sidecar.frame_count]);
     }
     for (const [name, key, count] of expected) {
       // Phaser counts its own __BASE frame alongside the sliced ones.

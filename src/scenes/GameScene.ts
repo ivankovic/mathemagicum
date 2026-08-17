@@ -38,6 +38,13 @@ import {
   dualChunkScreenBounds,
   dualTileRange,
 } from "../world/chunks";
+import {
+  FIXTURE_TYPES,
+  fixtureAnimKey,
+  fixtureFor,
+  fixtureSheetKey,
+  fixtureSidecarKey,
+} from "../world/fixtures";
 import type { WorldGrid } from "../world/grid";
 import {
   INTERIOR_ROOMS,
@@ -50,7 +57,6 @@ import {
   interiorSidecarKey,
 } from "../world/interiors";
 import type { PlacedObject } from "../world/objects";
-import { DEFAULT_OBJECT_COLOR, OBJECT_COLORS } from "../world/palette";
 import { findPath } from "../world/pathfinding";
 import {
   PLANTED_STAGE,
@@ -63,6 +69,7 @@ import {
 import {
   type BuildingSidecar,
   type CharacterSidecar,
+  type FixtureSidecar,
   type InteriorSidecar,
   type PlantSidecar,
   doorCell,
@@ -123,7 +130,8 @@ const CHUNK_CACHE_LIMIT = 60;
 const BUILDING_ANIM_FPS = 6;
 // Slow enough to read as a breeze rather than a shiver.
 const PLANT_SWAY_FPS = 4;
-const WELL_RADIUS = 9;
+// The well bucket drifts rather than swings.
+const FIXTURE_ANIM_FPS = 5;
 
 const NPC_MOVE_DURATION_MS = 500;
 const NPC_STEP_MIN_MS = 1500;
@@ -243,6 +251,7 @@ export class GameScene extends Phaser.Scene {
   // loaded texture rather than hardcoded — see terrainAtlas.ts.
   private terrainVariations = new Map<string, number>();
   private buildingSidecars = new Map<BuildingSprite, BuildingSidecar>();
+  private fixtureSidecars = new Map<string, FixtureSidecar>();
   private buildings: BuildingRuntime[] = [];
   private interiorSidecars = new Map<string, InteriorSidecar>();
   private interior: InteriorRuntime | null = null;
@@ -515,6 +524,26 @@ export class GameScene extends Phaser.Scene {
     this.registerCharacterAnims();
     this.registerInteriorAnims();
     this.registerPlantAnims();
+    this.registerFixtureAnims();
+  }
+
+  private registerFixtureAnims(): void {
+    for (const fixture of FIXTURE_TYPES) {
+      const sidecar = this.cache.json.get(fixtureSidecarKey(fixture)) as FixtureSidecar | undefined;
+      if (!sidecar) throw new Error(`missing sidecar for fixture "${fixture}"`);
+      this.fixtureSidecars.set(fixture, sidecar);
+      const key = fixtureAnimKey(fixture);
+      if (this.anims.exists(key)) continue;
+      this.anims.create({
+        key,
+        frames: this.anims.generateFrameNumbers(fixtureSheetKey(fixture), {
+          start: 0,
+          end: sidecar.frame_count - 1,
+        }),
+        frameRate: FIXTURE_ANIM_FPS,
+        repeat: -1,
+      });
+    }
   }
 
   // One looping sway per growth stage, from the ranges the sidecar names.
@@ -887,7 +916,7 @@ export class GameScene extends Phaser.Scene {
       const sprite = ROLE_SPRITES[object.type as BuildingRole];
       const sidecar = sprite ? this.buildingSidecars.get(sprite) : undefined;
       if (!sprite || !sidecar) {
-        this.spawnUnartedObject(object);
+        this.spawnFixture(object);
         continue;
       }
       const origin = spriteOrigin(sidecar, object.col, object.row);
@@ -909,16 +938,24 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  // The village well has no generated art yet — the asset generator ships
-  // buildings and terrain objects, and a well is neither. Drawn as the flat
-  // placeholder disc it was before, so the square still reads as a square.
-  private spawnUnartedObject(object: PlacedObject): void {
-    const { x, y } = this.toScreen(object.anchorCol, object.anchorRow);
+  // Anything placed that is not a building: today the village well. Throws
+  // rather than drawing a placeholder, because a silent grey disc is how a
+  // missing sprite survives to a release — and assets.test.ts checks every
+  // type the village places resolves here, so this is unreachable in
+  // practice and provably so.
+  private spawnFixture(object: PlacedObject): void {
+    const fixture = fixtureFor(object.type);
+    const sidecar = fixture ? this.fixtureSidecars.get(fixture) : undefined;
+    if (!fixture || !sidecar) {
+      throw new Error(`placed object "${object.type}" has no art`);
+    }
+    const feet = this.toFeet(object.col, object.row);
     this.world(
       this.add
-        .circle(x, y, WELL_RADIUS, OBJECT_COLORS[object.type] ?? DEFAULT_OBJECT_COLOR)
-        .setStrokeStyle(2, 0x37474f)
-        .setDepth(this.entityDepth(object.row)),
+        .sprite(feet.x, feet.y, fixtureSheetKey(fixture))
+        .setOrigin(0.5, 1)
+        .setDepth(feet.y)
+        .play(fixtureAnimKey(fixture)),
     );
   }
 

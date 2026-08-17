@@ -6,11 +6,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, DOOR_STATES, ROLE_SPRITES } from "./buildings";
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
+import { FIXTURE_TYPES, fixtureFor } from "./fixtures";
 import { INTERIOR_ROOMS, interiorFor } from "./interiors";
 import { PLANT_STAGES, PLANT_TYPES } from "./plants";
 import type {
   BuildingSidecar,
   CharacterSidecar,
+  FixtureSidecar,
   InteriorSidecar,
   PlantSidecar,
 } from "./spriteSidecar";
@@ -18,6 +20,7 @@ import { TERRAIN_TYPES } from "./terrain";
 import { TERRAIN_ATLAS_KEY, buildVariationIndex, comboKey } from "./terrainAtlas";
 import type { CornerTerrains } from "./terrainAtlas";
 import { TILE_SIZE } from "./topdown";
+import { generateWorld } from "./worldGenerator";
 
 // These assets are produced by a separate repo (~/src/asset-generator) and
 // committed here, so nothing in this repo's build can catch them drifting
@@ -448,6 +451,58 @@ describe("the shipped crops", () => {
       for (const range of Object.values(sidecar.animations)) {
         expect(range.start % sheet.columns).toBe(0);
       }
+    }
+  });
+});
+
+describe("the shipped fixtures", () => {
+  const sidecars = new Map(
+    FIXTURE_TYPES.map((f) => [f, readJson<FixtureSidecar>("fixtures", `${f}.json`)]),
+  );
+
+  test("ship the sheet PNG they name", () => {
+    for (const [name, sidecar] of sidecars) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error(`${name} has no sheet`);
+      expect(existsSync(join(ASSETS, "fixtures", sheet.file))).toBe(true);
+      expect(sheet.frame_count).toBe(sidecar.frame_count);
+    }
+  });
+
+  test("are 1:1 art one cell wide, overhanging upward", () => {
+    for (const sidecar of sidecars.values()) {
+      expect(sidecar.tile_size).toBe(TILE_SIZE);
+      expect(sidecar.footprint_tiles).toEqual({ width: 1, height: 1 });
+      expect(sidecar.sprite_size_px.width).toBe(TILE_SIZE);
+      const overhang = sidecar.sprite_size_px.height - TILE_SIZE;
+      expect(overhang).toBeGreaterThan(0);
+      expect(sidecar.sprite_offset_px).toEqual({ x: 0, y: -overhang });
+    }
+  });
+
+  test("block the cell they stand on", () => {
+    for (const sidecar of sidecars.values()) {
+      expect(sidecar.blocked_cells_relative_to_anchor).toEqual([[0, 0]]);
+    }
+  });
+});
+
+describe("every object the village places", () => {
+  // GameScene throws rather than drawing a placeholder for an object type it
+  // has no art for. This is what makes that throw unreachable: if a story
+  // area starts placing something new, this fails before the game does.
+  const world = generateWorld(120, 120, 4242);
+
+  test("resolves to either a building sprite or a fixture", () => {
+    const placed = [world.village.well, ...world.village.buildings];
+    expect(placed.length).toBeGreaterThan(0);
+    for (const object of placed) {
+      const asBuilding = ROLE_SPRITES[object.type as keyof typeof ROLE_SPRITES];
+      const asFixture = fixtureFor(object.type);
+      expect({ type: object.type, hasArt: Boolean(asBuilding ?? asFixture) }).toEqual({
+        type: object.type,
+        hasArt: true,
+      });
     }
   });
 });
