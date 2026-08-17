@@ -11,7 +11,7 @@ import { TerrainType } from "./terrain";
 function smallGrid(): WorldGrid {
   return new WorldGrid([
     [TerrainType.Grass, TerrainType.Sand],
-    [TerrainType.Water, TerrainType.Rock],
+    [TerrainType.Water, TerrainType.Mountain],
   ]);
 }
 

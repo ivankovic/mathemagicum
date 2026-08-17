@@ -20,7 +20,7 @@ describe("canPlantOn", () => {
   test("nothing grows on water or rock", () => {
     for (const plant of Object.values(PlantType)) {
       expect(canPlantOn(plant, TerrainType.Water)).toBe(false);
-      expect(canPlantOn(plant, TerrainType.Rock)).toBe(false);
+      expect(canPlantOn(plant, TerrainType.Mountain)).toBe(false);
     }
   });
 });

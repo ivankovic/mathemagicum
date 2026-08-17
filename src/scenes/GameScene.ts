@@ -3,41 +3,48 @@
 
 import Phaser from "phaser";
 import type { AreaPlacement } from "../world/anchors";
-import { buildingSpriteKey, buildingVariantFor } from "../world/buildingSprites";
 import {
-  CHUNK_SIZE,
+  BUILDING_SPRITES,
+  type BuildingRole,
+  type BuildingSprite,
+  ROLE_SPRITES,
+  buildingAnimKey,
+  spriteSheetKey,
+} from "../world/buildings";
+import {
   type ChunkCoord,
   chunkKey,
   chunksCoveringTileRange,
   dualChunkScreenBounds,
+  dualTileRange,
 } from "../world/chunks";
 import type { WorldGrid } from "../world/grid";
+import type { PlacedObject } from "../world/objects";
+import { DEFAULT_OBJECT_COLOR, OBJECT_COLORS, PLANT_COLORS } from "../world/palette";
+import { findPath } from "../world/pathfinding";
+import { PlantType } from "../world/plants";
+import { type BuildingSidecar, footprintBottomY, spriteOrigin } from "../world/spriteSidecar";
+import {
+  DUAL_OFFSET,
+  DUAL_ORIGIN,
+  TERRAIN_ATLAS_KEY,
+  buildVariationIndex,
+  cornerTerrainsFor,
+  frameFor,
+} from "../world/terrainAtlas";
+import { NIGHT_TINT_COLOR, isDaytime, nightTintAlpha, timeOfDay } from "../world/time";
 import {
   type GridPoint,
   type ScreenPoint,
-  TILE_HEIGHT,
-  TILE_WIDTH,
+  TILE_SIZE,
   computeMapScreenBounds,
+  depthFor,
   gridToScreen,
-  isoDepth,
   screenToGrid,
-} from "../world/iso";
-import type { PlacedObject } from "../world/objects";
-import { PLANT_COLORS } from "../world/palette";
-import { findPath } from "../world/pathfinding";
-import { PlantType } from "../world/plants";
-import { TerrainType } from "../world/terrain";
-import {
-  FULL_MASK,
-  TERRAIN_PRIORITY,
-  baseTerrainFor,
-  cornerMaskFor,
-  dualTileKey,
-  tileVariantFor,
-} from "../world/tileset";
-import { NIGHT_TINT_COLOR, isDaytime, nightTintAlpha, timeOfDay } from "../world/time";
+} from "../world/topdown";
 import type { VillageNpcSpec } from "../world/villageLayout";
 import { generateWorld } from "../world/worldGenerator";
+import { sidecarKey } from "./BootScene";
 
 const WORLD_SIZE = 500;
 // Fixed for now so the world is reproducible during development; will
@@ -53,6 +60,10 @@ const CHUNK_VIEW_MARGIN = 1;
 // Generous cache so panning back and forth doesn't constantly re-render —
 // well above what's ever simultaneously visible on screen.
 const CHUNK_CACHE_LIMIT = 60;
+
+// Slow idle loop: the 8 frames are drifting chimney smoke, not motion.
+const BUILDING_ANIM_FPS = 6;
+const WELL_RADIUS = 9;
 
 const NPC_COLOR = 0x8e24aa;
 const NPC_MOVE_DURATION_MS = 500;
@@ -138,6 +149,11 @@ export class GameScene extends Phaser.Scene {
   private activeChunks = new Map<string, ActiveChunk>();
   private frameCounter = 0;
 
+  // How many variants the atlas ships per corner combination, read from the
+  // loaded texture rather than hardcoded — see terrainAtlas.ts.
+  private terrainVariations = new Map<string, number>();
+  private buildingSidecars = new Map<BuildingSprite, BuildingSidecar>();
+
   private nightOverlay!: Phaser.GameObjects.Rectangle;
   private npcs: NpcRuntime[] = [];
 
@@ -147,6 +163,7 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.mobileControls = !this.sys.game.device.os.desktop;
+    this.loadAssetMetadata();
 
     const world = generateWorld(WORLD_SIZE, WORLD_SIZE, WORLD_SEED);
     this.grid = world.grid;
@@ -161,7 +178,7 @@ export class GameScene extends Phaser.Scene {
 
     const start = this.toScreen(this.playerCol, this.playerRow);
     this.player = this.add.circle(start.x, start.y, 10, 0xff5252).setStrokeStyle(2, 0xffffff);
-    this.player.setDepth(isoDepth(this.playerCol, this.playerRow) + 0.5);
+    this.player.setDepth(this.entityDepth(this.playerRow) + 0.5);
 
     this.cameras.main.setBounds(0, 0, mapPixelWidth, mapPixelHeight);
     this.cameras.main.startFollow(this.player);
@@ -226,6 +243,37 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // --- Asset metadata ----------------------------------------------------
+
+  // Everything the renderer needs to know about the art is read from the art
+  // itself: variation counts from the atlas's frame names, footprints and
+  // draw offsets from each building's sidecar. Nothing about the generator's
+  // output is restated as a constant here.
+  private loadAssetMetadata(): void {
+    const texture = this.textures.get(TERRAIN_ATLAS_KEY);
+    this.terrainVariations = buildVariationIndex(texture.getFrameNames());
+    if (this.terrainVariations.size === 0) {
+      throw new Error(`terrain atlas "${TERRAIN_ATLAS_KEY}" loaded no frames`);
+    }
+
+    for (const sprite of BUILDING_SPRITES) {
+      const sidecar = this.cache.json.get(sidecarKey(sprite)) as BuildingSidecar | undefined;
+      if (!sidecar) throw new Error(`missing sidecar for building "${sprite}"`);
+      this.buildingSidecars.set(sprite, sidecar);
+      const animKey = buildingAnimKey(sprite);
+      if (this.anims.exists(animKey)) continue;
+      this.anims.create({
+        key: animKey,
+        frames: this.anims.generateFrameNumbers(spriteSheetKey(sprite), {
+          start: 0,
+          end: sidecar.frame_count - 1,
+        }),
+        frameRate: BUILDING_ANIM_FPS,
+        repeat: -1,
+      });
+    }
+  }
+
   // --- Chunked terrain rendering ------------------------------------
 
   private refreshVisibleChunks(): void {
@@ -275,84 +323,59 @@ export class GameScene extends Phaser.Scene {
   }
 
   private activateChunk(chunk: ChunkCoord): void {
-    const raw = dualChunkScreenBounds(chunk, TILE_WIDTH, TILE_HEIGHT);
-    const minX = Math.floor(raw.minX);
-    const minY = Math.floor(raw.minY);
-    const width = Math.ceil(raw.maxX) - minX;
-    const height = Math.ceil(raw.maxY) - minY;
+    const bounds = dualChunkScreenBounds(chunk);
+    const minX = bounds.minX;
+    const minY = bounds.minY;
 
-    const colStart = chunk.chunkCol * CHUNK_SIZE;
-    const rowStart = chunk.chunkRow * CHUNK_SIZE;
-    const colEnd = Math.min(colStart + CHUNK_SIZE, this.grid.width);
-    const rowEnd = Math.min(rowStart + CHUNK_SIZE, this.grid.height);
-
-    const texture = this.add.renderTexture(this.originX + minX, this.originY + minY, width, height);
+    const texture = this.add.renderTexture(
+      this.originX + minX,
+      this.originY + minY,
+      bounds.maxX - minX,
+      bounds.maxY - minY,
+    );
     texture.setOrigin(0, 0);
     texture.setDepth(CHUNK_DEPTH);
 
-    // Objects (buildings, the well) are standalone Image sprites with
-    // their own isoDepth-based sort (see spawnBuildings), not baked into
-    // this RenderTexture — a building needs to rise above and often
-    // overhang its own footprint, which a flat tile stamped into a chunk
-    // can't express, and needs to depth-sort against the player/NPCs
-    // walking around it, which a static baked texture can't either.
+    // Buildings are standalone animated Sprites with their own depth sort
+    // (see spawnBuildings), not baked into this RenderTexture — a building
+    // rises above and overhangs its own footprint, which a flat tile stamped
+    // into a chunk can't express, and has to sort against the player and
+    // NPCs walking around it, which a static baked texture can't either.
     //
-    // Terrain rendering: one pass over the DUAL grid (see tileset.ts's
-    // module docstring) — one extra row/column of tiles beyond this
-    // chunk's own data-tile range on every side, since each dual tile's 4
-    // vertices reach one data cell outside a naive col/row-aligned range.
-    // Per dual tile:
-    //  1. Its base terrain (baseTerrainFor — the lowest-priority terrain
-    //     actually present among its 4 corners), drawn SOLID underneath
-    //     everything else. Not just a defensive backstop: standard
-    //     source-over compositing of several semi-transparent layers
-    //     doesn't reconstruct their analytic sum for anything below the
-    //     topmost one, so the base has to be a terrain the tile actually
-    //     touches or an unrelated color visibly bleeds through — see
-    //     baseTerrainFor's own docstring for the algebra.
-    //  2. Per TERRAIN_PRIORITY entry (lowest first): cornerMaskFor tells
-    //     us which of the tile's 4 corners are this terrain; mask 0 means
-    //     none of them are, so there's nothing to draw for this terrain
-    //     here. No separate "own cut" vs "neighbour's wedge" case split
-    //     like the old 47-tile blob scheme needed — the same mask
-    //     computation and the same texture key format apply to every
-    //     terrain uniformly (including the base terrain's own layer,
-    //     which just redraws its own solid color over itself — a no-op).
+    // Terrain is now one draw per dual tile, full stop. The atlas ships a
+    // finished tile for every corner-terrain combination, so there is no
+    // base layer, no priority pass and no per-terrain mask — what used to be
+    // a stack of up to 8 semi-transparent draws per tile (with the
+    // compositing subtleties that came with it) is a single opaque one.
     //
-    // Dual tile "(dualCol, dualRow)" is centered at data-grid position
-    // (dualCol + 0.5, dualRow + 0.5) — since gridToScreen is linear, that
-    // center is gridToScreen(dualCol, dualRow) shifted by (0, TILE_HEIGHT
-    // / 2) (see tileset.ts), so its top-left draw position is just
-    // gridToScreen(dualCol, dualRow) shifted left by TILE_WIDTH / 2 (same
-    // as a data tile's own x) and NOT shifted up by TILE_HEIGHT / 2 (unlike
-    // a data tile's own y) — the two half-tile shifts cancel.
-    //
-    // beginDraw/batchDrawFrame/endDraw wraps ALL of this in one GPU flush
-    // (not stamp(), which is draw() under the hood — a full flush per
-    // call) — a chunk can need several times CHUNK_SIZE^2 individual tile
-    // draws here, and stamp()-per-tile measured as an effectively
-    // unrecoverable hang under software-rendered WebGL (confirmed via a
-    // real headless-browser run, not just a guess) — Phaser's own docs
-    // call this batch API out for exactly "large numbers of objects."
+    // beginDraw/batchDrawFrame/endDraw wraps the whole chunk in one GPU
+    // flush (not stamp(), which is draw() under the hood — a full flush per
+    // call). Even at one draw per tile that is CHUNK_SIZE^2 of them, and
+    // stamp()-per-tile previously measured as an effectively unrecoverable
+    // hang under software-rendered WebGL; Phaser's own docs call this batch
+    // API out for exactly "large numbers of objects."
+    const range = dualTileRange(chunk);
+    // The dual grid is only defined from DUAL_ORIGIN to one short of the
+    // data grid's extent; a chunk at the world edge covers tiles past that,
+    // which would draw a duplicate of the clamped edge outside the world.
+    const minCol = Math.max(range.minCol, DUAL_ORIGIN);
+    const minRow = Math.max(range.minRow, DUAL_ORIGIN);
+    const maxCol = Math.min(range.maxCol, this.grid.width - 1);
+    const maxRow = Math.min(range.maxRow, this.grid.height - 1);
+
     texture.beginDraw();
-    for (let dualRow = rowStart - 1; dualRow < rowEnd; dualRow++) {
-      for (let dualCol = colStart - 1; dualCol < colEnd; dualCol++) {
+    for (let dualRow = minRow; dualRow <= maxRow; dualRow++) {
+      for (let dualCol = minCol; dualCol <= maxCol; dualCol++) {
+        const corners = cornerTerrainsFor(this.grid, dualCol, dualRow);
+        const frame = frameFor(corners, dualCol, dualRow, this.terrainVariations);
+        if (!frame) continue;
         const p = gridToScreen(dualCol, dualRow);
-        const x = p.x - minX - TILE_WIDTH / 2;
-        const y = p.y - minY;
-
-        const variant = tileVariantFor(dualCol, dualRow);
-
-        const baseTerrain = baseTerrainFor(this.grid, dualCol, dualRow);
-        const baseKey = dualTileKey(baseTerrain, FULL_MASK, variant);
-        texture.batchDrawFrame(baseKey, undefined, x, y);
-
-        for (const terrain of TERRAIN_PRIORITY) {
-          const mask = cornerMaskFor(this.grid, dualCol, dualRow, terrain);
-          if (mask === 0) continue;
-          const key = dualTileKey(terrain, mask, variant);
-          texture.batchDrawFrame(key, undefined, x, y);
-        }
+        texture.batchDrawFrame(
+          TERRAIN_ATLAS_KEY,
+          frame,
+          p.x + DUAL_OFFSET - minX,
+          p.y + DUAL_OFFSET - minY,
+        );
       }
     }
     texture.endDraw();
@@ -419,7 +442,7 @@ export class GameScene extends Phaser.Scene {
     this.isMoving = true;
     this.playerCol = targetCol;
     this.playerRow = targetRow;
-    this.player.setDepth(isoDepth(targetCol, targetRow) + 0.5);
+    this.player.setDepth(this.entityDepth(targetRow) + 0.5);
 
     const target = this.toScreen(targetCol, targetRow);
     this.tweens.add({
@@ -448,9 +471,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     const { x, y } = this.toScreen(this.playerCol, this.playerRow);
-    this.add
-      .circle(x, y, 6, PLANT_COLORS[plant])
-      .setDepth(isoDepth(this.playerCol, this.playerRow));
+    this.add.circle(x, y, 6, PLANT_COLORS[plant]).setDepth(this.entityDepth(this.playerRow));
     this.setMessage(`Planted ${plant}`);
   }
 
@@ -470,23 +491,40 @@ export class GameScene extends Phaser.Scene {
 
   // --- Buildings -----------------------------------------------------------
   //
-  // One standalone Image per placed object (well + every village building),
-  // anchored bottom-centre at its own anchorCol/anchorRow (see objects.ts's
-  // PlacedObject docstring — normally the footprint's front-facing cell,
-  // not its top-left corner or centre) and depth-sorted the same way
-  // NPCs/the player are, so the player walking near a tall building's base
-  // occludes/is occluded correctly instead of always drawing on top of or
-  // under it. Static once placed — no per-frame update needed.
+  // One animated Sprite per placed building, positioned from its sidecar
+  // rather than from any convention of ours: the generator states where to
+  // draw the art relative to the footprint's top-left cell, and the art
+  // overhangs upward by exactly the amount that offset encodes.
+  //
+  // Depth is the bottom of the footprint, so the player walking in front of
+  // a building occludes it and walking behind it is occluded — the whole
+  // reason a 3/4 view needs a depth sort at all.
   private spawnBuildings(objects: readonly PlacedObject[]): void {
     for (const object of objects) {
-      const { x, y } = this.toScreen(object.anchorCol, object.anchorRow);
-      const variant = buildingVariantFor(object.col, object.row);
-      const key = buildingSpriteKey(object.type, variant);
+      const sprite = ROLE_SPRITES[object.type as BuildingRole];
+      const sidecar = sprite ? this.buildingSidecars.get(sprite) : undefined;
+      if (!sprite || !sidecar) {
+        this.spawnUnartedObject(object);
+        continue;
+      }
+      const origin = spriteOrigin(sidecar, object.col, object.row);
       this.add
-        .image(x, y, key)
-        .setOrigin(0.5, 1)
-        .setDepth(isoDepth(object.anchorCol, object.anchorRow));
+        .sprite(this.originX + origin.x, this.originY + origin.y, spriteSheetKey(sprite))
+        .setOrigin(0, 0)
+        .setDepth(depthFor(footprintBottomY(sidecar, object.row)))
+        .play(buildingAnimKey(sprite));
     }
+  }
+
+  // The village well has no generated art yet — the asset generator ships
+  // buildings and terrain objects, and a well is neither. Drawn as the flat
+  // placeholder disc it was before, so the square still reads as a square.
+  private spawnUnartedObject(object: PlacedObject): void {
+    const { x, y } = this.toScreen(object.anchorCol, object.anchorRow);
+    this.add
+      .circle(x, y, WELL_RADIUS, OBJECT_COLORS[object.type] ?? DEFAULT_OBJECT_COLOR)
+      .setStrokeStyle(2, 0x37474f)
+      .setDepth(this.entityDepth(object.row));
   }
 
   // --- NPCs --------------------------------------------------------------
@@ -508,7 +546,7 @@ export class GameScene extends Phaser.Scene {
       const wanderCenter = isPostalWorker ? villageCenter : spec.home;
       const screen = this.toScreen(spec.home.col, spec.home.row);
       const sprite = this.add.circle(screen.x, screen.y, 8, NPC_COLOR).setStrokeStyle(2, 0xffffff);
-      sprite.setDepth(isoDepth(spec.home.col, spec.home.row) + 0.4);
+      sprite.setDepth(this.entityDepth(spec.home.row) + 0.4);
       return {
         id: spec.id,
         homeCol: spec.home.col,
@@ -579,7 +617,7 @@ export class GameScene extends Phaser.Scene {
     npc.isMoving = true;
     npc.col = col;
     npc.row = row;
-    npc.sprite.setDepth(isoDepth(col, row) + 0.4);
+    npc.sprite.setDepth(this.entityDepth(row) + 0.4);
     const target = this.toScreen(col, row);
     this.tweens.add({
       targets: npc.sprite,
@@ -656,9 +694,18 @@ export class GameScene extends Phaser.Scene {
 
   // --- Coordinates -------------------------------------------------------
 
+  // Entities (player, NPCs, plants) sit at the CENTRE of their tile, while
+  // gridToScreen names its top-left corner — on the isometric grid this
+  // replaced those were the same point, and they are not here.
   private toScreen(col: number, row: number): ScreenPoint {
     const p = gridToScreen(col, row);
-    return { x: p.x + this.originX, y: p.y + this.originY };
+    return { x: p.x + this.originX + TILE_SIZE / 2, y: p.y + this.originY + TILE_SIZE / 2 };
+  }
+
+  // Depth for something standing on a tile: the y of its feet, which is the
+  // tile's bottom edge, not its centre or origin.
+  private entityDepth(row: number): number {
+    return depthFor((row + 1) * TILE_SIZE);
   }
 
   private toGrid(screenX: number, screenY: number): GridPoint {

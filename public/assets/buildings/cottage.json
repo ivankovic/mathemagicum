@@ -1,0 +1,96 @@
+{
+  "sheet": {
+    "file": "cottage_sheet.png",
+    "frame_width": 96,
+    "frame_height": 128,
+    "frame_count": 8,
+    "margin": 1,
+    "spacing": 2
+  },
+  "building": "cottage",
+  "tile_size": 32,
+  "footprint_tiles": {
+    "width": 3,
+    "height": 2
+  },
+  "blocked_cells_relative_to_anchor": [
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      1
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      2
+    ]
+  ],
+  "door_cell_relative_to_anchor": [
+    1,
+    1
+  ],
+  "sprite_offset_px": {
+    "x": 0,
+    "y": -64
+  },
+  "sprite_size_px": {
+    "width": 96,
+    "height": 128
+  },
+  "frame_count": 8,
+  "example_placement": {
+    "building": "cottage",
+    "anchor": [
+      3,
+      2
+    ],
+    "footprint_tiles": {
+      "width": 3,
+      "height": 2
+    },
+    "blocked_cells": [
+      [
+        3,
+        2
+      ],
+      [
+        3,
+        3
+      ],
+      [
+        3,
+        4
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        4
+      ]
+    ],
+    "door_cell": [
+      4,
+      3
+    ]
+  }
+}

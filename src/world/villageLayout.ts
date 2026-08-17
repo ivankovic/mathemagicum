@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { AreaPlacement } from "./anchors";
+import { type BuildingRole, footprintFor } from "./buildings";
 import type { WorldGrid } from "./grid";
-import type { GridPoint } from "./iso";
 import type { PlacedObject } from "./objects";
 import { TerrainType } from "./terrain";
+import type { GridPoint } from "./topdown";
 
 // Hub-and-spoke layout for the Starting Village's interior — see
 // docs/WORLD_GENERATION.md's "Starting Village interior" section. The
@@ -20,7 +21,9 @@ import { TerrainType } from "./terrain";
 // intentional, since only the Village's interior is actually built yet.
 export const VILLAGE_SIZE = 48;
 const SQUARE_RADIUS = 4; // 9x9 plaza
-const BUILDING_SIZE = 4;
+// Building footprints are per-type now (see buildings.ts) — they come from
+// the art, which has a different shape per building. RING_RADIUS is measured
+// to a building's centre, so it stays uniform regardless.
 const RING_RADIUS = 9;
 const GARDEN_GAP = 1;
 // NPCs "retreat" to a tile between the square and their building — on the
@@ -52,7 +55,7 @@ interface GardenSpec {
 
 interface BuildingSpec {
   id: string;
-  type: "house" | "school" | "post-office" | "store";
+  type: BuildingRole;
   direction: Direction;
   npcId: string | null;
   garden: GardenSpec | null;
@@ -142,13 +145,18 @@ function alongDirection(center: GridPoint, direction: Direction, distance: numbe
 // given direction — h / max(|ux|, |uy|) for half-extent h and unit vector
 // (ux, uy). For a cardinal direction this is just h (2); for a diagonal one
 // the boundary is further away (a box's corner, not its edge midpoint), so
-// using a flat BUILDING_SIZE/2 offset for every direction was placing
+// using a flat half-footprint offset for every direction was placing
 // diagonal NPC homes inside their own building's footprint.
-function boxHalfExtentAlong(direction: Direction, halfSize: number): number {
+function boxHalfExtentAlong(direction: Direction, halfWidth: number, halfHeight: number): number {
   const mag = Math.hypot(direction.dCol, direction.dRow);
   const ux = Math.abs(direction.dCol) / mag;
   const uy = Math.abs(direction.dRow) / mag;
-  return halfSize / Math.max(ux, uy);
+  // Whichever axis the ray leaves the box through first. A cardinal
+  // direction zeroes one component, so that axis never bounds the exit.
+  return Math.min(
+    ux > 0 ? halfWidth / ux : Number.POSITIVE_INFINITY,
+    uy > 0 ? halfHeight / uy : Number.POSITIVE_INFINITY,
+  );
 }
 
 function carveRect(grid: WorldGrid, topLeft: GridPoint, width: number, height: number): void {
@@ -239,14 +247,15 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
     const buildingCenter = alongDirection(center, spec.direction, RING_RADIUS);
     carvePath(grid, center, buildingCenter);
 
-    const buildingTopLeft = topLeftFor(buildingCenter, BUILDING_SIZE, BUILDING_SIZE);
-    const anchor = nearestCellTo(buildingTopLeft, BUILDING_SIZE, BUILDING_SIZE, center);
+    const { width: buildingWidth, height: buildingHeight } = footprintFor(spec.type);
+    const buildingTopLeft = topLeftFor(buildingCenter, buildingWidth, buildingHeight);
+    const anchor = nearestCellTo(buildingTopLeft, buildingWidth, buildingHeight, center);
     const building: PlacedObject = {
       id: spec.id,
       type: spec.type,
       ...buildingTopLeft,
-      width: BUILDING_SIZE,
-      height: BUILDING_SIZE,
+      width: buildingWidth,
+      height: buildingHeight,
       blocksMovement: true,
       anchorCol: anchor.col,
       anchorRow: anchor.row,
@@ -256,7 +265,8 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
 
     if (spec.garden) {
       const gardenRadialHalf = Math.max(spec.garden.width, spec.garden.height) / 2;
-      const gardenDistance = RING_RADIUS + BUILDING_SIZE / 2 + GARDEN_GAP + gardenRadialHalf;
+      const gardenDistance =
+        RING_RADIUS + Math.max(buildingWidth, buildingHeight) / 2 + GARDEN_GAP + gardenRadialHalf;
       const gardenCenter = alongDirection(center, spec.direction, gardenDistance);
       carveRect(
         grid,
@@ -269,7 +279,7 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
     // The doorstep: a tile between the square and the building, just
     // outside its footprint, on the path — where an NPC retreats to at
     // night, and where the player starts if this is their own house.
-    const nearEdge = boxHalfExtentAlong(spec.direction, BUILDING_SIZE / 2);
+    const nearEdge = boxHalfExtentAlong(spec.direction, buildingWidth / 2, buildingHeight / 2);
     const doorstep = alongDirection(
       center,
       spec.direction,

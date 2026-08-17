@@ -6,9 +6,9 @@ import { generateBorder } from "./border";
 import { ensureConnectivity } from "./connectivity";
 import { WorldGrid } from "./grid";
 import { fillTerrainFromHabitats, growHabitats } from "./habitatGrowth";
-import type { GridPoint } from "./iso";
 import { createRng } from "./rng";
 import { TerrainType } from "./terrain";
+import type { GridPoint } from "./topdown";
 import { type VillageLayout, layoutVillage } from "./villageLayout";
 
 export interface GeneratedWorld {

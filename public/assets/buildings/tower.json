@@ -1,0 +1,80 @@
+{
+  "sheet": {
+    "file": "tower_sheet.png",
+    "frame_width": 64,
+    "frame_height": 180,
+    "frame_count": 8,
+    "margin": 1,
+    "spacing": 2
+  },
+  "building": "tower",
+  "tile_size": 32,
+  "footprint_tiles": {
+    "width": 2,
+    "height": 2
+  },
+  "blocked_cells_relative_to_anchor": [
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      1
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      1,
+      1
+    ]
+  ],
+  "door_cell_relative_to_anchor": [
+    1,
+    1
+  ],
+  "sprite_offset_px": {
+    "x": 0,
+    "y": -116
+  },
+  "sprite_size_px": {
+    "width": 64,
+    "height": 180
+  },
+  "frame_count": 8,
+  "example_placement": {
+    "building": "tower",
+    "anchor": [
+      3,
+      3
+    ],
+    "footprint_tiles": {
+      "width": 2,
+      "height": 2
+    },
+    "blocked_cells": [
+      [
+        3,
+        3
+      ],
+      [
+        3,
+        4
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        4
+      ]
+    ],
+    "door_cell": [
+      4,
+      4
+    ]
+  }
+}

@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { type PixelRect, type ScreenPoint, gridToScreen } from "./iso";
+import { DUAL_OFFSET, DUAL_ORIGIN } from "./terrainAtlas";
+import { type PixelRect, TILE_SIZE } from "./topdown";
 
-// Tiles per chunk, per axis. Rendering (not world data) is chunked: each
-// chunk becomes one RenderTexture, activated near the camera and released
-// away from it, so a 500x500+ world never has to rasterize all at once.
+// Dual tiles per chunk, per axis. Rendering (not world data) is chunked:
+// each chunk becomes one RenderTexture, activated near the camera and
+// released away from it, so a 500x500+ world never has to rasterize at once.
 export const CHUNK_SIZE = 32;
 
 export interface ChunkCoord {
@@ -13,78 +14,8 @@ export interface ChunkCoord {
   chunkRow: number;
 }
 
-export function tileToChunk(col: number, row: number): ChunkCoord {
-  return { chunkCol: Math.floor(col / CHUNK_SIZE), chunkRow: Math.floor(row / CHUNK_SIZE) };
-}
-
 export function chunkKey(chunk: ChunkCoord): string {
   return `${chunk.chunkCol},${chunk.chunkRow}`;
-}
-
-// Screen-space AABB (in the map's own unshifted projection space — callers
-// add their own origin) of one chunk's tiles. Isometric tiles are diamonds,
-// so neighbouring chunks' bounds overlap; pad by half a tile on every side
-// or you get seams at chunk boundaries.
-export function chunkScreenBounds(
-  chunk: ChunkCoord,
-  tileWidth: number,
-  tileHeight: number,
-): PixelRect {
-  const colStart = chunk.chunkCol * CHUNK_SIZE;
-  const rowStart = chunk.chunkRow * CHUNK_SIZE;
-  const colEnd = colStart + CHUNK_SIZE - 1;
-  const rowEnd = rowStart + CHUNK_SIZE - 1;
-  const corners: ScreenPoint[] = [
-    gridToScreen(colStart, rowStart),
-    gridToScreen(colEnd, rowStart),
-    gridToScreen(colStart, rowEnd),
-    gridToScreen(colEnd, rowEnd),
-  ];
-  const xs = corners.map((p) => p.x);
-  const ys = corners.map((p) => p.y);
-  const padX = tileWidth / 2;
-  const padY = tileHeight / 2;
-  return {
-    minX: Math.min(...xs) - padX,
-    maxX: Math.max(...xs) + padX,
-    minY: Math.min(...ys) - padY,
-    maxY: Math.max(...ys) + padY,
-  };
-}
-
-// Screen-space AABB of one chunk's DUAL tiles (see src/world/tileset.ts's
-// module docstring) — the dual grid extends one extra row/column of tiles
-// beyond a chunk's own CHUNK_SIZE x CHUNK_SIZE data cells (its outermost
-// dual tiles are centered half a cell before chunkCol*CHUNK_SIZE and half
-// a cell past the chunk's own last data cell), so this is NOT just
-// chunkScreenBounds with padding — it covers a genuinely larger area, or
-// GameScene.activateChunk clips those outermost dual tiles when it stamps
-// them into a RenderTexture sized off the wrong bounds.
-export function dualChunkScreenBounds(
-  chunk: ChunkCoord,
-  tileWidth: number,
-  tileHeight: number,
-): PixelRect {
-  const colStart = chunk.chunkCol * CHUNK_SIZE - 0.5;
-  const rowStart = chunk.chunkRow * CHUNK_SIZE - 0.5;
-  const colEnd = colStart + CHUNK_SIZE;
-  const rowEnd = rowStart + CHUNK_SIZE;
-  const corners: ScreenPoint[] = [
-    gridToScreen(colStart, rowStart),
-    gridToScreen(colEnd, rowStart),
-    gridToScreen(colStart, rowEnd),
-    gridToScreen(colEnd, rowEnd),
-  ];
-  const xs = corners.map((p) => p.x);
-  const ys = corners.map((p) => p.y);
-  const padX = tileWidth / 2;
-  const padY = tileHeight / 2;
-  return {
-    minX: Math.min(...xs) - padX,
-    maxX: Math.max(...xs) + padX,
-    minY: Math.min(...ys) - padY,
-    maxY: Math.max(...ys) + padY,
-  };
 }
 
 export interface TileRange {
@@ -94,30 +25,68 @@ export interface TileRange {
   maxRow: number;
 }
 
-// Chunk coords covering a tile range, expanded by marginChunks on every
-// side and clamped to the world's chunk bounds. The tile range itself is
-// expected to already be a conservative (over-inclusive is fine,
-// under-inclusive is not) bound on what's visible — see GameScene's use
-// of screenToGrid on the camera's world-view corners.
+// Chunks partition the DUAL tile grid, not the data grid — that grid is what
+// actually gets drawn, and it starts one tile back on each axis (see
+// terrainAtlas.ts's DUAL_ORIGIN). Chunk 0 therefore begins at dual tile -1,
+// so a chunk's tiles are contiguous and no dual tile belongs to two chunks.
+export function dualTileRange(chunk: ChunkCoord): TileRange {
+  const minCol = DUAL_ORIGIN + chunk.chunkCol * CHUNK_SIZE;
+  const minRow = DUAL_ORIGIN + chunk.chunkRow * CHUNK_SIZE;
+  return { minCol, maxCol: minCol + CHUNK_SIZE - 1, minRow, maxRow: minRow + CHUNK_SIZE - 1 };
+}
+
+export function dualTileToChunk(col: number, row: number): ChunkCoord {
+  return {
+    chunkCol: Math.floor((col - DUAL_ORIGIN) / CHUNK_SIZE),
+    chunkRow: Math.floor((row - DUAL_ORIGIN) / CHUNK_SIZE),
+  };
+}
+
+// Exact pixel rect of one chunk's dual tiles. Unlike the isometric version
+// this replaced, no half-tile padding is needed anywhere: top-down tiles are
+// axis-aligned squares that tile exactly, so neighbouring chunks abut rather
+// than overlap and there are no seams to pad away.
+export function dualChunkScreenBounds(chunk: ChunkCoord): PixelRect {
+  const range = dualTileRange(chunk);
+  return {
+    minX: range.minCol * TILE_SIZE + DUAL_OFFSET,
+    minY: range.minRow * TILE_SIZE + DUAL_OFFSET,
+    maxX: (range.maxCol + 1) * TILE_SIZE + DUAL_OFFSET,
+    maxY: (range.maxRow + 1) * TILE_SIZE + DUAL_OFFSET,
+  };
+}
+
+// How many chunks the dual grid for a world of this size needs per axis.
+// The dual grid is one tile wider and taller than the data grid.
+export function chunkCount(dataCells: number): number {
+  return Math.max(1, Math.ceil((dataCells + 1) / CHUNK_SIZE));
+}
+
+// Chunks covering a range of DATA tiles, expanded by marginChunks on every
+// side and clamped to the world's chunk bounds. A data cell is a corner of
+// the four dual tiles around it, so the dual range runs one further back on
+// each axis than the data range does. The input is expected to already be a
+// conservative bound on what's visible — over-inclusive is fine,
+// under-inclusive is not.
 export function chunksCoveringTileRange(
   range: TileRange,
   worldWidthTiles: number,
   worldHeightTiles: number,
   marginChunks: number,
 ): ChunkCoord[] {
-  const maxChunkCol = Math.max(0, Math.ceil(worldWidthTiles / CHUNK_SIZE) - 1);
-  const maxChunkRow = Math.max(0, Math.ceil(worldHeightTiles / CHUNK_SIZE) - 1);
-  const start = tileToChunk(range.minCol, range.minRow);
-  const end = tileToChunk(range.maxCol, range.maxRow);
+  const maxChunkCol = chunkCount(worldWidthTiles) - 1;
+  const maxChunkRow = chunkCount(worldHeightTiles) - 1;
+  const start = dualTileToChunk(range.minCol - 1, range.minRow - 1);
+  const end = dualTileToChunk(range.maxCol, range.maxRow);
 
   const minChunkCol = Math.max(0, start.chunkCol - marginChunks);
   const minChunkRow = Math.max(0, start.chunkRow - marginChunks);
-  const maxChunkColClamped = Math.min(maxChunkCol, end.chunkCol + marginChunks);
-  const maxChunkRowClamped = Math.min(maxChunkRow, end.chunkRow + marginChunks);
+  const lastCol = Math.min(maxChunkCol, end.chunkCol + marginChunks);
+  const lastRow = Math.min(maxChunkRow, end.chunkRow + marginChunks);
 
   const coords: ChunkCoord[] = [];
-  for (let chunkRow = minChunkRow; chunkRow <= maxChunkRowClamped; chunkRow++) {
-    for (let chunkCol = minChunkCol; chunkCol <= maxChunkColClamped; chunkCol++) {
+  for (let chunkRow = minChunkRow; chunkRow <= lastRow; chunkRow++) {
+    for (let chunkCol = minChunkCol; chunkCol <= lastCol; chunkCol++) {
       coords.push({ chunkCol, chunkRow });
     }
   }

@@ -4,8 +4,8 @@
 import type { AreaPlacement } from "./anchors";
 import type { WorldGrid } from "./grid";
 import { Habitat, sampleTerrain } from "./habitat";
-import type { GridPoint } from "./iso";
 import { type Rng, pick, randInt } from "./rng";
+import type { GridPoint } from "./topdown";
 
 const INTERIOR_HABITATS: readonly Habitat[] = [Habitat.Meadow, Habitat.Woodland, Habitat.Wetland];
 // Roughly one extra interior seed per this many tiles, per axis — a tuning

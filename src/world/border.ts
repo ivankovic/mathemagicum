@@ -3,9 +3,9 @@
 
 import type { WorldGrid } from "./grid";
 import { Habitat } from "./habitat";
-import type { GridPoint } from "./iso";
 import { type Rng, chance, randInt } from "./rng";
 import { TerrainType } from "./terrain";
+import type { GridPoint } from "./topdown";
 
 // Perimeter arc lengths, in tiles. Small enough that a 500-tile edge gets
 // several stretches of each habitat, large enough that arcs read as
@@ -43,7 +43,7 @@ const BORDER_HABITAT_TERRAIN: Record<
   TerrainType
 > = {
   [Habitat.Coastal]: TerrainType.Water,
-  [Habitat.Highland]: TerrainType.Rock,
+  [Habitat.Highland]: TerrainType.Mountain,
 };
 
 // Forces the outermost ring to a hard, impassable, mixed coastal/mountain

@@ -32,7 +32,16 @@ function weights(
 
 export const HABITAT_DEFINITIONS: Record<Habitat, HabitatDefinition> = {
   [Habitat.Meadow]: { terrainWeights: weights([[TerrainType.Grass, 1]]) },
-  [Habitat.Woodland]: { terrainWeights: weights([[TerrainType.Grass, 1]]) },
+  // Woodland finally has a terrain of its own. It stays mostly Woodland with
+  // Grass mixed in rather than being pure, so the region reads as a wood with
+  // clearings instead of a flat green slab — and so the boundary between the
+  // two is drawn by the tileset rather than by the habitat's outline.
+  [Habitat.Woodland]: {
+    terrainWeights: weights([
+      [TerrainType.Woodland, 0.75],
+      [TerrainType.Grass, 0.25],
+    ]),
+  },
   [Habitat.Wetland]: {
     terrainWeights: weights([
       [TerrainType.Grass, 0.5],
@@ -45,10 +54,14 @@ export const HABITAT_DEFINITIONS: Record<Habitat, HabitatDefinition> = {
       [TerrainType.Water, 0.3],
     ]),
   },
+  // Mostly walkable Hilly with impassable Mountain peaks through it: a
+  // highland the player can cross but has to route around, rather than a
+  // wall. Dirt is the bare ground between.
   [Habitat.Highland]: {
     terrainWeights: weights([
-      [TerrainType.Rock, 0.6],
-      [TerrainType.Dirt, 0.4],
+      [TerrainType.Hilly, 0.55],
+      [TerrainType.Mountain, 0.25],
+      [TerrainType.Dirt, 0.2],
     ]),
   },
 };

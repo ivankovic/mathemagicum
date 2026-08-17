@@ -18,7 +18,9 @@ time, each tied to a specific gardening action and a specific math skill.
   never from an opponent.
 - **Math as magic.** Casting a spell (solving a minigame) is how you
   interact with the garden. No separate "quiz mode" bolted on the side.
-- **Isometric pixel-art world.** Explored on foot, tile by tile.
+- **Pixel-art world in a 3/4 top-down view.** Explored on foot, tile by
+  tile. The ground is seen from directly above; buildings and objects are
+  drawn from the front and stand up out of the tiles they occupy.
 - **Learning over gating.** Every spell is available from the start — the
   goal is to encourage learning, not to reward progression with content.
   NPC teachers explain a spell and train it with partially solved

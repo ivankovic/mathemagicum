@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { WorldGrid } from "./grid";
-import type { GridPoint } from "./iso";
 import { TerrainType } from "./terrain";
+import type { GridPoint } from "./topdown";
 
 const DELTAS = [
   { dCol: 0, dRow: -1 },

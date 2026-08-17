@@ -1,7 +1,7 @@
 # Mathemagicum
 
 A free-to-play, source-available, on-device educational RPG. Pixel art,
-isometric view, runs entirely in the browser — no server, no account, no
+3/4 top-down view, runs entirely in the browser — no server, no account, no
 network required after the first load.
 
 Source is publicly readable and modifiable for noncommercial use (see
@@ -10,7 +10,48 @@ commercial use.
 
 ## Status
 
-Repo/toolchain scaffold only. No gameplay yet.
+Early. A generated 500×500 world you can walk around, with the Starting
+Village laid out in it. No minigames yet — planting is a direct keypress
+standing in for where the first spell will go.
+
+## Assets
+
+**Nothing in this repo generates art.** Every asset under `public/assets/`
+is produced by the sibling [`asset-generator`](../asset-generator) repo and
+committed here, so the game builds and runs with no Python toolchain and no
+generation step.
+
+To re-sync after regenerating them there:
+
+```sh
+cd ../asset-generator
+uv run asset-generator terrain-atlas   --seed 7 --out-dir output/terrain_atlas
+uv run asset-generator terrain-buildings --seed 7 --sheets --out-dir output/terrain_buildings
+
+cd -
+cp ../asset-generator/output/terrain_atlas/terrain*.{png,json} public/assets/terrain/
+cp ../asset-generator/output/terrain_buildings/*_sheet.png public/assets/buildings/
+cp ../asset-generator/output/terrain_buildings/{cottage,barn,tower,schoolhouse}.json public/assets/buildings/
+bun test   # src/world/assets.test.ts checks the sync
+```
+
+Two things are worth knowing about what gets copied:
+
+- **The terrain atlas holds a finished tile for every one of the 7⁴ ways
+  terrain can meet at a tile's four corners**, including the cells where
+  three or four terrains meet. Those cells have no autotile-bitmask
+  representation and the generator only composites them in Python, so
+  baking them all is what lets the renderer be a single frame lookup with
+  no mask, priority table or layer stack — and what guarantees the world
+  can never contain a tile with no art. `src/world/assets.test.ts` asserts
+  that coverage against the shipped file.
+- **Sprite sheets must come from `--sheets`**, which always writes 1:1 art.
+  The GIFs and PNGs those commands write alongside are QA renders scaled up
+  by `--scale`, and would draw several times too large.
+
+`assets.test.ts` is the guard on all of this: it reads the committed files
+and fails if they drift from what the renderer assumes, since a bad sync is
+otherwise invisible until something renders wrong.
 
 ## Stack
 

@@ -41,7 +41,10 @@ This is two different generators doing two different jobs:
 
 ### Terrain (exists today)
 
-The ground type of a tile — Grass / Dirt / Sand / Water / Rock. Controls
+The ground type of a tile — Water / Sand / Dirt / Grass / Woodland /
+Hilly / Mountain. This vocabulary is the asset generator's (see
+`src/world/terrain.ts`), since those names are what the tile atlas's frames
+are keyed by. Controls
 base passability and what can be planted where. Nothing about this
 changes.
 
@@ -152,7 +155,7 @@ placement: {
   // "blocking": object makes an otherwise-passable tile impassable
   //   (default behavior — a tree on Grass)
   // "passable": object makes an otherwise-impassable tile passable
-  //   (a dock on Water, a bridge over Water/Rock)
+  //   (a dock on Water, a bridge over Water/Mountain)
 }
 ```
 
@@ -175,7 +178,7 @@ seed reproduces the same world. Also makes the pipeline unit-testable
 without flakiness, same as the current world model.
 
 **1. Generate the border.** Walk the world's perimeter, split it into
-arcs, assign each arc Coastal (water) or Highland/mountainous (rock) —
+arcs, assign each arc Coastal (water) or Highland/mountainous (mountain) —
 mixed, not symmetric edge-pairs. Pure edge-terrain, independent of
 everything else; this alone produces the "hard natural border."
 

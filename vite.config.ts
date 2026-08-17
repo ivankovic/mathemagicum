@@ -28,18 +28,19 @@ export default defineConfig({
         icons: [],
       },
       workbox: {
-        // Phaser loads images/spritesheets/tilemaps/audio via its own
-        // loader at runtime (see BootScene.ts), which the Vite build never
-        // sees — Workbox's default globPatterns (**/*.{js,wasm,css,html})
-        // does NOT cover them, so they'd silently be missing from the
-        // offline precache. `png` covers the tileset from
-        // tools/tileset-gen (public/assets/tiles/*.png, ~4KB each, well
-        // under the default per-file cap); extend this list again for
-        // whatever other asset types actually land under public/assets
-        // (audio, atlases, ...) rather than guessing ahead of them now.
-        globPatterns: ["**/*.{js,wasm,css,html,png}"],
-        // Raise maximumFileSizeToCacheInBytes (default 2MB) once a real
-        // spritesheet atlas exists — the current tiles are nowhere near it.
+        // Phaser loads atlases/spritesheets via its own loader at runtime
+        // (see BootScene.ts), which the Vite build never sees — Workbox's
+        // default globPatterns (**/*.{js,wasm,css,html}) does NOT cover
+        // them, so they'd silently be missing from the offline precache.
+        // `png` covers the terrain atlas page and the building sheets;
+        // `json` covers the atlas index and the sprite sidecars, which are
+        // fetched at runtime exactly like the images and are just as fatal
+        // to miss. Extend this list again for whatever else actually lands
+        // under public/assets (audio, ...) rather than guessing ahead of it.
+        globPatterns: ["**/*.{js,wasm,css,html,png,json}"],
+        // The largest asset is the terrain atlas page (~850KB), comfortably
+        // under maximumFileSizeToCacheInBytes' 2MB default. Raise it if a
+        // future atlas needs a second page.
         // Workbox's SW bundler unconditionally `require`s terser, whose
         // serialize-javascript dependency calls crypto.getRandomValues() at
         // module load — that throws under the host's system Node if it's
