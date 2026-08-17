@@ -72,12 +72,20 @@ and drill a spell's theme, they don't gate access to it. See
 themes map onto specific areas.
 
 Spells are reached through a **spellbook** button, which opens a tray of
-runes. The book is deliberately not marked with any one spell's symbol —
-it is the container for all of them.
+runes; seeds through a **seed pouch** button beside it, which opens a tray
+of crops. Both are the same widget and behave identically: tap the
+container to see what is inside, tap one of those to plant or cast it
+straight away, on the tile the player is facing. Neither container is
+marked with any one of its contents — a plus on the book or a carrot on
+the pouch would be wrong the moment there are two of either.
+
+Nothing selects-then-confirms. A two-step action on a phone is two chances
+to lose the tray to a stray tap, and it asks the player to read a caption
+to find out what they are about to do.
 
 #### The addition spell — growth (implemented)
 
-**Action:** stand on a crop you have planted and cast it. One successful
+**Action:** face a crop you have planted and cast it. One successful
 cast moves the crop one growth stage: seedling → growing → mature. That
 mapping is the theme rule above applied literally — the spell that adds is
 the one that makes things grow, so planting drops a *seedling* and growth
@@ -133,7 +141,8 @@ the Starting Village's NPCs.
 
 A player moving through a world of multiple terrain types, planting
 multiple types of crop, and growing them with the first spell. Planting is
-still a direct action (stand on a valid tile, press a key) — the planting
-spell is not speced. Growth is real: a crop starts as a seedling and
-reaches maturity in two casts of the addition spell. No harvest loop yet,
-and nothing is saved between sessions.
+still a direct action — pick a seed from the pouch, or press a key — since
+the planting spell is not speced. Both gardening actions work the tile the
+player faces. Growth is real: a crop starts as a seedling and reaches
+maturity in two casts of the addition spell. No harvest loop yet, and
+nothing is saved between sessions.

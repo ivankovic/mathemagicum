@@ -13,8 +13,10 @@ commercial use.
 Early. A generated 500×500 world you can walk around, with the Starting
 Village laid out in it, and the first spell in place: crops are planted as
 seedlings and grown by casting **addition** on them, a number-line minigame
-opened from the spellbook. Planting itself is still a direct keypress —
-the planting spell is not speced. Nothing is saved between sessions.
+opened from the spellbook. Seeds and spells are picked from two icon trays
+in the corner of the screen, and both act on the tile the player faces.
+Planting itself is still a direct action — the planting spell is not
+speced. Nothing is saved between sessions.
 
 ## Assets
 
@@ -53,7 +55,8 @@ cp $OUT/terrain_fixtures/well{.json,_sheet.png} public/assets/fixtures/
 for t in grass woodland dirt hilly mountain sand; do
   cp $OUT/terrain_objects/$t{.json,_sheet.png} public/assets/objects/
 done
-cp $OUT/ui/{ui.json,parchment_fill.png,parchment_frame.png,spellbook.png,rune_add.png} public/assets/ui/
+cp $OUT/ui/{ui.json,parchment_fill.png,parchment_frame.png}    public/assets/ui/
+cp $OUT/ui/{spellbook.png,rune_add.png,seed_pouch.png,crop_*.png} public/assets/ui/
 bun test   # src/world/assets.test.ts checks the sync
 ```
 

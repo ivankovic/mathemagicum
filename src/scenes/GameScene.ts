@@ -4,8 +4,9 @@
 import Phaser from "phaser";
 import { VirtualJoystick } from "../input/VirtualJoystick";
 import { makeAdditionProblem } from "../spells/addition";
+import { IconTray } from "../ui/IconTray";
 import { SpellPopup } from "../ui/SpellPopup";
-import { UI_SIDECAR_KEY, UiAsset, type UiIndex, uiTextureKey } from "../ui/assets";
+import { UI_SIDECAR_KEY, UiAsset, type UiIndex, cropIcon, uiTextureKey } from "../ui/assets";
 import type { AreaPlacement } from "../world/anchors";
 import {
   BUILDING_SPRITES,
@@ -269,9 +270,8 @@ export class GameScene extends Phaser.Scene {
   // rather than found again by hunting the display list.
   private cropSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private spellPopup!: SpellPopup;
-  private spellTray: EdgeAnchored[] = [];
-  private spellTrayParts: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Image)[] = [];
-  private spellTrayOpen = false;
+  private seedTray?: IconTray;
+  private spellTray?: IconTray;
   // Problems vary from cast to cast, so this is seeded from the clock rather
   // than from WORLD_SEED: a world is meant to be reproducible, a lesson is
   // meant not to be.
@@ -282,6 +282,7 @@ export class GameScene extends Phaser.Scene {
   private plantKeys: Phaser.Input.Keyboard.Key[] = [];
   private plantActionKey!: Phaser.Input.Keyboard.Key;
   private spellbookKey!: Phaser.Input.Keyboard.Key;
+  private seedPouchKey!: Phaser.Input.Keyboard.Key;
 
   private mobileControls = false;
   private joystick?: VirtualJoystick;
@@ -403,7 +404,7 @@ export class GameScene extends Phaser.Scene {
     this.spellPopup = new SpellPopup(this, uiIndex, MODAL_DEPTH, (object) => this.ui(object));
 
     this.setupInput();
-    this.createSpellbook();
+    this.createActionBar();
     if (this.mobileControls) this.createTouchControls();
     this.layoutForViewport();
 
@@ -491,9 +492,8 @@ export class GameScene extends Phaser.Scene {
       this.tryPlant();
     }
 
-    if (Phaser.Input.Keyboard.JustDown(this.spellbookKey)) {
-      this.setSpellTrayOpen(!this.spellTrayOpen);
-    }
+    if (Phaser.Input.Keyboard.JustDown(this.spellbookKey)) this.toggleTray(this.spellTray);
+    if (Phaser.Input.Keyboard.JustDown(this.seedPouchKey)) this.toggleTray(this.seedTray);
   }
 
   // --- Cameras -----------------------------------------------------------
@@ -541,7 +541,6 @@ export class GameScene extends Phaser.Scene {
     this.uiCamera?.setSize(width, height);
     this.nightOverlay?.setSize(width, height);
     for (const button of this.edgeAnchored) button.place(width, height);
-    for (const item of this.spellTray) item.place(width, height);
     // The popup can be open across a phone rotation, and every one of its
     // pieces is placed from the viewport's size.
     this.spellPopup?.layout();
@@ -894,6 +893,7 @@ export class GameScene extends Phaser.Scene {
       .map((code) => keyboard.addKey(code));
     this.plantActionKey = keyboard.addKey(KeyCodes.SPACE);
     this.spellbookKey = keyboard.addKey(KeyCodes.B);
+    this.seedPouchKey = keyboard.addKey(KeyCodes.P);
   }
 
   private pressedDirection(): Direction | null {
@@ -954,83 +954,69 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  // --- Spells ------------------------------------------------------------
+  // --- The action bar ----------------------------------------------------
   //
-  // The spellbook is a button that opens a tray of runes; a rune is a spell.
-  // Two levels rather than one because the tray is where the second spell
-  // goes, and a lone button labelled with a plus would have to be renamed the
-  // moment there is more than one.
+  // Two containers in the bottom-right corner: a pouch holding seeds and a
+  // book holding spells. Tapping one shows what is inside; tapping one of
+  // those plants or casts straight away. See IconTray for why they are the
+  // same widget and why nothing selects-then-confirms.
   //
-  // It exists on desktop as well as on touch. Unlike the joystick, casting is
-  // not something a keyboard does better — and a spell the player cannot see
-  // is one they will never look for.
+  // This replaced a pair of text buttons reading "Plant" and "Next", where
+  // "Next" cycled the crop and "Plant" used whichever was current. That works
+  // with three crops and stops working at six, and it asked the player to
+  // read the status line to find out what they were about to plant.
 
-  private createSpellbook(): void {
-    // On touch it joins the column the Plant and Next buttons already form,
-    // above them; on a desktop that column does not exist and the corner is
-    // free. Sharing one position would have put the book on top of Plant.
+  private createActionBar(): void {
     const size = this.mobileControls ? 64 : 56;
-    const column = this.mobileControls ? 70 : 44;
-    const bookY = this.mobileControls ? 214 : 44;
-    const book = this.addIconButton(uiTextureKey(UiAsset.Spellbook), size, (w, h) => ({
-      x: w - column,
-      y: h - bookY,
-    }));
-    book.on("pointerdown", () => this.setSpellTrayOpen(!this.spellTrayOpen));
+    const bottom = this.mobileControls ? 76 : 48;
+    const edge = size / 2 + (this.mobileControls ? 16 : 12);
 
-    // The tray opens directly above the book it comes out of, so the finger
-    // that opened it is already next to what it opened.
-    const rune = this.addIconButton(uiTextureKey(UiAsset.RuneAdd), size - 8, (w, h) => ({
-      x: w - column,
-      y: h - bookY - size - 8,
-    }));
-    rune.on("pointerdown", () => this.castGrowthSpell());
-    for (const part of this.spellTrayParts) part.setVisible(false);
+    this.seedTray = new IconTray(this, {
+      texture: uiTextureKey(UiAsset.SeedPouch),
+      // One button per crop, in the order the keyboard's number keys pick
+      // them, so the two ways in agree about which is the first seed.
+      items: PLANT_TYPES.map((plant, index) => ({
+        texture: uiTextureKey(cropIcon(plant)),
+        act: () => {
+          // Picking a seed here is also what the number keys pick, so the two
+          // routes never disagree about which crop Space would plant. The
+          // caption is refreshed after, not by the tray closing before it:
+          // the tray's own onChange fires while this is still the old crop.
+          this.selectedPlantIndex = index;
+          this.tryPlant();
+          this.updateStatusText();
+        },
+      })),
+      size,
+      right: edge + size + 10,
+      bottom,
+      depth: TOUCH_UI_DEPTH,
+      register: (object) => this.ui(object),
+      onOpen: () => this.spellTray?.setOpen(false),
+      canOpen: () => !this.spellPopup.isOpen,
+      onChange: () => this.updateStatusText(),
+    });
+
+    this.spellTray = new IconTray(this, {
+      texture: uiTextureKey(UiAsset.Spellbook),
+      items: [{ texture: uiTextureKey(UiAsset.RuneAdd), act: () => this.castGrowthSpell() }],
+      size,
+      right: edge,
+      bottom,
+      depth: TOUCH_UI_DEPTH,
+      register: (object) => this.ui(object),
+      onOpen: () => this.seedTray?.setOpen(false),
+      canOpen: () => !this.spellPopup.isOpen,
+      onChange: () => this.updateStatusText(),
+    });
+
+    this.edgeAnchored.push(this.seedTray, this.spellTray);
   }
 
-  private addIconButton(
-    texture: string,
-    size: number,
-    at: (width: number, height: number) => { x: number; y: number },
-  ): Phaser.GameObjects.Rectangle {
-    const box = this.ui(
-      this.add
-        .rectangle(0, 0, size, size, 0x000000, 0.45)
-        .setStrokeStyle(2, 0xffffff, 0.6)
-        .setScrollFactor(0)
-        .setDepth(TOUCH_UI_DEPTH)
-        .setInteractive({ useHandCursor: true }),
-    );
-    const icon = this.ui(
-      this.add
-        .image(0, 0, texture)
-        .setScrollFactor(0)
-        .setDepth(TOUCH_UI_DEPTH + 1),
-    );
-    const anchor: EdgeAnchored = {
-      place: (width, height) => {
-        const { x, y } = at(width, height);
-        box.setPosition(x, y);
-        icon.setPosition(x, y);
-      },
-    };
-    this.edgeAnchored.push(anchor);
-    if (texture === uiTextureKey(UiAsset.RuneAdd)) {
-      this.spellTrayParts.push(box, icon);
-    }
-    return box;
-  }
-
-  // Every button this scene owns keeps working while a spell is on screen
-  // unless it is told not to. The spellbook is the one that matters most: on
-  // a phone it sits *inside* the popup's own rectangle, so without this a tap
-  // meant for the parchment would reopen the tray and the rune above it would
-  // restart the cast half way through the problem.
-  private setSpellTrayOpen(open: boolean): void {
-    if (open && this.spellPopup.isOpen) return;
-    this.spellTrayOpen = open;
-    for (const part of this.spellTrayParts) part.setVisible(open);
-    this.updateStatusText();
+  // The keyboard route into a tray. Whether it may open is the tray's own
+  // `canOpen` — see IconTray, and see why the guard cannot live only here.
+  private toggleTray(tray: IconTray | undefined): void {
+    tray?.toggle();
   }
 
   /**
@@ -1050,7 +1036,7 @@ export class GameScene extends Phaser.Scene {
     // sits inside the popup's own rectangle on a phone, and a rune tapped
     // through it would restart the cast half way through the problem.
     if (this.spellPopup.isOpen) return;
-    this.setSpellTrayOpen(false);
+    this.spellTray?.setOpen(false);
     if (this.interior) {
       this.setMessage("Nothing grows indoors");
       return;
@@ -1464,69 +1450,20 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private selectNextPlant(): void {
-    if (this.spellPopup.isOpen) return;
-    this.selectedPlantIndex = (this.selectedPlantIndex + 1) % PLANT_TYPES.length;
-    this.updateStatusText();
-  }
-
-  // Action buttons plus the floating joystick, set up only when Phaser
-  // detects a non-desktop OS (this.mobileControls). Keyboard input stays live
-  // underneath regardless, so a mobile browser with an attached keyboard
-  // still works too.
+  // The floating joystick, set up only when Phaser detects a non-desktop OS
+  // (this.mobileControls). Keyboard input stays live underneath regardless,
+  // so a mobile browser with an attached keyboard still works too.
   //
-  // The joystick replaced a fixed d-pad in the bottom-left corner. A pad
-  // pinned to a corner assumes how the device is held; one that appears under
-  // the thumb that summoned it does not, and it costs no permanent screen
-  // space on the display where space is tightest.
+  // It replaced a fixed d-pad in the bottom-left corner. A pad pinned to a
+  // corner assumes how the device is held; one that appears under the thumb
+  // that summoned it does not, and it costs no permanent screen space on the
+  // display where space is tightest.
+  //
+  // The action buttons that used to be set up here are gone: the seed pouch
+  // and the spellbook are drawn on every platform, so they live in
+  // createActionBar rather than behind this check.
   private createTouchControls(): void {
     this.joystick = new VirtualJoystick(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
-    // Sizes are in real screen pixels now that the UI camera draws at 1:1, so
-    // 64 here is 64 device-independent pixels — comfortably past the ~9mm a
-    // fingertip needs, which the old fractionally-scaled canvas was not.
-    this.addTapButton(
-      64,
-      "Plant",
-      (w, h) => ({ x: w - 70, y: h - 70 }),
-      () => this.tryPlant(),
-    );
-    this.addTapButton(
-      48,
-      "Next",
-      (w, h) => ({ x: w - 70, y: h - 142 }),
-      () => this.selectNextPlant(),
-    );
-  }
-
-  private addTapButton(
-    size: number,
-    label: string,
-    at: (width: number, height: number) => { x: number; y: number },
-    onTap: () => void,
-  ): void {
-    const box = this.ui(
-      this.add
-        .rectangle(0, 0, size, size, 0x000000, 0.45)
-        .setStrokeStyle(2, 0xffffff, 0.6)
-        .setScrollFactor(0)
-        .setDepth(TOUCH_UI_DEPTH)
-        .setInteractive({ useHandCursor: true }),
-    );
-    const text = this.ui(
-      this.add
-        .text(0, 0, label, { fontFamily: "monospace", fontSize: "15px", color: "#ffffff" })
-        .setOrigin(0.5)
-        .setScrollFactor(0)
-        .setDepth(TOUCH_UI_DEPTH + 1),
-    );
-    box.on("pointerdown", onTap);
-    this.edgeAnchored.push({
-      place: (width, height) => {
-        const { x, y } = at(width, height);
-        box.setPosition(x, y);
-        text.setPosition(x, y);
-      },
-    });
   }
 
   // --- Coordinates -------------------------------------------------------
@@ -1572,11 +1509,16 @@ export class GameScene extends Phaser.Scene {
   // Kept to two lines on a phone held upright, which is what it wraps to at
   // this length. It ran to three while it explained the spellbook in full,
   // and a third of a portrait screen is too much to spend on a caption.
+  //
+  // With an open tray the line says what the icons on screen will do, since
+  // that is the one moment the player is looking at something they have not
+  // seen before. Closed, it names the buttons instead.
   private get statusLine(): string {
+    if (this.seedTray?.isOpen) return "Pick a seed to plant it on the tile ahead";
+    if (this.spellTray?.isOpen) return "Cast + to grow the crop on the tile ahead";
     const plant = PLANT_TYPES[this.selectedPlantIndex];
-    const spell = this.spellTrayOpen ? "tap + to grow the tile ahead" : "spellbook";
     return this.mobileControls
-      ? `Drag to walk  Plant ahead: ${plant}  Book: ${spell}`
-      : `Arrows/WASD  Plant ahead: ${plant} (1-${PLANT_TYPES.length})  Space: plant  B: ${spell}`;
+      ? `Drag to walk  Seeds and spells: bottom right  (${plant} selected)`
+      : `Arrows/WASD  P: seeds  B: spells  Space: plant ${plant} ahead  1-${PLANT_TYPES.length}: pick seed`;
   }
 }
