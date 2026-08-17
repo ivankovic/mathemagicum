@@ -37,8 +37,9 @@ time, each tied to a specific gardening action and a specific math skill.
 
 1. Explore the world; note what terrain is where.
 2. Pick a plant suited to that terrain.
-3. Cast the planting spell to plant it.
-4. Tend it with further spells (watering, growth, ...) — minigames TBD.
+3. Plant it (a direct action for now — the planting spell is not speced).
+4. Tend it with further spells. The **addition spell** grows it one stage
+   per cast, seedling → growing → mature; watering and the rest are TBD.
 5. Harvest, expand, repeat.
 
 ## Systems
@@ -57,10 +58,9 @@ minigame.
 
 ### Gardening spells (math minigames)
 
-Not designed yet beyond the concept above — to be specified one at a time,
-each mapped to one gardening action (plant / tend / harvest / ...) and one
-math skill. Nothing here should be assumed until a minigame is actually
-speced.
+Specified one at a time, each mapped to one gardening action (plant / tend
+/ harvest / ...) and one math skill. Nothing beyond what is written below
+should be assumed until a minigame is actually speced.
 
 What is settled: spells are grouped by mathematical theme, and a spell's
 in-game effect mirrors that theme rather than being an arbitrary skin —
@@ -70,6 +70,46 @@ what multiplication is. All spells are available from the start (see
 and drill a spell's theme, they don't gate access to it. See
 [`WORLD_GENERATION.md`](WORLD_GENERATION.md) for how teachers and spell
 themes map onto specific areas.
+
+Spells are reached through a **spellbook** button, which opens a tray of
+runes. The book is deliberately not marked with any one spell's symbol —
+it is the container for all of them.
+
+#### The addition spell — growth (implemented)
+
+**Action:** stand on a crop you have planted and cast it. One successful
+cast moves the crop one growth stage: seedling → growing → mature. That
+mapping is the theme rule above applied literally — the spell that adds is
+the one that makes things grow, so planting drops a *seedling* and growth
+is something the player does rather than something a timer does.
+
+**Icon:** a plus.
+
+**The minigame:** two randomly chosen three-digit numbers whose sum is
+still under 1000, laid out on a number line. Three semicircular arrows jump
+from the first number by the second number's ones, then its tens, then its
+hundreds; under each arrow's landing point is a box the player fills in with
+the running total. The order is fixed and enforced — answering the hundreds
+first would mean adding the two numbers in your head and typing the answer,
+which is the thing the number line exists to replace.
+
+The line is drawn **schematically**, not to scale: the four points are
+spaced evenly and each arrow's *height* carries how big its jump is. To
+scale, a ones jump of at most 9 against a span of several hundred would be
+invisible, and the first of the three arrows would not exist.
+
+**No fail state.** A wrong answer marks the box, offers a hint that
+escalates but never states the answer, and lets the player try again. A
+spell is how the player gardens, and locking them out of gardening for
+arithmetic would make the math a gate — see "Learning over gating" and "No
+manipulative engagement mechanics" above.
+
+Problem generation is uniform over the pairs that actually exist, not over
+the addend with a start fitted around it; the addend's digits are all
+non-zero so that none of the three arrows is a `+0` jump landing where it
+started. `src/spells/addition.ts` is the whole of the rule, with no Phaser
+in it, and `addition.test.ts` pins both the arithmetic and the
+distribution.
 
 ### Day-night cycle
 
@@ -91,7 +131,9 @@ the Starting Village's NPCs.
 
 ## Current milestone
 
-Get a player moving through a world that has multiple terrain types and can
-plant multiple types of plants. No minigames yet: planting is a direct
-action (stand on a valid tile, press a key) as a placeholder for where the
-first spell will go. No growth or harvest loop yet.
+A player moving through a world of multiple terrain types, planting
+multiple types of crop, and growing them with the first spell. Planting is
+still a direct action (stand on a valid tile, press a key) — the planting
+spell is not speced. Growth is real: a crop starts as a seedling and
+reaches maturity in two casts of the addition spell. No harvest loop yet,
+and nothing is saved between sessions.

@@ -3,6 +3,9 @@
 
 import Phaser from "phaser";
 import { VirtualJoystick } from "../input/VirtualJoystick";
+import { makeAdditionProblem } from "../spells/addition";
+import { SpellPopup } from "../ui/SpellPopup";
+import { UI_SIDECAR_KEY, UiAsset, type UiIndex, uiTextureKey } from "../ui/assets";
 import type { AreaPlacement } from "../world/anchors";
 import {
   BUILDING_SPRITES,
@@ -61,11 +64,13 @@ import { findPath } from "../world/pathfinding";
 import {
   PLANTED_STAGE,
   PLANT_TYPES,
+  PlantStage,
   PlantType,
   plantAnimKey,
   plantSheetKey,
   plantSidecarKey,
 } from "../world/plants";
+import { type Rng, createRng } from "../world/rng";
 import {
   SCENERY_KINDS,
   sceneryAnimKey,
@@ -123,6 +128,9 @@ const WORLD_DEPTH_CEILING = WORLD_SIZE * TILE_SIZE;
 const NIGHT_TINT_DEPTH = WORLD_DEPTH_CEILING + 1000;
 const HUD_DEPTH = WORLD_DEPTH_CEILING + 2000;
 const TOUCH_UI_DEPTH = WORLD_DEPTH_CEILING + 3000;
+// Above the touch controls: a spell popup covers everything, including the
+// buttons that opened it.
+const MODAL_DEPTH = WORLD_DEPTH_CEILING + 4000;
 const CHUNK_DEPTH = -1000;
 // Integer, so every world pixel lands on a whole number of screen pixels —
 // the point of filling the viewport rather than scaling a fixed canvas into
@@ -161,6 +169,12 @@ const PATROL_WANDER_RADIUS = 16;
 interface Direction {
   dCol: number;
   dRow: number;
+}
+
+// Crops are sparse and looked up by tile, so they are keyed by position
+// rather than held in a grid-sized array.
+function cropKey(col: number, row: number): string {
+  return `${col},${row}`;
 }
 
 const STEP_DIRECTIONS: readonly Direction[] = [
@@ -251,10 +265,23 @@ export class GameScene extends Phaser.Scene {
   private statusText!: Phaser.GameObjects.Text;
   private messageText!: Phaser.GameObjects.Text;
 
+  // One sprite per planted tile, so a crop that grows can be re-animated
+  // rather than found again by hunting the display list.
+  private cropSprites = new Map<string, Phaser.GameObjects.Sprite>();
+  private spellPopup!: SpellPopup;
+  private spellTray: EdgeAnchored[] = [];
+  private spellTrayParts: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Image)[] = [];
+  private spellTrayOpen = false;
+  // Problems vary from cast to cast, so this is seeded from the clock rather
+  // than from WORLD_SEED: a world is meant to be reproducible, a lesson is
+  // meant not to be.
+  private spellRng: Rng = createRng(Date.now() & 0x7fffffff);
+
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Wasd;
   private plantKeys: Phaser.Input.Keyboard.Key[] = [];
   private plantActionKey!: Phaser.Input.Keyboard.Key;
+  private spellbookKey!: Phaser.Input.Keyboard.Key;
 
   private mobileControls = false;
   private joystick?: VirtualJoystick;
@@ -371,7 +398,12 @@ export class GameScene extends Phaser.Scene {
         .setDepth(NIGHT_TINT_DEPTH),
     );
 
+    const uiIndex = this.cache.json.get(UI_SIDECAR_KEY) as UiIndex | undefined;
+    if (!uiIndex) throw new Error("ui.json did not load — the spell parchment has no art");
+    this.spellPopup = new SpellPopup(this, uiIndex, MODAL_DEPTH, (object) => this.ui(object));
+
     this.setupInput();
+    this.createSpellbook();
     if (this.mobileControls) this.createTouchControls();
     this.layoutForViewport();
 
@@ -380,9 +412,17 @@ export class GameScene extends Phaser.Scene {
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layoutForViewport, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, this.layoutForViewport, this);
+      // The popup listens on the keyboard while it is open, and a listener
+      // outliving its scene fires into a destroyed display list.
+      this.spellPopup.destroy();
     });
 
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer, over: unknown[]) => {
+      // The popup's backdrop covers the screen and is interactive, so `over`
+      // is already non-empty while it is open. Checking anyway: a modal that
+      // is only modal because of depth ordering stops being one the first
+      // time something is drawn above it.
+      if (this.spellPopup?.isOpen) return;
       if (over.length > 0) return; // a UI button handles its own pointerdown
       // Touch steers with the floating joystick; a mouse walks to the tile it
       // clicked. Deliberately not both on touch: a press cannot be a stick
@@ -423,6 +463,12 @@ export class GameScene extends Phaser.Scene {
     }
     if (!this.interior) this.updateDoors();
 
+    // The world keeps running behind the parchment — smoke drifts, villagers
+    // wander — but nothing the player presses reaches it. Every key below is
+    // one the popup wants for itself (digits, Enter, Escape) or one that
+    // would walk the player out from under an open spell.
+    if (this.spellPopup.isOpen) return;
+
     if (!this.isMoving) {
       const dir = this.pressedDirection();
       if (dir) {
@@ -443,6 +489,10 @@ export class GameScene extends Phaser.Scene {
 
     if (Phaser.Input.Keyboard.JustDown(this.plantActionKey)) {
       this.tryPlant();
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(this.spellbookKey)) {
+      this.setSpellTrayOpen(!this.spellTrayOpen);
     }
   }
 
@@ -491,6 +541,10 @@ export class GameScene extends Phaser.Scene {
     this.uiCamera?.setSize(width, height);
     this.nightOverlay?.setSize(width, height);
     for (const button of this.edgeAnchored) button.place(width, height);
+    for (const item of this.spellTray) item.place(width, height);
+    // The popup can be open across a phone rotation, and every one of its
+    // pieces is placed from the viewport's size.
+    this.spellPopup?.layout();
     this.layoutHud();
   }
 
@@ -839,6 +893,7 @@ export class GameScene extends Phaser.Scene {
       .slice(0, PLANT_TYPES.length)
       .map((code) => keyboard.addKey(code));
     this.plantActionKey = keyboard.addKey(KeyCodes.SPACE);
+    this.spellbookKey = keyboard.addKey(KeyCodes.B);
   }
 
   private pressedDirection(): Direction | null {
@@ -899,7 +954,136 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  // --- Spells ------------------------------------------------------------
+  //
+  // The spellbook is a button that opens a tray of runes; a rune is a spell.
+  // Two levels rather than one because the tray is where the second spell
+  // goes, and a lone button labelled with a plus would have to be renamed the
+  // moment there is more than one.
+  //
+  // It exists on desktop as well as on touch. Unlike the joystick, casting is
+  // not something a keyboard does better — and a spell the player cannot see
+  // is one they will never look for.
+
+  private createSpellbook(): void {
+    // On touch it joins the column the Plant and Next buttons already form,
+    // above them; on a desktop that column does not exist and the corner is
+    // free. Sharing one position would have put the book on top of Plant.
+    const size = this.mobileControls ? 64 : 56;
+    const column = this.mobileControls ? 70 : 44;
+    const bookY = this.mobileControls ? 214 : 44;
+    const book = this.addIconButton(uiTextureKey(UiAsset.Spellbook), size, (w, h) => ({
+      x: w - column,
+      y: h - bookY,
+    }));
+    book.on("pointerdown", () => this.setSpellTrayOpen(!this.spellTrayOpen));
+
+    // The tray opens directly above the book it comes out of, so the finger
+    // that opened it is already next to what it opened.
+    const rune = this.addIconButton(uiTextureKey(UiAsset.RuneAdd), size - 8, (w, h) => ({
+      x: w - column,
+      y: h - bookY - size - 8,
+    }));
+    rune.on("pointerdown", () => this.castGrowthSpell());
+    for (const part of this.spellTrayParts) part.setVisible(false);
+  }
+
+  private addIconButton(
+    texture: string,
+    size: number,
+    at: (width: number, height: number) => { x: number; y: number },
+  ): Phaser.GameObjects.Rectangle {
+    const box = this.ui(
+      this.add
+        .rectangle(0, 0, size, size, 0x000000, 0.45)
+        .setStrokeStyle(2, 0xffffff, 0.6)
+        .setScrollFactor(0)
+        .setDepth(TOUCH_UI_DEPTH)
+        .setInteractive({ useHandCursor: true }),
+    );
+    const icon = this.ui(
+      this.add
+        .image(0, 0, texture)
+        .setScrollFactor(0)
+        .setDepth(TOUCH_UI_DEPTH + 1),
+    );
+    const anchor: EdgeAnchored = {
+      place: (width, height) => {
+        const { x, y } = at(width, height);
+        box.setPosition(x, y);
+        icon.setPosition(x, y);
+      },
+    };
+    this.edgeAnchored.push(anchor);
+    if (texture === uiTextureKey(UiAsset.RuneAdd)) {
+      this.spellTrayParts.push(box, icon);
+    }
+    return box;
+  }
+
+  // Every button this scene owns keeps working while a spell is on screen
+  // unless it is told not to. The spellbook is the one that matters most: on
+  // a phone it sits *inside* the popup's own rectangle, so without this a tap
+  // meant for the parchment would reopen the tray and the rune above it would
+  // restart the cast half way through the problem.
+  private setSpellTrayOpen(open: boolean): void {
+    if (open && this.spellPopup.isOpen) return;
+    this.spellTrayOpen = open;
+    for (const part of this.spellTrayParts) part.setVisible(open);
+    this.updateStatusText();
+  }
+
+  /**
+   * Cast the addition spell on the tile the player is standing on.
+   *
+   * The spell adds, and adding to a plant is what makes it grow — one cast,
+   * one stage. Refusals are stated rather than silent: the player has to be
+   * told the tile is bare or the crop is finished, or a spell that declines
+   * to open reads as a broken button.
+   */
+  private castGrowthSpell(): void {
+    // The one guard here that is not merely defensive: the spellbook button
+    // sits inside the popup's own rectangle on a phone, and a rune tapped
+    // through it would restart the cast half way through the problem.
+    if (this.spellPopup.isOpen) return;
+    this.setSpellTrayOpen(false);
+    if (this.interior) {
+      this.setMessage("Nothing grows indoors");
+      return;
+    }
+    const col = this.playerCol;
+    const row = this.playerRow;
+    const crop = this.grid.getCrop(col, row);
+    if (!crop) {
+      this.setMessage("Stand on something you planted to grow it");
+      return;
+    }
+    if (crop.stage === PlantStage.Mature) {
+      this.setMessage(`This ${crop.plant} is already fully grown`);
+      return;
+    }
+    // A stick still held when the parchment opens never sends its release,
+    // and the player walks off the moment the popup closes.
+    this.joystick?.release();
+    this.setMessage("");
+    this.spellPopup.open(makeAdditionProblem(this.spellRng), (solved) => {
+      if (solved) this.growCropAt(col, row);
+      else this.setMessage("The spell fades unspoken");
+    });
+  }
+
+  private growCropAt(col: number, row: number): void {
+    const grown = this.grid.growCrop(col, row);
+    if (!grown) return;
+    // Growth is a change of animation, not of sprite: the generator ships one
+    // sheet per crop with a row per stage, so the same object keeps playing
+    // further along its own reel.
+    this.cropSprites.get(cropKey(col, row))?.play(plantAnimKey(grown.plant, grown.stage));
+    this.setMessage(`Your ${grown.plant} is now ${grown.stage}`);
+  }
+
   private tryPlant(): void {
+    if (this.spellPopup.isOpen) return;
     const plant = PLANT_TYPES[this.selectedPlantIndex];
     if (!plant) return;
 
@@ -919,7 +1103,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     const feet = this.toFeet(this.playerCol, this.playerRow);
-    this.world(
+    const sprite = this.world(
       this.add
         .sprite(feet.x, feet.y, plantSheetKey(plant))
         .setOrigin(0.5, 1)
@@ -929,7 +1113,8 @@ export class GameScene extends Phaser.Scene {
         .setDepth(feet.y - 0.5)
         .play(plantAnimKey(plant, PLANTED_STAGE)),
     );
-    this.setMessage(`Planted ${plant}`);
+    this.cropSprites.set(cropKey(this.playerCol, this.playerRow), sprite);
+    this.setMessage(`Planted a ${plant} seedling — cast the plus rune to grow it`);
   }
 
   private handleTileClick(screenX: number, screenY: number): void {
@@ -1248,6 +1433,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private selectNextPlant(): void {
+    if (this.spellPopup.isOpen) return;
     this.selectedPlantIndex = (this.selectedPlantIndex + 1) % PLANT_TYPES.length;
     this.updateStatusText();
   }
@@ -1351,10 +1537,14 @@ export class GameScene extends Phaser.Scene {
     this.messageText.setText(text);
   }
 
+  // Kept to two lines on a phone held upright, which is what it wraps to at
+  // this length. It ran to three while it explained the spellbook in full,
+  // and a third of a portrait screen is too much to spend on a caption.
   private get statusLine(): string {
     const plant = PLANT_TYPES[this.selectedPlantIndex];
+    const spell = this.spellTrayOpen ? "tap + to grow this tile" : "spellbook";
     return this.mobileControls
-      ? `Drag anywhere to walk  Plant: ${plant}  (tap Next to change, Plant to plant)`
-      : `Move: arrows/WASD  Plant: ${plant}  (keys 1-${PLANT_TYPES.length} to choose)  Space: plant here`;
+      ? `Drag to walk  Plant: ${plant}  Book: ${spell}`
+      : `Arrows/WASD  Plant: ${plant} (1-${PLANT_TYPES.length})  Space: plant  B: ${spell}`;
   }
 }

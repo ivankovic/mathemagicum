@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { WorldGrid } from "./grid";
 import { Habitat } from "./habitat";
 import type { PlacedObject } from "./objects";
-import { PlantType } from "./plants";
+import { PlantStage, PlantType } from "./plants";
 import { TerrainType } from "./terrain";
 
 function smallGrid(): WorldGrid {
@@ -77,6 +77,47 @@ describe("WorldGrid planting", () => {
   test("cannot plant out of bounds", () => {
     const grid = smallGrid();
     expect(grid.plant(9, 9, PlantType.Sunflower)).toBe(false);
+  });
+});
+
+describe("WorldGrid growing", () => {
+  test("a new crop starts as a seedling", () => {
+    const grid = smallGrid();
+    grid.plant(0, 0, PlantType.Sunflower);
+    expect(grid.getCrop(0, 0)).toEqual({
+      plant: PlantType.Sunflower,
+      stage: PlantStage.Seedling,
+    });
+  });
+
+  test("growing walks the stages in order and then stops", () => {
+    const grid = smallGrid();
+    grid.plant(0, 0, PlantType.Sunflower);
+    expect(grid.growCrop(0, 0)?.stage).toBe(PlantStage.Growing);
+    expect(grid.growCrop(0, 0)?.stage).toBe(PlantStage.Mature);
+    // A fully grown crop reports no change rather than silently staying put,
+    // so the caster can say so instead of spending a cast on nothing.
+    expect(grid.growCrop(0, 0)).toBe(null);
+    expect(grid.getCrop(0, 0)?.stage).toBe(PlantStage.Mature);
+  });
+
+  test("growing bare ground does nothing", () => {
+    const grid = smallGrid();
+    expect(grid.growCrop(0, 0)).toBe(null);
+  });
+
+  test("growing one crop leaves its neighbours alone", () => {
+    const grid = smallGrid();
+    grid.plant(0, 0, PlantType.Sunflower);
+    grid.plant(1, 0, PlantType.Cactus); // the sand tile next to it
+    grid.growCrop(0, 0);
+    expect(grid.getCrop(1, 0)?.stage).toBe(PlantStage.Seedling);
+  });
+
+  test("growing keeps the crop it was", () => {
+    const grid = smallGrid();
+    grid.plant(0, 0, PlantType.Carrot);
+    expect(grid.growCrop(0, 0)?.plant).toBe(PlantType.Carrot);
   });
 });
 

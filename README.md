@@ -11,8 +11,10 @@ commercial use.
 ## Status
 
 Early. A generated 500×500 world you can walk around, with the Starting
-Village laid out in it. No minigames yet — planting is a direct keypress
-standing in for where the first spell will go.
+Village laid out in it, and the first spell in place: crops are planted as
+seedlings and grown by casting **addition** on them, a number-line minigame
+opened from the spellbook. Planting itself is still a direct keypress —
+the planting spell is not speced. Nothing is saved between sessions.
 
 ## Assets
 
@@ -32,6 +34,7 @@ uv run asset-generator terrain-interiors --seed 7 --sheets --out-dir output/terr
 uv run asset-generator terrain-plants --seed 7 --out-dir output/terrain_plants
 uv run asset-generator terrain-fixtures --seed 7 --out-dir output/terrain_fixtures
 uv run asset-generator terrain-objects --seed 7 --sheets --out-dir output/terrain_objects
+uv run asset-generator ui --seed 7 --out-dir output/ui
 
 cd -
 OUT=../asset-generator/output
@@ -50,6 +53,7 @@ cp $OUT/terrain_fixtures/well{.json,_sheet.png} public/assets/fixtures/
 for t in grass woodland dirt hilly mountain sand; do
   cp $OUT/terrain_objects/$t{.json,_sheet.png} public/assets/objects/
 done
+cp $OUT/ui/{ui.json,parchment_fill.png,parchment_frame.png,spellbook.png,rune_add.png} public/assets/ui/
 bun test   # src/world/assets.test.ts checks the sync
 ```
 
@@ -79,10 +83,19 @@ missing sprite survives to a release. `assets.test.ts` generates a world and
 checks every placed object resolves, so that throw is unreachable in
 practice and provably so.
 
-Crops ship all three growth stages even though planting currently shows the
-finished one: the tending spells that would move between them are still
-unspecced, and a seedling that never grew would promise a mechanic the game
-does not have. The art is ready for when they arrive.
+Crops ship all three growth stages and the game now uses all of them:
+planting drops a seedling and each successful cast of the addition spell
+advances one stage. Growth is a change of animation on the same sprite, not
+a swap — one sheet per crop with a row per stage is exactly what makes that
+possible.
+
+The interface art is the one set with no per-file sidecar. A panel has no
+frames, no footprint and no animations to describe, so the generator ships a
+single `ui.json` index instead: which file, how big, and where the parchment
+frame's nine-slice cuts fall. The parchment is two assets rather than one on
+purpose — a *seamless* fill the game tiles, and a border whose middle is
+empty. A nine-slice stretches its middle, and stretching mottled paper
+smears the grain into streaks; stretching nothing is safe.
 
 An interior's art is exactly as large as the grid it describes plus its north
 wall, and `assets.test.ts` checks that: cell (0,0) is drawn `wall_rise_px`

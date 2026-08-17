@@ -42,12 +42,24 @@ export const PLANT_STAGES: readonly PlantStage[] = Object.values(PlantStage);
 /**
  * The stage a newly planted crop is drawn at.
  *
- * Mature, because there is no tending loop yet: planting is still the direct
- * placeholder action the design doc describes, and a seedling that never
- * became anything would promise growth the game does not have. The earlier
- * stages ship anyway, so the art is ready when the growing spells are.
+ * A seedling, now that there is a way to make it grow. It used to be Mature,
+ * on the grounds that a seedling which could never become anything would
+ * promise growth the game did not have — and that is exactly what the
+ * addition spell supplies: one cast, one stage. See `src/spells/addition.ts`.
  */
-export const PLANTED_STAGE: PlantStage = PlantStage.Mature;
+export const PLANTED_STAGE: PlantStage = PlantStage.Seedling;
+
+/** The stage after this one, or null if the crop is fully grown. */
+export function nextStage(stage: PlantStage): PlantStage | null {
+  const at = PLANT_STAGES.indexOf(stage);
+  return PLANT_STAGES[at + 1] ?? null;
+}
+
+/** A crop growing on a tile: what it is, and how far along. */
+export interface Crop {
+  readonly plant: PlantType;
+  readonly stage: PlantStage;
+}
 
 export function plantSheetKey(plant: PlantType): string {
   return `plant-${plant}`;

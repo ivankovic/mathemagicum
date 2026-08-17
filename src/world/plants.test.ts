@@ -10,6 +10,7 @@ import {
   PlantStage,
   PlantType,
   canPlantOn,
+  nextStage,
   plantAnimKey,
   plantSheetKey,
 } from "./plants";
@@ -65,10 +66,30 @@ describe("growth stages", () => {
     expect(PLANT_STAGES).toContain(PLANTED_STAGE);
   });
 
-  test("planting shows the finished crop while there is no tending loop", () => {
-    // Deliberate, not an oversight: a seedling that never grew would promise
-    // a mechanic the game does not have yet.
-    expect(PLANTED_STAGE).toBe(PlantStage.Mature);
+  test("planting starts a crop at the beginning, now that it can grow", () => {
+    // This used to be Mature, on the grounds that a seedling which could
+    // never become anything promised a mechanic the game did not have. The
+    // addition spell is that mechanic — one cast, one stage.
+    expect(PLANTED_STAGE).toBe(PlantStage.Seedling);
+  });
+
+  test("each stage leads to the next, and the last leads nowhere", () => {
+    expect(nextStage(PlantStage.Seedling)).toBe(PlantStage.Growing);
+    expect(nextStage(PlantStage.Growing)).toBe(PlantStage.Mature);
+    expect(nextStage(PlantStage.Mature)).toBe(null);
+  });
+
+  test("growing from what is planted reaches maturity in a countable number of casts", () => {
+    let stage: PlantStage | null = PLANTED_STAGE;
+    let casts = 0;
+    while (stage !== null) {
+      const next: PlantStage | null = nextStage(stage);
+      if (next === null) break;
+      stage = next;
+      casts++;
+    }
+    expect(stage).toBe(PlantStage.Mature);
+    expect(casts).toBe(PLANT_STAGES.length - 1);
   });
 });
 

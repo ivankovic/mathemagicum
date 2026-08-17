@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Phaser from "phaser";
+import { UI_ASSETS, UI_SIDECAR_KEY, type UiIndex, uiEntry, uiTextureKey } from "../ui/assets";
 import { BUILDING_SPRITES, type BuildingSprite, spriteSheetKey } from "../world/buildings";
 import { ALL_CHARACTERS, characterSheetKey, characterSidecarKey } from "../world/characters";
 import { FIXTURE_TYPES, fixtureSheetKey, fixtureSidecarKey } from "../world/fixtures";
@@ -68,6 +69,9 @@ export class BootScene extends Phaser.Scene {
     for (const kind of SCENERY_KINDS) {
       this.load.json(scenerySidecarKey(kind), `${this.base()}assets/objects/${kind}.json`);
     }
+    // One index for the whole interface set rather than one per file — the
+    // generator writes it that way because a panel has no frames to describe.
+    this.load.json(UI_SIDECAR_KEY, `${this.base()}assets/ui/ui.json`);
   }
 
   create(): void {
@@ -97,8 +101,16 @@ export class BootScene extends Phaser.Scene {
       const sidecar = this.cache.json.get(scenerySidecarKey(kind)) as ObjectSidecar | undefined;
       this.queueSheet(scenerySheetKey(kind), "objects", kind, sidecar?.sheet);
     }
+    // Plain images, not spritesheets: the parchment and the icons are single
+    // frames, and the index says how big each one is so nothing here has to.
+    const uiIndex = this.cache.json.get(UI_SIDECAR_KEY) as UiIndex | undefined;
+    for (const asset of UI_ASSETS) {
+      const entry = uiEntry(uiIndex, asset);
+      this.load.image(uiTextureKey(asset), `${this.base()}assets/ui/${entry.file}`);
+    }
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
       this.verifyFrameCounts();
+      this.verifyUiSizes(uiIndex);
       this.scene.start("game");
     });
     this.load.start();
@@ -161,6 +173,34 @@ export class BootScene extends Phaser.Scene {
       const actual = this.textures.get(key).frameTotal - 1;
       if (actual !== count) {
         throw new Error(`${name} sliced into ${actual} frames, sidecar declares ${count}`);
+      }
+    }
+  }
+
+  /**
+   * Check the interface art is the size its index claims.
+   *
+   * The popup positions everything from these numbers — the nine-slice
+   * insets especially — and a frame that is not the size the insets were
+   * measured against does not fail to draw, it draws subtly wrong: a border
+   * with its corner ornament stretched across the whole top edge. Cheaper to
+   * catch here, naming the file.
+   */
+  private verifyUiSizes(index: UiIndex | undefined): void {
+    for (const asset of UI_ASSETS) {
+      const entry = uiEntry(index, asset);
+      const source = this.textures.get(uiTextureKey(asset)).getSourceImage();
+      if (source.width !== entry.width || source.height !== entry.height) {
+        throw new Error(
+          `${entry.file} is ${source.width}x${source.height}, ui.json declares ${entry.width}x${entry.height}`,
+        );
+      }
+      const insets = entry.nine_slice;
+      if (
+        insets &&
+        (insets.left + insets.right > entry.width || insets.top + insets.bottom > entry.height)
+      ) {
+        throw new Error(`${entry.file}'s nine-slice insets overlap`);
       }
     }
   }

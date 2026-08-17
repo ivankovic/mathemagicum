@@ -98,6 +98,18 @@ export class VirtualJoystick {
 
   end(pointer: Phaser.Input.Pointer): void {
     if (!this.owns(pointer)) return;
+    this.release();
+  }
+
+  /**
+   * Drop the stick whoever is holding it.
+   *
+   * For the moments the game takes control away — a popup opening over a
+   * held stick. Without this the finger that summoned it never sends the
+   * release the scene is listening for, and the player walks off in the last
+   * direction they pushed the moment the popup closes.
+   */
+  release(): void {
     this.pointerId = null;
     this.offset = { x: 0, y: 0 };
     for (const part of this.parts()) part.setVisible(false);

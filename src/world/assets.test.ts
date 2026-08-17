@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { UI_ASSETS, UiAsset, type UiIndex, uiEntry } from "../ui/assets";
 import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, DOOR_STATES, ROLE_SPRITES } from "./buildings";
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
 import { FIXTURE_TYPES, fixtureFor } from "./fixtures";
@@ -585,5 +586,45 @@ describe("the shipped scenery", () => {
         expect(range.start % sheet.columns).toBe(0);
       }
     }
+  });
+});
+
+describe("the shipped interface art", () => {
+  const index = readJson<UiIndex>("ui", "ui.json");
+
+  test("names every asset the game asks for", () => {
+    for (const asset of UI_ASSETS) {
+      expect(() => uiEntry(index, asset)).not.toThrow();
+    }
+  });
+
+  test("ships the file each entry points at", () => {
+    for (const asset of UI_ASSETS) {
+      expect({ asset, there: existsSync(join(ASSETS, "ui", uiEntry(index, asset).file)) }).toEqual({
+        asset,
+        there: true,
+      });
+    }
+  });
+
+  // The popup positions its whole border from these, and a frame whose
+  // insets do not fit inside it does not fail to draw: it draws the corner
+  // ornament stretched across the entire top edge.
+  test("gives the parchment frame nine-slice insets that fit inside it", () => {
+    const frame = uiEntry(index, UiAsset.ParchmentFrame);
+    const insets = frame.nine_slice;
+    if (!insets) throw new Error("parchment-frame has no nine_slice insets");
+    expect(insets.left + insets.right).toBeLessThan(frame.width);
+    expect(insets.top + insets.bottom).toBeLessThan(frame.height);
+  });
+
+  // The fill is repeated across a panel rather than scaled to it, so it has
+  // to be small enough that repeating is cheap and the panel is not one
+  // single copy of it.
+  test("marks the fill as tiling, and keeps it smaller than a panel", () => {
+    const fill = uiEntry(index, UiAsset.ParchmentFill);
+    expect(fill.tiles).toBe(true);
+    expect(fill.width).toBeLessThanOrEqual(256);
+    expect(fill.height).toBeLessThanOrEqual(256);
   });
 });

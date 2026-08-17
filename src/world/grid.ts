@@ -3,7 +3,7 @@
 
 import { Habitat } from "./habitat";
 import type { PlacedObject } from "./objects";
-import { type PlantType, canPlantOn } from "./plants";
+import { type Crop, PLANTED_STAGE, type PlantType, canPlantOn, nextStage } from "./plants";
 import { TerrainType, isPassable } from "./terrain";
 
 // Flat, numerically-indexed storage. At world scale (hundreds of thousands
@@ -48,7 +48,9 @@ export class WorldGrid {
   private readonly habitatCodes: Uint8Array;
   // Plants are sparse (most tiles are never planted), so a map of only the
   // planted tiles is far cheaper than a dense array sized to the whole grid.
-  private readonly plants = new Map<number, PlantType>();
+  // A crop carries its growth stage, unlike terrain or habitat: it is the one
+  // thing on the map the player changes after generation.
+  private readonly crops = new Map<number, Crop>();
   // Static structures (buildings, the village well) placed at generation
   // time. Sparse for the same reason as plants; a multi-tile object appears
   // once per occupied tile so lookups by (col, row) stay O(1), plus a flat
@@ -120,9 +122,13 @@ export class WorldGrid {
     this.habitatCodes[idx] = habitatToCode(habitat);
   }
 
-  getPlant(col: number, row: number): PlantType | null {
+  getCrop(col: number, row: number): Crop | null {
     const idx = this.requireInBounds(col, row);
-    return this.plants.get(idx) ?? null;
+    return this.crops.get(idx) ?? null;
+  }
+
+  getPlant(col: number, row: number): PlantType | null {
+    return this.getCrop(col, row)?.plant ?? null;
   }
 
   isPassable(col: number, row: number): boolean {
@@ -188,7 +194,27 @@ export class WorldGrid {
 
   plant(col: number, row: number, plant: PlantType): boolean {
     if (!this.canPlant(col, row, plant)) return false;
-    this.plants.set(this.index(col, row), plant);
+    this.crops.set(this.index(col, row), { plant, stage: PLANTED_STAGE });
     return true;
+  }
+
+  /**
+   * Move the crop on this tile one stage further along, if there is one and
+   * it is not already grown.
+   *
+   * Returns the crop as it now stands, or null if nothing changed. Nothing
+   * here decides *when* growth happens — that is the addition spell's job
+   * (`src/spells/addition.ts`), and keeping the decision out of the grid is
+   * what stops a second growing spell from having to negotiate with this one.
+   */
+  growCrop(col: number, row: number): Crop | null {
+    const idx = this.requireInBounds(col, row);
+    const crop = this.crops.get(idx);
+    if (!crop) return null;
+    const stage = nextStage(crop.stage);
+    if (!stage) return null;
+    const grown = { plant: crop.plant, stage };
+    this.crops.set(idx, grown);
+    return grown;
   }
 }
