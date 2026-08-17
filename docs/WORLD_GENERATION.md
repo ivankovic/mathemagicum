@@ -53,8 +53,10 @@ changes.
 A named bundle used during generation that describes a *region*, not a
 single tile:
 - a **terrain-weight distribution** — which terrain types appear in this
-  region and how often (e.g. Meadow: 100% Grass; Coastal: mostly Sand,
-  some Water)
+  region and how much of it each covers (e.g. Meadow: 100% Grass; Coastal:
+  mostly Sand, some Water). These are proportions of *area*, not per-tile
+  odds; the order they are listed in is significant — see
+  [Terrain from elevation](#terrain-from-elevation)
 - a **decoration-object palette + density** — what gets scattered on top
   (e.g. Woodland: dense Trees; Meadow: none)
 
@@ -207,9 +209,40 @@ Woodland seed from step 2, and enough additional random seeds to cover
 the rest of the map — until every non-reserved tile belongs to a habitat
 region.
 
-**5. Per-tile terrain + decoration.** For each tile, sample its terrain
-type from its habitat's weight distribution, then roll decoration objects
-from the habitat's density table.
+**5. Terrain + decoration.** Terrain comes from cutting a smooth,
+seeded elevation field at each habitat's weights — see
+[Terrain from elevation](#terrain-from-elevation). Decoration objects are
+still rolled from the habitat's density table (not built yet).
+
+### Terrain from elevation
+
+Habitat weights were originally read as per-tile odds: each tile rolled its
+own terrain from its habitat's distribution. That gets the proportions right
+and the shapes catastrophically wrong. Measured on a 500x500 world, it gave
+37,000 water tiles whose largest connected body was **289 tiles**, 28% of
+mountain sitting as isolated single tiles, and 40% of dirt. There was no
+lake, no sea and no mountain range anywhere on the map — just static at the
+right density.
+
+What the weights actually describe is how much of a *region* each terrain
+covers. So the fill reads a smooth seeded scalar field (`src/world/noise.ts`)
+and cuts it at each habitat's weight boundaries in order. Adjacent tiles
+sample nearly the same value, so they land in the same band, so terrain
+arrives in patches. The same 500x500 world then gives a largest water body
+of **18,565 tiles** and essentially zero isolated specks.
+
+Two consequences worth knowing:
+
+- **The field is elevation.** Each habitat lists its terrains low ground
+  first, so water fills hollows and mountain caps rises. Reordering a
+  habitat's entries moves its terrain around the map.
+- **One field serves every habitat**, which is why a lake runs on across the
+  boundary from a wetland into the coast rather than stopping dead at it.
+
+The field is remapped through its own measured distribution before use.
+Interpolated noise clusters around its mean, so cutting the raw field at 0.3
+would not put 30% of tiles below it, and every habitat's proportions would
+drift.
 
 **6. Guarantee connectivity.** Flood-fill from Starting Village; check
 every other story area has a reachable tile (terrain passable *and*

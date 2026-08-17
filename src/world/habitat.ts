@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { Rng } from "./rng";
 import { TerrainType } from "./terrain";
 
 // A habitat describes a *region*, not a single tile: which terrain types
@@ -21,6 +20,10 @@ export const Habitat = {
 export type Habitat = (typeof Habitat)[keyof typeof Habitat];
 
 interface HabitatDefinition {
+  // ORDER IS SIGNIFICANT, low ground first. The fill reads a smooth
+  // elevation field and cuts it at these weights in order, so the first
+  // entry is what fills the hollows and the last is what caps the rises.
+  // Reordering a habitat's entries moves its terrain around the map.
   readonly terrainWeights: ReadonlyMap<TerrainType, number>;
 }
 
@@ -38,20 +41,20 @@ export const HABITAT_DEFINITIONS: Record<Habitat, HabitatDefinition> = {
   // two is drawn by the tileset rather than by the habitat's outline.
   [Habitat.Woodland]: {
     terrainWeights: weights([
-      [TerrainType.Woodland, 0.75],
       [TerrainType.Grass, 0.25],
+      [TerrainType.Woodland, 0.75],
     ]),
   },
   [Habitat.Wetland]: {
     terrainWeights: weights([
-      [TerrainType.Grass, 0.5],
       [TerrainType.Water, 0.5],
+      [TerrainType.Grass, 0.5],
     ]),
   },
   [Habitat.Coastal]: {
     terrainWeights: weights([
-      [TerrainType.Sand, 0.7],
       [TerrainType.Water, 0.3],
+      [TerrainType.Sand, 0.7],
     ]),
   },
   // Mostly walkable Hilly with impassable Mountain peaks through it: a
@@ -59,23 +62,34 @@ export const HABITAT_DEFINITIONS: Record<Habitat, HabitatDefinition> = {
   // wall. Dirt is the bare ground between.
   [Habitat.Highland]: {
     terrainWeights: weights([
+      [TerrainType.Dirt, 0.2],
       [TerrainType.Hilly, 0.55],
       [TerrainType.Mountain, 0.25],
-      [TerrainType.Dirt, 0.2],
     ]),
   },
 };
 
-// Weighted-random terrain pick for a habitat.
-export function sampleTerrain(habitat: Habitat, rng: Rng): TerrainType {
+/**
+ * The terrain a habitat puts at a given height, where `elevation` is a
+ * position in [0, 1) within the habitat's own range — 0 its lowest ground,
+ * 1 its highest.
+ *
+ * This replaced a per-tile weighted roll. The weights are unchanged and mean
+ * the same thing about *area*, but reading them as bands of a smooth field
+ * rather than as odds is what turns a wetland into ponds instead of static:
+ * neighbouring tiles get nearly the same elevation, so they land in the same
+ * band.
+ */
+export function terrainAtElevation(habitat: Habitat, elevation: number): TerrainType {
   const entries = [...HABITAT_DEFINITIONS[habitat].terrainWeights.entries()];
-  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
-  let cursor = rng() * total;
-  for (const [terrain, weight] of entries) {
-    cursor -= weight;
-    if (cursor <= 0) return terrain;
-  }
   const last = entries[entries.length - 1];
   if (!last) throw new Error(`Habitat "${habitat}" has no terrain weights`);
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  let cursor = elevation * total;
+  for (const [terrain, weight] of entries) {
+    cursor -= weight;
+    // Strictly less, so a band of weight 0 can never claim a tile.
+    if (cursor < 0) return terrain;
+  }
   return last[0];
 }

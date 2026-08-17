@@ -3,7 +3,8 @@
 
 import type { AreaPlacement } from "./anchors";
 import type { WorldGrid } from "./grid";
-import { Habitat, sampleTerrain } from "./habitat";
+import { Habitat, terrainAtElevation } from "./habitat";
+import { uniform } from "./noise";
 import { type Rng, pick, randInt } from "./rng";
 import type { GridPoint } from "./topdown";
 
@@ -113,22 +114,39 @@ export function growHabitats(
   }
 }
 
-// Samples terrain per tile from its (already-grown) habitat's weights.
-// Border ring tiles are skipped — generateBorder already forced their
-// terrain and that must stay authoritative, never overwritten by a
-// habitat roll. Reserved anchor boxes are skipped too (deliberately left
-// at the grid's default terrain — see growHabitats). Must run after
-// growHabitats.
+/**
+ * Paints terrain by cutting a smooth elevation field at each habitat's
+ * weights (see noise.ts and habitat.ts's terrainAtElevation).
+ *
+ * This used to roll each tile independently from those weights, which got
+ * the proportions right and the shapes wrong: 37,000 water tiles in a
+ * 500x500 world whose largest connected body was 289 tiles, and 40% of dirt
+ * sitting as single specks. Weights describe how much of a *region* each
+ * terrain covers, not the odds for one tile, and reading them that way is
+ * what produces lakes and ridges rather than static.
+ *
+ * One field serves every habitat, so a lake runs on across the boundary
+ * between a wetland and the coast rather than stopping at it.
+ *
+ * Border ring tiles are skipped — generateBorder already forced their
+ * terrain and that stays authoritative. Reserved anchor boxes are skipped
+ * too (deliberately left at the grid's default terrain — see growHabitats).
+ * Must run after growHabitats.
+ */
 export function fillTerrainFromHabitats(
   grid: WorldGrid,
   reservedBoxes: readonly AreaPlacement[],
   rng: Rng,
 ): void {
+  // Drawn from the same rng as everything else, so one world seed still
+  // determines the whole map and the field is not a second source of truth.
+  const fieldSeed = randInt(rng, 0, 0x7ffffffe);
   for (let row = 0; row < grid.height; row++) {
     for (let col = 0; col < grid.width; col++) {
       if (isBorderRing(grid, col, row)) continue;
       if (isInsideAnyBox(col, row, reservedBoxes)) continue;
-      grid.setTerrain(col, row, sampleTerrain(grid.getHabitat(col, row), rng));
+      const elevation = uniform(col, row, fieldSeed);
+      grid.setTerrain(col, row, terrainAtElevation(grid.getHabitat(col, row), elevation));
     }
   }
 }
