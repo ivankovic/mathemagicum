@@ -31,6 +31,7 @@ uv run asset-generator terrain-characters --seed 7 --out-dir output/terrain_char
 uv run asset-generator terrain-interiors --seed 7 --sheets --out-dir output/terrain_interiors
 uv run asset-generator terrain-plants --seed 7 --out-dir output/terrain_plants
 uv run asset-generator terrain-fixtures --seed 7 --out-dir output/terrain_fixtures
+uv run asset-generator terrain-objects --seed 7 --sheets --out-dir output/terrain_objects
 
 cd -
 OUT=../asset-generator/output
@@ -46,6 +47,9 @@ for p in carrot sunflower cactus; do
   cp $OUT/terrain_plants/$p{.json,_sheet.png} public/assets/plants/
 done
 cp $OUT/terrain_fixtures/well{.json,_sheet.png} public/assets/fixtures/
+for t in grass woodland dirt hilly mountain sand; do
+  cp $OUT/terrain_objects/$t{.json,_sheet.png} public/assets/objects/
+done
 bun test   # src/world/assets.test.ts checks the sync
 ```
 

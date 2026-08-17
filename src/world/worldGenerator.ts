@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { type AnchorPlacements, type AreaPlacement, placeAnchors } from "./anchors";
+import { placeEdgeBarriers } from "./barriers";
 import { ensureConnectivity } from "./connectivity";
 import { type HighCorner, elevationAt, pickHighCorner } from "./elevation";
 import { WorldGrid } from "./grid";
@@ -66,6 +67,10 @@ export function generateWorld(width: number, height: number, seed: number): Gene
 
   fillFromElevation(grid, highCorner, fieldSeed, reservedBoxes);
   sealFarEdges(grid, highCorner);
+  // Before the connectivity check, so it sees the walled rim and reports
+  // honestly. Carving cannot clear an object, so the barrier is confined to
+  // the rim where it has nothing to cut off.
+  placeEdgeBarriers(grid, highCorner, reservedBoxes);
 
   ensureConnectivity(grid, village.playerSpawn, [
     centerOf(anchors.harbour),

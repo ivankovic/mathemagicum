@@ -9,11 +9,13 @@ import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
 import { FIXTURE_TYPES, fixtureFor } from "./fixtures";
 import { INTERIOR_ROOMS, interiorFor } from "./interiors";
 import { PLANT_STAGES, PLANT_TYPES } from "./plants";
+import { SCENERY_KINDS, sceneryKind } from "./scenery";
 import type {
   BuildingSidecar,
   CharacterSidecar,
   FixtureSidecar,
   InteriorSidecar,
+  ObjectSidecar,
   PlantSidecar,
 } from "./spriteSidecar";
 import { TERRAIN_TYPES } from "./terrain";
@@ -493,16 +495,63 @@ describe("every object the village places", () => {
   // area starts placing something new, this fails before the game does.
   const world = generateWorld(120, 120, 4242);
 
-  test("resolves to either a building sprite or a fixture", () => {
-    const placed = [world.village.well, ...world.village.buildings];
+  test("resolves to a building, a fixture or a piece of scenery", () => {
+    const placed = world.grid.listObjects();
     expect(placed.length).toBeGreaterThan(0);
+    const kinds = new Set<string>();
     for (const object of placed) {
       const asBuilding = ROLE_SPRITES[object.type as keyof typeof ROLE_SPRITES];
       const asFixture = fixtureFor(object.type);
-      expect({ type: object.type, hasArt: Boolean(asBuilding ?? asFixture) }).toEqual({
+      const asScenery = sceneryKind(object.type);
+      kinds.add(object.type);
+      expect({ type: object.type, hasArt: Boolean(asBuilding ?? asFixture ?? asScenery) }).toEqual({
         type: object.type,
         hasArt: true,
       });
+    }
+    // The world places all three kinds, so this is actually exercising the
+    // dispatch rather than one branch of it.
+    expect([...kinds].some((t) => sceneryKind(t))).toBe(true);
+    expect([...kinds].some((t) => fixtureFor(t))).toBe(true);
+  });
+});
+
+describe("the shipped scenery", () => {
+  const sidecars = new Map(
+    SCENERY_KINDS.map((k) => [k, readJson<ObjectSidecar>("objects", `${k}.json`)]),
+  );
+
+  test("exists for every kind of ground that grows something", () => {
+    for (const kind of SCENERY_KINDS) {
+      expect(sidecars.get(kind)?.terrain).toBe(kind);
+    }
+  });
+
+  test("ships the sheet PNG it names", () => {
+    for (const [name, sidecar] of sidecars) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error(`${name} has no sheet`);
+      expect(existsSync(join(ASSETS, "objects", sheet.file))).toBe(true);
+      expect(sheet.frame_count).toBe(sidecar.frame_count);
+    }
+  });
+
+  test("is 1:1 art on a 2x2 footprint, overhanging upward", () => {
+    // The barrier packs objects on a 2-tile lattice; a different footprint
+    // would leave gaps a player could walk through.
+    for (const sidecar of sidecars.values()) {
+      expect(sidecar.tile_size).toBe(TILE_SIZE);
+      expect(sidecar.footprint_tiles).toEqual({ width: 2, height: 2 });
+      expect(sidecar.sprite_size_px.width).toBe(2 * TILE_SIZE);
+      const overhang = sidecar.sprite_size_px.height - 2 * TILE_SIZE;
+      expect(overhang).toBeGreaterThan(0);
+      expect(sidecar.sprite_offset_px).toEqual({ x: 0, y: -overhang });
+    }
+  });
+
+  test("blocks every cell of its footprint", () => {
+    for (const sidecar of sidecars.values()) {
+      expect(sidecar.blocked_cells_relative_to_anchor.length).toBe(4);
     }
   });
 });

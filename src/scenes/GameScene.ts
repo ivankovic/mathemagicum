@@ -67,11 +67,20 @@ import {
   plantSidecarKey,
 } from "../world/plants";
 import {
+  SCENERY_KINDS,
+  sceneryAnimKey,
+  sceneryKind,
+  scenerySheetKey,
+  scenerySidecarKey,
+} from "../world/scenery";
+import {
   type BuildingSidecar,
   type CharacterSidecar,
   type FixtureSidecar,
   type InteriorSidecar,
+  type ObjectSidecar,
   type PlantSidecar,
+  type SpriteSidecar,
   doorCell,
   footprintBottomY,
   spriteOrigin,
@@ -83,6 +92,7 @@ import {
   buildVariationIndex,
   cornerTerrainsFor,
   frameFor,
+  variationFor,
 } from "../world/terrainAtlas";
 import { NIGHT_TINT_COLOR, isDaytime, nightTintAlpha, timeOfDay } from "../world/time";
 import {
@@ -132,6 +142,12 @@ const BUILDING_ANIM_FPS = 6;
 const PLANT_SWAY_FPS = 4;
 // The well bucket drifts rather than swings.
 const FIXTURE_ANIM_FPS = 5;
+// Trees and spires sway slowly, and there are hundreds of them.
+const SCENERY_ANIM_FPS = 4;
+// How many distinct starting points an idle animation can be scattered
+// across. Enough that a stand of trees looks unsynchronised, few enough
+// that it stays a cheap integer hash of the tile.
+const PHASE_STEPS = 16;
 
 const NPC_MOVE_DURATION_MS = 500;
 const NPC_STEP_MIN_MS = 1500;
@@ -252,6 +268,7 @@ export class GameScene extends Phaser.Scene {
   private terrainVariations = new Map<string, number>();
   private buildingSidecars = new Map<BuildingSprite, BuildingSidecar>();
   private fixtureSidecars = new Map<string, FixtureSidecar>();
+  private scenerySidecars = new Map<string, ObjectSidecar>();
   private buildings: BuildingRuntime[] = [];
   private interiorSidecars = new Map<string, InteriorSidecar>();
   private interior: InteriorRuntime | null = null;
@@ -318,7 +335,10 @@ export class GameScene extends Phaser.Scene {
     this.world(this.player);
     this.refreshVisibleChunks();
 
-    this.spawnBuildings([world.village.well, ...world.village.buildings]);
+    // Every static thing the generator placed: the village's buildings and
+    // well, and the hundreds of trees and boulders walling the world's two
+    // high edges.
+    this.spawnPlacedObjects(this.grid.listObjects());
     this.spawnNpcs(world.village.npcs, world.anchors.village);
 
     this.statusText = this.ui(
@@ -525,6 +545,26 @@ export class GameScene extends Phaser.Scene {
     this.registerInteriorAnims();
     this.registerPlantAnims();
     this.registerFixtureAnims();
+    this.registerSceneryAnims();
+  }
+
+  private registerSceneryAnims(): void {
+    for (const kind of SCENERY_KINDS) {
+      const sidecar = this.cache.json.get(scenerySidecarKey(kind)) as ObjectSidecar | undefined;
+      if (!sidecar) throw new Error(`missing sidecar for scenery "${kind}"`);
+      this.scenerySidecars.set(kind, sidecar);
+      const key = sceneryAnimKey(kind);
+      if (this.anims.exists(key)) continue;
+      this.anims.create({
+        key,
+        frames: this.anims.generateFrameNumbers(scenerySheetKey(kind), {
+          start: 0,
+          end: sidecar.frame_count - 1,
+        }),
+        frameRate: SCENERY_ANIM_FPS,
+        repeat: -1,
+      });
+    }
   }
 
   private registerFixtureAnims(): void {
@@ -911,12 +951,12 @@ export class GameScene extends Phaser.Scene {
   // Depth is the bottom of the footprint, so the player walking in front of
   // a building occludes it and walking behind it is occluded — the whole
   // reason a 3/4 view needs a depth sort at all.
-  private spawnBuildings(objects: readonly PlacedObject[]): void {
+  private spawnPlacedObjects(objects: readonly PlacedObject[]): void {
     for (const object of objects) {
       const sprite = ROLE_SPRITES[object.type as BuildingRole];
       const sidecar = sprite ? this.buildingSidecars.get(sprite) : undefined;
       if (!sprite || !sidecar) {
-        this.spawnFixture(object);
+        this.spawnNonBuilding(object);
         continue;
       }
       const origin = spriteOrigin(sidecar, object.col, object.row);
@@ -943,20 +983,57 @@ export class GameScene extends Phaser.Scene {
   // missing sprite survives to a release — and assets.test.ts checks every
   // type the village places resolves here, so this is unreachable in
   // practice and provably so.
-  private spawnFixture(object: PlacedObject): void {
+  private spawnNonBuilding(object: PlacedObject): void {
     const fixture = fixtureFor(object.type);
-    const sidecar = fixture ? this.fixtureSidecars.get(fixture) : undefined;
-    if (!fixture || !sidecar) {
-      throw new Error(`placed object "${object.type}" has no art`);
+    if (fixture) {
+      const sidecar = this.fixtureSidecars.get(fixture);
+      if (!sidecar) throw new Error(`no art loaded for fixture "${fixture}"`);
+      this.spawnFootprintSprite(object, sidecar, fixtureSheetKey(fixture), fixtureAnimKey(fixture));
+      return;
     }
-    const feet = this.toFeet(object.col, object.row);
-    this.world(
+    const kind = sceneryKind(object.type);
+    if (kind) {
+      const sidecar = this.scenerySidecars.get(kind);
+      if (!sidecar) throw new Error(`no art loaded for scenery "${kind}"`);
+      // Mirrored on half the tiles. Every boulder and conifer comes from
+      // one instance of its generator, so a wall of them is the same
+      // silhouette repeated hundreds of times; flipping breaks the repeat
+      // for free, where a second instance would mean more art to ship.
+      this.spawnFootprintSprite(object, sidecar, scenerySheetKey(kind), sceneryAnimKey(kind), true);
+      return;
+    }
+    throw new Error(`placed object "${object.type}" has no art`);
+  }
+
+  /**
+   * Draws anything that stands on a footprint: a fixture, a tree, a boulder.
+   *
+   * Placed from the sidecar's own offset, like a building, and started at a
+   * scattered point in its animation — a wood where every tree sways in
+   * unison reads as a screensaver, and there are hundreds of them along each
+   * walled edge.
+   */
+  private spawnFootprintSprite(
+    object: PlacedObject,
+    sidecar: SpriteSidecar,
+    sheetKey: string,
+    animKey: string,
+    mirror = false,
+  ): void {
+    const origin = spriteOrigin(sidecar, object.col, object.row);
+    const sprite = this.world(
       this.add
-        .sprite(feet.x, feet.y, fixtureSheetKey(fixture))
-        .setOrigin(0.5, 1)
-        .setDepth(feet.y)
-        .play(fixtureAnimKey(fixture)),
+        .sprite(this.originX + origin.x, this.originY + origin.y, sheetKey)
+        .setOrigin(0, 0)
+        .setDepth(depthFor(footprintBottomY(sidecar, object.row))),
     );
+    if (mirror && variationFor(object.col, object.row, 2) === 1) {
+      // Flipped about the sprite's own centre, so the footprint it covers
+      // does not move.
+      sprite.setFlipX(true);
+    }
+    sprite.play(animKey);
+    sprite.anims.setProgress(variationFor(object.col, object.row, PHASE_STEPS) / PHASE_STEPS);
   }
 
   // --- Interiors ---------------------------------------------------------

@@ -257,7 +257,21 @@ Two consequences worth stating plainly:
   cannot stay high along their whole length: their far ends *are* the water
   edges' ends. So they read as a ridge running down to the sea, and are meant
   to be walled by tight formations of boulders and tall trees rather than by
-  terrain (not built yet — see below).
+  terrain.
+
+The wall is built from the impassable scenery each kind of ground already
+grows — rock spires and boulders up in the mountains, close-set conifers
+through the woodland — so what blocks the player is chosen by where they are
+rather than picked. It is two objects deep on a 2-tile lattice, which is what
+packs it with no one-tile corridor straight out of the map, and it stops at
+the waterline: the sea already blocks, and a boulder standing in it is not a
+barrier but a mistake.
+
+Only the rim is walled, and reserved story areas are left clear. Both matter
+for the same reason: `ensureConnectivity` carves *terrain*, and an object
+blocks a tile whatever the terrain under it is — so a wall anywhere it could
+cut the map in two, or across the Observatory that sits in the mountain it is
+thickest in, would be unrescuable.
 
 Because the area below a height is quadratic in it, band thresholds cannot be
 read as area shares: measured over eight seeds the world comes out roughly
