@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Phaser from "phaser";
+import { VirtualJoystick } from "../input/VirtualJoystick";
 import type { AreaPlacement } from "../world/anchors";
 import {
   BUILDING_SPRITES,
@@ -26,6 +27,7 @@ import {
   characterSheetKey,
   characterSidecarKey,
   facingFor,
+  stepForFacing,
 } from "../world/characters";
 import {
   type ChunkCoord,
@@ -102,8 +104,6 @@ const NPC_STEP_MAX_MS = 4000;
 const LOCAL_WANDER_RADIUS = 5;
 const PATROL_WANDER_RADIUS = 16;
 
-type DirectionTag = "up" | "down" | "left" | "right";
-
 interface Direction {
   dCol: number;
   dRow: number;
@@ -173,7 +173,7 @@ export class GameScene extends Phaser.Scene {
   private plantActionKey!: Phaser.Input.Keyboard.Key;
 
   private mobileControls = false;
-  private touchDirection: DirectionTag | null = null;
+  private joystick?: VirtualJoystick;
   private path: GridPoint[] = [];
 
   private activeChunks = new Map<string, ActiveChunk>();
@@ -243,8 +243,22 @@ export class GameScene extends Phaser.Scene {
 
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer, over: unknown[]) => {
       if (over.length > 0) return; // a UI button handles its own pointerdown
-      this.handleTileClick(pointer.worldX, pointer.worldY);
+      // Touch steers with the floating joystick; a mouse walks to the tile it
+      // clicked. Deliberately not both on touch: a press cannot be a stick
+      // and a destination at once, and the stick is the one you can hold.
+      if (this.joystick) this.joystick.begin(pointer);
+      else this.handleTileClick(pointer.worldX, pointer.worldY);
     });
+    this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      this.joystick?.move(pointer);
+    });
+    // pointerupoutside fires when the finger leaves the canvas still held —
+    // without it the stick would stay stuck on and the player walk forever.
+    for (const event of ["pointerup", "pointerupoutside"]) {
+      this.input.on(event, (pointer: Phaser.Input.Pointer) => {
+        this.joystick?.end(pointer);
+      });
+    }
   }
 
   override update(): void {
@@ -507,19 +521,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private pressedDirection(): Direction | null {
-    if (this.cursors.up.isDown || this.wasd.up.isDown || this.touchDirection === "up") {
-      return { dCol: 0, dRow: -1 };
-    }
-    if (this.cursors.down.isDown || this.wasd.down.isDown || this.touchDirection === "down") {
-      return { dCol: 0, dRow: 1 };
-    }
-    if (this.cursors.left.isDown || this.wasd.left.isDown || this.touchDirection === "left") {
-      return { dCol: -1, dRow: 0 };
-    }
-    if (this.cursors.right.isDown || this.wasd.right.isDown || this.touchDirection === "right") {
-      return { dCol: 1, dRow: 0 };
-    }
-    return null;
+    if (this.cursors.up.isDown || this.wasd.up.isDown) return { dCol: 0, dRow: -1 };
+    if (this.cursors.down.isDown || this.wasd.down.isDown) return { dCol: 0, dRow: 1 };
+    if (this.cursors.left.isDown || this.wasd.left.isDown) return { dCol: -1, dRow: 0 };
+    if (this.cursors.right.isDown || this.wasd.right.isDown) return { dCol: 1, dRow: 0 };
+    // Keyboard first so an attached keyboard still wins on a touch device.
+    const held = this.joystick?.direction();
+    return held ? stepForFacing(held) : null;
   }
 
   private tryMove(dCol: number, dRow: number): void {
@@ -736,35 +744,20 @@ export class GameScene extends Phaser.Scene {
     this.updateStatusText();
   }
 
-  // On-screen d-pad + action buttons, shown only when Phaser detects a
-  // non-desktop OS (this.mobileControls). Keyboard input stays live
+  // Action buttons plus the floating joystick, set up only when Phaser
+  // detects a non-desktop OS (this.mobileControls). Keyboard input stays live
   // underneath regardless, so a mobile browser with an attached keyboard
   // still works too.
+  //
+  // The joystick replaced a fixed d-pad in the bottom-left corner. A pad
+  // pinned to a corner assumes how the device is held; one that appears under
+  // the thumb that summoned it does not, and it costs no permanent screen
+  // space on the display where space is tightest.
   private createTouchControls(): void {
-    const dpadX = 70;
-    const dpadY = this.scale.height - 70;
-    const gap = 54;
-    this.addHoldButton(dpadX, dpadY - gap, "▲", "up");
-    this.addHoldButton(dpadX, dpadY + gap, "▼", "down");
-    this.addHoldButton(dpadX - gap, dpadY, "◀", "left");
-    this.addHoldButton(dpadX + gap, dpadY, "▶", "right");
-
+    this.joystick = new VirtualJoystick(this, TOUCH_UI_DEPTH);
     const actionX = this.scale.width - 70;
     this.addTapButton(actionX, this.scale.height - 70, 64, "Plant", () => this.tryPlant());
     this.addTapButton(actionX, this.scale.height - 142, 48, "Next", () => this.selectNextPlant());
-  }
-
-  private addHoldButton(x: number, y: number, label: string, dir: DirectionTag): void {
-    const button = this.addButtonBase(x, y, 48, label, 20);
-    const clear = () => {
-      if (this.touchDirection === dir) this.touchDirection = null;
-    };
-    button.on("pointerdown", () => {
-      this.touchDirection = dir;
-    });
-    button.on("pointerup", clear);
-    button.on("pointerout", clear);
-    button.on("pointerupoutside", clear);
   }
 
   private addTapButton(x: number, y: number, size: number, label: string, onTap: () => void): void {
@@ -826,7 +819,7 @@ export class GameScene extends Phaser.Scene {
     const plant = PLANT_TYPES[this.selectedPlantIndex];
     this.statusText.setText(
       this.mobileControls
-        ? `Plant: ${plant}  (tap Next to change, Plant to plant)`
+        ? `Drag anywhere to walk  Plant: ${plant}  (tap Next to change, Plant to plant)`
         : `Move: arrows/WASD  Plant: ${plant}  (keys 1-${PLANT_TYPES.length} to choose)  Space: plant here`,
     );
   }

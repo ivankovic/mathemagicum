@@ -57,19 +57,43 @@ export type Facing = (typeof Facing)[keyof typeof Facing];
 export const DEFAULT_FACING: Facing = Facing.Down;
 
 /**
- * Which way a step points.
+ * The facing a direction vector points at, or null for a zero vector.
  *
- * Vertical wins a tie because the art reads better that way: the up and down
- * poses show a whole body, the side poses a narrower profile, so a character
- * moving diagonally looks more natural facing the camera than edge-on. Only
- * reachable if diagonal movement is ever added — today's steps are cardinal.
+ * Snaps to four directions because that is all the art has and all the
+ * movement does. Takes any vector, not just a unit step: the same rule reads
+ * a joystick's offset as reads a grid step, which is why the two cannot
+ * disagree about which way "up and slightly left" is.
+ *
+ * Vertical wins a tie because of the art: the up and down poses show a whole
+ * body, the side poses a narrower profile, so something moving diagonally
+ * looks more natural facing the camera than edge-on.
  */
-export function facingFor(dCol: number, dRow: number, current: Facing): Facing {
-  if (dRow !== 0 && Math.abs(dRow) >= Math.abs(dCol)) {
-    return dRow > 0 ? Facing.Down : Facing.Up;
+export function facingForVector(dx: number, dy: number): Facing | null {
+  if (dy !== 0 && Math.abs(dy) >= Math.abs(dx)) {
+    return dy > 0 ? Facing.Down : Facing.Up;
   }
-  if (dCol !== 0) return dCol > 0 ? Facing.Right : Facing.Left;
-  return current;
+  if (dx !== 0) return dx > 0 ? Facing.Right : Facing.Left;
+  return null;
+}
+
+// Which way a step points, holding the current facing if it doesn't move.
+export function facingFor(dCol: number, dRow: number, current: Facing): Facing {
+  return facingForVector(dCol, dRow) ?? current;
+}
+
+// The grid step for a facing — the inverse of facingFor, and what turns a
+// held joystick direction into a move.
+export function stepForFacing(facing: Facing): { dCol: number; dRow: number } {
+  switch (facing) {
+    case Facing.Up:
+      return { dCol: 0, dRow: -1 };
+    case Facing.Down:
+      return { dCol: 0, dRow: 1 };
+    case Facing.Left:
+      return { dCol: -1, dRow: 0 };
+    case Facing.Right:
+      return { dCol: 1, dRow: 0 };
+  }
 }
 
 export function characterSheetKey(character: string): string {

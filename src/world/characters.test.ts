@@ -11,6 +11,8 @@ import {
   characterAnimKey,
   characterFor,
   facingFor,
+  facingForVector,
+  stepForFacing,
 } from "./characters";
 
 describe("facingFor", () => {
@@ -41,6 +43,41 @@ describe("facingFor", () => {
 
   test("falls back to horizontal when the vertical component is smaller", () => {
     expect(facingFor(2, 1, Facing.Up)).toBe(Facing.Right);
+  });
+});
+
+describe("facingForVector", () => {
+  test("is null only for a zero vector", () => {
+    expect(facingForVector(0, 0)).toBeNull();
+    expect(facingForVector(0, 1)).not.toBeNull();
+  });
+
+  test("reads a long vector the same way as a unit step", () => {
+    // The joystick feeds this pixel offsets and the grid feeds it single
+    // steps; if magnitude mattered the two would disagree about "up".
+    expect(facingForVector(0, 50)).toBe(facingForVector(0, 1));
+    expect(facingForVector(-90, 0)).toBe(facingForVector(-1, 0));
+  });
+});
+
+describe("stepForFacing", () => {
+  test("round-trips through facingForVector for all four facings", () => {
+    for (const facing of Object.values(Facing)) {
+      const step = stepForFacing(facing);
+      expect(facingForVector(step.dCol, step.dRow)).toBe(facing);
+    }
+  });
+
+  test("every step is a single cardinal cell", () => {
+    for (const facing of Object.values(Facing)) {
+      const { dCol, dRow } = stepForFacing(facing);
+      expect(Math.abs(dCol) + Math.abs(dRow)).toBe(1);
+    }
+  });
+
+  test("down is +row, matching the grid's orientation", () => {
+    expect(stepForFacing(Facing.Down)).toEqual({ dCol: 0, dRow: 1 });
+    expect(stepForFacing(Facing.Up)).toEqual({ dCol: 0, dRow: -1 });
   });
 });
 
