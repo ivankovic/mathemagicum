@@ -1,16 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-// Terrain now renders from the real tileset (tools/tileset-gen, loaded via
-// BootScene, drawn in GameScene.activateChunk) — these are the remaining
-// placeholder flat colors, for things that don't have real art yet.
-import { PlantType } from "./plants";
-
-export const PLANT_COLORS: Record<PlantType, number> = {
-  [PlantType.Carrot]: 0xff9800,
-  [PlantType.Sunflower]: 0xffeb3b,
-  [PlantType.Cactus]: 0x2e7d32,
-};
+// What is left of the placeholder flat colors, now that terrain, buildings,
+// characters, interiors and crops all render from generated art: only the
+// village well, which the asset generator has no sprite for.
 
 // Keyed by PlacedObject.type (see src/world/villageLayout.ts) rather than a
 // closed union — new story-area object types will accrete over time.

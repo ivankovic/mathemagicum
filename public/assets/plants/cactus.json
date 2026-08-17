@@ -1,0 +1,49 @@
+{
+  "sheet": {
+    "file": "cactus_sheet.png",
+    "frame_width": 32,
+    "frame_height": 48,
+    "frame_count": 12,
+    "columns": 4,
+    "rows": 3,
+    "margin": 1,
+    "spacing": 2
+  },
+  "plant": "cactus",
+  "tile_size": 32,
+  "footprint_tiles": {
+    "width": 1,
+    "height": 1
+  },
+  "sprite_offset_px": {
+    "x": 0,
+    "y": -16
+  },
+  "sprite_size_px": {
+    "width": 32,
+    "height": 48
+  },
+  "frame_count": 12,
+  "animations": {
+    "stage_seedling": {
+      "start": 0,
+      "end": 3,
+      "frame_count": 4
+    },
+    "stage_growing": {
+      "start": 4,
+      "end": 7,
+      "frame_count": 4
+    },
+    "stage_mature": {
+      "start": 8,
+      "end": 11,
+      "frame_count": 4
+    }
+  },
+  "stages": [
+    "seedling",
+    "growing",
+    "mature"
+  ]
+}

@@ -68,6 +68,15 @@ export interface ObjectSidecar extends SpriteSidecar {
   terrain: string;
 }
 
+// A crop. Like a character it carries no blocked cells — a field is walked
+// across, not around — and like a building its frames are grouped into named
+// ranges, one per growth stage.
+export interface PlantSidecar extends SheetSprite {
+  plant: string;
+  stages: readonly string[];
+  animations: Record<string, AnimationRange>;
+}
+
 // A room the player can walk around inside. Unlike a building, which is one
 // sprite standing on the world grid, an interior *is* a little grid of its
 // own — so it carries its size and its own blocked cells rather than a

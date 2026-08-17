@@ -29,6 +29,7 @@ uv run asset-generator terrain-atlas   --seed 7 --out-dir output/terrain_atlas
 uv run asset-generator terrain-buildings --seed 7 --sheets --out-dir output/terrain_buildings
 uv run asset-generator terrain-characters --seed 7 --out-dir output/terrain_characters
 uv run asset-generator terrain-interiors --seed 7 --sheets --out-dir output/terrain_interiors
+uv run asset-generator terrain-plants --seed 7 --out-dir output/terrain_plants
 
 cd -
 OUT=../asset-generator/output
@@ -39,6 +40,9 @@ for c in player teacher postal-worker shopkeeper villager-0 villager-1 villager-
 done
 for r in cottage barn tower schoolhouse; do
   cp $OUT/terrain_interiors/$r{.json,_sheet.png} public/assets/interiors/
+done
+for p in carrot sunflower cactus; do
+  cp $OUT/terrain_plants/$p{.json,_sheet.png} public/assets/plants/
 done
 bun test   # src/world/assets.test.ts checks the sync
 ```
@@ -61,6 +65,11 @@ Three things are worth knowing about what gets copied:
   will roll as many generic villagers as you ask for; the list in the loop
   above has to stay in step with `VILLAGER_CHARACTERS` in
   `src/world/characters.ts`, which is what the game loads.
+
+Crops ship all three growth stages even though planting currently shows the
+finished one: the tending spells that would move between them are still
+unspecced, and a seedling that never grew would promise a mechanic the game
+does not have. The art is ready for when they arrive.
 
 An interior's art is exactly as large as the grid it describes plus its north
 wall, and `assets.test.ts` checks that: cell (0,0) is drawn `wall_rise_px`

@@ -5,10 +5,12 @@ import Phaser from "phaser";
 import { BUILDING_SPRITES, type BuildingSprite, spriteSheetKey } from "../world/buildings";
 import { ALL_CHARACTERS, characterSheetKey, characterSidecarKey } from "../world/characters";
 import { INTERIOR_ROOMS, interiorSheetKey, interiorSidecarKey } from "../world/interiors";
+import { PLANT_TYPES, plantSheetKey, plantSidecarKey } from "../world/plants";
 import type {
   BuildingSidecar,
   CharacterSidecar,
   InteriorSidecar,
+  PlantSidecar,
   SheetLayout,
 } from "../world/spriteSidecar";
 import { TERRAIN_ATLAS_KEY } from "../world/terrainAtlas";
@@ -53,6 +55,9 @@ export class BootScene extends Phaser.Scene {
     for (const room of INTERIOR_ROOMS) {
       this.load.json(interiorSidecarKey(room), `${this.base()}assets/interiors/${room}.json`);
     }
+    for (const plant of PLANT_TYPES) {
+      this.load.json(plantSidecarKey(plant), `${this.base()}assets/plants/${plant}.json`);
+    }
   }
 
   create(): void {
@@ -69,6 +74,10 @@ export class BootScene extends Phaser.Scene {
     for (const room of INTERIOR_ROOMS) {
       const sidecar = this.cache.json.get(interiorSidecarKey(room)) as InteriorSidecar | undefined;
       this.queueSheet(interiorSheetKey(room), "interiors", room, sidecar?.sheet);
+    }
+    for (const plant of PLANT_TYPES) {
+      const sidecar = this.cache.json.get(plantSidecarKey(plant)) as PlantSidecar | undefined;
+      this.queueSheet(plantSheetKey(plant), "plants", plant, sidecar?.sheet);
     }
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
       this.verifyFrameCounts();
@@ -116,6 +125,10 @@ export class BootScene extends Phaser.Scene {
     for (const room of INTERIOR_ROOMS) {
       const sheet = (this.cache.json.get(interiorSidecarKey(room)) as InteriorSidecar).sheet;
       if (sheet) expected.push([room, interiorSheetKey(room), sheet.frame_count]);
+    }
+    for (const plant of PLANT_TYPES) {
+      const sidecar = this.cache.json.get(plantSidecarKey(plant)) as PlantSidecar;
+      expected.push([plant, plantSheetKey(plant), sidecar.frame_count]);
     }
     for (const [name, key, count] of expected) {
       // Phaser counts its own __BASE frame alongside the sliced ones.

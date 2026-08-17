@@ -7,7 +7,13 @@ import { join } from "node:path";
 import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, DOOR_STATES, ROLE_SPRITES } from "./buildings";
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
 import { INTERIOR_ROOMS, interiorFor } from "./interiors";
-import type { BuildingSidecar, CharacterSidecar, InteriorSidecar } from "./spriteSidecar";
+import { PLANT_STAGES, PLANT_TYPES } from "./plants";
+import type {
+  BuildingSidecar,
+  CharacterSidecar,
+  InteriorSidecar,
+  PlantSidecar,
+} from "./spriteSidecar";
 import { TERRAIN_TYPES } from "./terrain";
 import { TERRAIN_ATLAS_KEY, buildVariationIndex, comboKey } from "./terrainAtlas";
 import type { CornerTerrains } from "./terrainAtlas";
@@ -379,6 +385,69 @@ describe("the shipped interiors", () => {
         name,
         ahead: false,
       });
+    }
+  });
+});
+
+describe("the shipped crops", () => {
+  const sidecars = new Map(
+    PLANT_TYPES.map((p) => [p, readJson<PlantSidecar>("plants", `${p}.json`)]),
+  );
+
+  test("exist for every plant the game offers", () => {
+    for (const plant of PLANT_TYPES) {
+      expect(sidecars.get(plant)?.plant).toBe(plant);
+    }
+  });
+
+  test("ship the sheet PNG they name", () => {
+    for (const [name, sidecar] of sidecars) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error(`${name} has no sheet`);
+      expect(existsSync(join(ASSETS, "plants", sheet.file))).toBe(true);
+    }
+  });
+
+  test("are 1:1 art one cell wide, overhanging upward", () => {
+    for (const sidecar of sidecars.values()) {
+      expect(sidecar.tile_size).toBe(TILE_SIZE);
+      expect(sidecar.footprint_tiles).toEqual({ width: 1, height: 1 });
+      expect(sidecar.sprite_size_px.width).toBe(TILE_SIZE);
+      const overhang = sidecar.sprite_size_px.height - TILE_SIZE;
+      expect(overhang).toBeGreaterThan(0);
+      expect(sidecar.sprite_offset_px).toEqual({ x: 0, y: -overhang });
+    }
+  });
+
+  test("carry a frame range for every growth stage the game knows", () => {
+    for (const [name, sidecar] of sidecars) {
+      expect({ name, ranges: new Set(Object.keys(sidecar.animations)) }).toEqual({
+        name,
+        ranges: new Set(PLANT_STAGES.map((s) => `stage_${s}`)),
+      });
+    }
+  });
+
+  test("name ranges inside the sheet that between them cover every frame", () => {
+    for (const [name, sidecar] of sidecars) {
+      const claimed = new Set<number>();
+      for (const range of Object.values(sidecar.animations)) {
+        expect(range.end - range.start + 1).toBe(range.frame_count);
+        expect(range.end).toBeLessThan(sidecar.frame_count);
+        for (let i = range.start; i <= range.end; i++) claimed.add(i);
+      }
+      expect({ name, covered: claimed.size }).toEqual({ name, covered: sidecar.frame_count });
+    }
+  });
+
+  test("put each stage on its own sheet row", () => {
+    for (const sidecar of sidecars.values()) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error("no sheet");
+      expect(sheet.rows).toBe(PLANT_STAGES.length);
+      for (const range of Object.values(sidecar.animations)) {
+        expect(range.start % sheet.columns).toBe(0);
+      }
     }
   });
 });

@@ -50,13 +50,21 @@ import {
   interiorSidecarKey,
 } from "../world/interiors";
 import type { PlacedObject } from "../world/objects";
-import { DEFAULT_OBJECT_COLOR, OBJECT_COLORS, PLANT_COLORS } from "../world/palette";
+import { DEFAULT_OBJECT_COLOR, OBJECT_COLORS } from "../world/palette";
 import { findPath } from "../world/pathfinding";
-import { PlantType } from "../world/plants";
+import {
+  PLANTED_STAGE,
+  PLANT_TYPES,
+  PlantType,
+  plantAnimKey,
+  plantSheetKey,
+  plantSidecarKey,
+} from "../world/plants";
 import {
   type BuildingSidecar,
   type CharacterSidecar,
   type InteriorSidecar,
+  type PlantSidecar,
   doorCell,
   footprintBottomY,
   spriteOrigin,
@@ -89,7 +97,6 @@ const WORLD_SIZE = 500;
 // save/new-game flow to hang that choice off of.
 const WORLD_SEED = 12345;
 const MOVE_DURATION_MS = 160;
-const PLANT_TYPES = Object.values(PlantType);
 // Depth is a pixel y now (see topdown.ts's depthFor), not the tile-unit
 // col + row the isometric projection sorted on — so it runs to the world's
 // pixel height rather than topping out around 1000. Anything that has to
@@ -114,6 +121,8 @@ const CHUNK_CACHE_LIMIT = 60;
 
 // Slow idle loop: the 8 frames are drifting chimney smoke, not motion.
 const BUILDING_ANIM_FPS = 6;
+// Slow enough to read as a breeze rather than a shiver.
+const PLANT_SWAY_FPS = 4;
 const WELL_RADIUS = 9;
 
 const NPC_MOVE_DURATION_MS = 500;
@@ -505,6 +514,30 @@ export class GameScene extends Phaser.Scene {
 
     this.registerCharacterAnims();
     this.registerInteriorAnims();
+    this.registerPlantAnims();
+  }
+
+  // One looping sway per growth stage, from the ranges the sidecar names.
+  // Only the planted stage is reachable today (see PLANTED_STAGE), but the
+  // others cost nothing to register and are what tending will switch to.
+  private registerPlantAnims(): void {
+    for (const plant of PLANT_TYPES) {
+      const sidecar = this.cache.json.get(plantSidecarKey(plant)) as PlantSidecar | undefined;
+      if (!sidecar) throw new Error(`missing sidecar for plant "${plant}"`);
+      for (const [name, range] of Object.entries(sidecar.animations)) {
+        const key = `plant-${plant}-${name}`;
+        if (this.anims.exists(key)) continue;
+        this.anims.create({
+          key,
+          frames: this.anims.generateFrameNumbers(plantSheetKey(plant), {
+            start: range.start,
+            end: range.end,
+          }),
+          frameRate: PLANT_SWAY_FPS,
+          repeat: -1,
+        });
+      }
+    }
   }
 
   private registerInteriorAnims(): void {
@@ -811,9 +844,16 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const { x, y } = this.toScreen(this.playerCol, this.playerRow);
+    const feet = this.toFeet(this.playerCol, this.playerRow);
     this.world(
-      this.add.circle(x, y, 6, PLANT_COLORS[plant]).setDepth(this.entityDepth(this.playerRow)),
+      this.add
+        .sprite(feet.x, feet.y, plantSheetKey(plant))
+        .setOrigin(0.5, 1)
+        // Half a pixel behind whatever stands on the same tile, so the
+        // player walking over their own crop is in front of it rather than
+        // flickering against it on a depth tie.
+        .setDepth(feet.y - 0.5)
+        .play(plantAnimKey(plant, PLANTED_STAGE)),
     );
     this.setMessage(`Planted ${plant}`);
   }
