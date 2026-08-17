@@ -7,6 +7,7 @@ import {
   chunkKey,
   chunkScreenBounds,
   chunksCoveringTileRange,
+  dualChunkScreenBounds,
   tileToChunk,
 } from "./chunks";
 import { TILE_HEIGHT, TILE_WIDTH } from "./iso";
@@ -48,6 +49,25 @@ describe("chunkScreenBounds", () => {
     const bounds = chunkScreenBounds({ chunkCol: 2, chunkRow: 3 }, TILE_WIDTH, TILE_HEIGHT);
     expect(bounds.minX).toBeLessThan(bounds.maxX);
     expect(bounds.minY).toBeLessThan(bounds.maxY);
+  });
+});
+
+describe("dualChunkScreenBounds", () => {
+  test("strictly contains chunkScreenBounds — the dual grid always extends further", () => {
+    const chunk = { chunkCol: 2, chunkRow: 3 };
+    const primal = chunkScreenBounds(chunk, TILE_WIDTH, TILE_HEIGHT);
+    const dual = dualChunkScreenBounds(chunk, TILE_WIDTH, TILE_HEIGHT);
+    expect(dual.minX).toBeLessThanOrEqual(primal.minX);
+    expect(dual.minY).toBeLessThanOrEqual(primal.minY);
+    expect(dual.maxX).toBeGreaterThanOrEqual(primal.maxX);
+    expect(dual.maxY).toBeGreaterThanOrEqual(primal.maxY);
+  });
+
+  test("padded bounds of neighbouring chunks overlap (no seam gap)", () => {
+    const a = dualChunkScreenBounds({ chunkCol: 0, chunkRow: 0 }, TILE_WIDTH, TILE_HEIGHT);
+    const b = dualChunkScreenBounds({ chunkCol: 1, chunkRow: 0 }, TILE_WIDTH, TILE_HEIGHT);
+    expect(b.minX).toBeLessThanOrEqual(a.maxX);
+    expect(b.minY).toBeLessThanOrEqual(a.maxY);
   });
 });
 

@@ -5,93 +5,30 @@ import { describe, expect, test } from "bun:test";
 import { WorldGrid } from "./grid";
 import { TerrainType } from "./terrain";
 import {
-  CANONICAL_BLOB_MASKS,
   DOWN,
-  DOWN_LEFT,
-  DOWN_RIGHT,
+  DRAWABLE_MASKS,
+  FULL_MASK,
   LEFT,
   RIGHT,
   TILE_VARIANTS,
   UP,
-  UP_LEFT,
-  UP_RIGHT,
-  blobTileKey,
-  cornerWedgeKey,
-  edgeWedgeKey,
-  ownCutMaskFor,
-  reduceBlobMask,
+  baseTerrainFor,
+  cornerMaskFor,
+  dualTileKey,
   terrainPriorityRank,
-  terrainTileKey,
   tileVariantFor,
 } from "./tileset";
 
-describe("reduceBlobMask", () => {
-  test("leaves a corner bit alone when both flanking edges are 0", () => {
-    expect(reduceBlobMask(UP_LEFT)).toBe(UP_LEFT);
-  });
-
-  test("zeroes a corner bit when either flanking edge is set", () => {
-    expect(reduceBlobMask(UP_LEFT | UP)).toBe(UP);
-    expect(reduceBlobMask(UP_LEFT | LEFT)).toBe(LEFT);
-    expect(reduceBlobMask(UP_RIGHT | RIGHT)).toBe(RIGHT);
-    expect(reduceBlobMask(DOWN_RIGHT | DOWN)).toBe(DOWN);
-    expect(reduceBlobMask(DOWN_LEFT | DOWN)).toBe(DOWN);
-  });
-
-  test("is idempotent — reducing an already-reduced mask changes nothing", () => {
-    for (const mask of CANONICAL_BLOB_MASKS) {
-      expect(reduceBlobMask(mask)).toBe(mask);
-    }
+describe("DRAWABLE_MASKS", () => {
+  test("is every mask 1-15 — 0 (no corners) needs no PNG", () => {
+    expect(DRAWABLE_MASKS).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
   });
 });
 
-describe("CANONICAL_BLOB_MASKS", () => {
-  test("has exactly 47 values — the well-known blob-tileset count", () => {
-    expect(CANONICAL_BLOB_MASKS.length).toBe(47);
-  });
-
-  test("every one of the 256 raw patterns reduces to a canonical value", () => {
-    const canonical = new Set(CANONICAL_BLOB_MASKS);
-    for (let raw = 0; raw < 256; raw++) {
-      expect(canonical.has(reduceBlobMask(raw))).toBe(true);
-    }
-  });
-
-  test("includes 0 (fully interior) and the fully-isolated tile", () => {
-    // Raw 255 (every neighbour differs) reduces to just the 4 edge bits
-    // (15) — once all 4 edges are cut, every corner's flanking edges are
-    // both set, so reduceBlobMask always zeroes them. 255 itself never
-    // survives reduction, which is exactly the point of reducing.
-    expect(CANONICAL_BLOB_MASKS).toContain(0);
-    expect(CANONICAL_BLOB_MASKS).toContain(UP | RIGHT | DOWN | LEFT);
-    expect(reduceBlobMask(255)).toBe(UP | RIGHT | DOWN | LEFT);
-  });
-});
-
-describe("blobTileKey", () => {
-  test("mask 0 includes the given variant", () => {
-    expect(blobTileKey(TerrainType.Sand, 0, 2)).toBe("sand-blob-0-2");
-  });
-
-  test("mask 0 defaults to variant 0 when omitted", () => {
-    expect(blobTileKey(TerrainType.Sand, 0)).toBe("sand-blob-0-0");
-  });
-
-  test("non-zero masks ignore the variant argument entirely", () => {
-    expect(blobTileKey(TerrainType.Sand, UP, 3)).toBe("sand-blob-1");
-    expect(blobTileKey(TerrainType.Sand, UP)).toBe("sand-blob-1");
-  });
-});
-
-describe("terrainTileKey", () => {
-  test("mask 0 picks a variant deterministically from (col, row)", () => {
-    const key = terrainTileKey(TerrainType.Grass, 0, 5, 9);
-    expect(key).toBe(`grass-blob-0-${tileVariantFor(5, 9)}`);
-  });
-
-  test("non-zero masks ignore position — one fixed tile per mask", () => {
-    expect(terrainTileKey(TerrainType.Grass, UP, 5, 9)).toBe("grass-blob-1");
-    expect(terrainTileKey(TerrainType.Grass, UP, 100, 200)).toBe("grass-blob-1");
+describe("dualTileKey", () => {
+  test("includes both the mask and the variant, for every mask", () => {
+    expect(dualTileKey(TerrainType.Sand, FULL_MASK, 2)).toBe("sand-dual-15-2");
+    expect(dualTileKey(TerrainType.Sand, UP, 3)).toBe("sand-dual-1-3");
   });
 });
 
@@ -128,72 +65,61 @@ describe("terrainPriorityRank", () => {
   });
 });
 
-describe("ownCutMaskFor", () => {
+describe("cornerMaskFor", () => {
   function grid5x5(fill: TerrainType): WorldGrid {
     return WorldGrid.empty(5, 5, fill);
   }
 
-  test("a tile fully surrounded by its own terrain has mask 0", () => {
+  test("a dual tile whose 4 corner cells are all the given terrain has FULL_MASK", () => {
     const grid = grid5x5(TerrainType.Grass);
-    expect(ownCutMaskFor(grid, 2, 2, TerrainType.Grass)).toBe(0);
+    // Dual tile (2, 2)'s corners are data cells (2,2) UP, (3,2) RIGHT,
+    // (3,3) DOWN, (2,3) LEFT — see tileset.ts's module docstring.
+    expect(cornerMaskFor(grid, 2, 2, TerrainType.Grass)).toBe(FULL_MASK);
   });
 
-  test("a higher-priority terrain is never cut, regardless of neighbours", () => {
-    const grid = grid5x5(TerrainType.Dirt);
-    // Grass outranks dirt — every neighbour differs, but none outranks
-    // grass, so grass stays a full plain tile here.
-    expect(ownCutMaskFor(grid, 2, 2, TerrainType.Grass)).toBe(0);
+  test("a dual tile with no matching corners has mask 0", () => {
+    const grid = grid5x5(TerrainType.Grass);
+    expect(cornerMaskFor(grid, 2, 2, TerrainType.Dirt)).toBe(0);
   });
 
-  test("a lower-priority terrain IS cut by a higher-priority neighbour", () => {
-    const grid = grid5x5(TerrainType.Dirt);
-    grid.setTerrain(2, 1, TerrainType.Grass); // north of (2,2), outranks dirt
-    expect(ownCutMaskFor(grid, 2, 2, TerrainType.Dirt)).toBe(UP);
+  test("each corner bit lines up with the documented UP/RIGHT/DOWN/LEFT data cell", () => {
+    const grid = grid5x5(TerrainType.Grass);
+    grid.setTerrain(3, 2, TerrainType.Dirt); // dual tile (2,2)'s RIGHT corner
+    expect(cornerMaskFor(grid, 2, 2, TerrainType.Grass)).toBe(UP | DOWN | LEFT);
+    expect(cornerMaskFor(grid, 2, 2, TerrainType.Dirt)).toBe(RIGHT);
   });
 
-  test("a differing but LOWER-priority neighbour causes no cut", () => {
-    const grid = grid5x5(TerrainType.Dirt);
-    grid.setTerrain(2, 1, TerrainType.Sand); // sand outranks nothing dirt cares about
-    expect(ownCutMaskFor(grid, 2, 2, TerrainType.Dirt)).toBe(0);
-  });
-
-  test("a higher-priority diagonal neighbour sets the corner bit when both flanks are lower/equal", () => {
-    const grid = grid5x5(TerrainType.Dirt);
-    grid.setTerrain(1, 1, TerrainType.Grass); // north-west diagonal of (2,2)
-    expect(ownCutMaskFor(grid, 2, 2, TerrainType.Dirt)).toBe(UP_LEFT);
-  });
-
-  test("a higher-priority diagonal is subsumed once its flanking edge also outranks", () => {
-    const grid = grid5x5(TerrainType.Dirt);
-    grid.setTerrain(1, 1, TerrainType.Grass); // corner
-    grid.setTerrain(2, 1, TerrainType.Grass); // flanking "up" edge
-    expect(ownCutMaskFor(grid, 2, 2, TerrainType.Dirt)).toBe(UP);
-  });
-
-  test("off the edge of the world counts as 'same' — no cut", () => {
-    const grid = grid5x5(TerrainType.Dirt);
-    expect(ownCutMaskFor(grid, 0, 0, TerrainType.Dirt)).toBe(0);
+  test("off the edge of the world clamps to the nearest in-bounds cell", () => {
+    const grid = grid5x5(TerrainType.Grass);
+    // Dual tile (-1, -1)'s UP/RIGHT/LEFT corners are all off-grid; only
+    // its DOWN corner, (0, 0), is real — the other 3 clamp to it too.
+    expect(cornerMaskFor(grid, -1, -1, TerrainType.Grass)).toBe(FULL_MASK);
+    grid.setTerrain(0, 0, TerrainType.Dirt);
+    expect(cornerMaskFor(grid, -1, -1, TerrainType.Dirt)).toBe(FULL_MASK);
+    expect(cornerMaskFor(grid, -1, -1, TerrainType.Grass)).toBe(0);
   });
 });
 
-describe("edgeWedgeKey / cornerWedgeKey", () => {
-  // The actual wedge SHAPE (the geometry that makes it the exact alpha
-  // inverse of ownCutMaskFor's cut) lives in tools/tileset-gen/src/
-  // tileset_gen/blob.py's _wedge_tile and isn't something TS computes —
-  // these just need to name the PNG that pairs with a given (terrain,
-  // direction) consistently.
-  test("names are distinct per direction and don't collide with blob keys", () => {
-    const keys = new Set([
-      edgeWedgeKey(TerrainType.Grass, UP),
-      edgeWedgeKey(TerrainType.Grass, RIGHT),
-      edgeWedgeKey(TerrainType.Grass, DOWN),
-      edgeWedgeKey(TerrainType.Grass, LEFT),
-      cornerWedgeKey(TerrainType.Grass, UP_LEFT),
-      cornerWedgeKey(TerrainType.Grass, UP_RIGHT),
-      cornerWedgeKey(TerrainType.Grass, DOWN_RIGHT),
-      cornerWedgeKey(TerrainType.Grass, DOWN_LEFT),
-      blobTileKey(TerrainType.Grass, 0, 0),
-    ]);
-    expect(keys.size).toBe(9);
+describe("baseTerrainFor", () => {
+  function grid5x5(fill: TerrainType): WorldGrid {
+    return WorldGrid.empty(5, 5, fill);
+  }
+
+  test("a tile fully surrounded by one terrain has that terrain as its base", () => {
+    const grid = grid5x5(TerrainType.Grass);
+    expect(baseTerrainFor(grid, 2, 2)).toBe(TerrainType.Grass);
+  });
+
+  test("picks the LOWEST-priority terrain among the 4 corners, not the highest", () => {
+    const grid = grid5x5(TerrainType.Grass); // grass is highest priority
+    grid.setTerrain(3, 2, TerrainType.Dirt); // RIGHT corner of dual tile (2,2)
+    expect(baseTerrainFor(grid, 2, 2)).toBe(TerrainType.Dirt);
+  });
+
+  test("with 3 distinct terrains at the 4 corners, still picks the lowest-priority one", () => {
+    const grid = grid5x5(TerrainType.Grass);
+    grid.setTerrain(3, 2, TerrainType.Dirt); // RIGHT
+    grid.setTerrain(3, 3, TerrainType.Water); // DOWN — lowest priority of the three
+    expect(baseTerrainFor(grid, 2, 2)).toBe(TerrainType.Water);
   });
 });

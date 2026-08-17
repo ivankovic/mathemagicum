@@ -14,6 +14,7 @@ dependencies = [
 
 [project.scripts]
 tileset-gen = "tileset_gen:main"
+building-gen = "tileset_gen.building_cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.8,<0.10.0"]
@@ -21,6 +22,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "pytest>=9.1.1",
     "ruff>=0.16.2",
 ]
 

@@ -10,3 +10,6 @@ pre-commit:
     python-lint:
       glob: "tools/tileset-gen/**/*.py"
       run: cd tools/tileset-gen && uv run ruff check . && uv run ruff format --check .
+    python-test:
+      glob: "tools/tileset-gen/**/*.py"
+      run: cd tools/tileset-gen && uv run pytest -q

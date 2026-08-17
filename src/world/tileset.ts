@@ -4,79 +4,56 @@
 import type { WorldGrid } from "./grid";
 import { TerrainType } from "./terrain";
 
-// The 47-tile "blob" autotile scheme: see tools/tileset-gen/src/
-// tileset_gen/blob.py's module docstring for the full explanation. This
-// file's bit constants and reduceBlobMask() MUST match that module's
-// exactly — the generator decides which masks to draw PNGs for, this
-// file decides which mask a live tile's actual neighbours produce, and
-// they only agree if both reductions are identical.
+// Modern "dual-grid" autotiling: the tiles actually drawn sit on a grid
+// offset by half a cell (both axes) from the terrain data grid, so each
+// drawn diamond's four vertices each land on exactly one data cell,
+// rather than each drawn tile being centered ON a data cell and needing
+// to know about all 8 of its neighbours. Concretely, the dual tile
+// "indexed" at (col, row) is centered at grid position (col + 0.5,
+// row + 0.5); gridToScreen is linear, so that center is just
+// gridToScreen(col, row) shifted by (0, TILE_HEIGHT / 2) — see
+// GameScene.ts's activateChunk for the resulting draw-offset trick. Its
+// four vertices land on these four data cells:
+//
+//   UP    = (col,     row    )
+//   RIGHT = (col + 1, row    )
+//   DOWN  = (col + 1, row + 1)
+//   LEFT  = (col,     row + 1)
+//
+// A dual tile's mask for a given terrain has exactly the bits of the
+// corners that ARE that terrain — no reduction step (every one of the 16
+// combinations is visually distinguishable, unlike the old 8-neighbour
+// blob scheme this replaced), and no wedge tiles: cornerMaskFor is the
+// same 4-bit computation regardless of which terrain is being tested, so
+// GameScene draws each TERRAIN_PRIORITY layer with one uniform pass over
+// the dual grid instead of a separate "own cut" vs "neighbour's wedge"
+// case split. See tools/tileset-gen/src/tileset_gen/dual_grid.py's module
+// docstring for the bilinear alpha math the generator uses to make a
+// terrain's own tile fade smoothly toward whichever corners it doesn't
+// own — the bit constants and corner-offset layout here MUST match that
+// module's exactly, same cross-language contract the old scheme had.
 export const UP = 1;
 export const RIGHT = 2;
 export const DOWN = 4;
 export const LEFT = 8;
-export const UP_LEFT = 16;
-export const UP_RIGHT = 32;
-export const DOWN_RIGHT = 64;
-export const DOWN_LEFT = 128;
 
-// Screen-adjacent grid offset for each bit. Direction names match
-// GameScene.ts's DirectionTag (up/down/left/right), not compass points.
-// The 4 diagonals are pure rendering data — WorldGrid/pathfinding/
-// connectivity only ever use the 4 orthogonal neighbours (see
-// pathfinding.ts's DELTAS) — so there's nothing to keep in sync there,
-// this just reads grid.getTerrain() at 4 extra offsets.
-interface NeighborOffset {
+interface CornerOffset {
   dCol: number;
   dRow: number;
   bit: number;
 }
 
-export const EDGE_OFFSETS: readonly NeighborOffset[] = [
-  { dCol: 0, dRow: -1, bit: UP },
+const CORNER_OFFSETS: readonly CornerOffset[] = [
+  { dCol: 0, dRow: 0, bit: UP },
   { dCol: 1, dRow: 0, bit: RIGHT },
-  { dCol: 0, dRow: 1, bit: DOWN },
-  { dCol: -1, dRow: 0, bit: LEFT },
+  { dCol: 1, dRow: 1, bit: DOWN },
+  { dCol: 0, dRow: 1, bit: LEFT },
 ];
 
-export const CORNER_OFFSETS: readonly NeighborOffset[] = [
-  { dCol: -1, dRow: -1, bit: UP_LEFT },
-  { dCol: 1, dRow: -1, bit: UP_RIGHT },
-  { dCol: 1, dRow: 1, bit: DOWN_RIGHT },
-  { dCol: -1, dRow: 1, bit: DOWN_LEFT },
-];
-
-const NEIGHBOR_OFFSETS: readonly NeighborOffset[] = [...EDGE_OFFSETS, ...CORNER_OFFSETS];
-
-// Zeroes every corner bit that isn't currently distinguishable (its two
-// flanking edges aren't both "same terrain") — collapses the raw 256
-// (8-bit) space down to the 47 canonical values.
-export function reduceBlobMask(rawMask: number): number {
-  let mask = rawMask;
-  if (mask & UP || mask & LEFT) mask &= ~UP_LEFT;
-  if (mask & UP || mask & RIGHT) mask &= ~UP_RIGHT;
-  if (mask & DOWN || mask & RIGHT) mask &= ~DOWN_RIGHT;
-  if (mask & DOWN || mask & LEFT) mask &= ~DOWN_LEFT;
-  return mask;
-}
-
-function computeCanonicalBlobMasks(): readonly number[] {
-  const seen = new Set<number>();
-  const ordered: number[] = [];
-  for (let raw = 0; raw < 256; raw++) {
-    const reduced = reduceBlobMask(raw);
-    if (!seen.has(reduced)) {
-      seen.add(reduced);
-      ordered.push(reduced);
-    }
-  }
-  return ordered;
-}
-
-// The 47 unique reduced values — same derivation as tools/tileset-gen's
-// canonical_masks(), computed independently rather than hardcoded so a
-// mistake in either implementation shows up as a mismatch, not silently
-// agrees by copy-paste.
-export const CANONICAL_BLOB_MASKS: readonly number[] = computeCanonicalBlobMasks();
+// Masks 1-15: every combination except "none of my corners are this
+// terrain" (0), which is fully transparent and needs no PNG — the
+// renderer just skips drawing this terrain's layer for that dual tile.
+export const DRAWABLE_MASKS: readonly number[] = Array.from({ length: 15 }, (_, i) => i + 1);
 
 // Draw order for GameScene's chunk renderer: lowest first (fully covered
 // by anything drawn after it), highest last (visible edge cuts into
@@ -90,11 +67,16 @@ export const TERRAIN_PRIORITY: readonly TerrainType[] = [
   TerrainType.Grass,
 ];
 
-// Contract with tools/tileset-gen: only the fully-interior mask (0) gets
-// TILE_VARIANTS distinct textures (named "<terrain>-blob-0-<variant>.png")
-// — by far the most common case (open ground), so it's the one that would
-// otherwise visibly repeat. Every other mask gets exactly one PNG, named
-// "<terrain>-blob-<mask>.png".
+// The one mask whose 4 corners are all `terrain` — i.e. the plain
+// fully-interior tile, by far the most common case in open ground.
+export const FULL_MASK = 15;
+
+// Contract with tools/tileset-gen: every mask gets TILE_VARIANTS distinct
+// textures (named "<terrain>-dual-<mask>-<variant>.png"), not just
+// FULL_MASK — a partial mask's edge has its own random wobble (see
+// dual_grid.py's _make_boundary_noise) that would otherwise repeat
+// identically at every tile sharing that mask along a long straight
+// boundary.
 export const TILE_VARIANTS = 4;
 
 export const TERRAIN_TYPES: readonly TerrainType[] = Object.values(TerrainType);
@@ -102,76 +84,86 @@ export const TERRAIN_TYPES: readonly TerrainType[] = Object.values(TerrainType);
 // Deterministic per-tile variant so the same (col, row) always renders the
 // same texture — reloading or re-panning past a tile can't make it flicker
 // to a different look. A cheap integer hash, not anything cryptographic.
+// Used for both primal (col, row) and dual (col, row) indices — it's just
+// a hash of two integers, it doesn't care which grid they came from.
 export function tileVariantFor(col: number, row: number): number {
   const hash = (col * 374761393 + row * 668265263) >>> 0;
   return hash % TILE_VARIANTS;
 }
 
-// mask 0 is the only one with more than one variant (see TILE_VARIANTS);
-// `variant` is ignored for every other mask, so callers enumerating keys
-// to preload can omit it entirely for those.
-export function blobTileKey(terrain: TerrainType, mask: number, variant = 0): string {
-  if (mask === 0) return `${terrain}-blob-0-${variant}`;
-  return `${terrain}-blob-${mask}`;
-}
-
-export function terrainTileKey(
-  terrain: TerrainType,
-  mask: number,
-  col: number,
-  row: number,
-): string {
-  return blobTileKey(terrain, mask, tileVariantFor(col, row));
+export function dualTileKey(terrain: TerrainType, mask: number, variant: number): string {
+  return `${terrain}-dual-${mask}-${variant}`;
 }
 
 export function terrainPriorityRank(terrain: TerrainType): number {
   return TERRAIN_PRIORITY.indexOf(terrain);
 }
 
-// A tile's own cut mask counts a neighbour only if it's BOTH a different
-// terrain AND higher priority. A higher-priority terrain is never cut by
-// anything lower — it stays a full plain tile (this is why grass, the
-// top of TERRAIN_PRIORITY, always renders as mask 0: nothing outranks
-// it). The lower-priority terrain is the one that visibly gets eaten
-// into, via edgeWedgeKey/cornerWedgeKey below — that split is what makes
-// the reveal correct without needing one tile per terrain PAIR: cutting
-// only ever exposes what a wedge draws, never "whatever happens to be
-// underneath." Off the edge of the world counts as "same" (no cut):
-// nothing beyond the border to blend toward.
-export function ownCutMaskFor(
+// Off-grid corners clamp to the nearest in-bounds cell rather than
+// counting as some fixed "background" terrain — the dual grid extends
+// one row/column of tiles beyond the data grid on every side (see
+// GameScene.ts's activateChunk), and clamping means those edge tiles
+// blend toward whatever the world's actual border terrain is instead of
+// popping to an arbitrary fallback.
+function clampedTerrain(grid: WorldGrid, col: number, row: number): TerrainType {
+  const c = Math.min(Math.max(col, 0), grid.width - 1);
+  const r = Math.min(Math.max(row, 0), grid.height - 1);
+  return grid.getTerrain(c, r);
+}
+
+// The dual tile "indexed" at (dualCol, dualRow) — see this file's module
+// docstring for which 4 data cells that corresponds to. Bit `bit` is set
+// when that corner IS `terrain` — used identically for every terrain in
+// TERRAIN_PRIORITY (no "own cut" vs "wedge" distinction like the old
+// scheme needed), so GameScene calls this once per (terrain, dual tile)
+// and just skips the draw when the result is 0.
+export function cornerMaskFor(
   grid: WorldGrid,
-  col: number,
-  row: number,
+  dualCol: number,
+  dualRow: number,
   terrain: TerrainType,
 ): number {
-  const rank = terrainPriorityRank(terrain);
   let mask = 0;
-  for (const { dCol, dRow, bit } of NEIGHBOR_OFFSETS) {
-    const nCol = col + dCol;
-    const nRow = row + dRow;
-    if (!grid.inBounds(nCol, nRow)) continue;
-    const neighborTerrain = grid.getTerrain(nCol, nRow);
-    if (neighborTerrain !== terrain && terrainPriorityRank(neighborTerrain) > rank) {
+  for (const { dCol, dRow, bit } of CORNER_OFFSETS) {
+    if (clampedTerrain(grid, dualCol + dCol, dualRow + dRow) === terrain) {
       mask |= bit;
     }
   }
-  return reduceBlobMask(mask);
+  return mask;
 }
 
-// Wedge tiles: a higher-priority terrain encroaching into a lower-
-// priority neighbour's own tile from one edge or corner direction — the
-// exact alpha inverse of what ownCutMaskFor cuts away there (see
-// blob.py's _wedge_tile for why it has to be the literal inverse, not an
-// approximation built from the OTHER 3 edges' cuts — that was tried
-// first and left gaps near corners, since edge_cut's u/v terms for
-// different edges don't share zero-crossings). Not derived from
-// CANONICAL_BLOB_MASKS — those all cut a notch FROM a solid tile, never
-// the reverse — so tools/tileset-gen generates these separately, 4
-// edges + 4 corners per terrain.
-export function edgeWedgeKey(terrain: TerrainType, edgeBit: number): string {
-  return `${terrain}-edge-${edgeBit}`;
-}
-
-export function cornerWedgeKey(terrain: TerrainType, cornerBit: number): string {
-  return `${terrain}-corner-${cornerBit}`;
+// The terrain GameScene draws SOLID (its own FULL_MASK tile, not cut to
+// its actual corner mask) underneath this dual tile's normal
+// TERRAIN_PRIORITY layers — the lowest-priority terrain actually present
+// among the tile's 4 corners, not always water.
+//
+// This isn't just a defensive backdrop (see the old 47-blob scheme's
+// comment about "a patch of water" — this replaces that): each real
+// terrain's own alpha here is an exact bilinear partition (they sum to
+// 1 across the tile), but standard source-over compositing of several
+// semi-transparent layers does NOT reconstruct that sum for anything
+// below the topmost layer — algebraically, compositing dirt(alpha 1-q)
+// then grass(alpha q) over an opaque base color Cbase works out to
+// q*Cg + (1-q)^2*Cd + q(1-q)*Cbase, not the desired q*Cg + (1-q)*Cd.
+// Those are equal only when Cbase = Cd — i.e. the base has to equal the
+// color of the terrain that would otherwise show through, or a
+// completely unrelated color (e.g. water's blue at a grass/dirt border
+// with no water corner at all) visibly bleeds through every boundary,
+// not just rare 3+-terrain junctions. Using the lowest-priority PRESENT
+// terrain as the base makes every 2-terrain boundary composite exactly;
+// a genuine 3+-terrain junction can still lose a little of a MIDDLE-
+// priority terrain's share to whichever terrain is under it, but never
+// bleeds in a terrain that isn't actually one of the tile's 4 corners.
+export function baseTerrainFor(grid: WorldGrid, dualCol: number, dualRow: number): TerrainType {
+  let best: TerrainType = clampedTerrain(grid, dualCol, dualRow);
+  let bestRank = terrainPriorityRank(best);
+  for (const { dCol, dRow } of CORNER_OFFSETS) {
+    const terrain = clampedTerrain(grid, dualCol + dCol, dualRow + dRow);
+    const rank = terrainPriorityRank(terrain);
+    if (rank < bestRank) {
+      bestRank = rank;
+      best = terrain;
+    }
+  }
+  return best;
 }

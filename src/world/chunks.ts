@@ -52,6 +52,41 @@ export function chunkScreenBounds(
   };
 }
 
+// Screen-space AABB of one chunk's DUAL tiles (see src/world/tileset.ts's
+// module docstring) — the dual grid extends one extra row/column of tiles
+// beyond a chunk's own CHUNK_SIZE x CHUNK_SIZE data cells (its outermost
+// dual tiles are centered half a cell before chunkCol*CHUNK_SIZE and half
+// a cell past the chunk's own last data cell), so this is NOT just
+// chunkScreenBounds with padding — it covers a genuinely larger area, or
+// GameScene.activateChunk clips those outermost dual tiles when it stamps
+// them into a RenderTexture sized off the wrong bounds.
+export function dualChunkScreenBounds(
+  chunk: ChunkCoord,
+  tileWidth: number,
+  tileHeight: number,
+): PixelRect {
+  const colStart = chunk.chunkCol * CHUNK_SIZE - 0.5;
+  const rowStart = chunk.chunkRow * CHUNK_SIZE - 0.5;
+  const colEnd = colStart + CHUNK_SIZE;
+  const rowEnd = rowStart + CHUNK_SIZE;
+  const corners: ScreenPoint[] = [
+    gridToScreen(colStart, rowStart),
+    gridToScreen(colEnd, rowStart),
+    gridToScreen(colStart, rowEnd),
+    gridToScreen(colEnd, rowEnd),
+  ];
+  const xs = corners.map((p) => p.x);
+  const ys = corners.map((p) => p.y);
+  const padX = tileWidth / 2;
+  const padY = tileHeight / 2;
+  return {
+    minX: Math.min(...xs) - padX,
+    maxX: Math.max(...xs) + padX,
+    minY: Math.min(...ys) - padY,
+    maxY: Math.max(...ys) + padY,
+  };
+}
+
 export interface TileRange {
   minCol: number;
   maxCol: number;

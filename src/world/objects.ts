@@ -13,4 +13,14 @@ export interface PlacedObject {
   width: number;
   height: number;
   blocksMovement: boolean;
+  // The single footprint cell a standalone sprite (see
+  // src/world/buildingSprites.ts) is planted on — its bottom-center point
+  // lines up with this cell's, same anchoring convention plants use. For
+  // a multi-cell object this is normally its front-facing cell (nearest
+  // its "audience", e.g. the village well for a building), not its
+  // top-left corner or centre, so the sprite doesn't look like it's
+  // floating over empty footprint or embedded behind its own front wall.
+  // Equal to (col, row) for a 1x1 object.
+  anchorCol: number;
+  anchorRow: number;
 }

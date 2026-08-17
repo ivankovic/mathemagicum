@@ -140,6 +140,8 @@ describe("WorldGrid placed objects", () => {
       width: 2,
       height: 2,
       blocksMovement: true,
+      anchorCol: 1,
+      anchorRow: 1,
       ...overrides,
     };
   }

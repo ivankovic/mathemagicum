@@ -76,6 +76,31 @@ describe("layoutVillage", () => {
     }
   });
 
+  test("a building's anchor is its own front-facing cell, not its top-left or centre", () => {
+    const { grid, village } = villageGrid();
+    const { buildings } = layoutVillage(grid, village);
+    const center = {
+      col: village.col + Math.floor(village.width / 2),
+      row: village.row + Math.floor(village.height / 2),
+    };
+    const playerHouse = buildings.find((b) => b.id === "player-house");
+    expect(playerHouse).toBeDefined();
+    if (!playerHouse) return;
+
+    // Always inside the building's own footprint.
+    expect(playerHouse.anchorCol).toBeGreaterThanOrEqual(playerHouse.col);
+    expect(playerHouse.anchorCol).toBeLessThan(playerHouse.col + playerHouse.width);
+    expect(playerHouse.anchorRow).toBeGreaterThanOrEqual(playerHouse.row);
+    expect(playerHouse.anchorRow).toBeLessThan(playerHouse.row + playerHouse.height);
+
+    // player-house sits due north of the square (see BUILDINGS), so its
+    // front-facing (southernmost, i.e. largest-row) cell is its anchor —
+    // not its top-left corner, and its column lines up with the centre
+    // since a pure-north direction doesn't shift the footprint sideways.
+    expect(playerHouse.anchorRow).toBe(playerHouse.row + playerHouse.height - 1);
+    expect(playerHouse.anchorCol).toBe(center.col);
+  });
+
   test("gardens are carved as Dirt and don't overlap their building", () => {
     const { grid, village } = villageGrid();
     const { buildings } = layoutVillage(grid, village);

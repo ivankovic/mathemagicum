@@ -192,6 +192,23 @@ function topLeftFor(center: GridPoint, width: number, height: number): GridPoint
   };
 }
 
+// The footprint cell closest to `target` — clamping is the closest point
+// in an axis-aligned box to an external point, so this needs no per-
+// direction case logic (see PlacedObject.anchorCol's docstring for why
+// this is the cell a building's sprite gets anchored to: the one facing
+// the village centre, whichever of the 7 ring directions it's in).
+function nearestCellTo(
+  topLeft: GridPoint,
+  width: number,
+  height: number,
+  target: GridPoint,
+): GridPoint {
+  return {
+    col: Math.min(Math.max(target.col, topLeft.col), topLeft.col + width - 1),
+    row: Math.min(Math.max(target.row, topLeft.row), topLeft.row + height - 1),
+  };
+}
+
 export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageLayout {
   const center: GridPoint = {
     col: village.col + Math.floor(village.width / 2),
@@ -209,6 +226,8 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
     width: 1,
     height: 1,
     blocksMovement: true,
+    anchorCol: center.col,
+    anchorRow: center.row,
   };
   grid.placeObject(well);
 
@@ -220,13 +239,17 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
     const buildingCenter = alongDirection(center, spec.direction, RING_RADIUS);
     carvePath(grid, center, buildingCenter);
 
+    const buildingTopLeft = topLeftFor(buildingCenter, BUILDING_SIZE, BUILDING_SIZE);
+    const anchor = nearestCellTo(buildingTopLeft, BUILDING_SIZE, BUILDING_SIZE, center);
     const building: PlacedObject = {
       id: spec.id,
       type: spec.type,
-      ...topLeftFor(buildingCenter, BUILDING_SIZE, BUILDING_SIZE),
+      ...buildingTopLeft,
       width: BUILDING_SIZE,
       height: BUILDING_SIZE,
       blocksMovement: true,
+      anchorCol: anchor.col,
+      anchorRow: anchor.row,
     };
     grid.placeObject(building);
     buildings.push(building);
