@@ -161,7 +161,7 @@ outside, all gated on `import.meta.env.DEV` (see `src/scenes/devHooks.ts`):
 | `?seed=N` | fixes the spell's problems, so a script knows the sums |
 | `?freezeNpcs` | holds villagers on their home tiles |
 | `?coins=N` | starts with money, so a shop test need not farm first |
-| `window.__mathemagicum` | `{ session, ui() }` — read state, and look up button positions by name |
+| `window.__mathemagicum` | `{ session, ui(), doors(), npcs(), screenOf() }` — read state; look up buttons, doors and people by name; convert a tile to a screen position |
 
 Each replaced something that had gone wrong. Pinning `Date.now` to make the
 spell predictable also stalled the walk tween, so sprites drew a tile from
@@ -172,6 +172,12 @@ bar grew a fourth slot — a test meaning to cast a spell planted a seed, and
 the symptom surfaced three steps later as a tray that would not open. And a
 colour search for a spell effect could not have succeeded at all, because the
 night tint had shifted every reference value.
+
+`screenOf` is there because computing a tile's screen position from the
+camera centre holds outdoors and quietly stops holding indoors: a room is
+smaller than the viewport, so the camera clamps and the player is nowhere
+near the middle. Two runs' worth of taps landed on the floor beside the
+shopkeeper and the game answered "Can't walk there".
 
 So: assert on state read back through the handle, look buttons up by name,
 and keep screenshots as artefacts for a human rather than as assertions.

@@ -68,6 +68,33 @@ export interface DevHandle {
   readonly session: GameSession;
   /** Screen positions of the named buttons, so scripts stop guessing them. */
   readonly ui: () => Record<string, { x: number; y: number }>;
+  /**
+   * The door tile of each building, by id.
+   *
+   * The world half of the same problem `ui` solves. Walking to a building
+   * meant guessing a direction from the village layout constants and
+   * stepping until something happened; the shop is behind one of these doors
+   * now, so a script that cannot find it cannot test the shop at all.
+   */
+  readonly doors: () => Record<string, { col: number; row: number }>;
+  /**
+   * Where every person a script can interact with is standing, by id.
+   *
+   * The shopkeeper is inside her room and only exists while the player is in
+   * there, so there is no layout constant to compute her from — and the one
+   * villager who answers a tap is exactly the one a test needs to find.
+   */
+  readonly npcs: () => Record<string, { col: number; row: number }>;
+  /**
+   * Where a tile is on screen right now.
+   *
+   * Scripts were computing this from the camera centre and the player's tile,
+   * which holds outdoors and quietly stops holding indoors: a room is smaller
+   * than the viewport, so the camera clamps and the player is nowhere near
+   * the middle. Every tap aimed at the shopkeeper landed on the floor beside
+   * her, and the game answered "Can't walk there".
+   */
+  readonly screenOf: (col: number, row: number) => { x: number; y: number };
 }
 
 const HANDLE_KEY = "__mathemagicum";

@@ -65,6 +65,40 @@ export function buildInteriorGrid(sidecar: InteriorSidecar): WorldGrid {
   return grid;
 }
 
+/**
+ * Where someone who works in this room stands.
+ *
+ * The back of the room, as near the middle as the furniture allows: the
+ * player walks in at the door and should see them without hunting, and a
+ * shopkeeper standing beside the door she came through reads as someone on
+ * their way out rather than someone serving.
+ *
+ * Chosen from the room's own walkability rather than written down per room,
+ * so a rearranged interior moves them instead of leaving them inside a
+ * cupboard. Null if there is nowhere to stand, which no shipped room does —
+ * interiors.test.ts checks that.
+ */
+export function interiorAttendantCell(sidecar: InteriorSidecar): GridPoint | null {
+  const grid = buildInteriorGrid(sidecar);
+  const door = interiorDoor(sidecar);
+  const middle = (sidecar.size_cells.cols - 1) / 2;
+  let best: GridPoint | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (let row = 0; row < sidecar.size_cells.rows; row++) {
+    for (let col = 0; col < sidecar.size_cells.cols; col++) {
+      if (!grid.isPassable(col, row)) continue;
+      // Distance from the door dominates; nearness to the centre only breaks
+      // ties, so she ends up at the back middle rather than a back corner.
+      const score = Math.abs(row - door.row) * 100 - Math.abs(col - middle);
+      if (score > bestScore) {
+        bestScore = score;
+        best = { col, row };
+      }
+    }
+  }
+  return best;
+}
+
 // Where the player stands when they walk in, and where they walk out from.
 // The generator puts it on the room's last row, so stepping off that row is
 // what leaves.

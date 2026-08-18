@@ -213,8 +213,15 @@ definition, so it is always within reach. Tables are stocked as outdoor
 furniture, which is a stretch; interior furniture is a separate thing that
 `interiors.py` draws and the player does not place.
 
-The shopkeeper answers a tap from one step away in any direction,
-diagonals included — unlike harvesting, which measures orthogonally
+**She is inside the store**, not walking the square. A shop is somewhere you
+go in to; a shopkeeper who wandered was somewhere you had to find first, and
+the barn's interior had no reason to exist. She stands at the back of the
+room, on a cell chosen from the room's own walkability so rearranging the
+furniture moves her rather than leaving her inside a crate. The shop panel is
+the one thing that works indoors — every gardening action is refused in
+there, but refusing the shop inside the shop would refuse it everywhere.
+
+She answers a tap from one step away in any direction, diagonals included — unlike harvesting, which measures orthogonally
 because it acts on the tile the player *faces* and there is no diagonal
 facing to turn to. Talking needs no facing.
 

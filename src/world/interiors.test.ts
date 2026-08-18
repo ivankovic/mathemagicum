@@ -6,6 +6,7 @@ import { BUILDING_SPRITES, ROLE_SPRITES } from "./buildings";
 import {
   INTERIOR_ROOMS,
   buildInteriorGrid,
+  interiorAttendantCell,
   interiorDoor,
   interiorFor,
   interiorOriginY,
@@ -106,5 +107,60 @@ describe("interiorFor", () => {
     for (const sprite of Object.values(ROLE_SPRITES)) {
       expect(INTERIOR_ROOMS).toContain(interiorFor(sprite));
     }
+  });
+});
+
+describe("where someone who works in a room stands", () => {
+  test("at the back of the room, not beside the door", () => {
+    // A shopkeeper standing at the door the player just came through reads as
+    // someone on their way out rather than as someone serving.
+    // An empty room, so this is about the rule and not about where the
+    // helper's default furniture happens to sit.
+    const cell = interiorAttendantCell(
+      room({ size_cells: { cols: 5, rows: 4 }, door_cell: [3, 2], blocked_cells: [] }),
+    );
+    expect(cell?.row).toBe(0);
+  });
+
+  test("as near the middle as it can, once it has picked a row", () => {
+    const cell = interiorAttendantCell(
+      room({ size_cells: { cols: 5, rows: 4 }, door_cell: [3, 0], blocked_cells: [] }),
+    );
+    expect(cell).toEqual({ col: 2, row: 0 });
+  });
+
+  // Chosen from the room's own walkability rather than written down per room,
+  // so rearranging the furniture moves them instead of leaving them inside a
+  // cupboard.
+  test("never on a blocked cell", () => {
+    const blocked = room({
+      size_cells: { cols: 3, rows: 3 },
+      door_cell: [2, 1],
+      blocked_cells: [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+      ],
+    });
+    const cell = interiorAttendantCell(blocked);
+    expect(cell?.row).not.toBe(0);
+    expect(buildInteriorGrid(blocked).isPassable(cell?.col ?? -1, cell?.row ?? -1)).toBe(true);
+  });
+
+  test("nowhere to stand is nowhere, not a guess", () => {
+    const full = room({
+      size_cells: { cols: 2, rows: 1 },
+      door_cell: [0, 0],
+      blocked_cells: [
+        [0, 0],
+        [0, 1],
+      ],
+    });
+    expect(interiorAttendantCell(full)).toBe(null);
+  });
+
+  test("the same room always puts them in the same place", () => {
+    const spec = room();
+    expect(interiorAttendantCell(spec)).toEqual(interiorAttendantCell(spec));
   });
 });

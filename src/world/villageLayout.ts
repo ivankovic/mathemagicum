@@ -59,6 +59,10 @@ interface BuildingSpec {
   direction: Direction;
   npcId: string | null;
   garden: GardenSpec | null;
+  // Whether that NPC is found inside the building rather than around it.
+  // The shopkeeper is: a shop is somewhere you go in to, and one who
+  // wandered the square was somewhere you had to find first.
+  npcIndoors?: boolean;
 }
 
 // Player's house has no NPC (see docs/WORLD_GENERATION.md — "A building is
@@ -106,6 +110,7 @@ const BUILDINGS: readonly BuildingSpec[] = [
     direction: DIRECTIONS.SW as Direction,
     npcId: "shopkeeper",
     garden: null,
+    npcIndoors: true,
   },
   {
     id: "villager-house-3",
@@ -120,6 +125,16 @@ export interface VillageNpcSpec {
   id: string;
   homeBuildingId: string;
   home: GridPoint;
+  /**
+   * Found inside their building rather than walking about outside it.
+   *
+   * An indoor NPC has no wander and no retreat: they are simply there, on a
+   * cell of the room, whenever the player walks in. `home` is still their
+   * building's doorstep, because that is what the layout knows — where they
+   * stand *inside* depends on the room's furniture and is the renderer's
+   * business.
+   */
+  indoors: boolean;
 }
 
 export interface VillageLayout {
@@ -286,7 +301,14 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
       RING_RADIUS - nearEdge - NPC_HOME_CLEARANCE,
     );
 
-    if (spec.npcId) npcs.push({ id: spec.npcId, homeBuildingId: spec.id, home: doorstep });
+    if (spec.npcId) {
+      npcs.push({
+        id: spec.npcId,
+        homeBuildingId: spec.id,
+        home: doorstep,
+        indoors: spec.npcIndoors === true,
+      });
+    }
     if (spec.id === "player-house") playerSpawn = doorstep;
   }
 

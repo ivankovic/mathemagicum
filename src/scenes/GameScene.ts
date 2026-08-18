@@ -76,6 +76,7 @@ import {
   INTERIOR_ROOMS,
   buildInteriorGrid,
   interiorAnimKey,
+  interiorAttendantCell,
   interiorDoor,
   interiorFor,
   interiorOriginY,
@@ -103,7 +104,7 @@ import {
   scenerySheetKey,
   scenerySidecarKey,
 } from "../world/scenery";
-import { GameSession } from "../world/session";
+import { GameSession, stepsToSpeak } from "../world/session";
 import type { Purse } from "../world/shop";
 import {
   type BuildingSidecar,
@@ -192,10 +193,12 @@ const NPC_STEP_MAX_MS = 4000;
 // Villagers/teacher/shopkeeper wander near their own building; the postal
 // worker patrols the whole village (see docs/WORLD_GENERATION.md's "Village
 // NPC roles" — only the postal worker's movement covers the full square).
-// The one villager with something to do: tapping her opens the store. The
-// others have no content behind them yet, so nothing is attached to them —
-// a person who responds to a tap with silence is worse than one who does not
-// respond at all.
+// The one villager with something to do: tapping her opens the store. She is
+// found *inside* the store rather than around the square — a shop is
+// somewhere you go in to, and a shopkeeper who wandered was somewhere you had
+// to find first. The others have no content behind them yet, so nothing is
+// attached to them: a person who answers a tap with silence is worse than one
+// who does not answer at all.
 const SHOPKEEPER_ID = "shopkeeper";
 const LOCAL_WANDER_RADIUS = 5;
 const PATROL_WANDER_RADIUS = 16;
@@ -261,6 +264,10 @@ interface EdgeAnchored {
 // instance rather than per type: the village has three cottages, and each
 // has to open its own door.
 interface BuildingRuntime {
+  // The placed object's id, so a room can be matched back to the building it
+  // is behind. Two of the village's buildings share a sprite, so the sprite
+  // alone cannot answer "whose room is this".
+  id: string;
   sprite: BuildingSprite;
   image: Phaser.GameObjects.Sprite;
   doorCol: number;
@@ -381,6 +388,11 @@ export class GameScene extends Phaser.Scene {
 
   private nightOverlay!: Phaser.GameObjects.Rectangle;
   private npcs: NpcRuntime[] = [];
+  // Who the village put where, kept because an indoor NPC is not spawned
+  // until the player walks into their building.
+  private villageNpcs: readonly VillageNpcSpec[] = [];
+  private attendant: Phaser.GameObjects.Sprite | null = null;
+  private attendantCell: GridPoint | null = null;
   // A second camera at zoom 1 for anything measured in screen pixels. Camera
   // zoom scales scrollFactor(0) objects too, so without this the HUD and the
   // joystick would be magnified along with the world and a "64px" button
@@ -436,6 +448,7 @@ export class GameScene extends Phaser.Scene {
     // well, and the hundreds of trees and boulders walling the world's two
     // high edges.
     this.spawnPlacedObjects(this.grid.listObjects());
+    this.villageNpcs = world.village.npcs;
     this.spawnNpcs(world.village.npcs, world.anchors.village);
 
     this.statusText = this.ui(
@@ -492,7 +505,19 @@ export class GameScene extends Phaser.Scene {
 
     this.setupInput();
     this.createActionBar();
-    exposeForTests({ session: this.session, ui: () => this.uiPositions() });
+    exposeForTests({
+      session: this.session,
+      ui: () => this.uiPositions(),
+      doors: () =>
+        Object.fromEntries(this.buildings.map((b) => [b.id, { col: b.doorCol, row: b.doorRow }])),
+      screenOf: (col, row) => this.screenOf(col, row),
+      npcs: () => {
+        const where: Record<string, { col: number; row: number }> = {};
+        for (const npc of this.npcs) where[npc.id] = { col: npc.col, row: npc.row };
+        if (this.attendantCell) where[SHOPKEEPER_ID] = { ...this.attendantCell };
+        return where;
+      },
+    });
     if (this.mobileControls) this.createTouchControls();
     this.layoutForViewport();
 
@@ -1337,26 +1362,20 @@ export class GameScene extends Phaser.Scene {
    * it, a tap there talks to her rather than picking it. That is the right
    * way round — you tapped a person.
    */
-  private watchShopkeeper(sprite: Phaser.GameObjects.Sprite): void {
+  private watchShopkeeper(sprite: Phaser.GameObjects.Sprite, at: () => GridPoint): void {
     const frame = sprite.frame;
     sprite.setInteractive(
       new Phaser.Geom.Rectangle(0, frame.realHeight - TILE_SIZE, TILE_SIZE, TILE_SIZE),
       Phaser.Geom.Rectangle.Contains,
     );
     sprite.on("pointerdown", () => {
-      const npc = this.npcs.find((candidate) => candidate.id === SHOPKEEPER_ID);
-      if (!npc) return;
       // Within one step in *any* direction, diagonals included — unlike
       // harvesting, which measures orthogonally because it acts on the tile
       // the player faces and there is no diagonal facing to turn to. Talking
       // to someone needs no facing, so standing at her corner is standing
       // next to her, and refusing that would be a rule with no reason behind
       // it that the player could see.
-      const steps = Math.max(
-        Math.abs(npc.col - this.playerCol),
-        Math.abs(npc.row - this.playerRow),
-      );
-      if (steps > 1) {
+      if (stepsToSpeak(this.session.tile, at()) > 1) {
         this.setMessage("Too far away — step up to her first");
         return;
       }
@@ -1365,7 +1384,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private openShop(): void {
-    if (this.modalOpen || this.interior) return;
+    // Deliberately no indoor check, unlike every gardening action: the shop
+    // is *inside* the store, so refusing it in there would refuse it
+    // everywhere. The only way to reach this is tapping the shopkeeper, and
+    // she is only ever in the one room.
+    if (this.modalOpen) return;
     // A stick still held when a panel opens never sends its release, and the
     // player walks off the moment it closes.
     this.joystick?.release();
@@ -1631,6 +1654,7 @@ export class GameScene extends Phaser.Scene {
       );
       const door = doorCell(sidecar, object.col, object.row);
       this.buildings.push({
+        id: object.id,
         sprite,
         image,
         doorCol: door.col,
@@ -1708,6 +1732,34 @@ export class GameScene extends Phaser.Scene {
   // --- Interiors ---------------------------------------------------------
 
   /**
+   * Put whoever works in this room into it.
+   *
+   * The shopkeeper is the only one so far, and she is here rather than
+   * outside because a shop is somewhere you go in to. Spawned on entry and
+   * destroyed on the way out rather than kept alive off screen: a room is
+   * built when it is walked into and thrown away when it is left, and an NPC
+   * that outlived their room would be a sprite on a layer nobody draws.
+   */
+  private spawnAttendant(buildingId: string, sidecar: InteriorSidecar): void {
+    const spec = this.villageNpcs.find((npc) => npc.indoors && npc.homeBuildingId === buildingId);
+    if (!spec) return;
+    const cell = interiorAttendantCell(sidecar);
+    if (!cell) throw new Error(`${sidecar.room} has nowhere for ${spec.id} to stand`);
+
+    const feet = this.toFeet(cell.col, cell.row);
+    const sprite = this.world(
+      this.add
+        .sprite(feet.x, feet.y, characterSheetKey(characterFor(spec.id, 0)))
+        .setOrigin(0.5, 1)
+        .setDepth(feet.y)
+        .play(characterAnimKey(characterFor(spec.id, 0), IDLE, Facing.Down)),
+    );
+    if (spec.id === SHOPKEEPER_ID) this.watchShopkeeper(sprite, () => cell);
+    this.attendant = sprite;
+    this.attendantCell = cell;
+  }
+
+  /**
    * The one place the indoor mode is set.
    *
    * The scene owns the mode — grids, layers, the camera — but the *rule* that
@@ -1764,6 +1816,10 @@ export class GameScene extends Phaser.Scene {
     this.grid = entered.grid;
     this.originX = 0;
     this.originY = entered.originY;
+    // After the origin moves, not before: `toFeet` measures from it, and a
+    // shopkeeper placed while it still pointed at the outdoor world would be
+    // drawn several hundred tiles from the room she is standing in.
+    this.spawnAttendant(building.id, sidecar);
     this.worldLayer.setVisible(false);
     this.interiorLayer.setVisible(true);
     this.movePlayerToLayer();
@@ -1781,6 +1837,9 @@ export class GameScene extends Phaser.Scene {
     interior.image.destroy();
     this.interiorLayer.setVisible(false);
     this.worldLayer.setVisible(true);
+    this.attendant?.destroy();
+    this.attendant = null;
+    this.attendantCell = null;
     this.setInterior(null);
     this.movePlayerToLayer();
 
@@ -1824,35 +1883,40 @@ export class GameScene extends Phaser.Scene {
     // villagers are handed out in order and a given NPC keeps the same face
     // every time the world is regenerated from the same seed.
     let genericIndex = 0;
-    this.npcs = specs.map((spec) => {
-      const isPostalWorker = spec.id === "postal-worker";
-      const wanderCenter = isPostalWorker ? villageCenter : spec.home;
-      const character = characterFor(spec.id, genericIndex);
-      if (character.startsWith("villager-")) genericIndex++;
-      const feet = this.toFeet(spec.home.col, spec.home.row);
-      const sprite = this.world(
-        this.add
-          .sprite(feet.x, feet.y, characterSheetKey(character))
-          .setOrigin(0.5, 1)
-          .setDepth(feet.y),
-      );
-      if (spec.id === SHOPKEEPER_ID) this.watchShopkeeper(sprite);
-      return {
-        id: spec.id,
-        character,
-        facing: DEFAULT_FACING,
-        homeCol: spec.home.col,
-        homeRow: spec.home.row,
-        wanderCenterCol: wanderCenter.col,
-        wanderCenterRow: wanderCenter.row,
-        wanderRadius: isPostalWorker ? PATROL_WANDER_RADIUS : LOCAL_WANDER_RADIUS,
-        col: spec.home.col,
-        row: spec.home.row,
-        sprite,
-        isMoving: false,
-        nextStepAt: this.time.now + Phaser.Math.Between(NPC_STEP_MIN_MS, NPC_STEP_MAX_MS),
-      };
-    });
+    // Indoor NPCs are not part of the outdoor cast at all: they have no
+    // wander and no retreat, and are spawned into their room when the player
+    // walks in. Counting them here anyway would hand a generic villager's
+    // face to someone who is never seen out here.
+    this.npcs = specs
+      .filter((spec) => !spec.indoors)
+      .map((spec) => {
+        const isPostalWorker = spec.id === "postal-worker";
+        const wanderCenter = isPostalWorker ? villageCenter : spec.home;
+        const character = characterFor(spec.id, genericIndex);
+        if (character.startsWith("villager-")) genericIndex++;
+        const feet = this.toFeet(spec.home.col, spec.home.row);
+        const sprite = this.world(
+          this.add
+            .sprite(feet.x, feet.y, characterSheetKey(character))
+            .setOrigin(0.5, 1)
+            .setDepth(feet.y),
+        );
+        return {
+          id: spec.id,
+          character,
+          facing: DEFAULT_FACING,
+          homeCol: spec.home.col,
+          homeRow: spec.home.row,
+          wanderCenterCol: wanderCenter.col,
+          wanderCenterRow: wanderCenter.row,
+          wanderRadius: isPostalWorker ? PATROL_WANDER_RADIUS : LOCAL_WANDER_RADIUS,
+          col: spec.home.col,
+          row: spec.home.row,
+          sprite,
+          isMoving: false,
+          nextStepAt: this.time.now + Phaser.Math.Between(NPC_STEP_MIN_MS, NPC_STEP_MAX_MS),
+        };
+      });
   }
 
   private updateNpcs(daytime: boolean): void {
@@ -1971,6 +2035,28 @@ export class GameScene extends Phaser.Scene {
     return depthFor((row + 1) * TILE_SIZE);
   }
 
+  /**
+   * Where a tile's feet land on screen, through whatever the camera is doing.
+   *
+   * The camera is bounded to the world, and indoors that world is a single
+   * room smaller than the viewport — so it clamps, and the player stops being
+   * at the centre. Anything that needs a screen position has to ask rather
+   * than assume.
+   */
+  private screenOf(col: number, row: number): ScreenPoint {
+    const camera = this.cameras.main;
+    const feet = this.toFeet(col, row);
+    // Through `worldView` rather than `scrollX` and the zoom: the view is
+    // what the camera actually settled on after its bounds were applied, and
+    // indoors those bounds are a room smaller than the viewport, so the
+    // arithmetic that holds outdoors does not hold in here.
+    const view = camera.worldView;
+    return {
+      x: (feet.x - view.x) * camera.zoom,
+      y: (feet.y - view.y) * camera.zoom,
+    };
+  }
+
   private toGrid(screenX: number, screenY: number): GridPoint {
     return screenToGrid(screenX - this.originX, screenY - this.originY);
   }
@@ -2044,8 +2130,8 @@ export class GameScene extends Phaser.Scene {
     // repeats it — two places showing the same number is one place too many
     // on a line that has to fit a phone held upright.
     return this.mobileControls
-      ? "Drag to walk  Tap a ripe crop to pick it, or the shopkeeper to trade"
-      : `Arrows/WASD  P: seeds  B: spells  Space: plant ${plant}  H: pick  Tap the shopkeeper to trade`;
+      ? "Drag to walk  Tap a ripe crop to pick it  The shop is inside the barn"
+      : `Arrows/WASD  P: seeds  B: spells  Space: plant ${plant}  H: pick  Shop: inside the barn`;
   }
 
   private get crateIsEmpty(): boolean {

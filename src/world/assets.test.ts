@@ -9,6 +9,7 @@ import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, DOOR_STATES, ROLE_SPRITES } from
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
 import { EFFECT_TYPES, effectAnimKey, effectSidecarKey } from "./effects";
 import { FIXTURE_TYPES, fixtureFor } from "./fixtures";
+import { buildInteriorGrid, interiorAttendantCell, interiorDoor } from "./interiors";
 import { INTERIOR_ROOMS, interiorFor } from "./interiors";
 import { PLANT_STAGES, PLANT_TYPES } from "./plants";
 import { SCENERY_KINDS, sceneryKind } from "./scenery";
@@ -690,5 +691,31 @@ describe("the shipped spell effects", () => {
 
   test("its sidecar key is distinct from every other asset's", () => {
     expect(new Set(EFFECT_TYPES.map(effectSidecarKey)).size).toBe(EFFECT_TYPES.length);
+  });
+});
+
+describe("the shipped rooms have somewhere to stand behind a counter", () => {
+  // The shopkeeper is spawned into her room when the player walks in, on a
+  // cell chosen from the room's own walkability. A room with nowhere to put
+  // her throws at that moment, which is a long way from the asset that caused
+  // it.
+  test("every room offers a walkable cell away from its door", () => {
+    for (const room of INTERIOR_ROOMS) {
+      const sidecar = readJson<InteriorSidecar>("interiors", `${room}.json`);
+      const cell = interiorAttendantCell(sidecar);
+      expect({ room, found: cell !== null }).toEqual({ room, found: true });
+      if (!cell) continue;
+      const grid = buildInteriorGrid(sidecar);
+      expect({ room, walkable: grid.isPassable(cell.col, cell.row) }).toEqual({
+        room,
+        walkable: true,
+      });
+      const door = interiorDoor(sidecar);
+      const depth = sidecar.size_cells.rows;
+      expect({ room, far: Math.abs(cell.row - door.row) * 2 >= depth - 1 }).toEqual({
+        room,
+        far: true,
+      });
+    }
   });
 });
