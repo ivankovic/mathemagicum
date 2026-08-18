@@ -6,11 +6,33 @@
 
 export const FixtureType = {
   Well: "well",
+  Fence: "fence",
+  Table: "table",
+  Lamp: "lamp",
 } as const;
 
 export type FixtureType = (typeof FixtureType)[keyof typeof FixtureType];
 
 export const FIXTURE_TYPES: readonly FixtureType[] = Object.values(FixtureType);
+
+/**
+ * The fixtures a player buys and sets down, as opposed to the one world
+ * generation places.
+ *
+ * The well is part of the village and never moves; these are stock. The
+ * split is the generator's — its `PLACEABLE` names the same three — and it
+ * matters here because only these need a price, a slot in the crate and a
+ * way back into the player's hands.
+ */
+export const PLACEABLE_FIXTURES: readonly FixtureType[] = [
+  FixtureType.Fence,
+  FixtureType.Table,
+  FixtureType.Lamp,
+];
+
+export function isPlaceable(fixture: FixtureType): boolean {
+  return PLACEABLE_FIXTURES.includes(fixture);
+}
 
 // PlacedObject.type is an open string — story areas will accrete new kinds —
 // so this narrows it rather than assuming every object is a fixture.

@@ -12,6 +12,7 @@
  * that knows how big it drew something.
  */
 
+import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import { PLANT_TYPES, type PlantType } from "../world/plants";
 
 export const UiAsset = {
@@ -21,13 +22,19 @@ export const UiAsset = {
   RuneAdd: "rune-add",
   SeedPouch: "seed-pouch",
   Basket: "basket",
+  Crate: "crate",
 } as const;
 
 export type UiAsset = (typeof UiAsset)[keyof typeof UiAsset];
 
-/** The icon for a crop, as it appears in the seed pouch. */
+/** The icon for a crop, as it appears in the seed pouch and the basket. */
 export function cropIcon(plant: PlantType): string {
   return `crop-${plant}`;
+}
+
+/** The icon for something the store sells, as it appears in the crate. */
+export function itemIcon(fixture: FixtureType): string {
+  return `item-${fixture}`;
 }
 
 // The crop icons are per-plant rather than named one by one, which is what
@@ -37,6 +44,7 @@ export function cropIcon(plant: PlantType): string {
 export const UI_ASSETS: readonly string[] = [
   ...Object.values(UiAsset),
   ...PLANT_TYPES.map(cropIcon),
+  ...PLACEABLE_FIXTURES.map(itemIcon),
 ];
 
 export const UI_SIDECAR_KEY = "ui-index";

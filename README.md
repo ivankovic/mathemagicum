@@ -16,9 +16,10 @@ seedlings and grown by casting **addition** on them, a number-line minigame
 opened from the spellbook. The player bends to plant, and a golden plus
 sinks into the tile a spell lands on. Seeds and spells are picked from two icon trays
 in the corner of the screen, and both act on the tile the player faces.
-Ripe crops are picked with a tap and go into a basket. Planting and
-harvesting are still direct actions — those spells are not speced. Nothing
-is saved between sessions.
+Ripe crops are picked with a tap and go into a basket, and the village
+shopkeeper buys them for coins you can spend on fences, tables and lamps to
+put down. Planting and harvesting are still direct actions — those spells
+are not speced. Nothing is saved between sessions.
 
 ## Assets
 
@@ -54,13 +55,16 @@ done
 for p in carrot sunflower cactus; do
   cp $OUT/terrain_plants/$p{.json,_sheet.png} public/assets/plants/
 done
-cp $OUT/terrain_fixtures/well{.json,_sheet.png} public/assets/fixtures/
+for f in well fence table lamp; do
+  cp $OUT/terrain_fixtures/$f{.json,_sheet.png} public/assets/fixtures/
+done
 cp $OUT/terrain_effects/plus{.json,_sheet.png} public/assets/effects/
 for t in grass woodland dirt hilly mountain sand; do
   cp $OUT/terrain_objects/$t{.json,_sheet.png} public/assets/objects/
 done
 cp $OUT/ui/{ui.json,parchment_fill.png,parchment_frame.png}    public/assets/ui/
-cp $OUT/ui/{spellbook.png,rune_add.png,seed_pouch.png,crop_*.png} public/assets/ui/
+cp $OUT/ui/{spellbook.png,rune_add.png,seed_pouch.png,basket.png,crate.png} public/assets/ui/
+cp $OUT/ui/{crop_*.png,item_*.png}                                public/assets/ui/
 bun test   # src/world/assets.test.ts checks the sync
 ```
 

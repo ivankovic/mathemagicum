@@ -5,8 +5,16 @@ import Phaser from "phaser";
 import { VirtualJoystick } from "../input/VirtualJoystick";
 import { makeAdditionProblem } from "../spells/addition";
 import { IconTray } from "../ui/IconTray";
+import { ShopPanel } from "../ui/ShopPanel";
 import { SpellPopup } from "../ui/SpellPopup";
-import { UI_SIDECAR_KEY, UiAsset, type UiIndex, cropIcon, uiTextureKey } from "../ui/assets";
+import {
+  UI_SIDECAR_KEY,
+  UiAsset,
+  type UiIndex,
+  cropIcon,
+  itemIcon,
+  uiTextureKey,
+} from "../ui/assets";
 import type { AreaPlacement } from "../world/anchors";
 import {
   BUILDING_SPRITES,
@@ -55,10 +63,13 @@ import {
 } from "../world/effects";
 import {
   FIXTURE_TYPES,
+  type FixtureType,
+  PLACEABLE_FIXTURES,
   fixtureAnimKey,
   fixtureFor,
   fixtureSheetKey,
   fixtureSidecarKey,
+  isPlaceable,
 } from "../world/fixtures";
 import type { WorldGrid } from "../world/grid";
 import {
@@ -92,6 +103,7 @@ import {
   scenerySheetKey,
   scenerySidecarKey,
 } from "../world/scenery";
+import { Purse } from "../world/shop";
 import {
   type BuildingSidecar,
   type CharacterSidecar,
@@ -178,6 +190,11 @@ const NPC_STEP_MAX_MS = 4000;
 // Villagers/teacher/shopkeeper wander near their own building; the postal
 // worker patrols the whole village (see docs/WORLD_GENERATION.md's "Village
 // NPC roles" — only the postal worker's movement covers the full square).
+// The one villager with something to do: tapping her opens the store. The
+// others have no content behind them yet, so nothing is attached to them —
+// a person who responds to a tap with silence is worse than one who does not
+// respond at all.
+const SHOPKEEPER_ID = "shopkeeper";
 const LOCAL_WANDER_RADIUS = 5;
 const PATROL_WANDER_RADIUS = 16;
 
@@ -196,9 +213,9 @@ const FPS_FOR_ANIMATION: Record<string, number> = {
   [PLANT]: PLANT_FPS,
 };
 
-// Crops are sparse and looked up by tile, so they are keyed by position
-// rather than held in a grid-sized array.
-function cropKey(col: number, row: number): string {
+// Crops and placed fixtures are sparse and looked up by tile, so their
+// sprites are keyed by position rather than held in a grid-sized array.
+function tileKey(col: number, row: number): string {
   return `${col},${row}`;
 }
 
@@ -307,8 +324,17 @@ export class GameScene extends Phaser.Scene {
   private seedTray?: IconTray;
   private spellTray?: IconTray;
   private basketTray?: IconTray;
-  // What she is carrying. No slots and no capacity — see Inventory.
+  private crateTray?: IconTray;
+  private shopPanel!: ShopPanel;
+  // What she is carrying, and what she has been paid. No slots, no capacity
+  // and no debt — see Inventory and Purse.
   private readonly inventory = new Inventory();
+  private readonly purse = new Purse();
+  private coinsText!: Phaser.GameObjects.Text;
+  // Sprites for fixtures the *player* put down, so one can be picked back
+  // up. Deliberately not the village well: it was placed by generation and
+  // is not hers to take.
+  private placedFixtures = new Map<string, Phaser.GameObjects.Sprite>();
   // Problems vary from cast to cast, so this is seeded from the clock rather
   // than from WORLD_SEED: a world is meant to be reproducible, a lesson is
   // meant not to be.
@@ -427,6 +453,16 @@ export class GameScene extends Phaser.Scene {
         .setScrollFactor(0)
         .setDepth(HUD_DEPTH),
     );
+    this.coinsText = this.ui(
+      this.add
+        .text(HUD_MARGIN, 0, "", {
+          fontFamily: "monospace",
+          fontSize: "13px",
+          color: "#ffd873",
+        })
+        .setScrollFactor(0)
+        .setDepth(HUD_DEPTH),
+    );
     this.updateStatusText();
 
     this.nightOverlay = this.ui(
@@ -440,6 +476,14 @@ export class GameScene extends Phaser.Scene {
     const uiIndex = this.cache.json.get(UI_SIDECAR_KEY) as UiIndex | undefined;
     if (!uiIndex) throw new Error("ui.json did not load — the spell parchment has no art");
     this.spellPopup = new SpellPopup(this, uiIndex, MODAL_DEPTH, (object) => this.ui(object));
+    this.shopPanel = new ShopPanel(
+      this,
+      uiIndex,
+      MODAL_DEPTH,
+      this.inventory,
+      this.purse,
+      (object) => this.ui(object),
+    );
 
     this.setupInput();
     this.createActionBar();
@@ -454,6 +498,7 @@ export class GameScene extends Phaser.Scene {
       // The popup listens on the keyboard while it is open, and a listener
       // outliving its scene fires into a destroyed display list.
       this.spellPopup.destroy();
+      this.shopPanel.destroy();
     });
 
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer, over: unknown[]) => {
@@ -461,7 +506,7 @@ export class GameScene extends Phaser.Scene {
       // is already non-empty while it is open. Checking anyway: a modal that
       // is only modal because of depth ordering stops being one the first
       // time something is drawn above it.
-      if (this.spellPopup?.isOpen) return;
+      if (this.modalOpen) return;
       if (over.length > 0) return; // a UI button handles its own pointerdown
       // Touch steers with the floating joystick; a mouse walks to the tile it
       // clicked. Deliberately not both on touch: a press cannot be a stick
@@ -512,7 +557,7 @@ export class GameScene extends Phaser.Scene {
     // wander — but nothing the player presses reaches it. Every key below is
     // one the popup wants for itself (digits, Enter, Escape) or one that
     // would walk the player out from under an open spell.
-    if (this.spellPopup.isOpen) return;
+    if (this.modalOpen) return;
 
     if (!this.isMoving) {
       const dir = this.pressedDirection();
@@ -589,6 +634,7 @@ export class GameScene extends Phaser.Scene {
     // The popup can be open across a phone rotation, and every one of its
     // pieces is placed from the viewport's size.
     this.spellPopup?.layout();
+    this.shopPanel?.layout();
     this.layoutHud();
   }
 
@@ -601,6 +647,18 @@ export class GameScene extends Phaser.Scene {
     this.statusText.setWordWrapWidth(wrap);
     this.messageText.setWordWrapWidth(wrap);
     this.messageText.setY(this.statusText.y + this.statusText.height + HUD_LINE_GAP);
+    // Under the message rather than beside the status line: that line
+    // already wraps to two on a phone, and money is the one number the
+    // player wants to find without reading a sentence.
+    this.coinsText?.setY(this.messageText.y + this.messageText.height + HUD_LINE_GAP);
+  }
+
+  // Hidden until she has been paid something. A "0 coins" line on every new
+  // game is a permanent reminder of a currency she has no use for yet.
+  private updateCoins(): void {
+    if (!this.coinsText) return;
+    this.coinsText.setText(this.purse.coins > 0 ? `${this.purse.coins} coins` : "");
+    this.layoutHud();
   }
 
   // --- Asset metadata ----------------------------------------------------
@@ -1113,8 +1171,9 @@ export class GameScene extends Phaser.Scene {
       onOpen: () => {
         this.spellTray?.setOpen(false);
         this.basketTray?.setOpen(false);
+        this.crateTray?.setOpen(false);
       },
-      canOpen: () => !this.spellPopup.isOpen,
+      canOpen: () => !this.modalOpen,
       onChange: () => this.updateStatusText(),
     });
 
@@ -1129,8 +1188,9 @@ export class GameScene extends Phaser.Scene {
       onOpen: () => {
         this.seedTray?.setOpen(false);
         this.basketTray?.setOpen(false);
+        this.crateTray?.setOpen(false);
       },
-      canOpen: () => !this.spellPopup.isOpen,
+      canOpen: () => !this.modalOpen,
       onChange: () => this.updateStatusText(),
     });
 
@@ -1145,9 +1205,10 @@ export class GameScene extends Phaser.Scene {
         count: () => this.inventory.count(plant),
         act: () => this.setMessage(describeItem(plant, this.inventory.count(plant))),
       })),
-      // On the basket itself, so how much she is carrying is legible without
-      // opening anything — the only badge visible while the tray is shut.
-      count: () => this.inventory.total,
+      // Crops only, not `inventory.total`: the bag holds bought fixtures too
+      // now, and a basket badge that counted those would say she is carrying
+      // three carrots when she is carrying a carrot and two fence panels.
+      count: () => PLANT_TYPES.reduce((sum, plant) => sum + this.inventory.count(plant), 0),
       size,
       right: edge + (size + 10) * 2,
       bottom,
@@ -1156,12 +1217,43 @@ export class GameScene extends Phaser.Scene {
       onOpen: () => {
         this.seedTray?.setOpen(false);
         this.spellTray?.setOpen(false);
+        this.crateTray?.setOpen(false);
       },
-      canOpen: () => !this.spellPopup.isOpen,
+      canOpen: () => !this.modalOpen,
       onChange: () => this.updateStatusText(),
     });
 
-    this.edgeAnchored.push(this.seedTray, this.spellTray, this.basketTray);
+    // What she has bought and can put down. A fourth container rather than
+    // more rows in the basket: six items stacked upward from the corner
+    // overflow a phone held sideways, and a tray whose top row is off screen
+    // is worse than one more button.
+    this.crateTray = new IconTray(this, {
+      texture: uiTextureKey(UiAsset.Crate),
+      items: PLACEABLE_FIXTURES.map((fixture) => ({
+        texture: uiTextureKey(itemIcon(fixture)),
+        count: () => this.inventory.count(fixture),
+        act: () => this.placeFixture(fixture),
+      })),
+      count: () => PLACEABLE_FIXTURES.reduce((sum, f) => sum + this.inventory.count(f), 0),
+      size,
+      right: edge + (size + 10) * 3,
+      bottom,
+      depth: TOUCH_UI_DEPTH,
+      register: (object) => this.ui(object),
+      // Every tray closes the other three. Notably not itself: a blanket
+      // "close the rest" that included the crate made it shut on the same
+      // click that opened it, which reads exactly like a button that does
+      // nothing.
+      onOpen: () => {
+        this.seedTray?.setOpen(false);
+        this.spellTray?.setOpen(false);
+        this.basketTray?.setOpen(false);
+      },
+      canOpen: () => !this.modalOpen,
+      onChange: () => this.updateStatusText(),
+    });
+
+    this.edgeAnchored.push(this.seedTray, this.spellTray, this.basketTray, this.crateTray);
   }
 
   // The keyboard route into a tray. Whether it may open is the tray's own
@@ -1186,7 +1278,7 @@ export class GameScene extends Phaser.Scene {
     // The one guard here that is not merely defensive: the spellbook button
     // sits inside the popup's own rectangle on a phone, and a rune tapped
     // through it would restart the cast half way through the problem.
-    if (this.spellPopup.isOpen) return;
+    if (this.modalOpen) return;
     this.spellTray?.setOpen(false);
     if (this.interior) {
       this.setMessage("Nothing grows indoors");
@@ -1225,7 +1317,7 @@ export class GameScene extends Phaser.Scene {
     // Growth is a change of animation, not of sprite: the generator ships one
     // sheet per crop with a row per stage, so the same object keeps playing
     // further along its own reel.
-    this.cropSprites.get(cropKey(col, row))?.play(plantAnimKey(grown.plant, grown.stage));
+    this.cropSprites.get(tileKey(col, row))?.play(plantAnimKey(grown.plant, grown.stage));
     this.setMessage(`Your ${grown.plant} is now ${grown.stage}`);
   }
 
@@ -1246,6 +1338,182 @@ export class GameScene extends Phaser.Scene {
     return { col: this.playerCol + step.dCol, row: this.playerRow + step.dRow };
   }
 
+  // --- The store ----------------------------------------------------------
+  //
+  // Sell what you pick, buy something to put down with the proceeds. The
+  // shopkeeper is the door into it: she is tapped like a crop, because she
+  // is a thing in the world with something to say, and a keyboard shortcut
+  // for a person standing in one place would be a shortcut to walking there.
+
+  /**
+   * Make the shopkeeper tappable.
+   *
+   * Same tile-sized hit area as a crop, and for the same reason: a character
+   * frame is a tile wide and half a tile taller, so the default area would
+   * reach into the tile above and answer for taps aimed at whatever is
+   * standing there. She wanders, but the area is in the sprite's own space
+   * and moves with her.
+   *
+   * The consequence worth stating: if she wanders onto a tile with a crop on
+   * it, a tap there talks to her rather than picking it. That is the right
+   * way round — you tapped a person.
+   */
+  private watchShopkeeper(sprite: Phaser.GameObjects.Sprite): void {
+    const frame = sprite.frame;
+    sprite.setInteractive(
+      new Phaser.Geom.Rectangle(0, frame.realHeight - TILE_SIZE, TILE_SIZE, TILE_SIZE),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    sprite.on("pointerdown", () => {
+      const npc = this.npcs.find((candidate) => candidate.id === SHOPKEEPER_ID);
+      if (!npc) return;
+      // Within one step in *any* direction, diagonals included — unlike
+      // harvesting, which measures orthogonally because it acts on the tile
+      // the player faces and there is no diagonal facing to turn to. Talking
+      // to someone needs no facing, so standing at her corner is standing
+      // next to her, and refusing that would be a rule with no reason behind
+      // it that the player could see.
+      const steps = Math.max(
+        Math.abs(npc.col - this.playerCol),
+        Math.abs(npc.row - this.playerRow),
+      );
+      if (steps > 1) {
+        this.setMessage("Too far away — step up to her first");
+        return;
+      }
+      this.openShop();
+    });
+  }
+
+  private openShop(): void {
+    if (this.modalOpen || this.interior) return;
+    // A stick still held when a panel opens never sends its release, and the
+    // player walks off the moment it closes.
+    this.joystick?.release();
+    this.closeTrays();
+    this.shopPanel.open_(
+      () => {
+        this.refreshCarried();
+        this.setMessage("");
+      },
+      // The bar stays on screen beside the panel, so a sale has to reach it
+      // as it happens rather than when the shop closes — otherwise the
+      // basket sits there claiming to hold what was just sold.
+      () => this.refreshCarried(),
+    );
+    this.updateStatusText();
+  }
+
+  private closeTrays(): void {
+    for (const tray of [this.seedTray, this.spellTray, this.basketTray, this.crateTray]) {
+      tray?.setOpen(false);
+    }
+  }
+
+  /** Both badges that count what she is holding, after anything moves it. */
+  private refreshCarried(): void {
+    this.basketTray?.refresh();
+    this.crateTray?.refresh();
+    this.updateCoins();
+    this.updateStatusText();
+  }
+
+  /**
+   * Put one bought fixture on the tile ahead.
+   *
+   * Same tile every gardening action works on, for the same reason. Placed
+   * things block the way, which is a state the player can walk herself into
+   * a corner with — so the answer is not a connectivity check before every
+   * placement but that **anything she put down, she can pick back up**: tap
+   * it and it returns to the crate. A fence that boxed her in is adjacent by
+   * definition, so it is always within reach.
+   */
+  private placeFixture(fixture: FixtureType): void {
+    if (this.modalOpen) return;
+    if (this.interior) {
+      this.setMessage("Not in here");
+      return;
+    }
+    if (this.inventory.count(fixture) <= 0) {
+      this.setMessage(`You have no ${fixture} — buy one at the store`);
+      return;
+    }
+    const { col, row } = this.facingTile();
+    // Generation-time placement could assume it owned the map; this cannot,
+    // so the tile has to be checked for everything already on it.
+    if (!this.grid.isPassable(col, row)) {
+      this.setMessage("There's no room there");
+      return;
+    }
+    if (this.grid.getCrop(col, row)) {
+      this.setMessage("Something is growing there");
+      return;
+    }
+    if (!this.inventory.remove(fixture, 1)) return;
+
+    const object: PlacedObject = {
+      id: `${fixture}-${col}-${row}`,
+      type: fixture,
+      col,
+      row,
+      width: 1,
+      height: 1,
+      blocksMovement: true,
+      anchorCol: col,
+      anchorRow: row,
+    };
+    this.grid.placeObject(object);
+    const sidecar = this.fixtureSidecars.get(fixture);
+    if (!sidecar) throw new Error(`no art loaded for fixture "${fixture}"`);
+    const sprite = this.spawnFootprintSprite(
+      object,
+      sidecar,
+      fixtureSheetKey(fixture),
+      fixtureAnimKey(fixture),
+    );
+    this.watchPlacedFixture(sprite, fixture, col, row);
+    this.placedFixtures.set(tileKey(col, row), sprite);
+    this.playGesture(PLANT); // she bends to set it down, same as planting
+    this.setMessage(`Put down a ${fixture} — tap it to pick it up again`);
+    this.refreshCarried();
+  }
+
+  /**
+   * Make a placed fixture tappable, so it can be taken back.
+   *
+   * Only ones the player put down: the village well goes through the same
+   * spawner and is deliberately left alone, because it is not hers.
+   */
+  private watchPlacedFixture(
+    sprite: Phaser.GameObjects.Sprite,
+    fixture: FixtureType,
+    col: number,
+    row: number,
+  ): void {
+    const frame = sprite.frame;
+    sprite.setInteractive(
+      new Phaser.Geom.Rectangle(0, frame.realHeight - TILE_SIZE, TILE_SIZE, TILE_SIZE),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    sprite.on("pointerdown", () => this.takeFixture(fixture, col, row));
+  }
+
+  private takeFixture(fixture: FixtureType, col: number, row: number): void {
+    if (this.modalOpen || this.interior) return;
+    const steps = Math.abs(col - this.playerCol) + Math.abs(row - this.playerRow);
+    if (steps > 1) {
+      this.setMessage("Too far away — step up to it first");
+      return;
+    }
+    if (!this.grid.removeObjectAt(col, row)) return;
+    const key = tileKey(col, row);
+    this.placedFixtures.get(key)?.destroy();
+    this.placedFixtures.delete(key);
+    const held = this.inventory.add(fixture, 1);
+    this.setMessage(`Picked up a ${fixture} — you have ${held}`);
+    this.refreshCarried();
+  }
+
   // --- Harvesting ---------------------------------------------------------
   //
   // One rule, whichever way the player asks: **she can pick a crop she is
@@ -1258,7 +1526,7 @@ export class GameScene extends Phaser.Scene {
   // planting is, and for the same reason: the harvest spell is not speced.
 
   private tryHarvest(): void {
-    if (this.spellPopup.isOpen) return;
+    if (this.modalOpen) return;
     if (this.interior) {
       this.setMessage("Nothing grows indoors");
       return;
@@ -1286,7 +1554,7 @@ export class GameScene extends Phaser.Scene {
     // The sprite has to go *and* leave the registry: nothing has ever removed
     // an entry from it, and a stale one would have `growCropAt` re-animating a
     // destroyed object the next time this tile was planted and cast on.
-    const key = cropKey(col, row);
+    const key = tileKey(col, row);
     this.cropSprites.get(key)?.destroy();
     this.cropSprites.delete(key);
 
@@ -1311,7 +1579,7 @@ export class GameScene extends Phaser.Scene {
    * walk is exactly what the joystick replaced on touch.
    */
   private handleCropTap(col: number, row: number): void {
-    if (this.spellPopup.isOpen || this.interior) return;
+    if (this.modalOpen || this.interior) return;
     const dCol = col - this.playerCol;
     const dRow = row - this.playerRow;
     const steps = Math.abs(dCol) + Math.abs(dRow);
@@ -1324,7 +1592,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tryPlant(): void {
-    if (this.spellPopup.isOpen) return;
+    if (this.modalOpen) return;
     const plant = PLANT_TYPES[this.selectedPlantIndex];
     if (!plant) return;
 
@@ -1363,7 +1631,7 @@ export class GameScene extends Phaser.Scene {
         .play(plantAnimKey(plant, PLANTED_STAGE)),
     );
     this.watchCrop(sprite, col, row);
-    this.cropSprites.set(cropKey(col, row), sprite);
+    this.cropSprites.set(tileKey(col, row), sprite);
     this.playGesture(PLANT);
     this.setMessage(`Planted a ${plant} seedling — cast the plus rune to grow it`);
   }
@@ -1490,7 +1758,7 @@ export class GameScene extends Phaser.Scene {
     sheetKey: string,
     animKey: string,
     mirror = false,
-  ): void {
+  ): Phaser.GameObjects.Sprite {
     const origin = spriteOrigin(sidecar, object.col, object.row);
     const sprite = this.world(
       this.add
@@ -1505,6 +1773,7 @@ export class GameScene extends Phaser.Scene {
     }
     sprite.play(animKey);
     sprite.anims.setProgress(variationFor(object.col, object.row, PHASE_STEPS) / PHASE_STEPS);
+    return sprite;
   }
 
   // --- Interiors ---------------------------------------------------------
@@ -1622,6 +1891,7 @@ export class GameScene extends Phaser.Scene {
           .setOrigin(0.5, 1)
           .setDepth(feet.y),
       );
+      if (spec.id === SHOPKEEPER_ID) this.watchShopkeeper(sprite);
       return {
         id: spec.id,
         character,
@@ -1761,6 +2031,7 @@ export class GameScene extends Phaser.Scene {
 
   private setMessage(text: string): void {
     this.messageText.setText(text);
+    this.layoutHud();
   }
 
   // Kept to two lines on a phone held upright, which is what it wraps to at
@@ -1770,9 +2041,26 @@ export class GameScene extends Phaser.Scene {
   // With an open tray the line says what the icons on screen will do, since
   // that is the one moment the player is looking at something they have not
   // seen before. Closed, it names the buttons instead.
+  /**
+   * Whether anything is covering the world.
+   *
+   * Two popups now, and every guard wants both. Asking about one by name was
+   * fine while there was one; the second would have meant finding every site
+   * that asked and remembering to widen it.
+   */
+  private get modalOpen(): boolean {
+    return this.spellPopup.isOpen || this.shopPanel?.isOpen === true;
+  }
+
   private get statusLine(): string {
+    if (this.shopPanel?.isOpen) return "The village store";
     if (this.seedTray?.isOpen) return "Pick a seed to plant it on the tile ahead";
     if (this.spellTray?.isOpen) return "Cast + to grow the crop on the tile ahead";
+    if (this.crateTray?.isOpen) {
+      return this.crateIsEmpty
+        ? "Nothing to put down — the shopkeeper sells fences and lamps"
+        : "Pick something to set it on the tile ahead";
+    }
     if (this.basketTray?.isOpen) {
       return this.inventory.isEmpty
         ? "Your basket is empty — tap a ripe crop to pick it"
@@ -1783,7 +2071,11 @@ export class GameScene extends Phaser.Scene {
     // repeats it — two places showing the same number is one place too many
     // on a line that has to fit a phone held upright.
     return this.mobileControls
-      ? `Drag to walk  Tap a ripe crop to pick it  (${plant} selected)`
-      : `Arrows/WASD  P: seeds  B: spells  Space: plant ${plant}  H: pick`;
+      ? "Drag to walk  Tap a ripe crop to pick it, or the shopkeeper to trade"
+      : `Arrows/WASD  P: seeds  B: spells  Space: plant ${plant}  H: pick  Tap the shopkeeper to trade`;
+  }
+
+  private get crateIsEmpty(): boolean {
+    return PLACEABLE_FIXTURES.every((fixture) => this.inventory.count(fixture) === 0);
   }
 }

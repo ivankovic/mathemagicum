@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
+import { FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import { ITEM_TYPES, Inventory, describeItem } from "./inventory";
 import { PLANT_TYPES, PlantType } from "./plants";
 
@@ -96,8 +97,21 @@ describe("Inventory", () => {
     expect(bag.add(PlantType.Carrot)).toBe(10000);
   });
 
-  test("items are the crops, so every harvest has somewhere to go", () => {
-    expect(ITEM_TYPES).toEqual(PLANT_TYPES);
+  // Both halves of the shop's trade have to have somewhere to land: crops
+  // she sells, fixtures she buys.
+  test("items cover every crop and every thing the store stocks", () => {
+    for (const plant of PLANT_TYPES) expect(ITEM_TYPES).toContain(plant);
+    for (const fixture of PLACEABLE_FIXTURES) expect(ITEM_TYPES).toContain(fixture);
+    expect(new Set(ITEM_TYPES).size).toBe(ITEM_TYPES.length);
+  });
+
+  test("holds a bought fixture alongside a picked crop", () => {
+    const bag = new Inventory();
+    bag.add(PlantType.Carrot, 2);
+    bag.add(FixtureType.Fence, 5);
+    expect(bag.count(FixtureType.Fence)).toBe(5);
+    expect(bag.total).toBe(7);
+    expect(bag.kinds).toBe(2);
   });
 });
 
@@ -115,6 +129,11 @@ describe("describeItem", () => {
   test("handles a name that already ends in s", () => {
     expect(describeItem(PlantType.Cactus, 2)).toBe("2 cactuses");
     expect(describeItem(PlantType.Cactus, 1)).toBe("1 cactus");
+  });
+
+  test("reads for the things the store sells too", () => {
+    expect(describeItem(FixtureType.Fence, 3)).toBe("3 fences");
+    expect(describeItem(FixtureType.Lamp, 1)).toBe("1 lamp");
   });
 
   test("says none of a thing rather than nothing at all", () => {

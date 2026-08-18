@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { type FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import { PLANT_TYPES, type PlantType } from "./plants";
 
 /**
@@ -19,15 +20,15 @@ import { PLANT_TYPES, type PlantType } from "./plants";
  * number under the player's thumb. Watching for that from in here would mean
  * this class knowing about the interface, which is the wrong way round.
  *
- * Items are plant types for now, because harvesting is the only thing that
- * puts anything in it. `ItemType` is a separate name from `PlantType` so the
- * first non-crop item — a tool, a villager's reward — does not have to be
- * pretended into the plant list.
+ * Items are crops she has picked and fixtures she has bought. `ItemType` was
+ * a separate name from `PlantType` from the start so the first non-crop item
+ * would not have to be pretended into the plant list, which is exactly what
+ * the village store turned out to sell.
  */
 
-export type ItemType = PlantType;
+export type ItemType = PlantType | FixtureType;
 
-export const ITEM_TYPES: readonly ItemType[] = PLANT_TYPES;
+export const ITEM_TYPES: readonly ItemType[] = [...PLANT_TYPES, ...PLACEABLE_FIXTURES];
 
 export class Inventory {
   // Sparse: a player carrying two kinds of thing has two entries, not one

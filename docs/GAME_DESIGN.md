@@ -175,13 +175,48 @@ worker's patrol is day-only) but explicitly *not* money or rewards — see
 [`WORLD_GENERATION.md`](WORLD_GENERATION.md#day-night-cycle) for the
 fuller brainstorm.
 
-### Economy (embryonic)
+### Economy
 
-Money exists as a concept — villagers reward it (alongside items) for
-help with their plants, the village shopkeeper sells seeds/supplies for
-it — but no prices, balance, or earning curve are designed. First
-mentioned in [`WORLD_GENERATION.md`](WORLD_GENERATION.md) while designing
-the Starting Village's NPCs.
+The village store is the first half of it, and the only half that exists:
+**the shopkeeper buys crops and sells things to put in the garden.** Tap
+her to trade — she is the door into it, so there is no separate menu — and
+one tap moves one unit either way.
+
+Villager requests, the design's intended way to *earn* money, are not
+built, so selling a harvest is currently the only income. That is why the
+shop buys produce at all: the loop has to close somewhere, and this is the
+shortest honest path from doing the maths to seeing something for it.
+
+Two rules keep the numbers from being arbitrary:
+
+- **Every crop is worth the same.** Not because that is obviously right,
+  but because nothing today makes one harder to grow than another: each
+  takes one planting and two casts, and they differ only in which terrain
+  accepts them. Pricing them apart would invent a difficulty the game does
+  not have. When crops differ, so can their prices.
+- **Stock is priced in crops, not coins.** A fence is "two harvests"; the
+  coin figure falls out of that. The player can count a price in the unit
+  they actually earn, and changing what a crop is worth cannot silently
+  make the whole shop cheap or unaffordable.
+
+Nothing here is scarcity. Seeds stay free and unlimited, crops regrow,
+there is no cap on coins or stock, and nothing the store sells is needed
+to plant, grow or harvest anything — see the pillars. It is somewhere for
+the work to go, not a gate.
+
+**What it sells: things to put down.** Fences, tables and lamp posts,
+bought into a crate and set on the tile the player faces. They block the
+way, which is a state she can corner herself with — so rather than
+checking connectivity before every placement, **anything she puts down she
+can pick back up** by tapping it. A fence that boxed her in is adjacent by
+definition, so it is always within reach. Tables are stocked as outdoor
+furniture, which is a stretch; interior furniture is a separate thing that
+`interiors.py` draws and the player does not place.
+
+The shopkeeper answers a tap from one step away in any direction,
+diagonals included — unlike harvesting, which measures orthogonally
+because it acts on the tile the player *faces* and there is no diagonal
+facing to turn to. Talking needs no facing.
 
 ## Current milestone
 

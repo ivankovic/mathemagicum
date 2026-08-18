@@ -37,6 +37,26 @@
       "width": 32,
       "height": 32
     },
+    "crate": {
+      "file": "crate.png",
+      "width": 32,
+      "height": 32
+    },
+    "item-fence": {
+      "file": "item_fence.png",
+      "width": 32,
+      "height": 32
+    },
+    "item-table": {
+      "file": "item_table.png",
+      "width": 32,
+      "height": 32
+    },
+    "item-lamp": {
+      "file": "item_lamp.png",
+      "width": 32,
+      "height": 32
+    },
     "crop-carrot": {
       "file": "crop_carrot.png",
       "width": 32,
