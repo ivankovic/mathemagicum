@@ -14,7 +14,8 @@ import {
   submit,
   typeDigit,
 } from "../spells/addition";
-import { UiAsset, type UiIndex, uiEntry, uiTextureKey } from "./assets";
+import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import type { UiIndex } from "./assets";
 
 /**
  * The parchment a spell is cast on.
@@ -36,12 +37,10 @@ import { UiAsset, type UiIndex, uiEntry, uiTextureKey } from "./assets";
  * anyway.
  */
 
-const PANEL_MARGIN = 12;
 const PANEL_MAX_W = 460;
 const PANEL_MAX_H = 430;
 const PANEL_MIN_W = 280;
 const PANEL_MIN_H = 300;
-const PAD = 16;
 
 const INK = "#4a3422";
 const INK_DIM = "#8a6a48";
@@ -98,9 +97,7 @@ interface PadKey {
 
 export class SpellPopup {
   private readonly parts: PanelPart[] = [];
-  private readonly backdrop: Phaser.GameObjects.Rectangle;
-  private readonly fill: Phaser.GameObjects.TileSprite;
-  private readonly frame: Phaser.GameObjects.NineSlice;
+  private readonly paper: ParchmentPanel;
   private readonly ink: Phaser.GameObjects.Graphics;
   private readonly title: Phaser.GameObjects.Text;
   private readonly hint: Phaser.GameObjects.Text;
@@ -124,46 +121,14 @@ export class SpellPopup {
   ) {
     const add = scene.add;
 
-    // Interactive, and that matters as much as the dimming does: a hit area
-    // covering the screen means the scene's own pointerdown handler sees
-    // `over.length > 0` and never starts the joystick or a walk under the
-    // popup.
-    //
-    // Built at 1x1 and resized in `render`, which is safe *because it is a
-    // Shape*: a Shape's hit area is its own `geom`, and `setSize` updates
-    // that, so the area follows the rectangle. Checked rather than assumed —
-    // a tap on the parchment and a tap on a keypad key both behave
-    // identically with and without re-establishing the area by hand. Anything
-    // here that stops being a Shape loses that and would need its hit area
-    // set explicitly on every resize.
-    this.backdrop = this.own(
-      add.rectangle(0, 0, 1, 1, 0x101018, 0.55).setOrigin(0, 0).setInteractive(),
-    );
-
-    // Tiled rather than stretched. Stretching mottled paper smears its grain
-    // into streaks, which is exactly what pixel art must not do.
-    const fillEntry = uiEntry(index, UiAsset.ParchmentFill);
-    this.fill = this.own(
-      add.tileSprite(0, 0, fillEntry.width, fillEntry.height, uiTextureKey(UiAsset.ParchmentFill)),
-    );
-
-    const frameEntry = uiEntry(index, UiAsset.ParchmentFrame);
-    const insets = frameEntry.nine_slice;
-    if (!insets) throw new Error("ui.json's parchment-frame has no nine_slice insets");
-    this.frame = this.own(
-      add.nineslice(
-        0,
-        0,
-        uiTextureKey(UiAsset.ParchmentFrame),
-        undefined,
-        frameEntry.width,
-        frameEntry.height,
-        insets.left,
-        insets.right,
-        insets.top,
-        insets.bottom,
-      ),
-    );
+    this.paper = new ParchmentPanel(scene, index, {
+      maxWidth: PANEL_MAX_W,
+      maxHeight: PANEL_MAX_H,
+      minWidth: PANEL_MIN_W,
+      minHeight: PANEL_MIN_H,
+      depth,
+      register,
+    });
 
     this.ink = this.own(add.graphics());
     this.title = this.own(this.label("", TITLE_SIZE, INK).setOrigin(0.5, 0));
@@ -224,6 +189,7 @@ export class SpellPopup {
   open(problem: AdditionProblem, onDone: (solved: boolean) => void): void {
     this.state = beginCast(problem);
     this.finish = onDone;
+    this.paper.setVisible(true);
     for (const part of this.parts) part.setVisible(true);
     this.keyHandler = (event: KeyboardEvent) => this.onKeyDown(event);
     this.scene.input.keyboard?.on("keydown", this.keyHandler);
@@ -238,6 +204,7 @@ export class SpellPopup {
     }
     this.state = null;
     this.finish = null;
+    this.paper.setVisible(false);
     for (const part of this.parts) part.setVisible(false);
   }
 
@@ -341,18 +308,14 @@ export class SpellPopup {
     const state = this.state;
     if (!state) return;
     const { width, height } = this.scene.scale;
+    const rect = this.paper.layout(width, height);
+    const panelW = rect.width;
+    const panelH = rect.height;
+    const cx = rect.centreX;
+    const cy = rect.centreY;
+    const left = rect.left;
+    const top = rect.top;
 
-    this.backdrop.setSize(width, height).setPosition(0, 0);
-
-    const panelW = Math.max(PANEL_MIN_W, Math.min(PANEL_MAX_W, width - PANEL_MARGIN * 2));
-    const panelH = Math.max(PANEL_MIN_H, Math.min(PANEL_MAX_H, height - PANEL_MARGIN * 2));
-    const cx = Math.round(width / 2);
-    const cy = Math.round(height / 2);
-    const left = cx - panelW / 2;
-    const top = cy - panelH / 2;
-
-    this.fill.setPosition(cx, cy).setSize(panelW, panelH);
-    this.frame.setPosition(cx, cy).setSize(panelW, panelH);
     this.closeRect.setPosition(left + panelW - PAD - 2, top + PAD + 2);
     this.closeText.setPosition(this.closeRect.x, this.closeRect.y);
 
@@ -522,6 +485,7 @@ export class SpellPopup {
 
   destroy(): void {
     this.close();
+    this.paper.destroy();
     for (const part of this.parts) part.destroy();
   }
 }
