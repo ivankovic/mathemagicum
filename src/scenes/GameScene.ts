@@ -1824,11 +1824,44 @@ export class GameScene extends Phaser.Scene {
     this.interiorLayer.setVisible(true);
     this.movePlayerToLayer();
 
-    const { cols, rows } = sidecar.size_cells;
-    this.cameras.main.setBounds(0, 0, cols * TILE_SIZE, this.originY + rows * TILE_SIZE);
     // Facing up: they just walked in through the wall behind them.
     this.placePlayer(door.col, door.row, Facing.Up);
+    // After the player has been moved, so that the branch which does follow
+    // them — a room too big for the screen, which a phone held upright makes
+    // of the schoolhouse — starts from where they now are rather than from
+    // where they were standing outside.
+    const { cols, rows } = sidecar.size_cells;
+    this.frameRoom(cols * TILE_SIZE, this.originY + rows * TILE_SIZE);
     this.setMessage(`Entered the ${room}. Step back out through the door.`);
+  }
+
+  /**
+   * Point the camera at a whole room rather than at the player inside it.
+   *
+   * Outdoors the camera follows, because the world is far larger than the
+   * screen. A room is not: every one of them fits in the viewport at once,
+   * so following is pointless and *bounding* is actively wrong — bounds are
+   * clamped so that the world never shows past its own edge, which for a
+   * world smaller than the view pins it to the top-left corner and leaves
+   * black down two sides. The room is framed in the middle instead.
+   *
+   * A room bigger than the viewport would still want the old behaviour, so
+   * that case keeps it. None of the shipped rooms is, but the rule reads
+   * better than the coincidence.
+   */
+  private frameRoom(width: number, height: number): void {
+    const camera = this.cameras.main;
+    const visible = { width: camera.width / camera.zoom, height: camera.height / camera.zoom };
+    if (width > visible.width || height > visible.height) {
+      camera.setBounds(0, 0, width, height);
+      camera.startFollow(this.player);
+      return;
+    }
+    // `removeBounds` first: with bounds set, the scroll this asks for is
+    // clamped straight back to the corner it is trying to move away from.
+    camera.removeBounds();
+    camera.stopFollow();
+    camera.centerOn(width / 2, height / 2);
   }
 
   private leaveInterior(): void {
@@ -1847,6 +1880,10 @@ export class GameScene extends Phaser.Scene {
     this.originX = 0;
     this.originY = 0;
     this.cameras.main.setBounds(0, 0, this.worldPixelWidth, this.worldPixelHeight);
+    // Following has to be turned back on: a room small enough to frame turned
+    // it off, and a player who walked out into a world the camera was no
+    // longer tracking would walk off the edge of the screen.
+    this.cameras.main.startFollow(this.player);
     this.placePlayer(interior.returnTo.col, interior.returnTo.row, Facing.Down);
     this.setMessage("");
     this.refreshVisibleChunks();
