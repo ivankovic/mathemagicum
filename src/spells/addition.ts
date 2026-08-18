@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { EN } from "../i18n/en";
+import type { Phrases } from "../i18n/phrases";
 import { type Rng, randInt } from "../world/rng";
 
 /**
@@ -25,8 +27,6 @@ import { type Rng, randInt } from "../world/rng";
 
 /** How many jumps a problem is broken into: ones, tens, hundreds. */
 export const PLACES = 3;
-
-export const PLACE_NAMES: readonly string[] = ["ones", "tens", "hundreds"];
 
 export interface AdditionProblem {
   /** The number the line starts at, and the number jumped along it. */
@@ -195,12 +195,11 @@ export function submit(state: CastState): CastState {
  * names the two numbers being added, which is the whole of the method, and
  * saying the result outright would turn the spell into a button.
  */
-export function hintFor(state: CastState): string | null {
+export function hintFor(state: CastState, words: Phrases = EN): string | null {
   if (isSolved(state) || state.attempts === 0) return null;
   const from = state.index === 0 ? state.problem.start : state.problem.stops[state.index - 1];
   const jump = state.problem.jumps[state.index];
   if (from === undefined || jump === undefined) return null;
-  const place = PLACE_NAMES[state.index] ?? "";
-  if (state.attempts === 1) return `Add the ${place} to ${from}.`;
-  return `${from} + ${jump} = ?`;
+  if (state.attempts === 1) return words.addPlace(state.index, from);
+  return words.sumQuestion(from, jump);
 }

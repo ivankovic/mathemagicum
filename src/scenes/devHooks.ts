@@ -32,9 +32,33 @@ export interface DevOptions {
   readonly freezeNpcs: boolean;
   /** Coins to start with, so a test of the shop need not first farm for them. */
   readonly coins: number;
+  /**
+   * Which language the game is being read in, overriding the browser's.
+   *
+   * The currency follows the language — kuna for English, francs for German
+   * — so this is the single biggest branch in the game, and without a way to
+   * ask for it a script would have to launch a second browser context with a
+   * different locale to check any of the arithmetic.
+   */
+  readonly language: string | null;
+  /**
+   * Which coins to count in, overriding both the language and what is saved.
+   *
+   * The euro is the currency that behaves differently — small coins, so the
+   * shop sells fewer at a time — and without this a script could only reach
+   * it by writing the saved settings itself, which is exactly the reaching-in
+   * these seams exist to replace.
+   */
+  readonly money: string | null;
 }
 
-const NONE: DevOptions = { seed: null, freezeNpcs: false, coins: 0 };
+const NONE: DevOptions = {
+  seed: null,
+  freezeNpcs: false,
+  coins: 0,
+  language: null,
+  money: null,
+};
 
 export function devOptions(search = globalThis.location?.search ?? ""): DevOptions {
   if (!import.meta.env.DEV) return NONE;
@@ -60,6 +84,8 @@ export function parseDevOptions(search: string): DevOptions {
     // wrong in a way nothing tells it about.
     freezeNpcs: params.has("freezeNpcs"),
     coins: Math.max(0, number("coins") ?? 0),
+    language: params.get("lang")?.trim() || null,
+    money: params.get("money")?.trim() || null,
   };
 }
 

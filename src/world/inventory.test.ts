@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
-import { ITEM_TYPES, Inventory, describeItem } from "./inventory";
+import { ITEM_TYPES, Inventory } from "./inventory";
 import { PLANT_TYPES, PlantType } from "./plants";
 
 describe("Inventory", () => {
@@ -112,31 +112,5 @@ describe("Inventory", () => {
     expect(bag.count(FixtureType.Fence)).toBe(5);
     expect(bag.total).toBe(7);
     expect(bag.kinds).toBe(2);
-  });
-});
-
-describe("describeItem", () => {
-  test("says one of a thing without pluralising it", () => {
-    expect(describeItem(PlantType.Carrot, 1)).toBe("1 carrot");
-  });
-
-  test("pluralises more than one", () => {
-    expect(describeItem(PlantType.Carrot, 3)).toBe("3 carrots");
-    expect(describeItem(PlantType.Sunflower, 2)).toBe("2 sunflowers");
-  });
-
-  // The one irregular ending the item list actually contains.
-  test("handles a name that already ends in s", () => {
-    expect(describeItem(PlantType.Cactus, 2)).toBe("2 cactuses");
-    expect(describeItem(PlantType.Cactus, 1)).toBe("1 cactus");
-  });
-
-  test("reads for the things the store sells too", () => {
-    expect(describeItem(FixtureType.Fence, 3)).toBe("3 fences");
-    expect(describeItem(FixtureType.Lamp, 1)).toBe("1 lamp");
-  });
-
-  test("says none of a thing rather than nothing at all", () => {
-    expect(describeItem(PlantType.Carrot, 0)).toBe("0 carrots");
   });
 });

@@ -179,13 +179,82 @@ fuller brainstorm.
 
 The village store is the first half of it, and the only half that exists:
 **the shopkeeper buys crops and sells things to put in the garden.** Tap
-her to trade — she is the door into it, so there is no separate menu — and
-one tap moves one unit either way.
+her to trade — she is the door into it, so there is no separate menu. What
+happens at the counter is the second minigame: **money is counted, not
+deducted.**
 
 Villager requests, the design's intended way to *earn* money, are not
 built, so selling a harvest is currently the only income. That is why the
 shop buys produce at all: the loop has to close somewhere, and this is the
 shortest honest path from doing the maths to seeing something for it.
+
+**The player picks the language and the money.** The browser's language is
+the first guess and nothing more: an options screen, reachable from the
+corner of the HUD, offers English or Deutsch and either currency — or
+"follow", which is the language's own. Keeping "follow" as a separate answer
+from the currency it happens to resolve to means switching language later
+switches the money with it, rather than leaving the player stuck with
+whatever was chosen once. Both are saved, and both apply the moment they are
+tapped: an options screen with an OK button asks a child to remember a second
+step for the first one to count.
+
+**The whole game is translated, not just the money.** Every line the player
+reads comes from a phrase book (`src/i18n/`), one per language, and the
+interface is what stops a half-translation shipping: a language that forgets
+a phrase does not compile, and a test fails on any German line that is still
+its English original. The phrases are *functions*, not templates with holes,
+so German can put the verb where German puts the verb rather than following
+English's word order in German words. Nouns carry their forms — "einen Zaun",
+"keinen Zaun", "die Karotte", "der Kaktus" — because the article follows the
+noun's gender, and a sentence that guessed would get one in three wrong.
+
+**The money is real money.** English plays in Croatian kuna by default and
+German in Swiss francs — a defunct currency and a foreign one, both
+deliberately: neither is the money in the player's own pocket, so the game is
+not quietly teaching that a fence costs five of what their parents earn. The
+euro is the third choice, and the one most players will actually recognise.
+All three use the coins that were really in circulation, which is why kuna
+and francs start at 5 (Switzerland withdrew the 1-rappen piece in 2007,
+Croatia stopped minting 1 and 2 lipa for circulation in 2009). Everything the
+game holds is in minor units — lipa, rappen, cents — and every price is a
+whole number of them, so nothing is ever a fraction of a coin.
+
+**The euro is a different shape, and that is why it is here.** It keeps its 1
+and 2 cent pieces, so its prices need not be round fives, and it stops at 2 €
+because 5 € is a note. Ten crops in euros is thirteen coins on the counter,
+which is bookkeeping rather than arithmetic — so the shop works out how many
+of a thing it can sell rather than assuming ten always fits, and in euros it
+offers fewer at a time. Same rule, different answer per currency.
+
+**The coins have faces.** Three of them — copper, silver, gold — not one per
+denomination, because the value is written on the button beside the picture
+and one set of art has to serve all three currencies; a digit struck into the
+art would be wrong in two of them. Which face a coin gets is a rule rather
+than a table: gold from a whole unit up, silver from a tenth, copper below
+that. The tiers differ in size as well as colour, so they stay apart for a
+colour-blind player and in bright sun, and because a child sorting real
+change sorts it by size long before reading the number.
+
+**Buying is counting out.** Pick a thing, pick how many, then put the exact
+sum on the counter coin by coin: tap a coin to add it, right-click to take it
+back. No change is given, because giving change is a different and harder
+skill than making a sum, and nothing about the screen can fail — there is no
+wrong answer to be scored on, only a total that is not there yet.
+
+**Selling is checking.** She counts the payment out herself and asks whether
+it is right. One time in ten she miscounts, by one to three coins, in either
+direction. The player says "that's right" or "that's wrong" — and either way
+**she pays what she owes.** Being wrong about her arithmetic costs nothing
+but being told so: a child who miscounts should lose a guess, not a harvest.
+
+**At most ten of a thing per trade, and fewer when the coins are small.** A
+counting limit, not a purse one. Past a handful the sum stops being
+arithmetic a child does in their head and becomes bookkeeping, and her side
+of the counter has to stay countable by eye — so the cap is the largest count
+whose payment still fits, and it stops at the first count that does not
+rather than the largest that does, because the picker steps through every
+number on the way. The picker also stops at what the purse can actually
+cover, so it can never offer a total the coin pad will refuse to reach.
 
 Two rules keep the numbers from being arbitrary:
 
@@ -197,7 +266,10 @@ Two rules keep the numbers from being arbitrary:
 - **Stock is priced in crops, not coins.** A fence is "two harvests"; the
   coin figure falls out of that. The player can count a price in the unit
   they actually earn, and changing what a crop is worth cannot silently
-  make the whole shop cheap or unaffordable.
+  make the whole shop cheap or unaffordable. A crop is 2,50 kn — deliberately
+  not a single coin, so the smallest sale is already a sum. A test holds the
+  bridge between the two halves: every price, multiplied by every quantity
+  the counter can ask for, has to be payable in coins that exist.
 
 Nothing here is scarcity. Seeds stay free and unlimited, crops regrow,
 there is no cap on coins or stock, and nothing the store sells is needed
@@ -232,5 +304,7 @@ multiple types of crop, and growing them with the first spell. Planting is
 still a direct action — pick a seed from the pouch, or press a key — since
 the planting spell is not speced. Both gardening actions work the tile the
 player faces. Growth is real: a crop starts as a seedling and reaches
-maturity in two casts of the addition spell. No harvest loop yet, and
-nothing is saved between sessions.
+maturity in two casts of the addition spell. No harvest loop yet. Nothing
+is saved between sessions except the two options — the language and the
+money — which would be no use as options if they had to be set again every
+time.

@@ -18,8 +18,14 @@ sinks into the tile a spell lands on. Seeds and spells are picked from two icon 
 in the corner of the screen, and both act on the tile the player faces.
 Ripe crops are picked with a tap and go into a basket, and the village
 shopkeeper buys them for coins you can spend on fences, tables and lamps to
-put down. Planting and harvesting are still direct actions — those spells
-are not speced. Nothing is saved between sessions.
+put down — and the counter is the second minigame: buying means counting the
+exact sum out in real coins — kuna, francs or euros — and selling means
+checking the payment she counts back, which one time in ten is wrong. Planting and harvesting are still direct actions — those spells
+are not speced. The game is playable in English and German — every line, not
+only the money — and the language and the currency are the player's to pick
+from an options panel in the corner of the screen. Money can be Croatian
+kuna, Swiss francs or euros, and the two choices are the only things saved
+between sessions.
 
 ## Assets
 
@@ -64,7 +70,7 @@ for t in grass woodland dirt hilly mountain sand; do
 done
 cp $OUT/ui/{ui.json,parchment_fill.png,parchment_frame.png}    public/assets/ui/
 cp $OUT/ui/{spellbook.png,rune_add.png,seed_pouch.png,basket.png,crate.png} public/assets/ui/
-cp $OUT/ui/{crop_*.png,item_*.png}                                public/assets/ui/
+cp $OUT/ui/{crop_*.png,item_*.png,coin_*.png}                     public/assets/ui/
 bun test   # src/world/assets.test.ts checks the sync
 ```
 
@@ -161,6 +167,8 @@ outside, all gated on `import.meta.env.DEV` (see `src/scenes/devHooks.ts`):
 | `?seed=N` | fixes the spell's problems, so a script knows the sums |
 | `?freezeNpcs` | holds villagers on their home tiles |
 | `?coins=N` | starts with money, so a shop test need not farm first |
+| `?lang=xx` | forces the language for one run, over the browser's and the saved choice |
+| `?money=X` | forces the currency — `kuna`, `franc`, `euro` — over the language and the saved choice |
 | `window.__mathemagicum` | `{ session, ui(), doors(), npcs(), screenOf() }` — read state; look up buttons, doors and people by name; convert a tile to a screen position |
 
 Each replaced something that had gone wrong. Pinning `Date.now` to make the

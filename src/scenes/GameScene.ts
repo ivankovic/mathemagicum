@@ -2,9 +2,25 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Phaser from "phaser";
+import { phrasesFor } from "../i18n";
+import { EN } from "../i18n/en";
+import type { Phrases } from "../i18n/phrases";
 import { VirtualJoystick } from "../input/VirtualJoystick";
+import {
+  FOLLOW_LANGUAGE,
+  MONEY_CHOICES,
+  type MoneyChoice,
+  type Settings,
+  browserStore,
+  currencyFor,
+  languageOf,
+  readSettings,
+  writeSettings,
+} from "../settings";
+import { type CurrencyDefinition, currencyOf } from "../shop/currency";
 import { makeAdditionProblem } from "../spells/addition";
 import { IconTray } from "../ui/IconTray";
+import { OptionsPanel } from "../ui/OptionsPanel";
 import { ShopPanel } from "../ui/ShopPanel";
 import { SpellPopup } from "../ui/SpellPopup";
 import {
@@ -83,7 +99,7 @@ import {
   interiorSheetKey,
   interiorSidecarKey,
 } from "../world/interiors";
-import { type Inventory, describeItem } from "../world/inventory";
+import type { Inventory } from "../world/inventory";
 import type { PlacedObject } from "../world/objects";
 import { findPath } from "../world/pathfinding";
 import {
@@ -91,7 +107,7 @@ import {
   PLANTED_STAGE,
   PLANT_TYPES,
   PlantStage,
-  PlantType,
+  type PlantType,
   plantAnimKey,
   plantSheetKey,
   plantSidecarKey,
@@ -339,6 +355,25 @@ export class GameScene extends Phaser.Scene {
   private crateTray?: IconTray;
   private shopPanel!: ShopPanel;
   private coinsText!: Phaser.GameObjects.Text;
+  /**
+   * What the player chose: the language, and which coins they count in.
+   *
+   * Held here rather than read where it is needed, so that changing it is one
+   * assignment followed by one refresh, and no part of the screen can be left
+   * showing the old answer.
+   */
+  private settings!: Settings;
+  /**
+   * Everything the player reads, in the language they chose.
+   *
+   * English until the settings are read, a few lines into `create`: the
+   * status line is written once while the scene is still assembling itself,
+   * and a phrase book that did not exist yet took the whole scene down.
+   */
+  private words: Phrases = EN;
+  private currency!: CurrencyDefinition;
+  private optionsPanel?: OptionsPanel;
+  private optionsButton?: { box: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text };
   // Sprites for fixtures the *player* put down, so one can be picked back
   // up. Deliberately not the village well: it was placed by generation and
   // is not hers to take.
@@ -350,6 +385,12 @@ export class GameScene extends Phaser.Scene {
   // which does not also stall every tween in the game. See devHooks.
   private dev: DevOptions = devOptions();
   private spellRng: Rng = createRng(0);
+  /**
+   * The shop draws from its own stream. Sharing the spell's would mean a
+   * trip to the counter shifted every sum the spellbook went on to set —
+   * and ?seed= promises a script the sums it is about to be asked.
+   */
+  private shopRng: Rng = createRng(0);
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Wasd;
@@ -414,7 +455,9 @@ export class GameScene extends Phaser.Scene {
     this.grid = world.grid;
     this.worldGrid = world.grid;
     this.session = new GameSession({ grid: world.grid, start: world.playerStart });
-    this.spellRng = createRng(this.dev.seed ?? Date.now() & 0x7fffffff);
+    const seed = this.dev.seed ?? Date.now() & 0x7fffffff;
+    this.spellRng = createRng(seed);
+    this.shopRng = createRng(seed ^ 0x5f37_1e2b);
     if (this.dev.coins > 0) this.session.purse.earn(this.dev.coins);
 
     const bounds = computeMapScreenBounds(this.grid.width, this.grid.height);
@@ -493,15 +536,65 @@ export class GameScene extends Phaser.Scene {
 
     const uiIndex = this.cache.json.get(UI_SIDECAR_KEY) as UiIndex | undefined;
     if (!uiIndex) throw new Error("ui.json did not load — the spell parchment has no art");
-    this.spellPopup = new SpellPopup(this, uiIndex, MODAL_DEPTH, (object) => this.ui(object));
+    // ?lang= is for scripts: it overrides the language for this run without
+    // touching what the player saved.
+    const stored = readSettings(browserStore(), navigator.language);
+    // The money goes back to following it too: a script asking for German is
+    // asking for the German money, and a currency saved in that browser
+    // profile by an earlier run would otherwise quietly outrank it.
+    this.settings = this.dev.language
+      ? { language: languageOf(this.dev.language), money: FOLLOW_LANGUAGE }
+      : stored;
+    // ?money= outranks the language it would otherwise follow. Ignored if it
+    // names a currency that does not exist, so a typo plays in kuna rather
+    // than in nothing.
+    if (this.dev.money && MONEY_CHOICES.includes(this.dev.money as MoneyChoice)) {
+      this.settings = { ...this.settings, money: this.dev.money as MoneyChoice };
+    }
+    this.currency = currencyOf(currencyFor(this.settings));
+    this.words = phrasesFor(this.settings.language);
+    this.session.setPhrases(this.words);
+    // Written once already, before there was a language to write it in.
+    this.updateStatusText();
+
+    this.spellPopup = new SpellPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
+      this.ui(object),
+    );
     this.shopPanel = new ShopPanel(
       this,
       uiIndex,
       MODAL_DEPTH,
       this.inventory,
       this.purse,
+      this.currency,
+      this.words,
+      this.shopRng,
       (object) => this.ui(object),
     );
+    // The panel runs the counting; the ledger is still the session's.
+    this.shopPanel.onBuy = (fixture, count) => {
+      this.session.buy(fixture, count);
+      this.refreshCarried();
+    };
+    this.shopPanel.onSell = (plant, count) => {
+      this.session.sell(plant, count);
+      this.refreshCarried();
+    };
+
+    this.optionsPanel = new OptionsPanel(
+      this,
+      uiIndex,
+      MODAL_DEPTH,
+      this.settings,
+      this.words,
+      (object) => this.ui(object),
+    );
+    this.optionsPanel.onChange = (next) => this.applySettings(next);
+    this.createOptionsButton();
+    // The coin line is written whenever money moves, and money starting in
+    // the purse is not money moving: ?coins= showed nothing until the first
+    // trade, and a saved purse would have done the same.
+    this.updateCoins();
 
     this.setupInput();
     this.createActionBar();
@@ -530,7 +623,12 @@ export class GameScene extends Phaser.Scene {
       // outliving its scene fires into a destroyed display list.
       this.spellPopup.destroy();
       this.shopPanel.destroy();
+      this.optionsPanel?.destroy();
     });
+
+    // The shop's coin pad takes a coin back on right-click, so the browser's
+    // own menu must not open over the parchment when it is used.
+    this.input.mouse?.disableContextMenu();
 
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer, over: unknown[]) => {
       // The popup's backdrop covers the screen and is interactive, so `over`
@@ -666,6 +764,7 @@ export class GameScene extends Phaser.Scene {
     // pieces is placed from the viewport's size.
     this.spellPopup?.layout();
     this.shopPanel?.layout();
+    this.optionsPanel?.layout();
     this.layoutHud();
   }
 
@@ -682,13 +781,14 @@ export class GameScene extends Phaser.Scene {
     // already wraps to two on a phone, and money is the one number the
     // player wants to find without reading a sentence.
     this.coinsText?.setY(this.messageText.y + this.messageText.height + HUD_LINE_GAP);
+    this.placeOptionsButton();
   }
 
   // Hidden until she has been paid something. A "0 coins" line on every new
   // game is a permanent reminder of a currency she has no use for yet.
   private updateCoins(): void {
     if (!this.coinsText) return;
-    this.coinsText.setText(this.purse.coins > 0 ? `${this.purse.coins} coins` : "");
+    this.coinsText.setText(this.purse.coins > 0 ? this.currency.format(this.purse.coins) : "");
     this.layoutHud();
   }
 
@@ -1233,7 +1333,7 @@ export class GameScene extends Phaser.Scene {
       items: PLANT_TYPES.map((plant) => ({
         texture: uiTextureKey(cropIcon(plant)),
         count: () => this.inventory.count(plant),
-        act: () => this.setMessage(describeItem(plant, this.inventory.count(plant))),
+        act: () => this.setMessage(this.words.count(plant, this.inventory.count(plant))),
       })),
       // Crops only, not `inventory.total`: the bag holds bought fixtures too
       // now, and a basket badge that counted those would say she is carrying
@@ -1323,7 +1423,7 @@ export class GameScene extends Phaser.Scene {
     this.setMessage("");
     this.spellPopup.open(makeAdditionProblem(this.spellRng), (solved) => {
       if (solved) this.growCropAt(col, row);
-      else this.setMessage("The spell fades unspoken");
+      else this.setMessage(this.words.spellFades);
     });
   }
 
@@ -1376,7 +1476,7 @@ export class GameScene extends Phaser.Scene {
       // next to her, and refusing that would be a rule with no reason behind
       // it that the player could see.
       if (stepsToSpeak(this.session.tile, at()) > 1) {
-        this.setMessage("Too far away — step up to her first");
+        this.setMessage(this.words.tooFarToSpeak);
         return;
       }
       this.openShop();
@@ -1416,6 +1516,10 @@ export class GameScene extends Phaser.Scene {
    */
   private uiPositions(): Record<string, { x: number; y: number }> {
     const positions: Record<string, { x: number; y: number }> = {};
+    if (this.optionsButton) {
+      const { x, y } = this.optionsButton.box;
+      positions.options = { x: x - 37, y: y + 12 };
+    }
     for (const [name, tray] of Object.entries(this.trays())) {
       if (!tray) continue;
       positions[name] = tray.containerPosition();
@@ -1424,6 +1528,90 @@ export class GameScene extends Phaser.Scene {
       }
     }
     return positions;
+  }
+
+  /**
+   * The options button: a corner of the screen, out of the action bar.
+   *
+   * Not a fifth tray. The trays are things she does to the world and this is
+   * a thing she does to the game, and the day the bar grew a fourth slot
+   * every hand-copied coordinate in the test scripts pointed at its
+   * neighbour — a settings button among them would be one more to shift.
+   */
+  private createOptionsButton(): void {
+    const box = this.ui(
+      this.add
+        .rectangle(0, 0, 74, 24, 0x1b1710, 0.65)
+        .setOrigin(1, 0)
+        .setStrokeStyle(1, 0xd8c08a, 0.8)
+        .setScrollFactor(0)
+        .setDepth(HUD_DEPTH)
+        .setInteractive({ useHandCursor: true }),
+    );
+    const label = this.ui(
+      this.add
+        .text(0, 0, "", { fontFamily: "monospace", fontSize: "12px", color: "#f0e0b8" })
+        .setOrigin(1, 0)
+        .setScrollFactor(0)
+        .setDepth(HUD_DEPTH),
+    );
+    box.on("pointerdown", () => this.openOptions());
+    this.optionsButton = { box, label };
+    this.placeOptionsButton();
+  }
+
+  private placeOptionsButton(): void {
+    if (!this.optionsButton) return;
+    const right = this.scale.width - HUD_MARGIN;
+    this.optionsButton.box.setPosition(right, HUD_MARGIN);
+    this.optionsButton.label.setPosition(right - 8, HUD_MARGIN + 5);
+  }
+
+  /**
+   * Out of sight while a popup is up.
+   *
+   * `openOptions` refuses anyway, but a button that looks the same and does
+   * nothing reads as broken — this game has already lost several debugging
+   * passes to exactly that.
+   */
+  private refreshOptionsButton(): void {
+    this.optionsButton?.label.setText(this.words.optionsButton);
+    const shown = !this.modalOpen;
+    this.optionsButton?.box.setVisible(shown);
+    this.optionsButton?.label.setVisible(shown);
+  }
+
+  private openOptions(): void {
+    if (this.modalOpen) return;
+    this.closeTrays();
+    this.optionsPanel?.open_(() => this.updateStatusText());
+    this.updateStatusText();
+  }
+
+  /**
+   * A choice was made: apply it everywhere it shows, then remember it.
+   *
+   * One place, because the currency is read by three separate things — the
+   * coin line, the shop's counter and the shop's own arithmetic — and a
+   * change that reached two of them would put a price on screen that the
+   * coins beneath it do not add up to.
+   */
+  private applySettings(next: Settings): void {
+    this.settings = next;
+    writeSettings(browserStore(), next);
+    this.currency = currencyOf(currencyFor(next));
+    this.words = phrasesFor(next.language);
+    this.session.setPhrases(this.words);
+    this.spellPopup?.setPhrases(this.words);
+    this.optionsPanel?.setPhrases(this.words);
+    this.shopPanel?.setPhrases(this.words);
+    this.shopPanel?.setCurrency(this.currency);
+    // The line on screen was written in the old language by whatever the
+    // player last did; it would otherwise sit there until they did something
+    // else. Clearing it is honest — re-translating a past event is not.
+    this.setMessage("");
+    this.updateCoins();
+    this.updateStatusText();
   }
 
   private trays(): Record<string, IconTray | undefined> {
@@ -1555,7 +1743,7 @@ export class GameScene extends Phaser.Scene {
     const dRow = row - this.playerRow;
     const steps = Math.abs(dCol) + Math.abs(dRow);
     if (steps > 1) {
-      this.setMessage("Too far away — step up to it first");
+      this.setMessage(this.words.tooFarToReach);
       return;
     }
     if (steps === 1) this.session.turnToward(dCol, dRow);
@@ -1564,7 +1752,7 @@ export class GameScene extends Phaser.Scene {
 
   private tryPlant(): void {
     if (this.modalOpen) return;
-    const plant = PLANT_TYPES[this.selectedPlantIndex];
+    const plant = PLANT_TYPES[this.selectedPlantIndex] ?? PLANT_TYPES[0];
     if (!plant) return;
 
     const result = this.session.plant(plant);
@@ -1832,7 +2020,7 @@ export class GameScene extends Phaser.Scene {
     // where they were standing outside.
     const { cols, rows } = sidecar.size_cells;
     this.frameRoom(cols * TILE_SIZE, this.originY + rows * TILE_SIZE);
-    this.setMessage(`Entered the ${room}. Step back out through the door.`);
+    this.setMessage(this.words.entered(room));
   }
 
   /**
@@ -2100,6 +2288,7 @@ export class GameScene extends Phaser.Scene {
 
   private updateStatusText(): void {
     this.statusText.setText(this.statusLine);
+    this.refreshOptionsButton();
     // Wrapping changes the status line's height, which the message line sits
     // under — so re-place it whenever the text changes, not only on resize.
     this.layoutHud();
@@ -2145,30 +2334,33 @@ export class GameScene extends Phaser.Scene {
   }
 
   private get modalOpen(): boolean {
-    return this.spellPopup.isOpen || this.shopPanel?.isOpen === true;
+    return (
+      // Optional throughout: the status line is written once while the scene
+      // is still assembling itself, before any of these exist.
+      this.spellPopup?.isOpen === true ||
+      this.shopPanel?.isOpen === true ||
+      this.optionsPanel?.isOpen === true
+    );
   }
 
   private get statusLine(): string {
-    if (this.shopPanel?.isOpen) return "The village store";
-    if (this.seedTray?.isOpen) return "Pick a seed to plant it on the tile ahead";
-    if (this.spellTray?.isOpen) return "Cast + to grow the crop on the tile ahead";
+    if (this.optionsPanel?.isOpen) return this.words.statusOptions;
+    if (this.shopPanel?.isOpen) return this.words.statusStore;
+    if (this.seedTray?.isOpen) return this.words.statusSeeds;
+    if (this.spellTray?.isOpen) return this.words.statusSpells;
     if (this.crateTray?.isOpen) {
-      return this.crateIsEmpty
-        ? "Nothing to put down — the shopkeeper sells fences and lamps"
-        : "Pick something to set it on the tile ahead";
+      return this.crateIsEmpty ? this.words.statusCrateEmpty : this.words.statusCrate;
     }
     if (this.basketTray?.isOpen) {
       return this.inventory.isEmpty
-        ? "Your basket is empty — tap a ripe crop to pick it"
-        : `Carrying ${this.inventory.total} in ${this.inventory.kinds} kind(s)`;
+        ? this.words.statusBasketEmpty
+        : this.words.statusCarrying(this.inventory.total, this.inventory.kinds);
     }
-    const plant = PLANT_TYPES[this.selectedPlantIndex];
+    const plant = PLANT_TYPES[this.selectedPlantIndex] ?? PLANT_TYPES[0];
     // The basket's own badge carries the count now, so the caption no longer
     // repeats it — two places showing the same number is one place too many
     // on a line that has to fit a phone held upright.
-    return this.mobileControls
-      ? "Drag to walk  Tap a ripe crop to pick it  The shop is inside the barn"
-      : `Arrows/WASD  P: seeds  B: spells  Space: plant ${plant}  H: pick  Shop: inside the barn`;
+    return this.mobileControls ? this.words.hintTouch : this.words.hintKeys(plant as PlantType);
   }
 
   private get crateIsEmpty(): boolean {

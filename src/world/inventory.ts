@@ -94,12 +94,3 @@ export class Inventory {
     return true;
   }
 }
-
-/** "3 carrots", "1 cactus" — the plural the message line needs. */
-export function describeItem(item: ItemType, count: number): string {
-  // English pluralisation is not the interesting problem here and the item
-  // list is three words long, so this handles the one irregular ending the
-  // set actually contains rather than pretending to be general.
-  const plural = item.endsWith("s") ? `${item}es` : `${item}s`;
-  return `${count} ${count === 1 ? item : plural}`;
-}

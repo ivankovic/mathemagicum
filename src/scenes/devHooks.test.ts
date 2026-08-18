@@ -6,7 +6,29 @@ import { parseDevOptions } from "./devHooks";
 
 describe("parseDevOptions", () => {
   test("asks for nothing when nothing is asked for", () => {
-    expect(parseDevOptions("")).toEqual({ seed: null, freezeNpcs: false, coins: 0 });
+    expect(parseDevOptions("")).toEqual({
+      seed: null,
+      freezeNpcs: false,
+      coins: 0,
+      language: null,
+      money: null,
+    });
+  });
+
+  // The currency follows the language, so without this the German half of
+  // the shop can only be reached by launching a differently-localed browser.
+  test("reads a language override", () => {
+    expect(parseDevOptions("?lang=de").language).toBe("de");
+    expect(parseDevOptions("?lang=de-CH").language).toBe("de-CH");
+    expect(parseDevOptions("?lang=").language).toBe(null);
+  });
+
+  // The euro is the currency that behaves differently — small coins, so the
+  // shop sells fewer at a time — and it is not the default in any language.
+  test("reads a currency override", () => {
+    expect(parseDevOptions("?money=euro").money).toBe("euro");
+    expect(parseDevOptions("?money=").money).toBe(null);
+    expect(parseDevOptions("").money).toBe(null);
   });
 
   test("reads a seed, so a script knows which sums it will be asked", () => {
@@ -33,10 +55,12 @@ describe("parseDevOptions", () => {
   });
 
   test("several at once", () => {
-    expect(parseDevOptions("?seed=7&freezeNpcs&coins=40")).toEqual({
+    expect(parseDevOptions("?seed=7&freezeNpcs&coins=40&lang=de")).toEqual({
       seed: 7,
       freezeNpcs: true,
       coins: 40,
+      language: "de",
+      money: null,
     });
   });
 });

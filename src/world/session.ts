@@ -1,13 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { EN } from "../i18n/en";
+import type { Phrases } from "../i18n/phrases";
 import { type Facing, facingFor, stepForFacing } from "./characters";
 import { type FixtureType, isPlaceable } from "./fixtures";
 import type { WorldGrid } from "./grid";
-import { Inventory, type ItemType, describeItem } from "./inventory";
+import { Inventory, type ItemType } from "./inventory";
 import type { PlacedObject } from "./objects";
 import { type Crop, HARVEST_YIELD, PlantStage, type PlantType } from "./plants";
-import { Purse, type Trade, buyOne, sellOne } from "./shop";
+import { Purse, type Trade, buyStock, sellCrops } from "./shop";
 import type { GridPoint } from "./topdown";
 
 /**
@@ -56,6 +58,8 @@ export interface SessionOptions {
   readonly grid: WorldGrid;
   readonly start: GridPoint;
   readonly facing?: Facing;
+  /** Defaults to English, so a test of the rules need not pick a language. */
+  readonly phrases?: Phrases;
 }
 
 /** How far a thing can be and still be worked: one orthogonal step. */
@@ -77,10 +81,17 @@ export function stepsToSpeak(a: GridPoint, b: GridPoint): number {
   return Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row));
 }
 
-const INDOORS = "Nothing grows indoors";
-
 export class GameSession {
   readonly grid: WorldGrid;
+  /**
+   * The words every refusal and every result is written in.
+   *
+   * Held rather than reached for, and swappable, because the player can
+   * change language mid-game: the session keeps the rules, and the rules
+   * decide what to say about themselves — a message written by the renderer
+   * instead would have to repeat the condition that produced it.
+   */
+  private words: Phrases;
   readonly inventory = new Inventory();
   readonly purse = new Purse();
 
@@ -98,8 +109,14 @@ export class GameSession {
 
   constructor(options: SessionOptions) {
     this.grid = options.grid;
+    this.words = options.phrases ?? EN;
     this.position = { col: options.start.col, row: options.start.row };
     this.heading = options.facing ?? ("down" as Facing);
+  }
+
+  /** Say everything from here on in another language. */
+  setPhrases(phrases: Phrases): void {
+    this.words = phrases;
   }
 
   get col(): number {
@@ -150,24 +167,24 @@ export class GameSession {
   // --- gardening ----------------------------------------------------------
 
   plant(plant: PlantType): PlantResult {
-    if (this.indoors) return { ok: false, message: INDOORS };
+    if (this.indoors) return { ok: false, message: this.words.nothingGrowsIndoors };
     const { col, row } = this.facingTile();
     // The tile underfoot was passable by definition; the one ahead is not.
     // Checked before anything reads the terrain there, because both the
     // world's edge and a tile occupied by a tree are reachable states and
     // `getTerrain` throws off the edge of the grid.
     if (!this.grid.isPassable(col, row)) {
-      return { ok: false, message: "There's no room to plant there" };
+      return { ok: false, message: this.words.noRoomToPlant };
     }
     if (this.grid.getPlant(col, row) !== null) {
-      return { ok: false, message: "Something is already planted there" };
+      return { ok: false, message: this.words.alreadyPlanted };
     }
     if (!this.grid.plant(col, row, plant)) {
-      return { ok: false, message: `${plant} can't grow on ${this.grid.getTerrain(col, row)}` };
+      return { ok: false, message: this.words.wrongGround(plant, this.grid.getTerrain(col, row)) };
     }
     return {
       ok: true,
-      message: `Planted a ${plant} seedling — cast the plus rune to grow it`,
+      message: this.words.planted(plant),
       tile: { col, row },
       plant,
     };
@@ -182,17 +199,17 @@ export class GameSession {
    * cast landing somewhere other than where it was aimed.
    */
   checkGrowth(): CropResult {
-    if (this.indoors) return { ok: false, message: INDOORS };
+    if (this.indoors) return { ok: false, message: this.words.nothingGrowsIndoors };
     const { col, row } = this.facingTile();
     if (!this.grid.inBounds(col, row)) {
-      return { ok: false, message: "Face something you planted to grow it" };
+      return { ok: false, message: this.words.faceToGrow };
     }
     const crop = this.grid.getCrop(col, row);
-    if (!crop) return { ok: false, message: "Face something you planted to grow it" };
+    if (!crop) return { ok: false, message: this.words.faceToGrow };
     if (crop.stage === PlantStage.Mature) {
       return {
         ok: false,
-        message: `This ${crop.plant} is already fully grown`,
+        message: this.words.alreadyGrown(crop.plant),
         tile: { col, row },
       };
     }
@@ -205,7 +222,7 @@ export class GameSession {
     if (!grown) return { ok: false, message: "" };
     return {
       ok: true,
-      message: `Your ${grown.plant} is now ${grown.stage}`,
+      message: this.words.grownTo(grown.plant, grown.stage),
       tile: { col, row },
       crop: grown,
     };
@@ -219,14 +236,14 @@ export class GameSession {
    * two rules for one verb.
    */
   harvest(): CropResult {
-    if (this.indoors) return { ok: false, message: INDOORS };
+    if (this.indoors) return { ok: false, message: this.words.nothingGrowsIndoors };
     const ahead = this.facingTile();
     const picked = this.pickAt(ahead) ?? this.pickAt(this.tile);
     if (picked) {
       const held = this.inventory.add(picked.crop.plant, HARVEST_YIELD);
       return {
         ok: true,
-        message: `Picked a ${picked.crop.plant} — you have ${describeItem(picked.crop.plant, held)}`,
+        message: this.words.picked(picked.crop.plant, held),
         tile: picked.tile,
         crop: picked.crop,
       };
@@ -238,9 +255,7 @@ export class GameSession {
       this.grid.getCrop(this.col, this.row);
     return {
       ok: false,
-      message: crop
-        ? `This ${crop.plant} is not ready — grow it with the plus rune`
-        : "Face something you planted to pick it",
+      message: crop ? this.words.notRipe(crop.plant) : this.words.faceToPick,
     };
   }
 
@@ -261,16 +276,16 @@ export class GameSession {
    * fence that boxed her in is adjacent by definition.
    */
   place(fixture: FixtureType): PlaceResult {
-    if (this.indoors) return { ok: false, message: "Not in here" };
-    if (!isPlaceable(fixture)) return { ok: false, message: `A ${fixture} is not yours to move` };
+    if (this.indoors) return { ok: false, message: this.words.notInHere };
+    if (!isPlaceable(fixture)) return { ok: false, message: this.words.notYours(fixture) };
     if (this.inventory.count(fixture) <= 0) {
-      return { ok: false, message: `You have no ${fixture} — buy one at the store` };
+      return { ok: false, message: this.words.noneLeft(fixture) };
     }
     const { col, row } = this.facingTile();
     // Generation-time placement could assume it owned the map; this cannot,
     // so the tile has to be checked for everything already on it.
-    if (!this.grid.isPassable(col, row)) return { ok: false, message: "There's no room there" };
-    if (this.grid.getCrop(col, row)) return { ok: false, message: "Something is growing there" };
+    if (!this.grid.isPassable(col, row)) return { ok: false, message: this.words.noRoomThere };
+    if (this.grid.getCrop(col, row)) return { ok: false, message: this.words.somethingGrowing };
     if (!this.inventory.remove(fixture, 1)) return { ok: false, message: "" };
 
     const object: PlacedObject = {
@@ -287,7 +302,7 @@ export class GameSession {
     this.grid.placeObject(object);
     return {
       ok: true,
-      message: `Put down a ${fixture} — tap it to pick it up again`,
+      message: this.words.putDown(fixture),
       tile: { col, row },
       fixture,
       object,
@@ -296,15 +311,15 @@ export class GameSession {
 
   /** Take a placed fixture back, if it is within one step. */
   takeBack(fixture: FixtureType, col: number, row: number): PlaceResult {
-    if (this.indoors) return { ok: false, message: "Not in here" };
+    if (this.indoors) return { ok: false, message: this.words.notInHere };
     if (stepsBetween(this.tile, { col, row }) > 1) {
-      return { ok: false, message: "Too far away — step up to it first" };
+      return { ok: false, message: this.words.tooFarToReach };
     }
     if (!this.grid.removeObjectAt(col, row)) return { ok: false, message: "" };
     const held = this.inventory.add(fixture, 1);
     return {
       ok: true,
-      message: `Picked up a ${fixture} — you have ${held}`,
+      message: this.words.pickedUp(fixture, held),
       tile: { col, row },
       fixture,
     };
@@ -312,11 +327,19 @@ export class GameSession {
 
   // --- trade ---------------------------------------------------------------
 
-  sell(item: ItemType): Trade {
-    return sellOne(this.inventory, this.purse, item);
+  /**
+   * Sell crops, having already been paid.
+   *
+   * Quantities now, not one at a time: the shopkeeper counts out a payment
+   * for the whole lot and the player checks the sum, so selling three
+   * carrots one at a time would be three sums instead of one.
+   */
+  sell(item: ItemType, count = 1): Trade {
+    return sellCrops(this.inventory, this.purse, item, count);
   }
 
-  buy(fixture: FixtureType): Trade {
-    return buyOne(this.inventory, this.purse, fixture);
+  /** Buy stock, having already counted the money out. */
+  buy(fixture: FixtureType, count = 1): Trade {
+    return buyStock(this.inventory, this.purse, fixture, count);
   }
 }

@@ -2,17 +2,19 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
+import { Currency, currencyOf, isPayable } from "../shop/currency";
 import { FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import { Inventory } from "./inventory";
 import { PLANT_TYPES, PlantType } from "./plants";
 import {
   CROP_PRICE,
+  MAX_TRADE,
   Purse,
   SHOP_STOCK,
-  buyOne,
+  buyStock,
   isSellable,
   priceOf,
-  sellOne,
+  sellCrops,
   sellPriceOf,
 } from "./shop";
 
@@ -45,6 +47,23 @@ describe("prices", () => {
     for (const fixture of SHOP_STOCK) {
       expect(sellPriceOf(fixture)).toBe(0);
       expect(isSellable(fixture)).toBe(false);
+    }
+  });
+
+  // The bridge between the price list and the two counting games: a sum that
+  // no set of coins adds up to is a sum a child cannot pay, and every price
+  // here is multiplied by up to MAX_TRADE before it reaches the counter.
+  test("every sum the counter can ask for is payable in real coins", () => {
+    for (const code of [Currency.Kuna, Currency.Franc]) {
+      const currency = currencyOf(code);
+      for (let count = 1; count <= MAX_TRADE; count++) {
+        for (const fixture of SHOP_STOCK) {
+          expect(isPayable(currency, priceOf(fixture) * count)).toBe(true);
+        }
+        for (const plant of PLANT_TYPES) {
+          expect(isPayable(currency, sellPriceOf(plant) * count)).toBe(true);
+        }
+      }
     }
   });
 
@@ -92,7 +111,7 @@ describe("selling", () => {
     const bag = new Inventory();
     const purse = new Purse();
     bag.add(PlantType.Carrot, 2);
-    const trade = sellOne(bag, purse, PlantType.Carrot);
+    const trade = sellCrops(bag, purse, PlantType.Carrot, 1);
     expect(trade.ok).toBe(true);
     expect(bag.count(PlantType.Carrot)).toBe(1);
     expect(purse.coins).toBe(CROP_PRICE);
@@ -102,7 +121,7 @@ describe("selling", () => {
     const bag = new Inventory();
     const purse = new Purse();
     bag.add(PlantType.Carrot, 3);
-    for (let i = 0; i < 3; i++) sellOne(bag, purse, PlantType.Carrot);
+    for (let i = 0; i < 3; i++) sellCrops(bag, purse, PlantType.Carrot, 1);
     expect(bag.count(PlantType.Carrot)).toBe(0);
     expect(purse.coins).toBe(3 * CROP_PRICE);
   });
@@ -110,7 +129,7 @@ describe("selling", () => {
   test("selling what you do not have pays nothing", () => {
     const bag = new Inventory();
     const purse = new Purse();
-    const trade = sellOne(bag, purse, PlantType.Carrot);
+    const trade = sellCrops(bag, purse, PlantType.Carrot, 1);
     expect(trade.ok).toBe(false);
     expect(purse.coins).toBe(0);
   });
@@ -119,7 +138,7 @@ describe("selling", () => {
     const bag = new Inventory();
     const purse = new Purse();
     bag.add(FixtureType.Fence, 1);
-    const trade = sellOne(bag, purse, FixtureType.Fence);
+    const trade = sellCrops(bag, purse, FixtureType.Fence, 1);
     expect(trade.ok).toBe(false);
     expect(bag.count(FixtureType.Fence)).toBe(1);
     expect(purse.coins).toBe(0);
@@ -129,16 +148,16 @@ describe("selling", () => {
 describe("buying", () => {
   function rich(): { bag: Inventory; purse: Purse } {
     const purse = new Purse();
-    purse.earn(1000);
+    purse.earn(100_000); // plenty, in minor units
     return { bag: new Inventory(), purse };
   }
 
   test("takes the coins and hands over the goods", () => {
     const { bag, purse } = rich();
-    const trade = buyOne(bag, purse, FixtureType.Fence);
+    const trade = buyStock(bag, purse, FixtureType.Fence, 1);
     expect(trade.ok).toBe(true);
     expect(bag.count(FixtureType.Fence)).toBe(1);
-    expect(purse.coins).toBe(1000 - priceOf(FixtureType.Fence));
+    expect(purse.coins).toBe(100_000 - priceOf(FixtureType.Fence));
   });
 
   // Refuses rather than going into debt, and leaves both sides untouched.
@@ -146,18 +165,26 @@ describe("buying", () => {
     const bag = new Inventory();
     const purse = new Purse();
     purse.earn(1);
-    const trade = buyOne(bag, purse, FixtureType.Lamp);
+    const trade = buyStock(bag, purse, FixtureType.Lamp, 1);
     expect(trade.ok).toBe(false);
     expect(bag.count(FixtureType.Lamp)).toBe(0);
     expect(purse.coins).toBe(1);
   });
 
-  test("says the price and what you have when it refuses", () => {
-    const bag = new Inventory();
-    const purse = new Purse();
-    const trade = buyOne(bag, purse, FixtureType.Lamp);
-    expect(trade.message).toContain(String(priceOf(FixtureType.Lamp)));
-    expect(trade.message).toContain("0");
+  test("buying several at once costs several times as much", () => {
+    const { bag, purse } = rich();
+    const trade = buyStock(bag, purse, FixtureType.Fence, 3);
+    expect(trade.ok).toBe(true);
+    expect(trade.amount).toBe(priceOf(FixtureType.Fence) * 3);
+    expect(bag.count(FixtureType.Fence)).toBe(3);
+  });
+
+  test("a quantity that is not a whole positive number buys nothing", () => {
+    const { bag, purse } = rich();
+    for (const count of [0, -1, 1.5]) {
+      expect(buyStock(bag, purse, FixtureType.Fence, count).ok).toBe(false);
+    }
+    expect(bag.count(FixtureType.Fence)).toBe(0);
   });
 });
 
@@ -170,8 +197,8 @@ describe("the loop closes", () => {
     const dearest = SHOP_STOCK.reduce((a, b) => (priceOf(a) >= priceOf(b) ? a : b));
     const needed = priceOf(dearest) / CROP_PRICE;
     bag.add(PlantType.Carrot, needed);
-    for (let i = 0; i < needed; i++) sellOne(bag, purse, PlantType.Carrot);
-    expect(buyOne(bag, purse, dearest).ok).toBe(true);
+    for (let i = 0; i < needed; i++) sellCrops(bag, purse, PlantType.Carrot, 1);
+    expect(buyStock(bag, purse, dearest, 1).ok).toBe(true);
     expect(purse.coins).toBe(0);
     expect(bag.count(dearest)).toBe(1);
   });

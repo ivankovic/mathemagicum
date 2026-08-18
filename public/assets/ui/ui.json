@@ -57,6 +57,21 @@
       "width": 32,
       "height": 32
     },
+    "coin-copper": {
+      "file": "coin_copper.png",
+      "width": 32,
+      "height": 32
+    },
+    "coin-silver": {
+      "file": "coin_silver.png",
+      "width": 32,
+      "height": 32
+    },
+    "coin-gold": {
+      "file": "coin_gold.png",
+      "width": 32,
+      "height": 32
+    },
     "crop-carrot": {
       "file": "crop_carrot.png",
       "width": 32,

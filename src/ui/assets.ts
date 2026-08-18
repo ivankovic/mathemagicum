@@ -12,6 +12,7 @@
  * that knows how big it drew something.
  */
 
+import { COIN_TIERS, type CoinTier } from "../shop/currency";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import { PLANT_TYPES, type PlantType } from "../world/plants";
 
@@ -32,6 +33,11 @@ export function cropIcon(plant: PlantType): string {
   return `crop-${plant}`;
 }
 
+/** The face of a coin: one picture per tier, with the value written beside it. */
+export function coinIcon(tier: CoinTier): string {
+  return `coin-${tier}`;
+}
+
 /** The icon for something the store sells, as it appears in the crate. */
 export function itemIcon(fixture: FixtureType): string {
   return `item-${fixture}`;
@@ -45,6 +51,7 @@ export const UI_ASSETS: readonly string[] = [
   ...Object.values(UiAsset),
   ...PLANT_TYPES.map(cropIcon),
   ...PLACEABLE_FIXTURES.map(itemIcon),
+  ...COIN_TIERS.map(coinIcon),
 ];
 
 export const UI_SIDECAR_KEY = "ui-index";

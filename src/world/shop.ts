@@ -29,8 +29,24 @@ import { PLANT_TYPES, type PlantType } from "./plants";
  * not a gate — see GAME_DESIGN.md's pillars.
  */
 
-/** What one harvested crop fetches. The unit everything else is quoted in. */
-export const CROP_PRICE = 5;
+/**
+ * What one harvested crop fetches, in the currency's minor unit — lipa or
+ * rappen. The unit everything else is quoted in.
+ *
+ * 2.50 rather than a round 1.00 or 5.00 on purpose: a price that is a whole
+ * number of the largest coin can be paid with one coin and teaches nothing.
+ * This one takes three, and two of them are not the same.
+ */
+export const CROP_PRICE = 250;
+
+/**
+ * The most of one thing that changes hands in a single trade.
+ *
+ * A counting limit, not a purse one: past a handful of items the sum stops
+ * being arithmetic a child does in their head and becomes bookkeeping, and
+ * the shopkeeper's payment has to stay countable on the counter.
+ */
+export const MAX_TRADE = 10;
 
 /** What the store stocks, priced in crops. */
 const COST_IN_CROPS: Record<FixtureType, number> = {
@@ -96,33 +112,47 @@ export class Purse {
 
 export interface Trade {
   readonly ok: boolean;
-  readonly message: string;
+  /** What changed hands, in minor units. */
+  readonly amount: number;
 }
 
 /**
- * Sell one of something.
+ * Sell some crops.
  *
- * One unit per call rather than a sell-everything: `remove` is all-or-
- * nothing and reads well for one, and a sell-all button next to a per-unit
- * buy would be two interaction models in one panel.
+ * No message: what the shopkeeper says about a sale now depends on whether
+ * she counted it out correctly and on what the player answered, which is the
+ * minigame's business rather than the ledger's. See src/shop/payment.ts.
  */
-export function sellOne(inventory: Inventory, purse: Purse, item: ItemType): Trade {
-  const price = sellPriceOf(item);
-  if (price <= 0) return { ok: false, message: `The shopkeeper has no use for a ${item}` };
-  if (!inventory.remove(item, 1)) return { ok: false, message: `You have no ${item} to sell` };
-  const coins = purse.earn(price);
-  return { ok: true, message: `Sold a ${item} for ${price} — you have ${coins} coins` };
+export function sellCrops(
+  inventory: Inventory,
+  purse: Purse,
+  item: ItemType,
+  count: number,
+): Trade {
+  const unit = sellPriceOf(item);
+  if (unit <= 0 || !Number.isInteger(count) || count <= 0) return { ok: false, amount: 0 };
+  if (!inventory.remove(item, count)) return { ok: false, amount: 0 };
+  const earned = unit * count;
+  purse.earn(earned);
+  return { ok: true, amount: earned };
 }
 
-/** Buy one of something. Refuses rather than going into debt. */
-export function buyOne(inventory: Inventory, purse: Purse, fixture: FixtureType): Trade {
-  const price = priceOf(fixture);
-  if (!purse.spend(price)) {
-    return {
-      ok: false,
-      message: `A ${fixture} costs ${price} — you have ${purse.coins}`,
-    };
-  }
-  const held = inventory.add(fixture, 1);
-  return { ok: true, message: `Bought a ${fixture} — you have ${held}, and ${purse.coins} coins` };
+/**
+ * Buy some stock, having already counted the money out.
+ *
+ * The caller is the tender minigame, which only lets this be reached once
+ * the coins on the counter come to exactly `priceOf(fixture) * count` — so
+ * the purse check here is a backstop rather than the gate.
+ */
+export function buyStock(
+  inventory: Inventory,
+  purse: Purse,
+  fixture: FixtureType,
+  count: number,
+): Trade {
+  if (!Number.isInteger(count) || count <= 0) return { ok: false, amount: 0 };
+  const price = priceOf(fixture) * count;
+  if (!purse.spend(price)) return { ok: false, amount: 0 };
+  inventory.add(fixture, count);
+  return { ok: true, amount: price };
 }

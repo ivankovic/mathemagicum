@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type Phaser from "phaser";
+import type { Phrases } from "../i18n/phrases";
 import {
   type AdditionProblem,
   type CastState,
   PLACES,
-  PLACE_NAMES,
   backspace,
   beginCast,
   hintFor,
@@ -117,6 +117,7 @@ export class SpellPopup {
     private readonly scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
+    private words: Phrases,
     private readonly register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
     const add = scene.add;
@@ -171,6 +172,12 @@ export class SpellPopup {
     }
     this.closeRect.setDepth(depth + 2);
     this.closeText.setDepth(depth + 3);
+  }
+
+  /** Say everything from here on in another language. */
+  setPhrases(words: Phrases): void {
+    this.words = words;
+    if (this.isOpen) this.layout();
   }
 
   get isOpen(): boolean {
@@ -430,9 +437,9 @@ export class SpellPopup {
   private hintLine(state: CastState): string {
     if (isSolved(state))
       return `${state.problem.start} + ${state.problem.addend} = ${state.solved.at(-1)}`;
-    const hint = hintFor(state);
+    const hint = hintFor(state, this.words);
     if (hint) return hint;
-    return `Jump the ${PLACE_NAMES[state.index] ?? ""}. Where do you land?`;
+    return this.words.jumpPrompt(state.index);
   }
 
   /** Which of the three states an arc is in: done, being answered, or ahead. */
