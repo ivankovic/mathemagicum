@@ -139,6 +139,15 @@ The only things in it are crops, because harvesting is the only thing that
 puts anything there yet. It is reached from a **basket** button beside the
 seed pouch and the spellbook, and behaves the same way they do.
 
+Counts are shown as badges: one per item inside the basket, and one on the
+basket itself for the total. The total is the one that matters, because it
+is the only one visible while the tray is shut — it tells the player they
+are carrying something without asking them to open anything to find out. An
+item she has none of is dimmed and carries no badge at all; hiding it
+outright would reshuffle the tray as things are picked, and a row of buttons
+that moves under a thumb is worse than one with a gap in it. Keeping the
+empty slots also lets the basket say what *could* be in it.
+
 ### Harvesting
 
 Picking a ripe crop is a direct action rather than a minigame — the harvest

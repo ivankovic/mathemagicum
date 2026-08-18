@@ -1142,8 +1142,12 @@ export class GameScene extends Phaser.Scene {
       texture: uiTextureKey(UiAsset.Basket),
       items: PLANT_TYPES.map((plant) => ({
         texture: uiTextureKey(cropIcon(plant)),
+        count: () => this.inventory.count(plant),
         act: () => this.setMessage(describeItem(plant, this.inventory.count(plant))),
       })),
+      // On the basket itself, so how much she is carrying is legible without
+      // opening anything — the only badge visible while the tray is shut.
+      count: () => this.inventory.total,
       size,
       right: edge + (size + 10) * 2,
       bottom,
@@ -1287,6 +1291,10 @@ export class GameScene extends Phaser.Scene {
     this.cropSprites.delete(key);
 
     const held = this.inventory.add(picked.plant, HARVEST_YIELD);
+    // The basket can be open while this happens — picking a crop does not
+    // close it — so the numbers on screen have to be told, not just the ones
+    // that will be read the next time it opens.
+    this.basketTray?.refresh();
     this.playGesture(PLANT); // the same bend; she is reaching for the ground either way
     this.setMessage(`Picked a ${picked.plant} — you have ${describeItem(picked.plant, held)}`);
     this.updateStatusText();
@@ -1768,12 +1776,14 @@ export class GameScene extends Phaser.Scene {
     if (this.basketTray?.isOpen) {
       return this.inventory.isEmpty
         ? "Your basket is empty — tap a ripe crop to pick it"
-        : "Carrying: tap an item to count it";
+        : `Carrying ${this.inventory.total} in ${this.inventory.kinds} kind(s)`;
     }
     const plant = PLANT_TYPES[this.selectedPlantIndex];
-    const carrying = this.inventory.isEmpty ? "" : `  Basket: ${this.inventory.total}`;
+    // The basket's own badge carries the count now, so the caption no longer
+    // repeats it — two places showing the same number is one place too many
+    // on a line that has to fit a phone held upright.
     return this.mobileControls
-      ? `Drag to walk  Tap a ripe crop to pick it${carrying}  (${plant} selected)`
-      : `Arrows/WASD  P: seeds  B: spells  Space: plant ${plant}  H: pick${carrying}`;
+      ? `Drag to walk  Tap a ripe crop to pick it  (${plant} selected)`
+      : `Arrows/WASD  P: seeds  B: spells  Space: plant ${plant}  H: pick`;
   }
 }

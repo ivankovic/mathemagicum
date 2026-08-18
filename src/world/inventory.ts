@@ -12,6 +12,13 @@ import { PLANT_TYPES, type PlantType } from "./plants";
  * into "walk home first", which is the sort of friction that exists to pad
  * a session rather than to teach anything.
  *
+ * Nothing here tells anything that it changed. Whatever mutates an inventory
+ * owns refreshing what displays it — the basket's count badges are painted
+ * when its tray opens and again when the scene says so, and a future spell or
+ * villager reward that adds to this without saying so will leave a stale
+ * number under the player's thumb. Watching for that from in here would mean
+ * this class knowing about the interface, which is the wrong way round.
+ *
  * Items are plant types for now, because harvesting is the only thing that
  * puts anything in it. `ItemType` is a separate name from `PlantType` so the
  * first non-crop item — a tool, a villager's reward — does not have to be
