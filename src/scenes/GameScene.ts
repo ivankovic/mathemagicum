@@ -71,9 +71,11 @@ import {
   interiorSheetKey,
   interiorSidecarKey,
 } from "../world/interiors";
+import { Inventory, describeItem } from "../world/inventory";
 import type { PlacedObject } from "../world/objects";
 import { findPath } from "../world/pathfinding";
 import {
+  HARVEST_YIELD,
   PLANTED_STAGE,
   PLANT_TYPES,
   PlantStage,
@@ -304,6 +306,9 @@ export class GameScene extends Phaser.Scene {
   private spellPopup!: SpellPopup;
   private seedTray?: IconTray;
   private spellTray?: IconTray;
+  private basketTray?: IconTray;
+  // What she is carrying. No slots and no capacity — see Inventory.
+  private readonly inventory = new Inventory();
   // Problems vary from cast to cast, so this is seeded from the clock rather
   // than from WORLD_SEED: a world is meant to be reproducible, a lesson is
   // meant not to be.
@@ -315,6 +320,7 @@ export class GameScene extends Phaser.Scene {
   private plantActionKey!: Phaser.Input.Keyboard.Key;
   private spellbookKey!: Phaser.Input.Keyboard.Key;
   private seedPouchKey!: Phaser.Input.Keyboard.Key;
+  private harvestKey!: Phaser.Input.Keyboard.Key;
 
   private mobileControls = false;
   private joystick?: VirtualJoystick;
@@ -532,6 +538,7 @@ export class GameScene extends Phaser.Scene {
 
     if (Phaser.Input.Keyboard.JustDown(this.spellbookKey)) this.toggleTray(this.spellTray);
     if (Phaser.Input.Keyboard.JustDown(this.seedPouchKey)) this.toggleTray(this.seedTray);
+    if (Phaser.Input.Keyboard.JustDown(this.harvestKey)) this.tryHarvest();
   }
 
   // --- Cameras -----------------------------------------------------------
@@ -1004,6 +1011,7 @@ export class GameScene extends Phaser.Scene {
     this.plantActionKey = keyboard.addKey(KeyCodes.SPACE);
     this.spellbookKey = keyboard.addKey(KeyCodes.B);
     this.seedPouchKey = keyboard.addKey(KeyCodes.P);
+    this.harvestKey = keyboard.addKey(KeyCodes.H);
   }
 
   private pressedDirection(): Direction | null {
@@ -1102,7 +1110,10 @@ export class GameScene extends Phaser.Scene {
       bottom,
       depth: TOUCH_UI_DEPTH,
       register: (object) => this.ui(object),
-      onOpen: () => this.spellTray?.setOpen(false),
+      onOpen: () => {
+        this.spellTray?.setOpen(false);
+        this.basketTray?.setOpen(false);
+      },
       canOpen: () => !this.spellPopup.isOpen,
       onChange: () => this.updateStatusText(),
     });
@@ -1115,12 +1126,38 @@ export class GameScene extends Phaser.Scene {
       bottom,
       depth: TOUCH_UI_DEPTH,
       register: (object) => this.ui(object),
-      onOpen: () => this.seedTray?.setOpen(false),
+      onOpen: () => {
+        this.seedTray?.setOpen(false);
+        this.basketTray?.setOpen(false);
+      },
       canOpen: () => !this.spellPopup.isOpen,
       onChange: () => this.updateStatusText(),
     });
 
-    this.edgeAnchored.push(this.seedTray, this.spellTray);
+    // What she is carrying, in the same shape as the two containers beside
+    // it. Tapping an item states how many of it she has rather than doing
+    // anything: there is nothing to spend produce on yet, and a button that
+    // silently did nothing would be worse than one that answers.
+    this.basketTray = new IconTray(this, {
+      texture: uiTextureKey(UiAsset.Basket),
+      items: PLANT_TYPES.map((plant) => ({
+        texture: uiTextureKey(cropIcon(plant)),
+        act: () => this.setMessage(describeItem(plant, this.inventory.count(plant))),
+      })),
+      size,
+      right: edge + (size + 10) * 2,
+      bottom,
+      depth: TOUCH_UI_DEPTH,
+      register: (object) => this.ui(object),
+      onOpen: () => {
+        this.seedTray?.setOpen(false);
+        this.spellTray?.setOpen(false);
+      },
+      canOpen: () => !this.spellPopup.isOpen,
+      onChange: () => this.updateStatusText(),
+    });
+
+    this.edgeAnchored.push(this.seedTray, this.spellTray, this.basketTray);
   }
 
   // The keyboard route into a tray. Whether it may open is the tray's own
@@ -1205,6 +1242,79 @@ export class GameScene extends Phaser.Scene {
     return { col: this.playerCol + step.dCol, row: this.playerRow + step.dRow };
   }
 
+  // --- Harvesting ---------------------------------------------------------
+  //
+  // One rule, whichever way the player asks: **she can pick a crop she is
+  // facing, or one she is standing on.** The H key applies it where she is;
+  // a tap on a crop beside her turns her toward it first and then applies the
+  // same rule, which is both the better feel and the reason the two routes
+  // cannot drift into meaning different things.
+  //
+  // Harvesting is a direct action rather than a spell, in the same way
+  // planting is, and for the same reason: the harvest spell is not speced.
+
+  private tryHarvest(): void {
+    if (this.spellPopup.isOpen) return;
+    if (this.interior) {
+      this.setMessage("Nothing grows indoors");
+      return;
+    }
+    const ahead = this.facingTile();
+    if (this.harvestAt(ahead.col, ahead.row)) return;
+    if (this.harvestAt(this.playerCol, this.playerRow)) return;
+
+    // Nothing was picked. Say why, about the tile she was most likely aiming
+    // at — a silent refusal reads as the game having missed the input.
+    const crop = this.grid.inBounds(ahead.col, ahead.row)
+      ? (this.grid.getCrop(ahead.col, ahead.row) ??
+        this.grid.getCrop(this.playerCol, this.playerRow))
+      : this.grid.getCrop(this.playerCol, this.playerRow);
+    if (crop) this.setMessage(`This ${crop.plant} is not ready — grow it with the plus rune`);
+    else this.setMessage("Face something you planted to pick it");
+  }
+
+  /** Pick whatever is ready at this tile. Returns whether anything was. */
+  private harvestAt(col: number, row: number): boolean {
+    if (!this.grid.inBounds(col, row)) return false;
+    const picked = this.grid.harvestCrop(col, row);
+    if (!picked) return false;
+
+    // The sprite has to go *and* leave the registry: nothing has ever removed
+    // an entry from it, and a stale one would have `growCropAt` re-animating a
+    // destroyed object the next time this tile was planted and cast on.
+    const key = cropKey(col, row);
+    this.cropSprites.get(key)?.destroy();
+    this.cropSprites.delete(key);
+
+    const held = this.inventory.add(picked.plant, HARVEST_YIELD);
+    this.playGesture(PLANT); // the same bend; she is reaching for the ground either way
+    this.setMessage(`Picked a ${picked.plant} — you have ${describeItem(picked.plant, held)}`);
+    this.updateStatusText();
+    return true;
+  }
+
+  /**
+   * A tap on a crop, from the sprite's own hit area.
+   *
+   * Turning to face it is what lets one rule serve both routes: after this,
+   * the crop is the faced tile and `tryHarvest` is the same code the H key
+   * runs. A crop further off than one step is not reached for — walking there
+   * on a tap would be a second kind of tap-to-move, and tapping the world to
+   * walk is exactly what the joystick replaced on touch.
+   */
+  private handleCropTap(col: number, row: number): void {
+    if (this.spellPopup.isOpen || this.interior) return;
+    const dCol = col - this.playerCol;
+    const dRow = row - this.playerRow;
+    const steps = Math.abs(dCol) + Math.abs(dRow);
+    if (steps > 1) {
+      this.setMessage("Too far away — step up to it first");
+      return;
+    }
+    if (steps === 1) this.playerFacing = facingFor(dCol, dRow, this.playerFacing);
+    this.tryHarvest();
+  }
+
   private tryPlant(): void {
     if (this.spellPopup.isOpen) return;
     const plant = PLANT_TYPES[this.selectedPlantIndex];
@@ -1244,9 +1354,34 @@ export class GameScene extends Phaser.Scene {
         .setDepth(feet.y - 0.5)
         .play(plantAnimKey(plant, PLANTED_STAGE)),
     );
+    this.watchCrop(sprite, col, row);
     this.cropSprites.set(cropKey(col, row), sprite);
     this.playGesture(PLANT);
     this.setMessage(`Planted a ${plant} seedling — cast the plus rune to grow it`);
+  }
+
+  /**
+   * Make a crop tappable, over its own tile and no more.
+   *
+   * A crop's frame is a tile wide and half a tile taller — the headroom a
+   * sunflower grows into — so the default hit area, which is the whole frame,
+   * would reach into the tile above and overlap the crop planted there. Two
+   * neighbours would then be resolved by depth rather than by which one was
+   * aimed at. The area is cut back to the cell the crop actually occupies,
+   * derived from the frame rather than restated: the soil patch is drawn
+   * there, so there is always something visible to aim at.
+   *
+   * Crops that are not ready are tappable too. If only ripe ones were, a tap
+   * on a seedling would fall through to the scene and walk the player, which
+   * reads as the game ignoring them.
+   */
+  private watchCrop(sprite: Phaser.GameObjects.Sprite, col: number, row: number): void {
+    const frame = sprite.frame;
+    sprite.setInteractive(
+      new Phaser.Geom.Rectangle(0, frame.realHeight - TILE_SIZE, TILE_SIZE, TILE_SIZE),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    sprite.on("pointerdown", () => this.handleCropTap(col, row));
   }
 
   private handleTileClick(screenX: number, screenY: number): void {
@@ -1630,9 +1765,15 @@ export class GameScene extends Phaser.Scene {
   private get statusLine(): string {
     if (this.seedTray?.isOpen) return "Pick a seed to plant it on the tile ahead";
     if (this.spellTray?.isOpen) return "Cast + to grow the crop on the tile ahead";
+    if (this.basketTray?.isOpen) {
+      return this.inventory.isEmpty
+        ? "Your basket is empty — tap a ripe crop to pick it"
+        : "Carrying: tap an item to count it";
+    }
     const plant = PLANT_TYPES[this.selectedPlantIndex];
+    const carrying = this.inventory.isEmpty ? "" : `  Basket: ${this.inventory.total}`;
     return this.mobileControls
-      ? `Drag to walk  Seeds and spells: bottom right  (${plant} selected)`
-      : `Arrows/WASD  P: seeds  B: spells  Space: plant ${plant} ahead  1-${PLANT_TYPES.length}: pick seed`;
+      ? `Drag to walk  Tap a ripe crop to pick it${carrying}  (${plant} selected)`
+      : `Arrows/WASD  P: seeds  B: spells  Space: plant ${plant}  H: pick${carrying}`;
   }
 }

@@ -32,6 +32,11 @@
       "width": 32,
       "height": 32
     },
+    "basket": {
+      "file": "basket.png",
+      "width": 32,
+      "height": 32
+    },
     "crop-carrot": {
       "file": "crop_carrot.png",
       "width": 32,

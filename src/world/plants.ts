@@ -49,6 +49,21 @@ export const PLANT_STAGES: readonly PlantStage[] = Object.values(PlantStage);
  */
 export const PLANTED_STAGE: PlantStage = PlantStage.Seedling;
 
+/**
+ * The stage at which a crop can be picked.
+ *
+ * The same stage `nextStage` runs out at, and that is the point rather than a
+ * coincidence: a crop is ready exactly when there is no more growing to do,
+ * so the two rules cannot drift apart into a crop that is finished but not
+ * pickable.
+ */
+export const HARVEST_STAGE: PlantStage = PlantStage.Mature;
+
+/** How much one harvest yields. One of everything, for now — there is no
+ * economy to balance against yet, and numbers picked without a reason are
+ * harder to change later than a single shared constant. */
+export const HARVEST_YIELD = 1;
+
 /** The stage after this one, or null if the crop is fully grown. */
 export function nextStage(stage: PlantStage): PlantStage | null {
   const at = PLANT_STAGES.indexOf(stage);

@@ -3,7 +3,14 @@
 
 import { Habitat } from "./habitat";
 import type { PlacedObject } from "./objects";
-import { type Crop, PLANTED_STAGE, type PlantType, canPlantOn, nextStage } from "./plants";
+import {
+  type Crop,
+  HARVEST_STAGE,
+  PLANTED_STAGE,
+  type PlantType,
+  canPlantOn,
+  nextStage,
+} from "./plants";
 import { TerrainType, isPassable } from "./terrain";
 
 // Flat, numerically-indexed storage. At world scale (hundreds of thousands
@@ -196,6 +203,23 @@ export class WorldGrid {
     if (!this.canPlant(col, row, plant)) return false;
     this.crops.set(this.index(col, row), { plant, stage: PLANTED_STAGE });
     return true;
+  }
+
+  /**
+   * Take the crop off this tile, if there is one and it is ready.
+   *
+   * Returns what was picked, or null if the tile is bare or the crop is
+   * still growing. The maturity rule lives here rather than at the call site
+   * for the same reason `growCrop`'s does: what "ready" means is a fact about
+   * a crop, and a second thing that harvests should not get to have its own
+   * opinion about it.
+   */
+  harvestCrop(col: number, row: number): Crop | null {
+    const idx = this.requireInBounds(col, row);
+    const crop = this.crops.get(idx);
+    if (!crop || crop.stage !== HARVEST_STAGE) return null;
+    this.crops.delete(idx);
+    return crop;
   }
 
   /**

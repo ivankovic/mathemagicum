@@ -241,3 +241,62 @@ describe("WorldGrid terrain/habitat mutation", () => {
     expect(grid.getHabitat(1, 0)).toBe(Habitat.Meadow);
   });
 });
+
+describe("WorldGrid harvesting", () => {
+  function mature(grid: WorldGrid, col: number, row: number, plant: PlantType): void {
+    grid.plant(col, row, plant);
+    while (grid.growCrop(col, row)) {
+      // grow until there is nothing left to grow
+    }
+  }
+
+  test("a ripe crop can be picked, and comes off the tile", () => {
+    const grid = smallGrid();
+    mature(grid, 0, 0, PlantType.Sunflower);
+    expect(grid.harvestCrop(0, 0)).toEqual({
+      plant: PlantType.Sunflower,
+      stage: PlantStage.Mature,
+    });
+    expect(grid.getCrop(0, 0)).toBe(null);
+  });
+
+  // The rule lives in the grid so a second thing that harvests cannot have
+  // its own opinion about what "ready" means.
+  test("a crop that is still growing is left alone", () => {
+    const grid = smallGrid();
+    grid.plant(0, 0, PlantType.Sunflower);
+    expect(grid.harvestCrop(0, 0)).toBe(null);
+    expect(grid.getCrop(0, 0)?.stage).toBe(PlantStage.Seedling);
+    grid.growCrop(0, 0);
+    expect(grid.harvestCrop(0, 0)).toBe(null);
+    expect(grid.getCrop(0, 0)?.stage).toBe(PlantStage.Growing);
+  });
+
+  test("harvesting bare ground does nothing", () => {
+    expect(smallGrid().harvestCrop(0, 0)).toBe(null);
+  });
+
+  test("the same crop cannot be picked twice", () => {
+    const grid = smallGrid();
+    mature(grid, 0, 0, PlantType.Sunflower);
+    expect(grid.harvestCrop(0, 0)).not.toBe(null);
+    expect(grid.harvestCrop(0, 0)).toBe(null);
+  });
+
+  test("a picked tile can be planted again", () => {
+    const grid = smallGrid();
+    mature(grid, 0, 0, PlantType.Sunflower);
+    grid.harvestCrop(0, 0);
+    expect(grid.canPlant(0, 0, PlantType.Sunflower)).toBe(true);
+    expect(grid.plant(0, 0, PlantType.Sunflower)).toBe(true);
+    expect(grid.getCrop(0, 0)?.stage).toBe(PlantStage.Seedling);
+  });
+
+  test("picking one crop leaves its neighbours alone", () => {
+    const grid = smallGrid();
+    mature(grid, 0, 0, PlantType.Sunflower);
+    mature(grid, 1, 0, PlantType.Cactus);
+    grid.harvestCrop(0, 0);
+    expect(grid.getCrop(1, 0)?.plant).toBe(PlantType.Cactus);
+  });
+});

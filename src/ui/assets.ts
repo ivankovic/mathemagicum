@@ -20,6 +20,7 @@ export const UiAsset = {
   Spellbook: "spellbook",
   RuneAdd: "rune-add",
   SeedPouch: "seed-pouch",
+  Basket: "basket",
 } as const;
 
 export type UiAsset = (typeof UiAsset)[keyof typeof UiAsset];

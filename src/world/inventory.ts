@@ -1,0 +1,97 @@
+// SPDX-FileCopyrightText: 2026 Marko Ivankovic
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+import { PLANT_TYPES, type PlantType } from "./plants";
+
+/**
+ * What the player is carrying.
+ *
+ * Deliberately a count per item and nothing else — no slots, no stack size,
+ * no weight. Those are scarcity mechanics, and the design doc rules out
+ * artificial scarcity: a basket that fills up would turn "help a villager"
+ * into "walk home first", which is the sort of friction that exists to pad
+ * a session rather than to teach anything.
+ *
+ * Items are plant types for now, because harvesting is the only thing that
+ * puts anything in it. `ItemType` is a separate name from `PlantType` so the
+ * first non-crop item — a tool, a villager's reward — does not have to be
+ * pretended into the plant list.
+ */
+
+export type ItemType = PlantType;
+
+export const ITEM_TYPES: readonly ItemType[] = PLANT_TYPES;
+
+export class Inventory {
+  // Sparse: a player carrying two kinds of thing has two entries, not one
+  // per item that exists. Absent and zero mean the same thing, and `add`
+  // never stores a zero, so `size` is the number of *kinds* carried.
+  private readonly counts = new Map<ItemType, number>();
+
+  /** How many of one item is carried. */
+  count(item: ItemType): number {
+    return this.counts.get(item) ?? 0;
+  }
+
+  /** Everything carried, in a stable order, skipping what is not. */
+  entries(): readonly (readonly [ItemType, number])[] {
+    return ITEM_TYPES.filter((item) => this.count(item) > 0).map(
+      (item) => [item, this.count(item)] as const,
+    );
+  }
+
+  /** How many things are carried in total, counting duplicates. */
+  get total(): number {
+    let sum = 0;
+    for (const value of this.counts.values()) sum += value;
+    return sum;
+  }
+
+  /** How many *kinds* of thing are carried. */
+  get kinds(): number {
+    return this.counts.size;
+  }
+
+  get isEmpty(): boolean {
+    return this.counts.size === 0;
+  }
+
+  /**
+   * Put `amount` of an item in. Returns the new count.
+   *
+   * Rejects zero and negatives rather than quietly treating `add(-1)` as a
+   * removal: taking things out is `remove`, and an `add` that could subtract
+   * is a bug waiting for a caller that forgot to clamp.
+   */
+  add(item: ItemType, amount = 1): number {
+    if (!Number.isInteger(amount) || amount <= 0) return this.count(item);
+    const next = this.count(item) + amount;
+    this.counts.set(item, next);
+    return next;
+  }
+
+  /**
+   * Take `amount` out, but only if there is that much. Returns whether it
+   * happened — all or nothing, so a caller cannot half-spend something.
+   */
+  remove(item: ItemType, amount = 1): boolean {
+    if (!Number.isInteger(amount) || amount <= 0) return false;
+    const held = this.count(item);
+    if (held < amount) return false;
+    const left = held - amount;
+    // Deleted rather than left at zero, so `entries` and `kinds` mean what
+    // they say without every reader having to filter.
+    if (left === 0) this.counts.delete(item);
+    else this.counts.set(item, left);
+    return true;
+  }
+}
+
+/** "3 carrots", "1 cactus" — the plural the message line needs. */
+export function describeItem(item: ItemType, count: number): string {
+  // English pluralisation is not the interesting problem here and the item
+  // list is three words long, so this handles the one irregular ending the
+  // set actually contains rather than pretending to be general.
+  const plural = item.endsWith("s") ? `${item}es` : `${item}s`;
+  return `${count} ${count === 1 ? item : plural}`;
+}

@@ -40,7 +40,9 @@ time, each tied to a specific gardening action and a specific math skill.
 3. Plant it (a direct action for now — the planting spell is not speced).
 4. Tend it with further spells. The **addition spell** grows it one stage
    per cast, seedling → growing → mature; watering and the rest are TBD.
-5. Harvest, expand, repeat.
+5. Pick it when it is ripe — a direct action, like planting, since the
+   harvest spell is not speced. What is picked goes in the basket.
+6. Expand, repeat.
 
 ## Systems
 
@@ -124,6 +126,35 @@ non-zero so that none of the three arrows is a `+0` jump landing where it
 started. `src/spells/addition.ts` is the whole of the rule, with no Phaser
 in it, and `addition.test.ts` pins both the arithmetic and the
 distribution.
+
+### Inventory
+
+A count per item and nothing else: no slots, no stack size, no weight, no
+capacity. Those are scarcity mechanics, and a basket that filled up would
+turn "go help a villager" into "walk home first" — friction that pads a
+session rather than teaching anything. See "No manipulative engagement
+mechanics" above.
+
+The only things in it are crops, because harvesting is the only thing that
+puts anything there yet. It is reached from a **basket** button beside the
+seed pouch and the spellbook, and behaves the same way they do.
+
+### Harvesting
+
+Picking a ripe crop is a direct action rather than a minigame — the harvest
+spell is not speced, and this stands in for it the way pressing a key stood
+in for planting.
+
+One rule, whichever way the player asks for it: **she can pick a crop she
+is facing, or one she is standing on.** Tapping a crop beside her turns her
+toward it first and then applies that same rule, so the tap and the key
+cannot drift into meaning different things. A crop further than one step
+away is not reached for; tapping the world to walk is what the joystick
+replaced on touch.
+
+Crops that are not ready are tappable too, and say so. If only ripe ones
+responded, a tap on a seedling would fall through and walk the player,
+which reads as the game ignoring them.
 
 ### Day-night cycle
 

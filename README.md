@@ -16,8 +16,9 @@ seedlings and grown by casting **addition** on them, a number-line minigame
 opened from the spellbook. The player bends to plant, and a golden plus
 sinks into the tile a spell lands on. Seeds and spells are picked from two icon trays
 in the corner of the screen, and both act on the tile the player faces.
-Planting itself is still a direct action — the planting spell is not
-speced. Nothing is saved between sessions.
+Ripe crops are picked with a tap and go into a basket. Planting and
+harvesting are still direct actions — those spells are not speced. Nothing
+is saved between sessions.
 
 ## Assets
 
