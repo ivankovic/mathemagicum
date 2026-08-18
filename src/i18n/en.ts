@@ -165,6 +165,21 @@ export const EN: Phrases = {
   verdictWasRight: (owed) => `It was right, in fact: ${owed}. She counts it again for you.`,
   verdictLookAgain: (paid, owed) => `Have another look — that was ${paid}, not ${owed}.`,
 
+  teacherGreeting: "The teacher looks up from her desk.",
+  lessonTitle: "The addition spell",
+  lessonRune:
+    "Open your spellbook and tap the + rune. Whatever you are facing grows one step — but only if you can do the sum it asks you.",
+  lessonSplit: (addend, parts) =>
+    `Pull the number apart. ${addend} is ${parts.join(" and ")}. Every number is made of hundreds, tens and ones, and those are the three jumps.`,
+  lessonJump: (start, jumps) =>
+    `Start at ${start} and jump the small part first: ${jumps.map((jump) => `+${jump}`).join(", then ")}. Type the number you land on into each box.`,
+  lessonAnswer: (answer) =>
+    `The last box is the answer: ${answer}. Small jumps first means only one part of the number changes each time, so there is nothing to carry and nothing to hold in your head.`,
+  lessonNext: "next",
+  lessonBack: "back",
+  lessonDone: "off you go",
+  lessonExample: (start, addend) => `${start} + ${addend}`,
+
   place: (index) => PLACES[index] ?? "",
   jumpPrompt: (index) => `Jump the ${PLACES[index] ?? ""}. Where do you land?`,
   addPlace: (index, from) => `Add the ${PLACES[index] ?? ""} to ${from}.`,

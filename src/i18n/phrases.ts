@@ -148,6 +148,25 @@ export interface Phrases {
   verdictWasRight: (owed: string) => string;
   verdictLookAgain: (paid: string, owed: string) => string;
 
+  // --- the teacher's lesson ------------------------------------------------
+
+  /** What she says when tapped, before the parchment opens. */
+  teacherGreeting: string;
+  lessonTitle: string;
+  /** Beat one: the spellbook and the rune, which are drawn beside this. */
+  lessonRune: string;
+  /** Beat two: the number pulled apart into hundreds, tens and ones. */
+  lessonSplit: (addend: number, parts: readonly number[]) => string;
+  /** Beat three: the jumps along the line, smallest first. */
+  lessonJump: (start: number, jumps: readonly number[]) => string;
+  /** Beat four: where you land, and why the order is that way round. */
+  lessonAnswer: (answer: number) => string;
+  lessonNext: string;
+  lessonBack: string;
+  lessonDone: string;
+  /** The caption under the worked example on every beat that shows numbers. */
+  lessonExample: (start: number, addend: number) => string;
+
   // --- the addition spell --------------------------------------------------
 
   /** "ones", "tens", "hundreds" — index 0 is the ones. */

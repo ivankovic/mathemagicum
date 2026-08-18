@@ -113,6 +113,16 @@ describe("layoutVillage", () => {
     }
   });
 
+  // The two with something to say are found inside their own building; the
+  // rest wander. See VillageNpcSpec.indoors.
+  test("the shopkeeper and the teacher are indoors, the others are not", () => {
+    const { grid, village } = villageGrid();
+    const { npcs } = layoutVillage(grid, village);
+    const indoors = npcs.filter((npc) => npc.indoors).map((npc) => npc.id);
+    expect(indoors.sort()).toEqual(["shopkeeper", "teacher"]);
+    expect(npcs.filter((npc) => !npc.indoors).length).toBeGreaterThan(0);
+  });
+
   test("every villager/teacher/postal-worker/shopkeeper gets a home point, player-house does not", () => {
     const { grid, village } = villageGrid();
     const { npcs, buildings } = layoutVillage(grid, village);

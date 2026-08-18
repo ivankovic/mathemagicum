@@ -20,6 +20,7 @@ import {
 import { type CurrencyDefinition, currencyOf } from "../shop/currency";
 import { makeAdditionProblem } from "../spells/addition";
 import { IconTray } from "../ui/IconTray";
+import { LessonPanel } from "../ui/LessonPanel";
 import { OptionsPanel } from "../ui/OptionsPanel";
 import { ShopPanel } from "../ui/ShopPanel";
 import { SpellPopup } from "../ui/SpellPopup";
@@ -37,9 +38,12 @@ import {
   type BuildingRole,
   type BuildingSprite,
   DoorState,
+  type Entrance,
   ROLE_SPRITES,
   buildingAnimKey,
   doorStateForDistance,
+  entranceFor,
+  isEntrance,
   spriteSheetKey,
 } from "../world/buildings";
 import {
@@ -216,6 +220,11 @@ const NPC_STEP_MAX_MS = 4000;
 // attached to them: a person who answers a tap with silence is worse than one
 // who does not answer at all.
 const SHOPKEEPER_ID = "shopkeeper";
+// The other villager with something to say: she explains the addition spell,
+// and she is in the school for the same reason the shopkeeper is in the
+// store — a teacher you have to find in the square is one you meet by
+// accident, and the spell is the thing a child is most likely to be stuck on.
+const TEACHER_ID = "teacher";
 const LOCAL_WANDER_RADIUS = 5;
 const PATROL_WANDER_RADIUS = 16;
 
@@ -288,6 +297,10 @@ interface BuildingRuntime {
   image: Phaser.GameObjects.Sprite;
   doorCol: number;
   doorRow: number;
+  // The cells a step into which goes inside: the door and the wall to either
+  // side of it. See ENTRANCE_REACH — the doorway is wider to walk into than
+  // it is to look at.
+  entrance: Entrance;
   door: DoorState;
 }
 
@@ -373,6 +386,7 @@ export class GameScene extends Phaser.Scene {
   private words: Phrases = EN;
   private currency!: CurrencyDefinition;
   private optionsPanel?: OptionsPanel;
+  private lessonPanel?: LessonPanel;
   private optionsButton?: { box: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text };
   // Sprites for fixtures the *player* put down, so one can be picked back
   // up. Deliberately not the village well: it was placed by generation and
@@ -434,6 +448,9 @@ export class GameScene extends Phaser.Scene {
   private villageNpcs: readonly VillageNpcSpec[] = [];
   private attendant: Phaser.GameObjects.Sprite | null = null;
   private attendantCell: GridPoint | null = null;
+  // Whose room this is: the dev hook reports them by name, and a hard-coded
+  // "shopkeeper" answered for the teacher the day there were two of them.
+  private attendantId: string | null = null;
   // A second camera at zoom 1 for anything measured in screen pixels. Camera
   // zoom scales scrollFactor(0) objects too, so without this the HUD and the
   // joystick would be magnified along with the world and a "64px" button
@@ -581,6 +598,9 @@ export class GameScene extends Phaser.Scene {
       this.refreshCarried();
     };
 
+    this.lessonPanel = new LessonPanel(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
+      this.ui(object),
+    );
     this.optionsPanel = new OptionsPanel(
       this,
       uiIndex,
@@ -607,7 +627,9 @@ export class GameScene extends Phaser.Scene {
       npcs: () => {
         const where: Record<string, { col: number; row: number }> = {};
         for (const npc of this.npcs) where[npc.id] = { col: npc.col, row: npc.row };
-        if (this.attendantCell) where[SHOPKEEPER_ID] = { ...this.attendantCell };
+        if (this.attendantCell && this.attendantId) {
+          where[this.attendantId] = { ...this.attendantCell };
+        }
         return where;
       },
     });
@@ -624,6 +646,7 @@ export class GameScene extends Phaser.Scene {
       this.spellPopup.destroy();
       this.shopPanel.destroy();
       this.optionsPanel?.destroy();
+      this.lessonPanel?.destroy();
     });
 
     // The shop's coin pad takes a coin back on right-click, so the browser's
@@ -765,6 +788,7 @@ export class GameScene extends Phaser.Scene {
     this.spellPopup?.layout();
     this.shopPanel?.layout();
     this.optionsPanel?.layout();
+    this.lessonPanel?.layout();
     this.layoutHud();
   }
 
@@ -1233,10 +1257,10 @@ export class GameScene extends Phaser.Scene {
         return;
       }
     } else {
-      // Pressing into a door enters, rather than bumping off it. The door
-      // cell is part of the footprint and so already impassable, which is
-      // what makes this unambiguous: nothing else wants that step.
-      const building = this.buildingWithDoorAt(targetCol, targetRow);
+      // Pressing into a doorway enters, rather than bumping off it. Every
+      // cell of it is part of the footprint and so already impassable, which
+      // is what makes this unambiguous: nothing else wants that step.
+      const building = this.buildingEntranceAt(targetCol, targetRow);
       if (building) {
         this.enterInterior(building);
         return;
@@ -1450,7 +1474,7 @@ export class GameScene extends Phaser.Scene {
   // for a person standing in one place would be a shortcut to walking there.
 
   /**
-   * Make the shopkeeper tappable.
+   * Make whoever works in this room tappable.
    *
    * Same tile-sized hit area as a crop, and for the same reason: a character
    * frame is a tile wide and half a tile taller, so the default area would
@@ -1462,7 +1486,11 @@ export class GameScene extends Phaser.Scene {
    * it, a tap there talks to her rather than picking it. That is the right
    * way round — you tapped a person.
    */
-  private watchShopkeeper(sprite: Phaser.GameObjects.Sprite, at: () => GridPoint): void {
+  private watchAttendant(
+    sprite: Phaser.GameObjects.Sprite,
+    at: () => GridPoint,
+    talk: () => void,
+  ): void {
     const frame = sprite.frame;
     sprite.setInteractive(
       new Phaser.Geom.Rectangle(0, frame.realHeight - TILE_SIZE, TILE_SIZE, TILE_SIZE),
@@ -1479,8 +1507,27 @@ export class GameScene extends Phaser.Scene {
         this.setMessage(this.words.tooFarToSpeak);
         return;
       }
-      this.openShop();
+      talk();
     });
+  }
+
+  /**
+   * The teacher's lesson.
+   *
+   * Same shape as the shop and for the same reason: she is a person standing
+   * in a room, so the way in is tapping her rather than a key that would be
+   * a shortcut to walking over.
+   */
+  private openLesson(): void {
+    if (this.modalOpen) return;
+    this.joystick?.release();
+    this.closeTrays();
+    this.setMessage(this.words.teacherGreeting);
+    this.lessonPanel?.open_(() => {
+      this.setMessage("");
+      this.updateStatusText();
+    });
+    this.updateStatusText();
   }
 
   private openShop(): void {
@@ -1604,6 +1651,7 @@ export class GameScene extends Phaser.Scene {
     this.session.setPhrases(this.words);
     this.spellPopup?.setPhrases(this.words);
     this.optionsPanel?.setPhrases(this.words);
+    this.lessonPanel?.setPhrases(this.words);
     this.shopPanel?.setPhrases(this.words);
     this.shopPanel?.setCurrency(this.currency);
     // The line on screen was written in the old language by whatever the
@@ -1847,6 +1895,7 @@ export class GameScene extends Phaser.Scene {
         image,
         doorCol: door.col,
         doorRow: door.row,
+        entrance: entranceFor(door, object.col, sidecar.footprint_tiles.width),
         door: DoorState.Closed,
       });
     }
@@ -1942,9 +1991,21 @@ export class GameScene extends Phaser.Scene {
         .setDepth(feet.y)
         .play(characterAnimKey(characterFor(spec.id, 0), IDLE, Facing.Down)),
     );
-    if (spec.id === SHOPKEEPER_ID) this.watchShopkeeper(sprite, () => cell);
+    if (spec.id === SHOPKEEPER_ID)
+      this.watchAttendant(
+        sprite,
+        () => cell,
+        () => this.openShop(),
+      );
+    if (spec.id === TEACHER_ID)
+      this.watchAttendant(
+        sprite,
+        () => cell,
+        () => this.openLesson(),
+      );
     this.attendant = sprite;
     this.attendantCell = cell;
+    this.attendantId = spec.id;
   }
 
   /**
@@ -1964,8 +2025,8 @@ export class GameScene extends Phaser.Scene {
     return interior;
   }
 
-  private buildingWithDoorAt(col: number, row: number): BuildingRuntime | undefined {
-    return this.buildings.find((b) => b.doorCol === col && b.doorRow === row);
+  private buildingEntranceAt(col: number, row: number): BuildingRuntime | undefined {
+    return this.buildings.find((b) => isEntrance(b.entrance, col, row));
   }
 
   /**
@@ -2061,6 +2122,7 @@ export class GameScene extends Phaser.Scene {
     this.attendant?.destroy();
     this.attendant = null;
     this.attendantCell = null;
+    this.attendantId = null;
     this.setInterior(null);
     this.movePlayerToLayer();
 
@@ -2339,11 +2401,13 @@ export class GameScene extends Phaser.Scene {
       // is still assembling itself, before any of these exist.
       this.spellPopup?.isOpen === true ||
       this.shopPanel?.isOpen === true ||
-      this.optionsPanel?.isOpen === true
+      this.optionsPanel?.isOpen === true ||
+      this.lessonPanel?.isOpen === true
     );
   }
 
   private get statusLine(): string {
+    if (this.lessonPanel?.isOpen) return this.words.lessonTitle;
     if (this.optionsPanel?.isOpen) return this.words.statusOptions;
     if (this.shopPanel?.isOpen) return this.words.statusStore;
     if (this.seedTray?.isOpen) return this.words.statusSeeds;

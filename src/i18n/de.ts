@@ -214,6 +214,21 @@ export const DE: Phrases = {
   verdictWasRight: (owed) => `Es stimmte doch: ${owed}. Sie zählt es noch einmal vor.`,
   verdictLookAgain: (paid, owed) => `Schau noch einmal — das waren ${paid}, nicht ${owed}.`,
 
+  teacherGreeting: "Die Lehrerin schaut von ihrem Pult auf.",
+  lessonTitle: "Der Additionszauber",
+  lessonRune:
+    "Öffne dein Zauberbuch und tipp auf die +-Rune. Was vor dir steht, wächst einen Schritt — aber nur, wenn du die Aufgabe lösen kannst.",
+  lessonSplit: (addend, parts) =>
+    `Zerleg die Zahl. ${addend} ist ${parts.join(" und ")}. Jede Zahl besteht aus Hundertern, Zehnern und Einern — und das sind die drei Sprünge.`,
+  lessonJump: (start, jumps) =>
+    `Fang bei ${start} an und spring zuerst den kleinen Teil: ${jumps.map((jump) => `+${jump}`).join(", dann ")}. Schreib in jedes Kästchen die Zahl, auf der du landest.`,
+  lessonAnswer: (answer) =>
+    `Im letzten Kästchen steht die Lösung: ${answer}. Weil du klein anfängst, ändert sich jedes Mal nur ein Teil der Zahl — nichts zu übertragen, nichts im Kopf zu behalten.`,
+  lessonNext: "weiter",
+  lessonBack: "zurück",
+  lessonDone: "ab in den Garten",
+  lessonExample: (start, addend) => `${start} + ${addend}`,
+
   place: (index) => PLACES[index] ?? "",
   jumpPrompt: (index) => `Spring die ${PLACES[index] ?? ""}. Wo landest du?`,
   addPlace: (index, from) => `Addiere die ${PLACES[index] ?? ""} zu ${from}.`,

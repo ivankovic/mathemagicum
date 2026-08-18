@@ -105,6 +105,17 @@ function sample(p: Phrases): Record<string, string> {
     verdictWasRight: p.verdictWasRight("7,50 kn"),
     verdictLookAgain: p.verdictLookAgain("7,00 kn", "7,50 kn"),
 
+    teacherGreeting: p.teacherGreeting,
+    lessonTitle: p.lessonTitle,
+    lessonRune: p.lessonRune,
+    lessonSplit: p.lessonSplit(114, [100, 10, 4]),
+    lessonJump: p.lessonJump(148, [4, 10, 100]),
+    lessonAnswer: p.lessonAnswer(262),
+    lessonNext: p.lessonNext,
+    lessonBack: p.lessonBack,
+    lessonDone: p.lessonDone,
+    lessonExample: p.lessonExample(148, 114),
+
     place: p.place(0),
     jumpPrompt: p.jumpPrompt(0),
     addPlace: p.addPlace(1, 234),
@@ -151,7 +162,9 @@ describe("every language says everything", () => {
   test("German is actually German", () => {
     const en = sample(EN);
     const de = sample(DE);
-    const shared = ["sumQuestion"];
+    // Both are numbers and a plus sign, which every language here writes the
+    // same way.
+    const shared = ["sumQuestion", "lessonExample"];
     for (const [key, line] of Object.entries(de)) {
       if (shared.includes(key)) continue;
       expect(`${key}: ${line}`).not.toBe(`${key}: ${en[key]}`);

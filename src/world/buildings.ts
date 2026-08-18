@@ -51,6 +51,45 @@ export function footprintFor(role: BuildingRole): Footprint {
   return BUILDING_FOOTPRINTS[ROLE_SPRITES[role]];
 }
 
+/**
+ * How far to either side of the door a step still counts as going in.
+ *
+ * The door is one cell, and hitting one cell from a moving character is
+ * fiddly: the player walks along the front of a building, has to stop on
+ * exactly the right tile, and pressing up anywhere else bumps into a wall
+ * that looks no different from the doorway. So the doorway is *three* cells
+ * wide to walk into while staying one cell wide to look at — a target you
+ * can miss by one and still hit.
+ *
+ * Clamped to the building's own footprint, which is the part that has to be
+ * a rule rather than an offset: a door in the corner of a wall has ground
+ * beside it, and a step onto ordinary grass must not put the player indoors.
+ */
+export const ENTRANCE_REACH = 1;
+
+/** The run of cells a step into which enters a building. */
+export interface Entrance {
+  readonly row: number;
+  readonly minCol: number;
+  readonly maxCol: number;
+}
+
+export function entranceFor(
+  door: { col: number; row: number },
+  anchorCol: number,
+  width: number,
+): Entrance {
+  return {
+    row: door.row,
+    minCol: Math.max(anchorCol, door.col - ENTRANCE_REACH),
+    maxCol: Math.min(anchorCol + width - 1, door.col + ENTRANCE_REACH),
+  };
+}
+
+export function isEntrance(entrance: Entrance, col: number, row: number): boolean {
+  return row === entrance.row && col >= entrance.minCol && col <= entrance.maxCol;
+}
+
 export function spriteSheetKey(sprite: BuildingSprite): string {
   return `building-${sprite}`;
 }

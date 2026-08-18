@@ -293,9 +293,55 @@ furniture moves her rather than leaving her inside a crate. The shop panel is
 the one thing that works indoors — every gardening action is refused in
 there, but refusing the shop inside the shop would refuse it everywhere.
 
+**The doorway is wider to walk into than it is to look at.** The door is one
+cell of art, but a step into the wall immediately either side of it goes
+inside too. Hitting a single tile while walking is fiddly — you come along
+the front of a building, have to stop on exactly the right one, and pressing
+up anywhere else bumps into a wall that looks no different from the doorway.
+Three cells is a target you can miss by one and still hit. It is clamped to
+the building's own footprint rather than being an offset from the door, which
+is the part that has to be a rule: a door in the corner of a wall has grass
+beside it, and a step onto ordinary grass must not put the player indoors.
+
 She answers a tap from one step away in any direction, diagonals included — unlike harvesting, which measures orthogonally
 because it acts on the tile the player *faces* and there is no diagonal
 facing to turn to. Talking needs no facing.
+
+### The teacher
+
+**Someone to ask about the spell.** The addition spell is the one thing in
+the game a child can be genuinely stuck on, and until now the only help was
+the parchment's own hints — which arrive *after* two wrong answers. Help you
+have to fail into is help arriving at the worst possible moment. So the
+method is also somewhere you can go and read it, from a person, before you
+need it: the teacher, at the front of the schoolhouse.
+
+**She is in the school**, for the same reasons the shopkeeper is in the
+store, and she stands on a cell chosen from the room's own walkability rather
+than a written-down spot. She is drawn as a schoolteacher rather than a
+wizard: she used to wear a pointed hat, which was the loudest thing in her
+silhouette and said "magic user" about the one person in the village whose
+job is explaining that the magic is arithmetic. Her hair is in a bun instead
+— the same silhouette work, from all four sides, saying schoolroom — and the
+book she was already carrying now reads as hers rather than as a spellbook. Tapping her opens four screens, one idea each, with
+a picture on every one:
+
+1. **the rune** — the spellbook and the `+` icon, drawn from the same art the
+   action bar uses, so the lesson names things the player can already see;
+2. **the split** — 114 pulled apart into 100, 10 and 4, read out biggest
+   first, which is how a person says a number;
+3. **the jumps** — the same number line the spell draws, every arc already
+   made and each landing labelled, in the order they are actually made:
+   smallest first;
+4. **the answer** — where the last jump lands, and *why* the order is that
+   way round: each jump changes one part of the number, so there is never a
+   carry to hold in your head.
+
+The worked example is built by the same function that builds a real problem,
+so what she teaches cannot drift from what the spell sets. That is the whole
+reason it lives in `src/spells/lesson.ts` rather than in the panel that draws
+it — an example with its jumps written out by hand is an example that can
+quietly stop matching the thing it teaches.
 
 ## Current milestone
 

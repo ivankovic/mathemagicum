@@ -60,8 +60,9 @@ interface BuildingSpec {
   npcId: string | null;
   garden: GardenSpec | null;
   // Whether that NPC is found inside the building rather than around it.
-  // The shopkeeper is: a shop is somewhere you go in to, and one who
-  // wandered the square was somewhere you had to find first.
+  // The shopkeeper and the teacher are: a shop and a school are somewhere you
+  // go in to, and one who wandered the square was somewhere you had to find
+  // first.
   npcIndoors?: boolean;
 }
 
@@ -82,6 +83,10 @@ const BUILDINGS: readonly BuildingSpec[] = [
     direction: DIRECTIONS.NE as Direction,
     npcId: "teacher",
     garden: null,
+    // Like the shopkeeper, and for the same reason: a teacher you have to
+    // find in the square is a teacher you meet by accident. She is where a
+    // child would look for her, and the school has a reason to exist.
+    npcIndoors: true,
   },
   {
     id: "villager-house-1",
