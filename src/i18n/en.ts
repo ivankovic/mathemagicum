@@ -38,6 +38,8 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Fence]: noun("fence"),
   [FixtureType.Table]: noun("table"),
   [FixtureType.Lamp]: noun("lamp"),
+  [FixtureType.Gate]: noun("gate"),
+  [FixtureType.FenceSide]: noun("fence"),
 };
 
 const STAGES: Record<PlantStage, string> = {
@@ -54,6 +56,7 @@ const TERRAIN: Record<TerrainType, string> = {
   [TerrainType.Woodland]: "woodland",
   [TerrainType.Hilly]: "hills",
   [TerrainType.Mountain]: "mountain",
+  [TerrainType.Cobble]: "cobbles",
 };
 
 const ROOMS: Record<string, string> = {
@@ -70,6 +73,19 @@ const CURRENCIES: Record<Currency, string> = {
 };
 
 const PLACES = ["ones", "tens", "hundreds"];
+
+// The welcome, a page at a time. Keyed by IntroBeat rather than written as
+// four fields, so a beat added to the tour fails the coverage test in every
+// language instead of silently showing an empty page in one of them.
+const INTRO_EN: Record<string, string> = {
+  seeds:
+    "That is your garden. Take a seed from the pouch and it goes into the ground on the tile you are facing.",
+  spell:
+    "Seeds do not grow on their own here. Open the spellbook, cast the + rune on one, and answer the sum. Two casts and it is ripe. The teacher in the school will show you how, if you ask her.",
+  pick: "Tap a ripe crop to pick it. It goes in your basket, and it grows back.",
+  store:
+    "The shopkeeper in the barn buys what you pick, and sells fences, tables and lamps for the garden. You count the coins out yourself — she is not always right, mind.",
+};
 
 function item(item: ItemType): Noun {
   return PLANTS[item as PlantType] ?? FIXTURES[item as FixtureType] ?? noun(item);
@@ -164,6 +180,10 @@ export const EN: Phrases = {
     `Well spotted. That was ${paid}, ${short ? "short of" : "over"} ${owed}. She makes it up.`,
   verdictWasRight: (owed) => `It was right, in fact: ${owed}. She counts it again for you.`,
   verdictLookAgain: (paid, owed) => `Have another look — that was ${paid}, not ${owed}.`,
+
+  postmanGreeting: "The postal worker jogs over with something for you.",
+  introTitle: "Welcome to the village",
+  intro: (beat) => INTRO_EN[beat] ?? "",
 
   teacherGreeting: "The teacher looks up from her desk.",
   lessonTitle: "The addition spell",

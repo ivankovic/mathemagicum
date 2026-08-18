@@ -23,4 +23,13 @@ export interface PlacedObject {
   // Equal to (col, row) for a 1x1 object.
   anchorCol: number;
   anchorRow: number;
+  /**
+   * Drawn mirrored about its own centre.
+   *
+   * For the fence's side run, whose rails sit on the left of its cell so
+   * they line up with the corner panel's left post: the right-hand side of
+   * an enclosure is the same sprite flipped, which lands them on the other
+   * post. The footprint does not move, only the picture.
+   */
+  flip?: boolean;
 }

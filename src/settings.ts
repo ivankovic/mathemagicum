@@ -58,11 +58,23 @@ export const MONEY_CHOICES: readonly MoneyChoice[] = [
 export interface Settings {
   readonly language: Language;
   readonly money: MoneyChoice;
+  /**
+   * Whether the postal worker has already walked the player through the
+   * basics.
+   *
+   * Saved for the same reason the other two are: a tutorial that interrupts
+   * every single load is one the player learns to dismiss without reading,
+   * which is worse than not having one. He still walks over and can still be
+   * tapped for it again — what is remembered is only whether it opens by
+   * itself.
+   */
+  readonly introSeen: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   language: Language.English,
   money: FOLLOW_LANGUAGE,
+  introSeen: false,
 };
 
 /** What the game can read a language tag as. `de-CH`, `de-AT` and `de` all agree. */
@@ -119,6 +131,7 @@ export function readSettings(store: SettingsStore | null, browserLanguage?: stri
   return {
     language: isLanguage(record.language) ? record.language : fallback.language,
     money: isMoney(record.money) ? record.money : fallback.money,
+    introSeen: record.introSeen === true,
   };
 }
 

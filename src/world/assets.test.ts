@@ -57,8 +57,13 @@ describe("the shipped terrain atlas", () => {
     }
   });
 
-  test("fits in one page, within the 2048px mobile texture ceiling", () => {
-    expect(atlas.textures.length).toBe(1);
+  // It fitted one page until the eighth terrain — the cobbles — went in.
+  // Blending is pairwise, so each terrain costs a pair against every other
+  // one, and 5328 tiles do not fit the 4096 a 2048 page holds at 32px. Two
+  // pages is one extra bind and one extra request; a third would mean the
+  // pairs had grown again, which is worth being told about.
+  test("fits two pages, each within the 2048px mobile texture ceiling", () => {
+    expect(atlas.textures.length).toBe(2);
     for (const texture of atlas.textures) {
       expect(texture.size.w).toBeLessThanOrEqual(2048);
       expect(texture.size.h).toBeLessThanOrEqual(2048);

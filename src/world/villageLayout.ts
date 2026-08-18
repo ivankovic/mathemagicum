@@ -3,6 +3,7 @@
 
 import type { AreaPlacement } from "./anchors";
 import { type BuildingRole, footprintFor } from "./buildings";
+import { FixtureType } from "./fixtures";
 import type { WorldGrid } from "./grid";
 import type { PlacedObject } from "./objects";
 import { TerrainType } from "./terrain";
@@ -25,7 +26,10 @@ const SQUARE_RADIUS = 4; // 9x9 plaza
 // the art, which has a different shape per building. RING_RADIUS is measured
 // to a building's centre, so it stays uniform regardless.
 const RING_RADIUS = 9;
-const GARDEN_GAP = 1;
+// Was 1, which put a garden's fence hard against its building's wall. Three
+// leaves a tile to walk down between the two, which is what makes the plot
+// read as a plot rather than as an extension of the house.
+const GARDEN_GAP = 3;
 // NPCs "retreat" to a tile between the square and their building — on the
 // path, just outside the building's own footprint. Needs more than 1 tile
 // of clearance: rounding a diagonal direction's (col, row) independently
@@ -146,7 +150,18 @@ export interface VillageLayout {
   well: PlacedObject;
   buildings: readonly PlacedObject[];
   npcs: readonly VillageNpcSpec[];
+  /** Where the player starts: in their own beds, inside their own fence. */
   playerSpawn: GridPoint;
+  /**
+   * Their front door, and the world generator's route anchor.
+   *
+   * The two are separate because the spawn is now *inside* a fenced plot,
+   * and the connectivity pass carves its routes by removing whatever stands
+   * in the way. Starting it in the garden had it punch straight out through
+   * the fence on its way to the first story area — which is how the gate
+   * disappeared the first time this was drawn.
+   */
+  playerDoorstep: GridPoint;
 }
 
 function round(point: { x: number; y: number }): GridPoint {
@@ -179,10 +194,101 @@ function boxHalfExtentAlong(direction: Direction, halfWidth: number, halfHeight:
   );
 }
 
-function carveRect(grid: WorldGrid, topLeft: GridPoint, width: number, height: number): void {
+function carveRect(
+  grid: WorldGrid,
+  topLeft: GridPoint,
+  width: number,
+  height: number,
+  terrain: TerrainType = TerrainType.Dirt,
+): void {
   for (let row = topLeft.row; row < topLeft.row + height; row++) {
     for (let col = topLeft.col; col < topLeft.col + width; col++) {
-      if (grid.inBounds(col, row)) grid.setTerrain(col, row, TerrainType.Dirt);
+      if (grid.inBounds(col, row)) grid.setTerrain(col, row, terrain);
+    }
+  }
+}
+
+/**
+ * Where a garden's fence stands: the ring of cells one tile outside its beds.
+ *
+ * Outside rather than around the outermost row of beds, because every cell
+ * of a garden is meant to be plantable — a fence standing on the beds would
+ * quietly cost the player the row it sat on.
+ */
+export function gardenFenceRing(
+  topLeft: GridPoint,
+  width: number,
+  height: number,
+): readonly GridPoint[] {
+  const left = topLeft.col - 1;
+  const right = topLeft.col + width;
+  const top = topLeft.row - 1;
+  const bottom = topLeft.row + height;
+  const ring: GridPoint[] = [];
+  for (let col = left; col <= right; col++) {
+    ring.push({ col, row: top });
+    ring.push({ col, row: bottom });
+  }
+  for (let row = top + 1; row < bottom; row++) {
+    ring.push({ col: left, row });
+    ring.push({ col: right, row });
+  }
+  return ring;
+}
+
+/**
+ * Which cell of the ring is the way in: the one nearest the village square,
+ * never a corner.
+ *
+ * Nearest the square because that is where the player is coming from, and
+ * never a corner because a gate in a corner opens onto the diagonal, which
+ * is the one direction nobody here can walk.
+ */
+export function gardenGate(ring: readonly GridPoint[], towards: GridPoint): GridPoint {
+  const cols = ring.map((cell) => cell.col);
+  const rows = ring.map((cell) => cell.row);
+  const left = Math.min(...cols);
+  const right = Math.max(...cols);
+  const top = Math.min(...rows);
+  const bottom = Math.max(...rows);
+  const isCorner = (cell: GridPoint) =>
+    (cell.col === left || cell.col === right) && (cell.row === top || cell.row === bottom);
+  const distance = (cell: GridPoint) =>
+    (cell.col - towards.col) ** 2 + (cell.row - towards.row) ** 2;
+  const candidates = ring.filter((cell) => !isCorner(cell));
+  return candidates.reduce((best, cell) => (distance(cell) < distance(best) ? cell : best));
+}
+
+/**
+ * Four lamp posts, one at each corner of the square.
+ *
+ * The village had no light of its own: night fell and the only thing lit was
+ * whatever the player happened to be carrying. Corners rather than edges
+ * because the paths leave the square along its edges, and a lamp post is a
+ * solid thing — one dropped on a one-tile spoke would wall a house off.
+ * Checked anyway before each is placed, since "the corners are clear" is a
+ * property of today's layout rather than a law of it.
+ */
+function lightTheSquare(grid: WorldGrid, center: GridPoint, keepClear: readonly GridPoint[]): void {
+  const reach = SQUARE_RADIUS - 1;
+  for (const dCol of [-reach, reach]) {
+    for (const dRow of [-reach, reach]) {
+      const col = center.col + dCol;
+      const row = center.row + dRow;
+      if (!grid.inBounds(col, row) || !grid.isPassable(col, row)) continue;
+      if (grid.getObjectAt(col, row)) continue;
+      if (keepClear.some((cell) => cell.col === col && cell.row === row)) continue;
+      grid.placeObject({
+        id: `square-lamp-${col}-${row}`,
+        type: FixtureType.Lamp,
+        col,
+        row,
+        width: 1,
+        height: 1,
+        blocksMovement: true,
+        anchorCol: col,
+        anchorRow: row,
+      });
     }
   }
 }
@@ -244,7 +350,8 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
   };
 
   const squareSize = SQUARE_RADIUS * 2 + 1;
-  carveRect(grid, topLeftFor(center, squareSize, squareSize), squareSize, squareSize);
+  const squareTopLeft = topLeftFor(center, squareSize, squareSize);
+  carveRect(grid, squareTopLeft, squareSize, squareSize);
 
   const well: PlacedObject = {
     id: "well",
@@ -262,6 +369,7 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
   const buildings: PlacedObject[] = [];
   const npcs: VillageNpcSpec[] = [];
   let playerSpawn: GridPoint | undefined;
+  let playerDoorstep: GridPoint | undefined;
 
   for (const spec of BUILDINGS) {
     const buildingCenter = alongDirection(center, spec.direction, RING_RADIUS);
@@ -288,12 +396,57 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
       const gardenDistance =
         RING_RADIUS + Math.max(buildingWidth, buildingHeight) / 2 + GARDEN_GAP + gardenRadialHalf;
       const gardenCenter = alongDirection(center, spec.direction, gardenDistance);
+      const gardenTopLeft = topLeftFor(gardenCenter, spec.garden.width, spec.garden.height);
+      carveRect(grid, gardenTopLeft, spec.garden.width, spec.garden.height);
+      // The ground the fence stands on, carved too, so the enclosure reads as
+      // one plot — and so nothing scatters scenery into the fence line, which
+      // only ever lands on the terrain it grows from.
       carveRect(
         grid,
-        topLeftFor(gardenCenter, spec.garden.width, spec.garden.height),
-        spec.garden.width,
-        spec.garden.height,
+        { col: gardenTopLeft.col - 1, row: gardenTopLeft.row - 1 },
+        spec.garden.width + 2,
+        spec.garden.height + 2,
       );
+
+      const ring = gardenFenceRing(gardenTopLeft, spec.garden.width, spec.garden.height);
+      const gate = gardenGate(ring, center);
+      const left = gardenTopLeft.col - 1;
+      const right = gardenTopLeft.col + spec.garden.width;
+      // A way up to it: the gate faces the square, and what lies between is
+      // whatever the world put there.
+      carvePath(grid, gate, buildingCenter);
+      for (const cell of ring) {
+        const isGate = cell.col === gate.col && cell.row === gate.row;
+        // The sides run away from the camera and the top and bottom run
+        // across it, which is two different pictures of the same fence. The
+        // corners belong to the top and bottom, because that is the run whose
+        // posts the sides line up under.
+        const side = !isGate && (cell.col === left || cell.col === right);
+        const isSide =
+          side &&
+          cell.row !== gardenTopLeft.row - 1 &&
+          cell.row !== gardenTopLeft.row + spec.garden.height;
+        const type = isGate ? FixtureType.Gate : isSide ? FixtureType.FenceSide : FixtureType.Fence;
+        grid.placeObject({
+          id: `${spec.id}-${type}-${cell.col}-${cell.row}`,
+          type,
+          col: cell.col,
+          row: cell.row,
+          width: 1,
+          height: 1,
+          // The gate is the one cell of the ring you can walk through, which
+          // is why it is drawn standing open rather than shut.
+          blocksMovement: !isGate,
+          anchorCol: cell.col,
+          anchorRow: cell.row,
+          // The right-hand side is the left-hand sprite mirrored.
+          flip: isSide && cell.col === right,
+        });
+      }
+      // Standing in their own beds, inside their own fence: the first thing
+      // the game is about is the thing the player is stood in.
+      if (spec.id === "player-house")
+        playerSpawn = { col: gardenCenter.col, row: gardenCenter.row };
     }
 
     // The doorstep: a tile between the square and the building, just
@@ -314,10 +467,27 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
         indoors: spec.npcIndoors === true,
       });
     }
-    if (spec.id === "player-house") playerSpawn = doorstep;
+    // The doorstep is the spawn's fallback too: a player house without a
+    // garden would otherwise have nowhere to put its owner.
+    if (spec.id === "player-house") {
+      playerDoorstep = doorstep;
+      playerSpawn ??= doorstep;
+    }
   }
 
-  if (!playerSpawn) throw new Error('BUILDINGS is missing "player-house"');
+  if (!playerSpawn || !playerDoorstep) throw new Error('BUILDINGS is missing "player-house"');
 
-  return { well, buildings, npcs, playerSpawn };
+  // The paving goes down last, over the ends of the roads rather than under
+  // them: every spoke is carved outward from the middle of the square, so
+  // paving first left dirt tracks scored across it. A village lays stone
+  // where it gathers and wears a path where it walks — but the gathering
+  // place is one surface, not a stone floor with ruts in it.
+  carveRect(grid, squareTopLeft, squareSize, squareSize, TerrainType.Cobble);
+
+  // After the buildings, so it knows which cells are doorsteps: those are
+  // where the villagers stand at night, and a lamp post dropped on one is a
+  // villager with nowhere to go home to.
+  lightTheSquare(grid, center, [playerDoorstep, ...npcs.map((npc) => npc.home)]);
+
+  return { well, buildings, npcs, playerSpawn, playerDoorstep };
 }

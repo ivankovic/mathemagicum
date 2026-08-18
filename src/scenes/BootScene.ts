@@ -42,9 +42,11 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // One request and one texture for all ~3300 terrain tiles, including
-    // every 3- and 4-terrain corner cell. The second argument is the
-    // directory the atlas's own page filenames resolve against.
+    // Every terrain tile the world can need, including every 3- and
+    // 4-terrain corner cell: ~5300 of them, over two pages since the village
+    // square was paved. A multiatlas is one request either way. The second
+    // argument is the directory the atlas's own page filenames resolve
+    // against.
     this.load.multiatlas(
       TERRAIN_ATLAS_KEY,
       `${this.base()}assets/terrain/terrain.json`,

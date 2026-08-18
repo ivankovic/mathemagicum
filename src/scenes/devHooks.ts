@@ -50,6 +50,25 @@ export interface DevOptions {
    * these seams exist to replace.
    */
   readonly money: string | null;
+  /**
+   * Ask for the welcome again.
+   *
+   * The postal worker walks it over once and it is then remembered as seen,
+   * which is right for a player and useless for a script: without this the
+   * only way to test the tutorial twice would be to clear the saved settings
+   * from outside, which is exactly the reaching-in these seams replace.
+   */
+  readonly intro: boolean;
+  /**
+   * Pin the clock, in hours.
+   *
+   * The day-night cycle follows the player's own wall clock, which is right
+   * for a player and useless for looking at: verifying that night is lit
+   * meant either waiting for evening or trusting a screenshot taken at some
+   * unrepeatable hour. Pinning `Date` from outside was tried once and stalled
+   * every tween in the scene, so the game states the seam instead.
+   */
+  readonly hour: number | null;
 }
 
 const NONE: DevOptions = {
@@ -58,6 +77,8 @@ const NONE: DevOptions = {
   coins: 0,
   language: null,
   money: null,
+  intro: false,
+  hour: null,
 };
 
 export function devOptions(search = globalThis.location?.search ?? ""): DevOptions {
@@ -68,14 +89,16 @@ export function devOptions(search = globalThis.location?.search ?? ""): DevOptio
 /** Split out from the environment check so it can be tested on its own. */
 export function parseDevOptions(search: string): DevOptions {
   const params = new URLSearchParams(search);
-  const number = (name: string): number | null => {
+  const number = (name: string, whole = true): number | null => {
     const raw = params.get(name);
     // Empty counts as absent. `Number("")` is 0, which is finite, so a bare
     // `?seed=` would otherwise hand a script seed 0 — a different set of
     // problems than the one it computed, failing as wrong answers.
     if (raw === null || raw.trim() === "") return null;
     const value = Number(raw);
-    return Number.isFinite(value) ? Math.trunc(value) : null;
+    if (!Number.isFinite(value)) return null;
+    // Seeds and coins are counts; the clock is not — half past nine is 9.5.
+    return whole ? Math.trunc(value) : value;
   };
   return {
     seed: number("seed"),
@@ -86,6 +109,8 @@ export function parseDevOptions(search: string): DevOptions {
     coins: Math.max(0, number("coins") ?? 0),
     language: params.get("lang")?.trim() || null,
     money: params.get("money")?.trim() || null,
+    intro: params.has("intro"),
+    hour: number("hour", false),
   };
 }
 

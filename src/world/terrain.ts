@@ -14,6 +14,11 @@ export const TerrainType = {
   Woodland: "woodland",
   Hilly: "hilly",
   Mountain: "mountain",
+  // Laid stone, not grown ground: the village square. Last in the list
+  // because it is last in the generator's PRIORITY — wherever cobbles meet
+  // anything, theirs is the edge that reads, since a paved square with a
+  // grass lip over it would look like the grass was winning.
+  Cobble: "cobble",
 } as const;
 
 export type TerrainType = (typeof TerrainType)[keyof typeof TerrainType];

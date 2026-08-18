@@ -170,7 +170,9 @@ which reads as the game ignoring them.
 Reflects the player's actual real-world time of day (local clock), not a
 simulated in-game clock — no time state to save, nothing to drift. Gates
 NPC presence (every villager retreats indoors at night; the postal
-worker's patrol is day-only) but explicitly *not* money or rewards — see
+worker's patrol is day-only, except that an undelivered welcome outranks
+the clock — see "The welcome") and, since playtesting, what is lit: the
+tint is no longer the whole story of night — see "Night, and what is lit" but explicitly *not* money or rewards — see
 "No manipulative engagement mechanics" above. See
 [`WORLD_GENERATION.md`](WORLD_GENERATION.md#day-night-cycle) for the
 fuller brainstorm.
@@ -306,6 +308,114 @@ beside it, and a step onto ordinary grass must not put the player indoors.
 She answers a tap from one step away in any direction, diagonals included — unlike harvesting, which measures orthogonally
 because it acts on the tile the player *faces* and there is no diagonal
 facing to turn to. Talking needs no facing.
+
+### The garden
+
+**The player starts standing in their own beds.** Not at the front door: the
+beds are what the game is about, and starting outside them made the first
+move of every new game "walk round the house". The plot is fenced, so the
+first thing on screen is a patch of ground that is plainly *theirs*.
+
+**Every village garden is fenced, with one gate.** The fence stands on a ring
+of ground one tile outside the beds rather than on the outermost row of them,
+because every cell of a garden is meant to be plantable and a fence post
+would quietly cost the player the row it sat on. The gate is the ring cell
+nearest the square — never a corner, since a corner gate opens onto the
+diagonal, which is the one direction nobody here can walk — and a short path
+is carved from it towards the house so the way in is never behind a tree.
+
+**The gate is drawn standing open, and that is the whole design.** A closed
+gate on this grid would have to either block the way — a wall with a picture
+of a gate on it — or let the player walk through solid timber. Open, it says
+"this is the way in" and means it: it is the one cell of the ring that does
+not block movement. Its posts stand taller than the fence's and sit where the
+fence's posts sit, so the runs either side join onto it rather than stopping
+short.
+
+One thing this cost, and it is worth writing down: the connectivity pass
+carves its routes to the story areas by *removing whatever stands in the
+way*, and it used to start from the player's spawn. With the spawn moved
+inside the fence, its first carve punched straight out through the wall — the
+gate vanished, and the fence had a hole in it instead. It now starts from the
+doorstep, which is outside; the garden hangs off it through the gate, so
+anything reachable from one is reachable from the other.
+
+### Night, and what is lit
+
+**Night was too dark to play in**, which is what playtesting is for. The fix
+is not a paler sheet of navy — a night you can read at a glance is not night
+— but light in it: the tint came down a little, and what the player carries
+and what is burning nearby now shows.
+
+**The player carries a light.** A soft, pale pool, a couple of tiles across.
+It moves with them, so the dark has a shape and walking through it feels like
+walking through it rather than like the screen being dimmer.
+
+**The village lights itself.** Four lamp posts stand at the corners of the
+square — corners rather than edges, because the roads leave the square along
+its edges and a lamp post is a solid thing that would wall a house off if it
+landed on a one-tile spoke. Each throws a warm halo, bigger and more orange
+than the player's, so a lamp is somewhere you can actually see by and worth
+buying one of your own for.
+
+The lights are drawn *additively over* the tint rather than erased out of it.
+Erasing is what it wants to mean, and a render texture can do exactly that —
+which is how it was written first, and it went wrong in a way worth
+recording: with the sheet being filled and erased every frame, it came out
+blank within seconds and night simply stopped happening as the player walked.
+Warm light added to a cold sheet reads the same to the eye and cannot get out
+of step with itself.
+
+### The village square
+
+**It is paved.** Cobbles, not dirt: the square is where the village gathers,
+and stone is what a place lays down where it gathers, while a path is what it
+wears where it walks. The roads out of it stay dirt for exactly that reason —
+and the paving goes down *after* they are carved, because every spoke starts
+at the middle of the square and paving first left dirt tracks scored across
+it.
+
+The stone is drawn as a Voronoi partition with every boundary cracked, which
+is what the generator already uses for mountain rock. Blobs were tried first
+and read as gravel: a wobbled circle cannot say "laid by hand", because the
+thing that says it is the joint.
+
+### The welcome
+
+**The postal worker brings the tutorial to you.** At the start of a new game
+he crosses the square, says hello, and walks the player through four pages:
+put a seed in the ground, cast the spell to grow it, pick it, sell it. That
+is the whole game as it stands, and a tutorial that covered more would be one
+nobody reads to the end.
+
+Two decisions about *how* it arrives. It is delivered by **a person who walks
+over**, not a title screen: a child meets it as somebody saying hello rather
+than as a wall of text between them and the game, and he is the one villager
+whose round already covers the whole village. And **every page is two icons**
+— the seed pouch, the spellbook, the rune, the basket, a coin — the same
+images that sit in the corner of the screen, not illustrations drawn for the
+telling. "Tap this pouch" is a sentence a child can act on; "tap the seed
+pouch" is one they have to decode first.
+
+**An undelivered welcome outranks his round.** He walks it over whatever the
+clock says, which is the one exception to every villager going home at night
+— a child who starts playing at eight in the evening needs it more than the
+village needs its curfew kept, and "the postman is still out" is a smaller
+oddity than "nobody ever told me what to do here". Once it is given he keeps
+the same hours as everyone else.
+
+**It is remembered once given.** A tutorial that interrupts every load is one
+the player learns to dismiss without reading, which is worse than not having
+one at all — so it is saved beside the language and the money. He still walks
+over, and tapping him still asks for it again; what is remembered is only
+whether it opens by itself. He gives up crossing the square after a while, so
+a player who would rather run off and plant something is not followed forever.
+
+**The panel is the teacher's panel.** Both explanations are the same deck of
+pages with the same buttons and the same row of dots, because the second
+explanation a child meets should not also have to be learned as a piece of
+interface. What differs is the picture on each page: icons here, diagrams in
+the school.
 
 ### The teacher
 

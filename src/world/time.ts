@@ -17,7 +17,11 @@ const SUNSET = 20;
 // How many hours either side of sunrise/sunset the tint fades over, rather
 // than cutting instantly from day to night.
 const TRANSITION_HOURS = 1.5;
-const MAX_NIGHT_ALPHA = 0.55;
+// Was 0.55, which playtested as "I cannot see anything". Night should read
+// as night — you want a lamp — but the garden you are standing in has to
+// stay legible, and the lights the scene now carves out of this tint do the
+// rest of the work of making the dark feel dark.
+export const MAX_NIGHT_ALPHA = 0.42;
 export const NIGHT_TINT_COLOR = 0x0a1a3a;
 
 // Whether NPCs should be out and about (see docs/WORLD_GENERATION.md's

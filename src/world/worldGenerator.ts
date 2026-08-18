@@ -77,7 +77,12 @@ export function generateWorld(width: number, height: number, seed: number): Gene
   // the rim where it has nothing to cut off.
   placeEdgeBarriers(grid, highCorner, reservedBoxes, fieldSeed);
 
-  ensureConnectivity(grid, village.playerSpawn, [
+  // From the doorstep rather than from where the player stands: the spawn is
+  // inside a fenced garden, and this carves its routes by removing whatever
+  // is in the way — starting it in there had it cut straight out through the
+  // fence. The garden hangs off the doorstep through its gate, so anything
+  // reachable from one is reachable from the other.
+  ensureConnectivity(grid, village.playerDoorstep, [
     centerOf(anchors.harbour),
     centerOf(anchors.bigCity),
     centerOf(anchors.observatory),

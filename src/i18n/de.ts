@@ -60,6 +60,8 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Fence]: noun({ bare: "Zaun", gender: "m", plural: "Zäune" }),
   [FixtureType.Table]: noun({ bare: "Tisch", gender: "m", plural: "Tische" }),
   [FixtureType.Lamp]: noun({ bare: "Laterne", gender: "f", plural: "Laternen" }),
+  [FixtureType.Gate]: noun({ bare: "Tor", gender: "n", plural: "Tore" }),
+  [FixtureType.FenceSide]: noun({ bare: "Zaun", gender: "m", plural: "Zäune" }),
 };
 
 const STAGES: Record<PlantStage, string> = {
@@ -76,6 +78,7 @@ const TERRAIN: Record<TerrainType, string> = {
   [TerrainType.Woodland]: "Waldboden",
   [TerrainType.Hilly]: "Hügeln",
   [TerrainType.Mountain]: "Fels",
+  [TerrainType.Cobble]: "Pflaster",
 };
 
 const ROOMS: Record<string, string> = {
@@ -101,6 +104,18 @@ const CURRENCIES: Record<Currency, string> = {
 };
 
 const PLACES = ["Einer", "Zehner", "Hunderter"];
+
+// Der Rundgang, Seite für Seite. Nach IntroBeat geschlüsselt, damit eine neue
+// Seite in jeder Sprache auffällt und nicht leer bleibt.
+const INTRO_DE: Record<string, string> = {
+  seeds:
+    "Das da ist dein Garten. Nimm ein Saatkorn aus dem Beutel — es kommt auf das Feld, vor dem du stehst.",
+  spell:
+    "Von allein wächst hier nichts. Öffne das Zauberbuch, sprich die +-Rune darauf und löse die Aufgabe. Zweimal, dann ist die Pflanze reif. Die Lehrerin in der Schule zeigt dir, wie es geht.",
+  pick: "Tipp auf eine reife Pflanze, um sie zu pflücken. Sie wandert in deinen Korb und wächst nach.",
+  store:
+    "Die Händlerin in der Scheune kauft deine Ernte und verkauft Zäune, Tische und Laternen für den Garten. Das Geld zählst du selbst ab — und sie verzählt sich auch mal.",
+};
 
 /**
  * A sentence that starts with a noun form starts with a capital.
@@ -213,6 +228,10 @@ export const DE: Phrases = {
     `Gut aufgepasst. Das waren ${paid} statt ${owed} — ${short ? "zu wenig" : "zu viel"}. Sie gleicht es aus.`,
   verdictWasRight: (owed) => `Es stimmte doch: ${owed}. Sie zählt es noch einmal vor.`,
   verdictLookAgain: (paid, owed) => `Schau noch einmal — das waren ${paid}, nicht ${owed}.`,
+
+  postmanGreeting: "Der Postbote kommt herüber — er hat etwas für dich.",
+  introTitle: "Willkommen im Dorf",
+  intro: (beat) => INTRO_DE[beat] ?? "",
 
   teacherGreeting: "Die Lehrerin schaut von ihrem Pult auf.",
   lessonTitle: "Der Additionszauber",

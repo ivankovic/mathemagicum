@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { Language } from "../settings";
 import { Currency } from "../shop/currency";
+import { INTRO_BEATS, IntroBeat } from "../ui/intro";
 import { FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import { PLANT_STAGES, PLANT_TYPES, PlantStage, PlantType } from "../world/plants";
 import { TERRAIN_TYPES } from "../world/terrain";
@@ -105,6 +106,9 @@ function sample(p: Phrases): Record<string, string> {
     verdictWasRight: p.verdictWasRight("7,50 kn"),
     verdictLookAgain: p.verdictLookAgain("7,00 kn", "7,50 kn"),
 
+    postmanGreeting: p.postmanGreeting,
+    introTitle: p.introTitle,
+    intro: p.intro(IntroBeat.Seeds),
     teacherGreeting: p.teacherGreeting,
     lessonTitle: p.lessonTitle,
     lessonRune: p.lessonRune,
@@ -168,6 +172,28 @@ describe("every language says everything", () => {
     for (const [key, line] of Object.entries(de)) {
       if (shared.includes(key)) continue;
       expect(`${key}: ${line}`).not.toBe(`${key}: ${en[key]}`);
+    }
+  });
+});
+
+describe("the welcome", () => {
+  // The tour is keyed by beat, so a beat added without words would show an
+  // empty page — in one language, quite possibly not the one being tested.
+  test("every language has a page for every beat of it", () => {
+    for (const [name, book] of BOOKS) {
+      for (const beat of INTRO_BEATS) {
+        expect({ name, beat, said: book.intro(beat).length > 0 }).toEqual({
+          name,
+          beat,
+          said: true,
+        });
+      }
+    }
+  });
+
+  test("the two languages say different things on every page", () => {
+    for (const beat of INTRO_BEATS) {
+      expect(DE.intro(beat)).not.toBe(EN.intro(beat));
     }
   });
 });

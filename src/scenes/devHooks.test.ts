@@ -12,6 +12,8 @@ describe("parseDevOptions", () => {
       coins: 0,
       language: null,
       money: null,
+      intro: false,
+      hour: null,
     });
   });
 
@@ -29,6 +31,22 @@ describe("parseDevOptions", () => {
     expect(parseDevOptions("?money=euro").money).toBe("euro");
     expect(parseDevOptions("?money=").money).toBe(null);
     expect(parseDevOptions("").money).toBe(null);
+  });
+
+  // The welcome is given once and then remembered, which is right for a
+  // player and useless for a test of it.
+  test("reads a request for the welcome", () => {
+    expect(parseDevOptions("?intro").intro).toBe(true);
+    expect(parseDevOptions("").intro).toBe(false);
+  });
+
+  // Night is a third of the day and the game follows the player's own clock,
+  // so without this a look at the lighting means waiting for evening.
+  test("reads a pinned clock", () => {
+    expect(parseDevOptions("?hour=22").hour).toBe(22);
+    expect(parseDevOptions("?hour=6.5").hour).toBe(6.5);
+    expect(parseDevOptions("?hour=").hour).toBe(null);
+    expect(parseDevOptions("").hour).toBe(null);
   });
 
   test("reads a seed, so a script knows which sums it will be asked", () => {
@@ -61,6 +79,8 @@ describe("parseDevOptions", () => {
       coins: 40,
       language: "de",
       money: null,
+      intro: false,
+      hour: null,
     });
   });
 });

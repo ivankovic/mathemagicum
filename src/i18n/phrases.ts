@@ -148,6 +148,14 @@ export interface Phrases {
   verdictWasRight: (owed: string) => string;
   verdictLookAgain: (paid: string, owed: string) => string;
 
+  // --- the postal worker's welcome ------------------------------------------
+
+  /** What he says as he walks up, before the parchment opens. */
+  postmanGreeting: string;
+  introTitle: string;
+  /** One page of the welcome. The beat names are IntroBeat's. */
+  intro: (beat: string) => string;
+
   // --- the teacher's lesson ------------------------------------------------
 
   /** What she says when tapped, before the parchment opens. */

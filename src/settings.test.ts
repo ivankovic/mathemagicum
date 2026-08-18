@@ -48,18 +48,26 @@ describe("reading a language tag", () => {
 
 describe("which money", () => {
   test("following the language gives kuna for English and francs for German", () => {
-    expect(currencyFor({ language: Language.English, money: FOLLOW_LANGUAGE })).toBe(Currency.Kuna);
-    expect(currencyFor({ language: Language.German, money: FOLLOW_LANGUAGE })).toBe(Currency.Franc);
+    expect(
+      currencyFor({ language: Language.English, money: FOLLOW_LANGUAGE, introSeen: false }),
+    ).toBe(Currency.Kuna);
+    expect(
+      currencyFor({ language: Language.German, money: FOLLOW_LANGUAGE, introSeen: false }),
+    ).toBe(Currency.Franc);
   });
 
   // The whole point of the setting: a player may want the foreign coins.
   test("a chosen currency wins over the language", () => {
-    expect(currencyFor({ language: Language.English, money: Currency.Franc })).toBe(Currency.Franc);
-    expect(currencyFor({ language: Language.German, money: Currency.Kuna })).toBe(Currency.Kuna);
+    expect(
+      currencyFor({ language: Language.English, money: Currency.Franc, introSeen: false }),
+    ).toBe(Currency.Franc);
+    expect(currencyFor({ language: Language.German, money: Currency.Kuna, introSeen: false })).toBe(
+      Currency.Kuna,
+    );
   });
 
   test("following the language follows it when the language changes", () => {
-    const settings: Settings = { language: Language.English, money: FOLLOW_LANGUAGE };
+    const settings: Settings = DEFAULT_SETTINGS;
     expect(currencyFor({ ...settings, language: Language.German })).toBe(Currency.Franc);
   });
 });
@@ -69,13 +77,18 @@ describe("remembering the choice", () => {
     expect(readSettings(memory(), "de-CH")).toEqual({
       language: Language.German,
       money: FOLLOW_LANGUAGE,
+      introSeen: false,
     });
     expect(readSettings(memory(), "en-GB")).toEqual(DEFAULT_SETTINGS);
   });
 
   test("what was written comes back", () => {
     const store = memory();
-    const chosen: Settings = { language: Language.German, money: Currency.Kuna };
+    const chosen: Settings = {
+      language: Language.German,
+      money: Currency.Kuna,
+      introSeen: true,
+    };
     writeSettings(store, chosen);
     expect(readSettings(store, "en")).toEqual(chosen);
   });
@@ -83,7 +96,7 @@ describe("remembering the choice", () => {
   // A saved choice is a choice; the browser's language must not overrule it.
   test("a saved language beats the browser's", () => {
     const store = memory();
-    writeSettings(store, { language: Language.English, money: FOLLOW_LANGUAGE });
+    writeSettings(store, { ...DEFAULT_SETTINGS, language: Language.English });
     expect(readSettings(store, "de-DE").language).toBe(Language.English);
   });
 
@@ -92,6 +105,7 @@ describe("remembering the choice", () => {
     expect(readSettings(store, "de")).toEqual({
       language: Language.German,
       money: Currency.Franc,
+      introSeen: false,
     });
   });
 
@@ -99,6 +113,7 @@ describe("remembering the choice", () => {
     expect(readSettings(memory("{not json"), "de")).toEqual({
       language: Language.German,
       money: FOLLOW_LANGUAGE,
+      introSeen: false,
     });
     expect(readSettings(memory("null"), "en")).toEqual(DEFAULT_SETTINGS);
   });
@@ -108,6 +123,7 @@ describe("remembering the choice", () => {
     expect(readSettings(null, "de")).toEqual({
       language: Language.German,
       money: FOLLOW_LANGUAGE,
+      introSeen: false,
     });
     expect(() => writeSettings(null, DEFAULT_SETTINGS)).not.toThrow();
   });
@@ -140,9 +156,18 @@ describe("what the menu offers", () => {
     }
   });
 
+  // The one thing here that is progress rather than preference: it is only
+  // ever true once, and a saved file that lost it would replay the tutorial.
+  test("having seen the welcome is remembered", () => {
+    const store = memory();
+    writeSettings(store, { ...DEFAULT_SETTINGS, introSeen: true });
+    expect(readSettings(store, "en").introSeen).toBe(true);
+    expect(readSettings(memory(), "en").introSeen).toBe(false);
+  });
+
   test("every money choice resolves to a currency", () => {
     for (const money of MONEY_CHOICES) {
-      expect(currencyFor({ language: Language.English, money })).toBeTruthy();
+      expect(currencyFor({ ...DEFAULT_SETTINGS, money })).toBeTruthy();
     }
   });
 

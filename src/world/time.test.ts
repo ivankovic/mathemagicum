@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { isDaytime, nightTintAlpha, timeOfDay } from "./time";
+import { MAX_NIGHT_ALPHA, isDaytime, nightTintAlpha, timeOfDay } from "./time";
 
 describe("timeOfDay", () => {
   test("reads local hours/minutes/seconds as a fractional hour", () => {
@@ -38,7 +38,7 @@ describe("nightTintAlpha", () => {
 
   test("is at its max for deep night, both before dawn and after dusk", () => {
     for (const hour of [0, 1, 2, 3, 4, 4.5, 21.5, 22, 23, 23.9]) {
-      expect(nightTintAlpha(hour)).toBeCloseTo(0.55, 5);
+      expect(nightTintAlpha(hour)).toBeCloseTo(MAX_NIGHT_ALPHA, 5);
     }
   });
 
@@ -59,7 +59,7 @@ describe("nightTintAlpha", () => {
       expect(alpha).toBeGreaterThanOrEqual(previous - 1e-9);
       previous = alpha;
     }
-    expect(nightTintAlpha(21.5)).toBeCloseTo(0.55, 5);
+    expect(nightTintAlpha(21.5)).toBeCloseTo(MAX_NIGHT_ALPHA, 5);
   });
 
   test("covers every hour of the day without gaps or NaNs", () => {
@@ -67,7 +67,7 @@ describe("nightTintAlpha", () => {
       const alpha = nightTintAlpha(hour);
       expect(Number.isNaN(alpha)).toBe(false);
       expect(alpha).toBeGreaterThanOrEqual(0);
-      expect(alpha).toBeLessThanOrEqual(0.55);
+      expect(alpha).toBeLessThanOrEqual(MAX_NIGHT_ALPHA);
     }
   });
 });

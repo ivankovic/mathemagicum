@@ -51,6 +51,8 @@ export const MAX_TRADE = 10;
 /** What the store stocks, priced in crops. */
 const COST_IN_CROPS: Record<FixtureType, number> = {
   well: Number.POSITIVE_INFINITY, // not for sale; the village has the one
+  gate: Number.POSITIVE_INFINITY, // nor is this: it belongs to a garden wall
+  "fence-side": Number.POSITIVE_INFINITY, // the same fence, the world's copy
   fence: 2,
   table: 5,
   lamp: 8,

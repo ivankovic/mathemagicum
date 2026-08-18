@@ -20,6 +20,7 @@ import {
 import { type CurrencyDefinition, currencyOf } from "../shop/currency";
 import { makeAdditionProblem } from "../spells/addition";
 import { IconTray } from "../ui/IconTray";
+import { IntroPanel } from "../ui/IntroPanel";
 import { LessonPanel } from "../ui/LessonPanel";
 import { OptionsPanel } from "../ui/OptionsPanel";
 import { ShopPanel } from "../ui/ShopPanel";
@@ -83,7 +84,7 @@ import {
 } from "../world/effects";
 import {
   FIXTURE_TYPES,
-  type FixtureType,
+  FixtureType,
   PLACEABLE_FIXTURES,
   fixtureAnimKey,
   fixtureFor,
@@ -148,7 +149,13 @@ import {
   frameFor,
   variationFor,
 } from "../world/terrainAtlas";
-import { NIGHT_TINT_COLOR, isDaytime, nightTintAlpha, timeOfDay } from "../world/time";
+import {
+  MAX_NIGHT_ALPHA,
+  NIGHT_TINT_COLOR,
+  isDaytime,
+  nightTintAlpha,
+  timeOfDay,
+} from "../world/time";
 import {
   type GridPoint,
   type ScreenPoint,
@@ -176,6 +183,31 @@ const MOVE_DURATION_MS = 160;
 // WORLD_SIZE keeps them right if the world grows.
 const WORLD_DEPTH_CEILING = WORLD_SIZE * TILE_SIZE;
 const NIGHT_TINT_DEPTH = WORLD_DEPTH_CEILING + 1000;
+
+// --- lights --------------------------------------------------------------
+//
+// Night used to be one flat sheet of navy over everything, and playtesting
+// said the obvious: you cannot see. The fix is not a paler sheet — a night
+// you can read at a glance is not night — but holes in it. What the player
+// carries, and what is burning nearby, is cut back out of the dark.
+//
+// The mask is built here rather than drawn by the asset generator, and that
+// is deliberate: a soft radial falloff is not pixel art and cannot be, since
+// the generator's canvas is indexed and has no partial alpha. It is the same
+// kind of thing as the tint itself — a colour with an alpha ramp — so it is
+// made the same way, in code.
+const LIGHT_TEXTURE = "light-mask";
+const LIGHT_TEXTURE_RADIUS = 128;
+const LIGHT_RINGS = 32;
+/** How far each kind of light reaches, in screen pixels at the world zoom. */
+const PLAYER_LIGHT_RADIUS = 120;
+const LAMP_LIGHT_RADIUS = 150;
+/** The warm halo a flame throws. */
+const LAMP_GLOW_COLOR = 0xffb347;
+const LAMP_GLOW_ALPHA = 0.62;
+/** What the player carries: paler and smaller, so a lamp is still worth having. */
+const PLAYER_GLOW_COLOR = 0xffe6b0;
+const PLAYER_GLOW_ALPHA = 0.5;
 const HUD_DEPTH = WORLD_DEPTH_CEILING + 2000;
 const TOUCH_UI_DEPTH = WORLD_DEPTH_CEILING + 3000;
 // Above the touch controls: a spell popup covers everything, including the
@@ -225,6 +257,22 @@ const SHOPKEEPER_ID = "shopkeeper";
 // store — a teacher you have to find in the square is one you meet by
 // accident, and the spell is the thing a child is most likely to be stuck on.
 const TEACHER_ID = "teacher";
+// The one who comes to *you*. He patrols the whole village anyway, so a round
+// that starts at the player's gate is in character — and a tutorial that
+// walks over and introduces itself is one a child meets as a person rather
+// than as a wall of text on a title screen.
+const POSTAL_WORKER_ID = "postal-worker";
+// He crosses the square to deliver it, so he moves at a walk rather than at
+// the villagers' amble; the wander timings would have him arrive a minute in.
+const INTRO_STEP_MS = 230;
+// And he covers ground faster than a villager ambling: the walk from the post
+// office round the house and in through the garden gate is two dozen tiles,
+// which at the wander's pace is a quarter of a minute of watching somebody
+// approach before the game says anything at all.
+const INTRO_MOVE_MS = 220;
+// If the player is running circles round him, he gives up and gets on with
+// his round. Tapping him still asks for the welcome.
+const INTRO_PATIENCE_STEPS = 60;
 const LOCAL_WANDER_RADIUS = 5;
 const PATROL_WANDER_RADIUS = 16;
 
@@ -387,6 +435,21 @@ export class GameScene extends Phaser.Scene {
   private currency!: CurrencyDefinition;
   private optionsPanel?: OptionsPanel;
   private lessonPanel?: LessonPanel;
+  private introPanel?: IntroPanel;
+  /** Whether the postal worker still has the welcome to deliver, and his patience. */
+  private introToGive = false;
+  private introStepsLeft = INTRO_PATIENCE_STEPS;
+  /**
+   * His route to the player, and who it was computed for.
+   *
+   * He used to step greedily, which was fine while the player started on
+   * an open doorstep. They now start inside a fenced garden, and a greedy
+   * stepper walks into the fence and stands there until it runs out of
+   * patience — so he takes the same pathfinder the click-to-walk uses, and
+   * comes in through the gate like anybody else.
+   */
+  private introPath: GridPoint[] = [];
+  private introPathFor: GridPoint | null = null;
   private optionsButton?: { box: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text };
   // Sprites for fixtures the *player* put down, so one can be picked back
   // up. Deliberately not the village well: it was placed by generation and
@@ -442,6 +505,17 @@ export class GameScene extends Phaser.Scene {
   private interiorLayer!: Phaser.GameObjects.Layer;
 
   private nightOverlay!: Phaser.GameObjects.Rectangle;
+  private playerGlow!: Phaser.GameObjects.Image;
+  /** Every lamp burning in the world, so the dark can be cut back around them. */
+  private readonly lamps = new Map<string, GridPoint>();
+  /**
+   * A halo per lamp, keyed by its tile.
+   *
+   * Keyed rather than kept in a list beside `lamps`: the first version pushed
+   * and popped, so picking up one lamp of two put out the *last* one placed
+   * instead of the one in your hand.
+   */
+  private readonly lampGlows = new Map<string, Phaser.GameObjects.Image>();
   private npcs: NpcRuntime[] = [];
   // Who the village put where, kept because an indoor NPC is not spawned
   // until the player walks into their building.
@@ -507,6 +581,11 @@ export class GameScene extends Phaser.Scene {
     // Every static thing the generator placed: the village's buildings and
     // well, and the hundreds of trees and boulders walling the world's two
     // high edges.
+    // Before anything is spawned: the village's own lamp posts ask for their
+    // halo as they appear, and an image made against a texture that does not
+    // exist yet gets Phaser's missing-texture placeholder — a lime green box,
+    // drawn additively, several tiles across.
+    this.makeLightMask();
     this.spawnPlacedObjects(this.grid.listObjects());
     this.villageNpcs = world.village.npcs;
     this.spawnNpcs(world.village.npcs, world.anchors.village);
@@ -550,6 +629,17 @@ export class GameScene extends Phaser.Scene {
         .setScrollFactor(0)
         .setDepth(NIGHT_TINT_DEPTH),
     );
+    // The light the player carries, over the tint rather than cut out of it.
+    this.playerGlow = this.ui(
+      this.add
+        .image(0, 0, LIGHT_TEXTURE)
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(NIGHT_TINT_DEPTH + 1)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setTint(PLAYER_GLOW_COLOR)
+        .setVisible(false),
+    );
 
     const uiIndex = this.cache.json.get(UI_SIDECAR_KEY) as UiIndex | undefined;
     if (!uiIndex) throw new Error("ui.json did not load — the spell parchment has no art");
@@ -560,7 +650,7 @@ export class GameScene extends Phaser.Scene {
     // asking for the German money, and a currency saved in that browser
     // profile by an earlier run would otherwise quietly outrank it.
     this.settings = this.dev.language
-      ? { language: languageOf(this.dev.language), money: FOLLOW_LANGUAGE }
+      ? { ...stored, language: languageOf(this.dev.language), money: FOLLOW_LANGUAGE }
       : stored;
     // ?money= outranks the language it would otherwise follow. Ignored if it
     // names a currency that does not exist, so a typo plays in kuna rather
@@ -601,6 +691,12 @@ export class GameScene extends Phaser.Scene {
     this.lessonPanel = new LessonPanel(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
+    this.introPanel = new IntroPanel(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
+      this.ui(object),
+    );
+    // He walks it over the first time, and after that only if asked. ?intro
+    // asks for it again without clearing the saved settings.
+    this.introToGive = !this.settings.introSeen || this.dev.intro;
     this.optionsPanel = new OptionsPanel(
       this,
       uiIndex,
@@ -647,6 +743,7 @@ export class GameScene extends Phaser.Scene {
       this.shopPanel.destroy();
       this.optionsPanel?.destroy();
       this.lessonPanel?.destroy();
+      this.introPanel?.destroy();
     });
 
     // The shop's coin pad takes a coin back on right-click, so the browser's
@@ -680,14 +777,14 @@ export class GameScene extends Phaser.Scene {
 
   override update(): void {
     this.frameCounter++;
-    const hour = timeOfDay(new Date());
+    const hour = this.dev.hour ?? timeOfDay(new Date());
     if (!this.interior) {
       this.refreshVisibleChunks();
       this.updateNpcs(isDaytime(hour));
     }
     // The tint still applies indoors: it is the time of day, not the weather
     // outside a window.
-    this.nightOverlay.setFillStyle(NIGHT_TINT_COLOR, nightTintAlpha(hour));
+    this.paintNight(nightTintAlpha(hour));
 
     // Depth follows the sprite's own y, which is its feet — so it stays
     // correct part-way through a step rather than only at whole tiles.
@@ -789,7 +886,100 @@ export class GameScene extends Phaser.Scene {
     this.shopPanel?.layout();
     this.optionsPanel?.layout();
     this.lessonPanel?.layout();
+    this.introPanel?.layout();
     this.layoutHud();
+  }
+
+  /**
+   * A soft disc, built once and used as the shape of every light.
+   *
+   * Concentric circles rather than a gradient fill, because Phaser's shapes
+   * have no radial gradient and this is the cheapest thing that reads as
+   * one: thirty-two rings is smooth enough that nothing bands at this size.
+   */
+  private makeLightMask(): void {
+    if (this.textures.exists(LIGHT_TEXTURE)) return;
+    const size = LIGHT_TEXTURE_RADIUS * 2;
+    const paint = this.make.graphics({ x: 0, y: 0 }, false);
+    for (let ring = LIGHT_RINGS; ring > 0; ring--) {
+      const t = ring / LIGHT_RINGS;
+      // Squared falloff: light thins out fast at the edge, which is what
+      // stops the hole reading as a spotlight with a hard rim.
+      paint.fillStyle(0xffffff, (1 - t) ** 2 * 0.14 + 0.02);
+      paint.fillCircle(LIGHT_TEXTURE_RADIUS, LIGHT_TEXTURE_RADIUS, LIGHT_TEXTURE_RADIUS * t);
+    }
+    paint.generateTexture(LIGHT_TEXTURE, size, size);
+    paint.destroy();
+  }
+
+  /**
+   * Lay the night over the world, and the lights over the night.
+   *
+   * The lights are drawn *additively on top of* the tint rather than erased
+   * out of it. Erasing is what this wants to mean — a lamp should take the
+   * dark away — and a render texture can do exactly that, which is how it
+   * was written first. That also went wrong in a way worth recording: with
+   * `fill` and `erase` both running every frame, the sheet came out blank
+   * within a few seconds and night simply stopped happening as the player
+   * walked. Adding warm light to a cold sheet reads the same to the eye,
+   * costs one sprite per source, and cannot get out of step with itself.
+   */
+  private paintNight(alpha: number): void {
+    this.nightOverlay?.setFillStyle(NIGHT_TINT_COLOR, alpha);
+    const strength = alpha / MAX_NIGHT_ALPHA;
+    const player = this.playerGlow;
+    player?.setVisible(alpha > 0);
+    if (player && alpha > 0) {
+      // From the sprite, not from the tile she is booked as standing on. A
+      // step takes a couple of hundred milliseconds and the light was being
+      // placed on whole tiles, so it jumped a tile at a time while she walked
+      // smoothly underneath it. Same reasoning as the depth sort just below
+      // the clock: follow the sprite's own position and it stays right
+      // part-way through a step.
+      const at = this.screenOfPoint(this.player.x, this.player.y - TILE_SIZE / 2);
+      player
+        .setPosition(at.x, at.y)
+        .setDisplaySize(PLAYER_LIGHT_RADIUS * 2, PLAYER_LIGHT_RADIUS * 2)
+        .setAlpha(strength * PLAYER_GLOW_ALPHA);
+    }
+    for (const [key, glow] of this.lampGlows) {
+      const cell = this.lamps.get(key);
+      glow.setVisible(cell !== undefined && alpha > 0);
+      if (!cell || alpha <= 0) continue;
+      const at = this.screenOf(cell.col, cell.row);
+      glow
+        .setPosition(at.x, at.y - TILE_SIZE)
+        .setDisplaySize(LAMP_LIGHT_RADIUS * 2, LAMP_LIGHT_RADIUS * 2)
+        .setAlpha(strength * LAMP_GLOW_ALPHA);
+    }
+  }
+
+  /** Remember a lamp, and give it the halo that says it is lit. */
+  private lightLamp(col: number, row: number): void {
+    const key = tileKey(col, row);
+    if (this.lampGlows.has(key)) return;
+    this.lamps.set(key, { col, row });
+    this.lampGlows.set(
+      key,
+      this.ui(
+        this.add
+          .image(0, 0, LIGHT_TEXTURE)
+          .setOrigin(0.5)
+          .setScrollFactor(0)
+          .setDepth(NIGHT_TINT_DEPTH + 1)
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setTint(LAMP_GLOW_COLOR)
+          .setVisible(false),
+      ),
+    );
+  }
+
+  /** A lamp picked back up stops burning, and its halo goes with it. */
+  private snuffLamp(col: number, row: number): void {
+    const key = tileKey(col, row);
+    if (!this.lamps.delete(key)) return;
+    this.lampGlows.get(key)?.destroy();
+    this.lampGlows.delete(key);
   }
 
   // The HUD is a single run of text that has to fit a phone held upright as
@@ -1518,6 +1708,44 @@ export class GameScene extends Phaser.Scene {
    * in a room, so the way in is tapping her rather than a key that would be
    * a shortcut to walking over.
    */
+  /**
+   * The welcome, from whoever is giving it.
+   *
+   * Opened by him arriving the first time and by a tap after that. Marked as
+   * seen on the way *in* rather than on the way out: a player who shuts it
+   * halfway has still been offered it, and re-opening it on their next visit
+   * would read as the game not having noticed they closed it.
+   */
+  private openIntro(): void {
+    if (this.modalOpen) return;
+    this.introToGive = false;
+    this.joystick?.release();
+    this.closeTrays();
+    this.rememberIntroSeen();
+    this.setMessage(this.words.postmanGreeting);
+    this.introPanel?.open_(() => {
+      this.setMessage("");
+      this.updateStatusText();
+    });
+    this.updateStatusText();
+  }
+
+  /**
+   * Note that the welcome has been given.
+   *
+   * Its own method rather than a trip through `applySettings`: nothing about
+   * this changes the language or the money, and going through the general
+   * path once cleared the message line — swallowing the very greeting it was
+   * about to show — which is the kind of thing that comes back the next time
+   * that method learns to do something else.
+   */
+  private rememberIntroSeen(): void {
+    if (this.settings.introSeen) return;
+    this.settings = { ...this.settings, introSeen: true };
+    writeSettings(browserStore(), this.settings);
+    this.optionsPanel?.setSettings(this.settings);
+  }
+
   private openLesson(): void {
     if (this.modalOpen) return;
     this.joystick?.release();
@@ -1652,6 +1880,7 @@ export class GameScene extends Phaser.Scene {
     this.spellPopup?.setPhrases(this.words);
     this.optionsPanel?.setPhrases(this.words);
     this.lessonPanel?.setPhrases(this.words);
+    this.introPanel?.setPhrases(this.words);
     this.shopPanel?.setPhrases(this.words);
     this.shopPanel?.setCurrency(this.currency);
     // The line on screen was written in the old language by whatever the
@@ -1710,6 +1939,7 @@ export class GameScene extends Phaser.Scene {
     );
     this.watchPlacedFixture(sprite, fixture, col, row);
     this.placedFixtures.set(tileKey(col, row), sprite);
+    if (fixture === FixtureType.Lamp) this.lightLamp(col, row);
     this.playGesture(PLANT); // she bends to set it down, same as planting
     this.refreshCarried();
   }
@@ -1742,6 +1972,7 @@ export class GameScene extends Phaser.Scene {
     const key = tileKey(col, row);
     this.placedFixtures.get(key)?.destroy();
     this.placedFixtures.delete(key);
+    this.snuffLamp(col, row);
     this.refreshCarried();
   }
 
@@ -1912,6 +2143,10 @@ export class GameScene extends Phaser.Scene {
       const sidecar = this.fixtureSidecars.get(fixture);
       if (!sidecar) throw new Error(`no art loaded for fixture "${fixture}"`);
       this.spawnFootprintSprite(object, sidecar, fixtureSheetKey(fixture), fixtureAnimKey(fixture));
+      // A lamp has a flame in it, so it lights the ground around it. Noted
+      // here rather than by walking the grid every frame: the scene already
+      // sees every one of them exactly once, as it puts it on screen.
+      if (fixture === FixtureType.Lamp) this.lightLamp(object.col, object.row);
       return;
     }
     const kind = sceneryKind(object.type);
@@ -1956,7 +2191,11 @@ export class GameScene extends Phaser.Scene {
         .setOrigin(0, 0)
         .setDepth(depthFor(footprintBottomY(sidecar, object.row))),
     );
-    if (mirror && variationFor(object.col, object.row, 2) === 1) {
+    // Either the object says so — the fence's side run, whose right-hand
+    // half is the left-hand sprite reversed — or the caller asked for the
+    // scenery's own by-the-tile variation.
+    if (object.flip) sprite.setFlipX(true);
+    else if (mirror && variationFor(object.col, object.row, 2) === 1) {
       // Flipped about the sprite's own centre, so the footprint it covers
       // does not move.
       sprite.setFlipX(true);
@@ -2188,6 +2427,18 @@ export class GameScene extends Phaser.Scene {
             .setOrigin(0.5, 1)
             .setDepth(feet.y),
         );
+        if (spec.id === POSTAL_WORKER_ID) {
+          // He wanders, so the tap asks him where he is now rather than
+          // where he was when the world was built.
+          this.watchAttendant(
+            sprite,
+            () => {
+              const npc = this.npcs.find((one) => one.id === POSTAL_WORKER_ID);
+              return { col: npc?.col ?? spec.home.col, row: npc?.row ?? spec.home.row };
+            },
+            () => this.openIntro(),
+          );
+        }
         return {
           id: spec.id,
           character,
@@ -2212,16 +2463,85 @@ export class GameScene extends Phaser.Scene {
     // was and then tapped her found she had moved in between, and retrying
     // only widened the window. See devHooks.
     if (this.dev.freezeNpcs) {
-      for (const npc of this.npcs) if (!npc.isMoving) this.npcRetreatStep(npc);
+      for (const npc of this.npcs) {
+        if (npc.isMoving) continue;
+        // ?intro asks for the welcome, and the welcome is a walk across the
+        // square: the one NPC movement a frozen world is still allowed, or
+        // the two seams would cancel each other and the tutorial could not
+        // be tested from a script at all.
+        if (this.dev.intro && this.deliveringIntro(npc)) this.npcDeliverIntroStep(npc);
+        else this.npcRetreatStep(npc);
+      }
       return;
     }
     const now = this.time.now;
     for (const npc of this.npcs) {
       if (npc.isMoving || now < npc.nextStepAt) continue;
+      if (this.deliveringIntro(npc)) {
+        npc.nextStepAt = now + INTRO_STEP_MS;
+        this.npcDeliverIntroStep(npc);
+        continue;
+      }
       npc.nextStepAt = now + Phaser.Math.Between(NPC_STEP_MIN_MS, NPC_STEP_MAX_MS);
       if (daytime) this.npcWanderStep(npc);
       else this.npcRetreatStep(npc);
     }
+  }
+
+  /**
+   * Whether this NPC is currently crossing the square to say hello.
+   *
+   * Deliberately not gated on daylight, unlike everything else he does. A
+   * child who starts playing at eight in the evening needs the welcome more
+   * than the village needs its curfew kept, and "the postman is still out"
+   * is a smaller oddity than "nobody ever told me what to do here".
+   */
+  private deliveringIntro(npc: NpcRuntime): boolean {
+    return (
+      this.introToGive &&
+      npc.id === POSTAL_WORKER_ID &&
+      this.introStepsLeft > 0 &&
+      !this.session.indoors &&
+      !this.modalOpen
+    );
+  }
+
+  /**
+   * One step of his walk over, and the hello when he arrives.
+   *
+   * He aims at the player rather than at a fixed tile, so following them
+   * across the square is the same code as standing still while they come to
+   * him. The greeting fires from *speaking* distance — one step in any
+   * direction, diagonals included, the same reach the shopkeeper answers a
+   * tap from — because a delivery that required him to be orthogonally
+   * adjacent would have him shuffling round the player's corner.
+   */
+  private npcDeliverIntroStep(npc: NpcRuntime): void {
+    if (stepsToSpeak({ col: npc.col, row: npc.row }, this.session.tile) <= 1) {
+      npc.facing = facingFor(this.session.col - npc.col, this.session.row - npc.row, npc.facing);
+      this.openIntro();
+      return;
+    }
+    this.introStepsLeft--;
+    const goal = this.session.tile;
+    // Only re-routed when it is worth re-routing: a breadth-first search of
+    // the world is cheap once and wasteful five times a second.
+    if (
+      this.introPath.length === 0 ||
+      this.introPathFor?.col !== goal.col ||
+      this.introPathFor?.row !== goal.row
+    ) {
+      this.introPath = findPath(this.grid, { col: npc.col, row: npc.row }, goal) ?? [];
+      this.introPathFor = goal;
+    }
+    const next = this.introPath.shift();
+    // No way through at all — a garden with its gate walled up, say. Fall
+    // back to walking at them, which at least ends up somewhere visible.
+    if (!next) {
+      this.npcStepToward(npc, goal.col, goal.row);
+      return;
+    }
+    this.moveNpcTo(npc, next.col, next.row, INTRO_MOVE_MS);
   }
 
   // A bounded random walk, not a route to a chosen destination — simple,
@@ -2243,17 +2563,24 @@ export class GameScene extends Phaser.Scene {
   // not a real path, but the village's open square-and-spokes layout means
   // a straight-ish line home rarely needs to route around anything.
   private npcRetreatStep(npc: NpcRuntime): void {
-    if (npc.col === npc.homeCol && npc.row === npc.homeRow) return;
-    const dCol = Math.sign(npc.homeCol - npc.col);
-    const dRow = Math.sign(npc.homeRow - npc.row);
+    this.npcStepToward(npc, npc.homeCol, npc.homeRow);
+  }
+
+  private npcStepToward(npc: NpcRuntime, toCol: number, toRow: number): void {
+    if (npc.col === toCol && npc.row === toRow) return;
+    const dCol = Math.sign(toCol - npc.col);
+    const dRow = Math.sign(toRow - npc.row);
     const attempts: Direction[] = [];
-    if (Math.abs(npc.homeCol - npc.col) >= Math.abs(npc.homeRow - npc.row)) {
+    if (Math.abs(toCol - npc.col) >= Math.abs(toRow - npc.row)) {
       if (dCol !== 0) attempts.push({ dCol, dRow: 0 });
       if (dRow !== 0) attempts.push({ dCol: 0, dRow });
     } else {
       if (dRow !== 0) attempts.push({ dCol: 0, dRow });
       if (dCol !== 0) attempts.push({ dCol, dRow: 0 });
     }
+    // Greedy on the longer axis first, which is enough for the village's
+    // open square-and-spokes layout; a real path would be a lot of machinery
+    // for a walk across a plaza.
     for (const attempt of attempts) {
       const col = npc.col + attempt.dCol;
       const row = npc.row + attempt.dRow;
@@ -2264,7 +2591,12 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private moveNpcTo(npc: NpcRuntime, col: number, row: number): void {
+  private moveNpcTo(
+    npc: NpcRuntime,
+    col: number,
+    row: number,
+    duration = NPC_MOVE_DURATION_MS,
+  ): void {
     npc.facing = facingFor(col - npc.col, row - npc.row, npc.facing);
     npc.isMoving = true;
     npc.col = col;
@@ -2274,7 +2606,7 @@ export class GameScene extends Phaser.Scene {
       targets: npc.sprite,
       x: target.x,
       y: target.y,
-      duration: NPC_MOVE_DURATION_MS,
+      duration,
       onComplete: () => {
         npc.isMoving = false;
       },
@@ -2331,16 +2663,27 @@ export class GameScene extends Phaser.Scene {
    * than assume.
    */
   private screenOf(col: number, row: number): ScreenPoint {
-    const camera = this.cameras.main;
     const feet = this.toFeet(col, row);
-    // Through `worldView` rather than `scrollX` and the zoom: the view is
-    // what the camera actually settled on after its bounds were applied, and
-    // indoors those bounds are a room smaller than the viewport, so the
-    // arithmetic that holds outdoors does not hold in here.
+    return this.screenOfPoint(feet.x, feet.y);
+  }
+
+  /**
+   * A point in the world, in screen pixels.
+   *
+   * Split out from `screenOf` for the things that are not on a tile boundary
+   * — a sprite half way through its step is the whole reason this exists.
+   *
+   * Through `worldView` rather than `scrollX` and the zoom: the view is what
+   * the camera actually settled on after its bounds were applied, and indoors
+   * those bounds are a room smaller than the viewport, so the arithmetic that
+   * holds outdoors does not hold in here.
+   */
+  private screenOfPoint(worldX: number, worldY: number): ScreenPoint {
+    const camera = this.cameras.main;
     const view = camera.worldView;
     return {
-      x: (feet.x - view.x) * camera.zoom,
-      y: (feet.y - view.y) * camera.zoom,
+      x: (worldX - view.x) * camera.zoom,
+      y: (worldY - view.y) * camera.zoom,
     };
   }
 
@@ -2402,11 +2745,13 @@ export class GameScene extends Phaser.Scene {
       this.spellPopup?.isOpen === true ||
       this.shopPanel?.isOpen === true ||
       this.optionsPanel?.isOpen === true ||
-      this.lessonPanel?.isOpen === true
+      this.lessonPanel?.isOpen === true ||
+      this.introPanel?.isOpen === true
     );
   }
 
   private get statusLine(): string {
+    if (this.introPanel?.isOpen) return this.words.introTitle;
     if (this.lessonPanel?.isOpen) return this.words.lessonTitle;
     if (this.optionsPanel?.isOpen) return this.words.statusOptions;
     if (this.shopPanel?.isOpen) return this.words.statusStore;

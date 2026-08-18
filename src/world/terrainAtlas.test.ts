@@ -143,8 +143,9 @@ describe("the dual grid's geometry", () => {
 
 describe("every terrain combination the game can produce", () => {
   test("is a combination of exactly the terrains the atlas was built from", () => {
-    // 7 terrains, 4 corners. If this number moves, the shipped atlas is stale
-    // and the contract test in buildings.test.ts's sibling below will say so.
-    expect(TERRAIN_TYPES.length ** 4).toBe(2401);
+    // 8 terrains, 4 corners — was 7 before the village square was paved. If
+    // this number moves again, the shipped atlas is stale, and the contract
+    // test in assets.test.ts will say so in the same breath.
+    expect(TERRAIN_TYPES.length ** 4).toBe(4096);
   });
 });

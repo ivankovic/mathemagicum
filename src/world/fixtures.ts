@@ -9,6 +9,14 @@ export const FixtureType = {
   Fence: "fence",
   Table: "table",
   Lamp: "lamp",
+  // World generation's, like the well: it stands in the fence around each
+  // village garden, and it is drawn open because it is the one cell of that
+  // fence the player can walk through.
+  Gate: "gate",
+  // The same fence running away from the camera rather than across it. The
+  // player's fence is the one panel — choosing an orientation per tile is
+  // not a decision a single tap can carry — so this is world generation's.
+  FenceSide: "fence-side",
 } as const;
 
 export type FixtureType = (typeof FixtureType)[keyof typeof FixtureType];

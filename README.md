@@ -61,7 +61,7 @@ done
 for p in carrot sunflower cactus; do
   cp $OUT/terrain_plants/$p{.json,_sheet.png} public/assets/plants/
 done
-for f in well fence table lamp; do
+for f in well fence fence-side table lamp gate; do
   cp $OUT/terrain_fixtures/$f{.json,_sheet.png} public/assets/fixtures/
 done
 cp $OUT/terrain_effects/plus{.json,_sheet.png} public/assets/effects/
@@ -76,14 +76,18 @@ bun test   # src/world/assets.test.ts checks the sync
 
 Three things are worth knowing about what gets copied:
 
-- **The terrain atlas holds a finished tile for every one of the 7⁴ ways
+- **The terrain atlas holds a finished tile for every one of the 8⁴ ways
   terrain can meet at a tile's four corners**, including the cells where
   three or four terrains meet. Those cells have no autotile-bitmask
   representation and the generator only composites them in Python, so
   baking them all is what lets the renderer be a single frame lookup with
   no mask, priority table or layer stack — and what guarantees the world
   can never contain a tile with no art. `src/world/assets.test.ts` asserts
-  that coverage against the shipped file.
+  that coverage against the shipped file. It spans two pages since the
+  village square was paved: blending is pairwise, so an eighth terrain costs
+  a pair against every other one, and 5328 tiles do not fit the 4096 a 2048
+  page holds at 32px. The loader is a multiatlas and takes that in its
+  stride; a *third* page would mean something had grown again.
 - **Sprite sheets must come from `--sheets`**, which always writes 1:1 art.
   The GIFs and PNGs those commands write alongside are QA renders scaled up
   by `--scale`, and would draw several times too large. (`terrain-characters`
@@ -169,6 +173,8 @@ outside, all gated on `import.meta.env.DEV` (see `src/scenes/devHooks.ts`):
 | `?coins=N` | starts with money, so a shop test need not farm first |
 | `?lang=xx` | forces the language for one run, over the browser's and the saved choice |
 | `?money=X` | forces the currency — `kuna`, `franc`, `euro` — over the language and the saved choice |
+| `?intro` | asks the postal worker for the welcome again, without clearing the saved settings — and is the one thing `?freezeNpcs` still lets him move for |
+| `?hour=N` | pins the clock, so night can be looked at without waiting for it (`?hour=22`, `?hour=6.5`). Moves the tint, the lights *and* whether the villagers are out — everything that reads the hour, which is the point |
 | `window.__mathemagicum` | `{ session, ui(), doors(), npcs(), screenOf() }` — read state; look up buttons, doors and people by name; convert a tile to a screen position |
 
 Each replaced something that had gone wrong. Pinning `Date.now` to make the
