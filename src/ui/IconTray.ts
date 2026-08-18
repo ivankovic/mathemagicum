@@ -241,6 +241,16 @@ export class IconTray {
     this.setOpen(!this.open);
   }
 
+  /** Where the container button sits, for a script that needs to tap it. */
+  containerPosition(): { x: number; y: number } {
+    return { x: this.container.box.x, y: this.container.box.y };
+  }
+
+  /** Where each item sits, in the order they were given. */
+  itemPositions(): { x: number; y: number }[] {
+    return this.items.map((item) => ({ x: item.box.x, y: item.box.y }));
+  }
+
   /** Re-place for a viewport of this size. Matches GameScene's EdgeAnchored. */
   place(width: number, height: number): void {
     const { size, right, bottom } = this.options;

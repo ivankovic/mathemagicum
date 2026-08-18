@@ -128,6 +128,61 @@ character mysteriously freezes.
 and fails if they drift from what the renderer assumes, since a bad sync is
 otherwise invisible until something renders wrong.
 
+## Testing
+
+Three layers, and the middle one is the one that pays.
+
+**Rules — `src/world/session.ts`.** Everything the player can do, with none
+of what it looks like: position, facing, inventory, purse, and every action
+with the message it produces. No Phaser. The whole loop — plant, cast twice,
+pick, sell, buy, put down, take back — is a few lines of arithmetic in
+`session.test.ts` and runs in milliseconds, which is what makes the awkward
+scenarios affordable: selling a crop you do not have, fencing yourself into a
+corner, casting on bare ground. None of those were ever tested while the
+rules lived inside the scene, because each would have meant another browser
+run and another screenshot to squint at.
+
+**Art — the asset generator's own suite.** Pixel-level assertions belong
+where the output is deterministic and pure. They have caught real bugs:
+hands drawn below the ground line, a reach that ate the character's own
+shadow.
+
+**Wiring — a browser.** What is left is what only a real loader and a real
+input path can show: a texture key that resolves, a hit area over the right
+tile, a tray that opens. Keep these few.
+
+### Driving the game from a script
+
+The game offers deliberate seams rather than being monkeypatched from
+outside, all gated on `import.meta.env.DEV` (see `src/scenes/devHooks.ts`):
+
+| | |
+|---|---|
+| `?seed=N` | fixes the spell's problems, so a script knows the sums |
+| `?freezeNpcs` | holds villagers on their home tiles |
+| `?coins=N` | starts with money, so a shop test need not farm first |
+| `window.__mathemagicum` | `{ session, ui() }` — read state, and look up button positions by name |
+
+Each replaced something that had gone wrong. Pinning `Date.now` to make the
+spell predictable also stalled the walk tween, so sprites drew a tile from
+where the camera said the player was, and three separate "the tap is broken"
+conclusions turned out to be the test's own doing. Button coordinates copied
+into scripts by hand silently pointed at their neighbour the day the action
+bar grew a fourth slot — a test meaning to cast a spell planted a seed, and
+the symptom surfaced three steps later as a tray that would not open. And a
+colour search for a spell effect could not have succeeded at all, because the
+night tint had shifted every reference value.
+
+So: assert on state read back through the handle, look buttons up by name,
+and keep screenshots as artefacts for a human rather than as assertions.
+
+On the gate, precisely: `__mathemagicum` is **absent** from a production
+bundle — the export is dropped. The parameter names are not; a minifier
+leaves the parsing function's string literals behind even though nothing
+reaches them, because `devOptions()` folds to a constant before the call. So
+grepping a release for `freezeNpcs` finds a hit, and the gate is still
+holding: the options are never read, and there is no handle to reach.
+
 ## Stack
 
 - [Bun](https://bun.sh) — runtime, package manager, test runner

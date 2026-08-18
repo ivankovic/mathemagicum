@@ -82,7 +82,7 @@ import {
   interiorSheetKey,
   interiorSidecarKey,
 } from "../world/interiors";
-import { Inventory, describeItem } from "../world/inventory";
+import { type Inventory, describeItem } from "../world/inventory";
 import type { PlacedObject } from "../world/objects";
 import { findPath } from "../world/pathfinding";
 import {
@@ -103,7 +103,8 @@ import {
   scenerySheetKey,
   scenerySidecarKey,
 } from "../world/scenery";
-import { Purse } from "../world/shop";
+import { GameSession } from "../world/session";
+import type { Purse } from "../world/shop";
 import {
   type BuildingSidecar,
   type CharacterSidecar,
@@ -139,6 +140,7 @@ import {
 import type { VillageNpcSpec } from "../world/villageLayout";
 import { generateWorld } from "../world/worldGenerator";
 import { sidecarKey } from "./BootScene";
+import { type DevOptions, devOptions, exposeForTests } from "./devHooks";
 
 const WORLD_SIZE = 500;
 // Fixed for now so the world is reproducible during development; will
@@ -298,9 +300,12 @@ export class GameScene extends Phaser.Scene {
   private originY = 0;
 
   private player!: Phaser.GameObjects.Sprite;
-  private playerCol = 0;
-  private playerRow = 0;
-  private playerFacing: Facing = DEFAULT_FACING;
+  // The rules — where she is, what she is facing, what she is carrying, and
+  // every action she can take — live in a headless GameSession. This scene is
+  // the renderer and the input adapter over it, which is what lets the whole
+  // plant-grow-pick-sell-buy loop be tested without a browser at all. See
+  // src/world/session.ts.
+  private session!: GameSession;
   private isMoving = false;
   // A gesture the player is part-way through, or null. While it is set the
   // per-frame idle/walk assertion leaves the sprite alone — see
@@ -326,10 +331,6 @@ export class GameScene extends Phaser.Scene {
   private basketTray?: IconTray;
   private crateTray?: IconTray;
   private shopPanel!: ShopPanel;
-  // What she is carrying, and what she has been paid. No slots, no capacity
-  // and no debt — see Inventory and Purse.
-  private readonly inventory = new Inventory();
-  private readonly purse = new Purse();
   private coinsText!: Phaser.GameObjects.Text;
   // Sprites for fixtures the *player* put down, so one can be picked back
   // up. Deliberately not the village well: it was placed by generation and
@@ -337,8 +338,11 @@ export class GameScene extends Phaser.Scene {
   private placedFixtures = new Map<string, Phaser.GameObjects.Sprite>();
   // Problems vary from cast to cast, so this is seeded from the clock rather
   // than from WORLD_SEED: a world is meant to be reproducible, a lesson is
-  // meant not to be.
-  private spellRng: Rng = createRng(Date.now() & 0x7fffffff);
+  // meant not to be. A driving script can pin it with `?seed=`, which is the
+  // honest version of what tests used to do by monkeypatching Date.now — and
+  // which does not also stall every tween in the game. See devHooks.
+  private dev: DevOptions = devOptions();
+  private spellRng: Rng = createRng(0);
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Wasd;
@@ -397,8 +401,9 @@ export class GameScene extends Phaser.Scene {
     const world = generateWorld(WORLD_SIZE, WORLD_SIZE, WORLD_SEED);
     this.grid = world.grid;
     this.worldGrid = world.grid;
-    this.playerCol = world.playerStart.col;
-    this.playerRow = world.playerStart.row;
+    this.session = new GameSession({ grid: world.grid, start: world.playerStart });
+    this.spellRng = createRng(this.dev.seed ?? Date.now() & 0x7fffffff);
+    if (this.dev.coins > 0) this.session.purse.earn(this.dev.coins);
 
     const bounds = computeMapScreenBounds(this.grid.width, this.grid.height);
     this.originX = -bounds.minX;
@@ -487,6 +492,7 @@ export class GameScene extends Phaser.Scene {
 
     this.setupInput();
     this.createActionBar();
+    exposeForTests({ session: this.session, ui: () => this.uiPositions() });
     if (this.mobileControls) this.createTouchControls();
     this.layoutForViewport();
 
@@ -1088,7 +1094,7 @@ export class GameScene extends Phaser.Scene {
     // Turn to face a blocked direction even though the step fails: pressing
     // into a wall should still turn the character, which is what makes the
     // controls feel like they are being listened to.
-    this.playerFacing = facingFor(dCol, dRow, this.playerFacing);
+    this.session.turnToward(dCol, dRow);
 
     if (this.interior) {
       // Walking off the room's edge means nothing except at the door, which
@@ -1115,8 +1121,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.grid.isPassable(targetCol, targetRow)) return;
 
     this.isMoving = true;
-    this.playerCol = targetCol;
-    this.playerRow = targetRow;
+    this.session.setPosition(targetCol, targetRow);
 
     const target = this.toFeet(targetCol, targetRow);
     this.tweens.add({
@@ -1280,24 +1285,13 @@ export class GameScene extends Phaser.Scene {
     // through it would restart the cast half way through the problem.
     if (this.modalOpen) return;
     this.spellTray?.setOpen(false);
-    if (this.interior) {
-      this.setMessage("Nothing grows indoors");
+
+    const target = this.session.checkGrowth();
+    if (!target.ok || !target.tile) {
+      this.setMessage(target.message);
       return;
     }
-    const { col, row } = this.facingTile();
-    if (!this.grid.inBounds(col, row)) {
-      this.setMessage("Face something you planted to grow it");
-      return;
-    }
-    const crop = this.grid.getCrop(col, row);
-    if (!crop) {
-      this.setMessage("Face something you planted to grow it");
-      return;
-    }
-    if (crop.stage === PlantStage.Mature) {
-      this.setMessage(`This ${crop.plant} is already fully grown`);
-      return;
-    }
+    const { col, row } = target.tile;
     // A stick still held when the parchment opens never sends its release,
     // and the player walks off the moment the popup closes.
     this.joystick?.release();
@@ -1309,33 +1303,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   private growCropAt(col: number, row: number): void {
-    const grown = this.grid.growCrop(col, row);
-    if (!grown) return;
+    const result = this.session.growAt(col, row);
+    if (!result.ok || !result.crop) return;
     // The plus lands on the tile it is being added to, which is the whole of
     // what the effect has to say.
     this.playEffect(EffectType.Plus, col, row);
     // Growth is a change of animation, not of sprite: the generator ships one
     // sheet per crop with a row per stage, so the same object keeps playing
     // further along its own reel.
-    this.cropSprites.get(tileKey(col, row))?.play(plantAnimKey(grown.plant, grown.stage));
-    this.setMessage(`Your ${grown.plant} is now ${grown.stage}`);
-  }
-
-  /**
-   * The tile the player is facing — the one every gardening action works on.
-   *
-   * Gardening used to happen on the tile the player was *standing* on, which
-   * has two problems the moment a crop is something you come back to. A
-   * seedling under the player's own feet is drawn behind them and invisible,
-   * so planting appeared to do nothing; and standing on a tile is the one
-   * position from which you cannot see what is on it. Working the tile in
-   * front puts the crop where the player is looking, and makes which tile is
-   * about to be worked something they can already read off the character's
-   * facing.
-   */
-  private facingTile(): GridPoint {
-    const step = stepForFacing(this.playerFacing);
-    return { col: this.playerCol + step.dCol, row: this.playerRow + step.dRow };
+    this.cropSprites
+      .get(tileKey(col, row))
+      ?.play(plantAnimKey(result.crop.plant, result.crop.stage));
+    this.setMessage(result.message);
   }
 
   // --- The store ----------------------------------------------------------
@@ -1404,10 +1383,37 @@ export class GameScene extends Phaser.Scene {
     this.updateStatusText();
   }
 
-  private closeTrays(): void {
-    for (const tray of [this.seedTray, this.spellTray, this.basketTray, this.crateTray]) {
-      tray?.setOpen(false);
+  /**
+   * Where each named button is on screen right now.
+   *
+   * Scripts used to copy these out of the layout code by hand, and the day
+   * the action bar grew a fourth slot every one of them silently pointed at
+   * its neighbour — a test that meant to cast a spell planted a seed instead,
+   * and the symptom surfaced three steps later as a tray that would not open.
+   */
+  private uiPositions(): Record<string, { x: number; y: number }> {
+    const positions: Record<string, { x: number; y: number }> = {};
+    for (const [name, tray] of Object.entries(this.trays())) {
+      if (!tray) continue;
+      positions[name] = tray.containerPosition();
+      for (const [index, item] of tray.itemPositions().entries()) {
+        positions[`${name}.${index}`] = item;
+      }
     }
+    return positions;
+  }
+
+  private trays(): Record<string, IconTray | undefined> {
+    return {
+      spellbook: this.spellTray,
+      seeds: this.seedTray,
+      basket: this.basketTray,
+      crate: this.crateTray,
+    };
+  }
+
+  private closeTrays(): void {
+    for (const tray of Object.values(this.trays())) tray?.setOpen(false);
   }
 
   /** Both badges that count what she is holding, after anything moves it. */
@@ -1430,43 +1436,15 @@ export class GameScene extends Phaser.Scene {
    */
   private placeFixture(fixture: FixtureType): void {
     if (this.modalOpen) return;
-    if (this.interior) {
-      this.setMessage("Not in here");
-      return;
-    }
-    if (this.inventory.count(fixture) <= 0) {
-      this.setMessage(`You have no ${fixture} — buy one at the store`);
-      return;
-    }
-    const { col, row } = this.facingTile();
-    // Generation-time placement could assume it owned the map; this cannot,
-    // so the tile has to be checked for everything already on it.
-    if (!this.grid.isPassable(col, row)) {
-      this.setMessage("There's no room there");
-      return;
-    }
-    if (this.grid.getCrop(col, row)) {
-      this.setMessage("Something is growing there");
-      return;
-    }
-    if (!this.inventory.remove(fixture, 1)) return;
+    const result = this.session.place(fixture);
+    this.setMessage(result.message);
+    if (!result.ok || !result.tile || !result.object) return;
 
-    const object: PlacedObject = {
-      id: `${fixture}-${col}-${row}`,
-      type: fixture,
-      col,
-      row,
-      width: 1,
-      height: 1,
-      blocksMovement: true,
-      anchorCol: col,
-      anchorRow: row,
-    };
-    this.grid.placeObject(object);
+    const { col, row } = result.tile;
     const sidecar = this.fixtureSidecars.get(fixture);
     if (!sidecar) throw new Error(`no art loaded for fixture "${fixture}"`);
     const sprite = this.spawnFootprintSprite(
-      object,
+      result.object,
       sidecar,
       fixtureSheetKey(fixture),
       fixtureAnimKey(fixture),
@@ -1474,7 +1452,6 @@ export class GameScene extends Phaser.Scene {
     this.watchPlacedFixture(sprite, fixture, col, row);
     this.placedFixtures.set(tileKey(col, row), sprite);
     this.playGesture(PLANT); // she bends to set it down, same as planting
-    this.setMessage(`Put down a ${fixture} — tap it to pick it up again`);
     this.refreshCarried();
   }
 
@@ -1499,18 +1476,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private takeFixture(fixture: FixtureType, col: number, row: number): void {
-    if (this.modalOpen || this.interior) return;
-    const steps = Math.abs(col - this.playerCol) + Math.abs(row - this.playerRow);
-    if (steps > 1) {
-      this.setMessage("Too far away — step up to it first");
-      return;
-    }
-    if (!this.grid.removeObjectAt(col, row)) return;
+    if (this.modalOpen) return;
+    const result = this.session.takeBack(fixture, col, row);
+    this.setMessage(result.message);
+    if (!result.ok) return;
     const key = tileKey(col, row);
     this.placedFixtures.get(key)?.destroy();
     this.placedFixtures.delete(key);
-    const held = this.inventory.add(fixture, 1);
-    this.setMessage(`Picked up a ${fixture} — you have ${held}`);
     this.refreshCarried();
   }
 
@@ -1527,46 +1499,22 @@ export class GameScene extends Phaser.Scene {
 
   private tryHarvest(): void {
     if (this.modalOpen) return;
-    if (this.interior) {
-      this.setMessage("Nothing grows indoors");
-      return;
-    }
-    const ahead = this.facingTile();
-    if (this.harvestAt(ahead.col, ahead.row)) return;
-    if (this.harvestAt(this.playerCol, this.playerRow)) return;
+    const result = this.session.harvest();
+    this.setMessage(result.message);
+    if (!result.ok || !result.tile) return;
 
-    // Nothing was picked. Say why, about the tile she was most likely aiming
-    // at — a silent refusal reads as the game having missed the input.
-    const crop = this.grid.inBounds(ahead.col, ahead.row)
-      ? (this.grid.getCrop(ahead.col, ahead.row) ??
-        this.grid.getCrop(this.playerCol, this.playerRow))
-      : this.grid.getCrop(this.playerCol, this.playerRow);
-    if (crop) this.setMessage(`This ${crop.plant} is not ready — grow it with the plus rune`);
-    else this.setMessage("Face something you planted to pick it");
-  }
-
-  /** Pick whatever is ready at this tile. Returns whether anything was. */
-  private harvestAt(col: number, row: number): boolean {
-    if (!this.grid.inBounds(col, row)) return false;
-    const picked = this.grid.harvestCrop(col, row);
-    if (!picked) return false;
-
-    // The sprite has to go *and* leave the registry: nothing has ever removed
-    // an entry from it, and a stale one would have `growCropAt` re-animating a
-    // destroyed object the next time this tile was planted and cast on.
-    const key = tileKey(col, row);
+    // The sprite has to go *and* leave the registry: a stale entry would have
+    // the growth spell re-animating a destroyed object the next time this
+    // tile was planted and cast on.
+    const key = tileKey(result.tile.col, result.tile.row);
     this.cropSprites.get(key)?.destroy();
     this.cropSprites.delete(key);
 
-    const held = this.inventory.add(picked.plant, HARVEST_YIELD);
     // The basket can be open while this happens — picking a crop does not
     // close it — so the numbers on screen have to be told, not just the ones
     // that will be read the next time it opens.
-    this.basketTray?.refresh();
+    this.refreshCarried();
     this.playGesture(PLANT); // the same bend; she is reaching for the ground either way
-    this.setMessage(`Picked a ${picked.plant} — you have ${describeItem(picked.plant, held)}`);
-    this.updateStatusText();
-    return true;
   }
 
   /**
@@ -1587,7 +1535,7 @@ export class GameScene extends Phaser.Scene {
       this.setMessage("Too far away — step up to it first");
       return;
     }
-    if (steps === 1) this.playerFacing = facingFor(dCol, dRow, this.playerFacing);
+    if (steps === 1) this.session.turnToward(dCol, dRow);
     this.tryHarvest();
   }
 
@@ -1596,29 +1544,11 @@ export class GameScene extends Phaser.Scene {
     const plant = PLANT_TYPES[this.selectedPlantIndex];
     if (!plant) return;
 
-    if (this.interior) {
-      this.setMessage("Nothing grows indoors");
-      return;
-    }
+    const result = this.session.plant(plant);
+    this.setMessage(result.message);
+    if (!result.ok || !result.tile) return;
 
-    const { col, row } = this.facingTile();
-    // The tile underfoot was passable by definition; the one ahead is not.
-    // Checked before anything reads the terrain there, because both the
-    // world's edge and a tile occupied by a tree are now reachable states
-    // and `getTerrain` throws off the edge of the grid.
-    if (!this.grid.isPassable(col, row)) {
-      this.setMessage("There's no room to plant there");
-      return;
-    }
-    if (this.grid.getPlant(col, row) !== null) {
-      this.setMessage("Something is already planted there");
-      return;
-    }
-    if (!this.grid.plant(col, row, plant)) {
-      this.setMessage(`${plant} can't grow on ${this.grid.getTerrain(col, row)}`);
-      return;
-    }
-
+    const { col, row } = result.tile;
     const feet = this.toFeet(col, row);
     const sprite = this.world(
       this.add
@@ -1633,7 +1563,6 @@ export class GameScene extends Phaser.Scene {
     this.watchCrop(sprite, col, row);
     this.cropSprites.set(tileKey(col, row), sprite);
     this.playGesture(PLANT);
-    this.setMessage(`Planted a ${plant} seedling — cast the plus rune to grow it`);
   }
 
   /**
@@ -1778,6 +1707,23 @@ export class GameScene extends Phaser.Scene {
 
   // --- Interiors ---------------------------------------------------------
 
+  /**
+   * The one place the indoor mode is set.
+   *
+   * The scene owns the mode — grids, layers, the camera — but the *rule* that
+   * nothing may be gardened in there lives with the other rules, in the
+   * session. Two facts in two files is a fact that can disagree with itself:
+   * an entry that set the flag and an exit that forgot would strand the
+   * player unable to plant anything ever again, after one visit to a cottage,
+   * with nothing on screen to say why. Derived from the same assignment
+   * instead, so there is no second place to forget.
+   */
+  private setInterior<T extends InteriorRuntime | null>(interior: T): T {
+    this.interior = interior;
+    this.session.indoors = interior !== null;
+    return interior;
+  }
+
   private buildingWithDoorAt(col: number, row: number): BuildingRuntime | undefined {
     return this.buildings.find((b) => b.doorCol === col && b.doorRow === row);
   }
@@ -1797,7 +1743,7 @@ export class GameScene extends Phaser.Scene {
     if (!sidecar) throw new Error(`no interior for "${room}"`);
 
     const door = interiorDoor(sidecar);
-    this.interior = {
+    const entered = this.setInterior({
       room,
       grid: buildInteriorGrid(sidecar),
       // Placed below, once `world` will file it under the interior layer.
@@ -1807,17 +1753,17 @@ export class GameScene extends Phaser.Scene {
       // building's footprint and so is never stood on.
       returnTo: { col: building.doorCol, row: building.doorRow + 1 },
       originY: interiorOriginY(sidecar),
-    };
+    });
 
     const image = this.world(
       this.add.sprite(0, 0, interiorSheetKey(room)).setOrigin(0, 0).setDepth(CHUNK_DEPTH),
     );
     if ((sidecar.sheet?.frame_count ?? 1) > 1) image.play(interiorAnimKey(room));
-    this.interior.image = image;
+    entered.image = image;
 
-    this.grid = this.interior.grid;
+    this.grid = entered.grid;
     this.originX = 0;
-    this.originY = this.interior.originY;
+    this.originY = entered.originY;
     this.worldLayer.setVisible(false);
     this.interiorLayer.setVisible(true);
     this.movePlayerToLayer();
@@ -1835,7 +1781,7 @@ export class GameScene extends Phaser.Scene {
     interior.image.destroy();
     this.interiorLayer.setVisible(false);
     this.worldLayer.setVisible(true);
-    this.interior = null;
+    this.setInterior(null);
     this.movePlayerToLayer();
 
     this.grid = this.worldGrid;
@@ -1854,9 +1800,8 @@ export class GameScene extends Phaser.Scene {
     this.tweens.killTweensOf(this.player);
     this.isMoving = false;
     this.path = [];
-    this.playerCol = col;
-    this.playerRow = row;
-    this.playerFacing = facing;
+    this.session.setPosition(col, row);
+    this.session.face(facing);
     const feet = this.toFeet(col, row);
     this.player.setPosition(feet.x, feet.y).setDepth(feet.y);
   }
@@ -1911,6 +1856,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateNpcs(daytime: boolean): void {
+    // `?freezeNpcs` holds everyone on their home tile. A wandering villager
+    // is a position no script can know: a test that read where the shopkeeper
+    // was and then tapped her found she had moved in between, and retrying
+    // only widened the window. See devHooks.
+    if (this.dev.freezeNpcs) {
+      for (const npc of this.npcs) if (!npc.isMoving) this.npcRetreatStep(npc);
+      return;
+    }
     const now = this.time.now;
     for (const npc of this.npcs) {
       if (npc.isMoving || now < npc.nextStepAt) continue;
@@ -2048,6 +2001,26 @@ export class GameScene extends Phaser.Scene {
    * fine while there was one; the second would have meant finding every site
    * that asked and remembering to widen it.
    */
+  private get playerCol(): number {
+    return this.session.col;
+  }
+
+  private get playerRow(): number {
+    return this.session.row;
+  }
+
+  private get playerFacing(): Facing {
+    return this.session.facing;
+  }
+
+  private get inventory(): Inventory {
+    return this.session.inventory;
+  }
+
+  private get purse(): Purse {
+    return this.session.purse;
+  }
+
   private get modalOpen(): boolean {
     return this.spellPopup.isOpen || this.shopPanel?.isOpen === true;
   }
