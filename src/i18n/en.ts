@@ -31,6 +31,11 @@ const PLANTS: Record<PlantType, Noun> = {
   [PlantType.Carrot]: noun("carrot"),
   [PlantType.Sunflower]: noun("sunflower"),
   [PlantType.Cactus]: noun("cactus", "cactuses"),
+  [PlantType.Tomato]: noun("tomato", "tomatoes"),
+  [PlantType.Pepper]: noun("pepper"),
+  // A mass noun: you grow wheat, not wheats, and "3 wheat" is what a person
+  // says. The plural field carries the same word rather than an invented one.
+  [PlantType.Wheat]: noun("wheat", "wheat"),
 };
 
 const FIXTURES: Record<FixtureType, Noun> = {
@@ -74,6 +79,15 @@ const CURRENCIES: Record<Currency, string> = {
 
 const PLACES = ["ones", "tens", "hundreds"];
 
+// The five places world generation puts down, as a player would say them.
+const PLACE_NAMES: Record<string, string> = {
+  village: "the village",
+  harbour: "the harbour",
+  bigCity: "the city",
+  observatory: "the observatory",
+  enchantedForest: "the old forest",
+};
+
 // The welcome, a page at a time. Keyed by IntroBeat rather than written as
 // four fields, so a beat added to the tour fails the coverage test in every
 // language instead of silently showing an empty page in one of them.
@@ -85,6 +99,7 @@ const INTRO_EN: Record<string, string> = {
   pick: "Tap a ripe crop to pick it. It goes in your basket, and it grows back.",
   store:
     "The shopkeeper in the barn buys what you pick, and sells fences, tables and lamps for the garden. You count the coins out yourself — she is not always right, mind.",
+  map: "There is a map of the whole world on the wall in the tower. Tap it any time you want to see where you are.",
 };
 
 function item(item: ItemType): Noun {
@@ -133,17 +148,12 @@ export const EN: Phrases = {
   cannotWalkThere: "Can't walk there",
   entered: (room) => `Entered the ${ROOMS[room] ?? room}. Step back out through the door.`,
 
-  statusOptions: "Options",
-  statusStore: "The village store",
-  statusSeeds: "Pick a seed to plant it on the tile ahead",
-  statusSpells: "Cast + to grow the crop on the tile ahead",
-  statusCrateEmpty: "Nothing to put down — the shopkeeper sells fences and lamps",
-  statusCrate: "Pick something to set it on the tile ahead",
-  statusBasketEmpty: "Your basket is empty — tap a ripe crop to pick it",
-  statusCarrying: (total, kinds) => `Carrying ${total} in ${kinds} kind(s)`,
-  hintTouch: "Drag to walk  Tap a ripe crop to pick it  The shop is inside the barn",
-  hintKeys: (plant) =>
-    `Arrows/WASD  P: seeds  B: spells  Space: plant ${PLANTS[plant]?.bare}  H: pick  Shop: inside the barn`,
+  mapTitle: "Map of the world",
+  mapYouAreHere: "You are the pale mark.",
+  placeName: (place) => PLACE_NAMES[place] ?? place,
+
+  purseTier: (count, amount) => (count > 0 ? `${count} coins — ${amount}` : "none of those"),
+  purseEmpty: "Your purse is empty",
 
   optionsButton: "options",
   optionsTitle: "Options",

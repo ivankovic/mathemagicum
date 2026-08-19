@@ -20,6 +20,35 @@ export function interiorFor(sprite: BuildingSprite): string {
 // this covers every building the village can place.
 export const INTERIOR_ROOMS: readonly string[] = ["cottage", "barn", "tower", "schoolhouse"];
 
+/**
+ * Where a map hangs on a room's back wall.
+ *
+ * The middle of the wall, stepping outward until it finds a cell with no
+ * furniture against it. Derived rather than written down per room: the room
+ * art and its furniture come from the generator, and a coordinate typed in
+ * here would go on being right only until somebody moved a bookshelf.
+ *
+ * The one thing on that wall which is not furniture is a window, and the
+ * generator now says which columns those take: it did not, this hung the map
+ * across the tower's, and "the picture will tell you" is not something code
+ * can read.
+ */
+export function wallHangingCell(sidecar: InteriorSidecar): GridPoint {
+  const { cols } = sidecar.size_cells;
+  const taken = new Set(
+    (sidecar.furniture ?? []).map((piece) => `${piece.cell[0]},${piece.cell[1]}`),
+  );
+  const windows = new Set(sidecar.window_columns ?? []);
+  // The centre line, which falls on a cell in an odd-width room and between
+  // two in an even one — hence the halves rather than a `floor`.
+  const middle = (cols - 1) / 2;
+  const order = [...Array(cols).keys()].sort((a, b) => Math.abs(a - middle) - Math.abs(b - middle));
+  for (const col of order) {
+    if (!taken.has(`0,${col}`) && !windows.has(col)) return { col, row: 0 };
+  }
+  return { col: Math.round(middle), row: 0 };
+}
+
 export function interiorSheetKey(room: string): string {
   return `interior-${room}`;
 }

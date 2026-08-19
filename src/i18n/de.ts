@@ -53,6 +53,10 @@ const PLANTS: Record<PlantType, Noun> = {
   [PlantType.Carrot]: noun({ bare: "Karotte", gender: "f", plural: "Karotten" }),
   [PlantType.Sunflower]: noun({ bare: "Sonnenblume", gender: "f", plural: "Sonnenblumen" }),
   [PlantType.Cactus]: noun({ bare: "Kaktus", gender: "m", plural: "Kakteen" }),
+  [PlantType.Tomato]: noun({ bare: "Tomate", gender: "f", plural: "Tomaten" }),
+  [PlantType.Pepper]: noun({ bare: "Paprika", gender: "f", plural: "Paprika" }),
+  // Stoffname: man erntet Weizen, nicht Weizens.
+  [PlantType.Wheat]: noun({ bare: "Weizen", gender: "m", plural: "Weizen" }),
 };
 
 const FIXTURES: Record<FixtureType, Noun> = {
@@ -105,6 +109,15 @@ const CURRENCIES: Record<Currency, string> = {
 
 const PLACES = ["Einer", "Zehner", "Hunderter"];
 
+// Die fünf Orte, die die Welt setzt.
+const PLACE_NAMES: Record<string, string> = {
+  village: "das Dorf",
+  harbour: "der Hafen",
+  bigCity: "die Stadt",
+  observatory: "die Sternwarte",
+  enchantedForest: "der alte Wald",
+};
+
 // Der Rundgang, Seite für Seite. Nach IntroBeat geschlüsselt, damit eine neue
 // Seite in jeder Sprache auffällt und nicht leer bleibt.
 const INTRO_DE: Record<string, string> = {
@@ -115,6 +128,7 @@ const INTRO_DE: Record<string, string> = {
   pick: "Tipp auf eine reife Pflanze, um sie zu pflücken. Sie wandert in deinen Korb und wächst nach.",
   store:
     "Die Händlerin in der Scheune kauft deine Ernte und verkauft Zäune, Tische und Laternen für den Garten. Das Geld zählst du selbst ab — und sie verzählt sich auch mal.",
+  map: "Im Turm hängt an der Wand eine Karte der ganzen Welt. Tipp jederzeit darauf, um zu sehen, wo du bist.",
 };
 
 /**
@@ -181,17 +195,12 @@ export const DE: Phrases = {
   cannotWalkThere: "Da geht es nicht weiter",
   entered: (room) => `Du bist ${IN_ROOM[room] ?? room}. Durch die Tür geht es wieder hinaus.`,
 
-  statusOptions: "Optionen",
-  statusStore: "Der Dorfladen",
-  statusSeeds: "Wähle ein Saatkorn für das Feld vor dir",
-  statusSpells: "Sprich +, damit die Pflanze vor dir wächst",
-  statusCrateEmpty: "Nichts zum Hinstellen — die Händlerin verkauft Zäune und Laternen",
-  statusCrate: "Wähle etwas für das Feld vor dir",
-  statusBasketEmpty: "Dein Korb ist leer — tipp auf eine reife Pflanze",
-  statusCarrying: (total, kinds) => `Du trägst ${total} in ${kinds} Sorte(n)`,
-  hintTouch: "Ziehen zum Gehen  Reife Pflanze antippen  Der Laden ist in der Scheune",
-  hintKeys: (plant) =>
-    `Pfeile/WASD  P: Saat  B: Zauber  Leertaste: ${PLANTS[plant]?.bare} pflanzen  H: pflücken  Laden: in der Scheune`,
+  mapTitle: "Karte der Welt",
+  mapYouAreHere: "Du bist der helle Punkt.",
+  placeName: (place) => PLACE_NAMES[place] ?? place,
+
+  purseTier: (count, amount) => (count > 0 ? `${count} Münzen — ${amount}` : "davon keine"),
+  purseEmpty: "Dein Geldbeutel ist leer",
 
   optionsButton: "Optionen",
   optionsTitle: "Optionen",

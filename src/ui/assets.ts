@@ -24,6 +24,8 @@ export const UiAsset = {
   SeedPouch: "seed-pouch",
   Basket: "basket",
   Crate: "crate",
+  /** The map hanging on the tower's wall — the object, not the world it shows. */
+  MapWall: "map-wall",
 } as const;
 
 export type UiAsset = (typeof UiAsset)[keyof typeof UiAsset];

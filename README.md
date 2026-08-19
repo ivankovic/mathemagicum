@@ -58,7 +58,7 @@ done
 for r in cottage barn tower schoolhouse; do
   cp $OUT/terrain_interiors/$r{.json,_sheet.png} public/assets/interiors/
 done
-for p in carrot sunflower cactus; do
+for p in carrot sunflower cactus tomato pepper wheat; do
   cp $OUT/terrain_plants/$p{.json,_sheet.png} public/assets/plants/
 done
 for f in well fence fence-side table lamp gate; do
@@ -69,7 +69,7 @@ for t in grass woodland dirt hilly mountain sand; do
   cp $OUT/terrain_objects/$t{.json,_sheet.png} public/assets/objects/
 done
 cp $OUT/ui/{ui.json,parchment_fill.png,parchment_frame.png}    public/assets/ui/
-cp $OUT/ui/{spellbook.png,rune_add.png,seed_pouch.png,basket.png,crate.png} public/assets/ui/
+cp $OUT/ui/{spellbook.png,rune_add.png,seed_pouch.png,basket.png,crate.png,map_wall.png} public/assets/ui/
 cp $OUT/ui/{crop_*.png,item_*.png,coin_*.png}                     public/assets/ui/
 bun test   # src/world/assets.test.ts checks the sync
 ```

@@ -48,6 +48,27 @@ describe("canPlantOn", () => {
     expect(signatures.size).toBeGreaterThan(1);
   });
 
+  // The garden crops are the ones a player can act on the moment they start:
+  // they spawn standing in their own beds, and a seed in the pouch that the
+  // ground underfoot refuses is a button that does nothing for no visible
+  // reason. The cactus is the deliberate exception, and it is why the rule
+  // exists at all.
+  test("every crop but the cactus grows on both garden grounds", () => {
+    for (const plant of PLANT_TYPES) {
+      const garden = canPlantOn(plant, TerrainType.Dirt) && canPlantOn(plant, TerrainType.Grass);
+      expect({ plant, garden }).toEqual({ plant, garden: plant !== PlantType.Cactus });
+    }
+  });
+
+  test("the cactus wants sand, and is the only one that does", () => {
+    for (const plant of PLANT_TYPES) {
+      expect({ plant, sand: canPlantOn(plant, TerrainType.Sand) }).toEqual({
+        plant,
+        sand: plant === PlantType.Cactus,
+      });
+    }
+  });
+
   test("every definition lists only real terrain types", () => {
     for (const definition of Object.values(PLANT_DEFINITIONS)) {
       for (const terrain of definition.allowedTerrain) {

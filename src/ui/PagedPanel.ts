@@ -36,6 +36,16 @@ const ICON_ART = 40;
 const ICON_GAP = 22;
 const DOT_GAP = 14;
 
+// Buttons are sized to what is written on them rather than to a number
+// chosen while reading English. "next" is four characters and "ab in den
+// Garten" is sixteen, and a box built for the first has the second hanging
+// out of both ends of it.
+const BUTTON_H = 28;
+const BUTTON_MIN_W = 110;
+const BUTTON_PAD = 14;
+const BUTTON_GAP = 12;
+const BUTTON_MIN_SIZE = 10;
+
 export interface Chip {
   readonly box: Phaser.GameObjects.Rectangle;
   readonly label: Phaser.GameObjects.Text;
@@ -233,17 +243,47 @@ export abstract class PagedPanel<TPage> {
         .setVisible(true);
     }
 
+    // Both buttons measured before either is placed, then laid out as a pair
+    // and centred: their widths depend on the language, so where one ends is
+    // not known until the other has been read.
     const last = isLastPage(deck, this.page);
-    const buttonY = rect.top + rect.height - PAD - 18;
-    this.place(this.nextButton, rect.centreX + 66, buttonY, 120, 28);
-    this.nextButton.label.setText(last ? this.words.lessonDone : this.words.lessonNext);
-    this.nextButton.box.setStrokeStyle(2, last ? LAST_HEX : INK_HEX);
-    this.show(this.nextButton);
-    if (this.page !== deck[0]) {
-      this.place(this.backButton, rect.centreX - 66, buttonY, 120, 28);
-      this.backButton.label.setText(this.words.lessonBack);
+    const backShown = this.page !== deck[0];
+    const buttonY = rect.top + rect.height - PAD - BUTTON_H / 2 - 4;
+    const room = rect.width - PAD * 2;
+    const each = backShown ? (room - BUTTON_GAP) / 2 : room;
+    const nextWidth = this.fitButton(
+      this.nextButton,
+      last ? this.words.lessonDone : this.words.lessonNext,
+      each,
+    );
+    const backWidth = backShown ? this.fitButton(this.backButton, this.words.lessonBack, each) : 0;
+    const total = backShown ? backWidth + BUTTON_GAP + nextWidth : nextWidth;
+    const left = rect.centreX - total / 2;
+
+    if (backShown) {
+      this.place(this.backButton, left + backWidth / 2, buttonY, backWidth, BUTTON_H);
       this.show(this.backButton);
     }
+    this.place(this.nextButton, left + total - nextWidth / 2, buttonY, nextWidth, BUTTON_H);
+    this.nextButton.box.setStrokeStyle(2, last ? LAST_HEX : INK_HEX);
+    this.show(this.nextButton);
+  }
+
+  /**
+   * Write a button's label and report how wide the button has to be.
+   *
+   * Grows to fit the words, down to a floor so a row of buttons keeps the
+   * same rhythm whatever is written on them — and shrinks the lettering
+   * rather than the box once there is no more paper to give, since a panel
+   * on a phone has only so much width to hand out.
+   */
+  private fitButton(chip: Chip, text: string, maxWidth: number): number {
+    chip.label.setFontSize(BODY_SIZE).setText(text);
+    const room = maxWidth - BUTTON_PAD * 2;
+    for (let size = BODY_SIZE; size > BUTTON_MIN_SIZE && chip.label.width > room; size--) {
+      chip.label.setFontSize(size - 1);
+    }
+    return Math.max(BUTTON_MIN_W, Math.min(maxWidth, chip.label.width + BUTTON_PAD * 2));
   }
 
   /**

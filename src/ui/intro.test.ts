@@ -29,13 +29,22 @@ describe("the welcome's pictures", () => {
     }
   });
 
-  test("the beats are the four the tour walks, without repeats", () => {
+  test("the beats are the five the tour walks, without repeats", () => {
     expect(INTRO_BEATS).toEqual([
       IntroBeat.Seeds,
       IntroBeat.Spell,
       IntroBeat.Pick,
       IntroBeat.Store,
+      IntroBeat.Map,
     ]);
     expect(new Set(INTRO_BEATS).size).toBe(INTRO_BEATS.length);
+  });
+
+  // The map is the one beat that names a place rather than an action, and it
+  // is also the only beat with a single icon instead of two — worth pinning
+  // both, since a page with one picture is an easy thing to get wrong when
+  // the panel expects a pair.
+  test("the map beat points at the wall map and nothing else", () => {
+    expect(INTRO_ICONS[IntroBeat.Map]).toEqual(["map-wall"]);
   });
 });

@@ -227,5 +227,9 @@
       ],
       "blocks": true
     }
+  ],
+  "window_columns": [
+    3,
+    4
   ]
 }

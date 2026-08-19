@@ -85,6 +85,14 @@ Nothing selects-then-confirms. A two-step action on a phone is two chances
 to lose the tray to a stray tap, and it asks the player to read a caption
 to find out what they are about to do.
 
+**There is no caption any more.** The screen used to carry a status line
+above the message line — the key hints, "you are carrying three carrots", the
+name of whichever panel was open. It was a paragraph of interface explaining
+an interface that had since learned to explain itself: the trays show what
+they hold, the badges count it, the panels have titles of their own, and the
+postal worker walks the basics over in person. One line of HUD text is left,
+and it says what just happened.
+
 #### The addition spell — growth (implemented)
 
 **Action:** face a crop you have planted and cast it. One successful
@@ -126,6 +134,32 @@ non-zero so that none of the three arrows is a `+0` jump landing where it
 started. `src/spells/addition.ts` is the whole of the rule, with no Phaser
 in it, and `addition.test.ts` pins both the arithmetic and the
 distribution.
+
+### What grows where
+
+**Six crops**: carrot, sunflower, tomato, pepper, wheat and cactus. Five of
+them are garden crops and go into either turned earth or grass; the cactus
+wants sand.
+
+That split is the whole of the terrain rule, and it is deliberate. The
+sunflower used to want grass alone, which meant a seed in the pouch that the
+beds the player starts standing in would refuse — a rule that never taught
+anything, because all it ever did was fail. **One crop with a condition
+teaches that ground matters better than five with fussy ones**: the cactus is
+somewhere you have to go and find, and everything else grows where a garden
+is.
+
+The three new ones are also a lesson in what a sprite has to carry at this
+size. Tomato and pepper are drawn from *one* body — from above they are the
+same bushy green thing until they fruit — and what tells them apart is the
+shape of the fruit, round against hanging pods, never the colour alone: a
+colour difference is lost against turned soil, and lost entirely on a player
+who cannot tell red from orange. Wheat is drawn as three stalks rather than
+one, because a single stem with a head on it reads as a flower.
+
+The icons in the pouch show the *part the player is picking* — a fruit, a
+pod, an ear — rather than a shrunken copy of the plant, for the same reason
+the carrot's icon has always been a root and not a spray of fronds.
 
 ### Inventory
 
@@ -227,6 +261,16 @@ because 5 € is a note. Ten crops in euros is thirteen coins on the counter,
 which is bookkeeping rather than arithmetic — so the shop works out how many
 of a thing it can sell rather than assuming ten always fits, and in euros it
 offers fewer at a time. Same rule, different answer per currency.
+
+**Money is a button, not a line of text.** The purse sits in the action bar
+beside the things it buys, with a badge for how much is in it — whole units,
+not the minor ones the purse counts in, because a badge reading "5000" for
+fifty kuna would be a number nobody in the game uses. Opening it shows the
+coins she is actually carrying, sorted into the three kinds, and tapping one
+kind says what those come to. Sorted by kind rather than by denomination for
+a practical reason as well as a pedagogical one: a kuna purse and a euro
+purse hold different coins but the same three metals, so the button survives
+the player changing currency.
 
 **The coins have faces.** Three of them — copper, silver, gold — not one per
 denomination, because the value is written on the button beside the picture
@@ -416,6 +460,29 @@ pages with the same buttons and the same row of dots, because the second
 explanation a child meets should not also have to be learned as a piece of
 interface. What differs is the picture on each page: icons here, diagrams in
 the school.
+
+### The map in the tower
+
+**There is a map of the world on the post office wall.** Tapping it opens the
+world — the real one, drawn from the player's own grid rather than painted by
+hand, because the world is generated per game and a coastline somebody drew
+would be a picture of a world nobody is standing in. It shows the five places
+world generation puts down, each named, and where the player is.
+
+The picture *on the wall* says nothing about which world it is: a frame, a
+scrap of parchment, a coast, a marked place. A painted coastline that
+disagreed with the one in the popup would be a small lie in the first place a
+child looks.
+
+It is walked once, the first time it is opened, into a texture — a quarter of
+a million cells is nothing to walk once and quite a lot to walk every frame —
+and everything that moves is drawn over the top each time. The colours are a
+diagram's rather than the terrain art's: at one pixel a tile, texture,
+speckle and blended edges all average to mud, so the map has one flat colour
+per terrain and a test that says no two of them are the same.
+
+**Why the tower.** It is the post office, and the post is the one trade in a
+village that has a reason to know where everywhere else is.
 
 ### The teacher
 

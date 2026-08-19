@@ -92,18 +92,19 @@ export interface Phrases {
   cannotWalkThere: string;
   entered: (room: string) => string;
 
-  // --- the status line -----------------------------------------------------
+  // --- the map on the tower wall -------------------------------------------
 
-  statusOptions: string;
-  statusStore: string;
-  statusSeeds: string;
-  statusSpells: string;
-  statusCrateEmpty: string;
-  statusCrate: string;
-  statusBasketEmpty: string;
-  statusCarrying: (total: number, kinds: number) => string;
-  hintTouch: string;
-  hintKeys: (plant: PlantType) => string;
+  mapTitle: string;
+  mapYouAreHere: string;
+  /** The places marked on it, by the id world generation gives them. */
+  placeName: (place: string) => string;
+
+  // --- the purse -----------------------------------------------------------
+
+  /** What one kind of coin in the purse comes to, when its button is tapped. */
+  purseTier: (count: number, amount: string) => string;
+  /** Nothing in it at all. */
+  purseEmpty: string;
 
   // --- options -------------------------------------------------------------
 

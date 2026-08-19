@@ -60,16 +60,12 @@ function sample(p: Phrases): Record<string, string> {
     cannotWalkThere: p.cannotWalkThere,
     entered: p.entered("barn"),
 
-    statusOptions: p.statusOptions,
-    statusStore: p.statusStore,
-    statusSeeds: p.statusSeeds,
-    statusSpells: p.statusSpells,
-    statusCrateEmpty: p.statusCrateEmpty,
-    statusCrate: p.statusCrate,
-    statusBasketEmpty: p.statusBasketEmpty,
-    statusCarrying: p.statusCarrying(3, 2),
-    hintTouch: p.hintTouch,
-    hintKeys: p.hintKeys(carrot),
+    mapTitle: p.mapTitle,
+    mapYouAreHere: p.mapYouAreHere,
+    placeName: p.placeName("harbour"),
+
+    purseTier: p.purseTier(3, "7,50 kn"),
+    purseEmpty: p.purseEmpty,
 
     optionsButton: p.optionsButton,
     optionsTitle: p.optionsTitle,

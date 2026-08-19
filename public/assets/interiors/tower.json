@@ -191,5 +191,9 @@
       ],
       "blocks": true
     }
+  ],
+  "window_columns": [
+    2,
+    3
   ]
 }

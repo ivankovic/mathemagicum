@@ -17,11 +17,21 @@ import {
   readSettings,
   writeSettings,
 } from "../settings";
-import { type CurrencyDefinition, currencyOf } from "../shop/currency";
+import {
+  COIN_TIERS,
+  CoinTier,
+  type CurrencyDefinition,
+  coinTier,
+  totalOf as coinTotal,
+  coinsFor,
+  currencyOf,
+  smallestCoin,
+} from "../shop/currency";
 import { makeAdditionProblem } from "../spells/addition";
 import { IconTray } from "../ui/IconTray";
 import { IntroPanel } from "../ui/IntroPanel";
 import { LessonPanel } from "../ui/LessonPanel";
+import { MapPanel } from "../ui/MapPanel";
 import { OptionsPanel } from "../ui/OptionsPanel";
 import { ShopPanel } from "../ui/ShopPanel";
 import { SpellPopup } from "../ui/SpellPopup";
@@ -29,6 +39,7 @@ import {
   UI_SIDECAR_KEY,
   UiAsset,
   type UiIndex,
+  coinIcon,
   cropIcon,
   itemIcon,
   uiTextureKey,
@@ -103,6 +114,7 @@ import {
   interiorOriginY,
   interiorSheetKey,
   interiorSidecarKey,
+  wallHangingCell,
 } from "../world/interiors";
 import type { Inventory } from "../world/inventory";
 import type { PlacedObject } from "../world/objects";
@@ -220,7 +232,6 @@ const CHUNK_DEPTH = -1000;
 // while doubling how big a character reads on a phone.
 const CAMERA_ZOOM = 2;
 const HUD_MARGIN = 8;
-const HUD_LINE_GAP = 4;
 const CHUNK_VIEW_MARGIN = 1;
 // Generous cache so panning back and forth doesn't constantly re-render —
 // well above what's ever simultaneously visible on screen.
@@ -257,6 +268,11 @@ const SHOPKEEPER_ID = "shopkeeper";
 // store — a teacher you have to find in the square is one you meet by
 // accident, and the spell is the thing a child is most likely to be stuck on.
 const TEACHER_ID = "teacher";
+// The post office's room, and the one building with a reason to have a map of
+// the world on its wall.
+const MAP_ROOM = "tower";
+// How far up the wall it hangs, from the floor cell it is measured against.
+const WALL_MAP_RISE = 10;
 // The one who comes to *you*. He patrols the whole village anyway, so a round
 // that starts at the player's gate is in character — and a tutorial that
 // walks over and introduces itself is one a child meets as a person rather
@@ -403,7 +419,6 @@ export class GameScene extends Phaser.Scene {
   private playerGesture: string | null = null;
 
   private selectedPlantIndex = 0;
-  private statusText!: Phaser.GameObjects.Text;
   private messageText!: Phaser.GameObjects.Text;
 
   // One sprite per planted tile, so a crop that grows can be re-animated
@@ -414,8 +429,8 @@ export class GameScene extends Phaser.Scene {
   private spellTray?: IconTray;
   private basketTray?: IconTray;
   private crateTray?: IconTray;
+  private purseTray?: IconTray;
   private shopPanel!: ShopPanel;
-  private coinsText!: Phaser.GameObjects.Text;
   /**
    * What the player chose: the language, and which coins they count in.
    *
@@ -436,6 +451,7 @@ export class GameScene extends Phaser.Scene {
   private optionsPanel?: OptionsPanel;
   private lessonPanel?: LessonPanel;
   private introPanel?: IntroPanel;
+  private mapPanel?: MapPanel;
   /** Whether the postal worker still has the welcome to deliver, and his patience. */
   private introToGive = false;
   private introStepsLeft = INTRO_PATIENCE_STEPS;
@@ -521,6 +537,8 @@ export class GameScene extends Phaser.Scene {
   // until the player walks into their building.
   private villageNpcs: readonly VillageNpcSpec[] = [];
   private attendant: Phaser.GameObjects.Sprite | null = null;
+  /** The tower's wall map, while the player is in the tower. */
+  private wallMap: Phaser.GameObjects.Image | null = null;
   private attendantCell: GridPoint | null = null;
   // Whose room this is: the dev hook reports them by name, and a hard-coded
   // "shopkeeper" answered for the teacher the day there were two of them.
@@ -590,16 +608,6 @@ export class GameScene extends Phaser.Scene {
     this.villageNpcs = world.village.npcs;
     this.spawnNpcs(world.village.npcs, world.anchors.village);
 
-    this.statusText = this.ui(
-      this.add
-        .text(HUD_MARGIN, HUD_MARGIN, "", {
-          fontFamily: "monospace",
-          fontSize: "13px",
-          color: "#ffffff",
-        })
-        .setScrollFactor(0)
-        .setDepth(HUD_DEPTH),
-    );
     this.messageText = this.ui(
       this.add
         .text(HUD_MARGIN, 0, "", {
@@ -610,17 +618,6 @@ export class GameScene extends Phaser.Scene {
         .setScrollFactor(0)
         .setDepth(HUD_DEPTH),
     );
-    this.coinsText = this.ui(
-      this.add
-        .text(HUD_MARGIN, 0, "", {
-          fontFamily: "monospace",
-          fontSize: "13px",
-          color: "#ffd873",
-        })
-        .setScrollFactor(0)
-        .setDepth(HUD_DEPTH),
-    );
-    this.updateStatusText();
 
     this.nightOverlay = this.ui(
       this.add
@@ -662,7 +659,6 @@ export class GameScene extends Phaser.Scene {
     this.words = phrasesFor(this.settings.language);
     this.session.setPhrases(this.words);
     // Written once already, before there was a language to write it in.
-    this.updateStatusText();
 
     this.spellPopup = new SpellPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
@@ -691,6 +687,16 @@ export class GameScene extends Phaser.Scene {
     this.lessonPanel = new LessonPanel(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
+    this.mapPanel = new MapPanel(
+      this,
+      uiIndex,
+      MODAL_DEPTH,
+      this.words,
+      world.grid,
+      world.anchors,
+      () => this.session.tile,
+      (object) => this.ui(object),
+    );
     this.introPanel = new IntroPanel(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
@@ -710,7 +716,6 @@ export class GameScene extends Phaser.Scene {
     // The coin line is written whenever money moves, and money starting in
     // the purse is not money moving: ?coins= showed nothing until the first
     // trade, and a saved purse would have done the same.
-    this.updateCoins();
 
     this.setupInput();
     this.createActionBar();
@@ -744,6 +749,7 @@ export class GameScene extends Phaser.Scene {
       this.optionsPanel?.destroy();
       this.lessonPanel?.destroy();
       this.introPanel?.destroy();
+      this.mapPanel?.destroy();
     });
 
     // The shop's coin pad takes a coin back on right-click, so the browser's
@@ -785,6 +791,10 @@ export class GameScene extends Phaser.Scene {
     // The tint still applies indoors: it is the time of day, not the weather
     // outside a window.
     this.paintNight(nightTintAlpha(hour));
+    // Every frame, now that there is no status line whose repaint used to
+    // carry it: two setVisible calls, and it cannot fall out of step with
+    // whether a panel is open.
+    this.refreshOptionsButton();
 
     // Depth follows the sprite's own y, which is its feet — so it stays
     // correct part-way through a step rather than only at whole tiles.
@@ -822,7 +832,6 @@ export class GameScene extends Phaser.Scene {
     for (const [index, key] of this.plantKeys.entries()) {
       if (Phaser.Input.Keyboard.JustDown(key)) {
         this.selectedPlantIndex = index;
-        this.updateStatusText();
       }
     }
 
@@ -887,6 +896,7 @@ export class GameScene extends Phaser.Scene {
     this.optionsPanel?.layout();
     this.lessonPanel?.layout();
     this.introPanel?.layout();
+    this.mapPanel?.layout();
     this.layoutHud();
   }
 
@@ -982,28 +992,20 @@ export class GameScene extends Phaser.Scene {
     this.lampGlows.delete(key);
   }
 
-  // The HUD is a single run of text that has to fit a phone held upright as
-  // well as a desktop window, so it wraps rather than running off the edge,
-  // and the message line follows whatever height the status line wrapped to.
+  /**
+   * Place what is left of the HUD.
+   *
+   * What is left is one line: whatever just happened. The caption above it —
+   * the key hints, the "you are carrying three carrots", the name of the
+   * panel you have open — is gone. It was a paragraph of interface explaining
+   * an interface that had learned to explain itself: the trays show what they
+   * hold, the badges count it, and the panels have titles of their own.
+   */
   private layoutHud(): void {
-    if (!this.statusText || !this.messageText) return;
-    const wrap = Math.max(120, this.scale.width - HUD_MARGIN * 2);
-    this.statusText.setWordWrapWidth(wrap);
-    this.messageText.setWordWrapWidth(wrap);
-    this.messageText.setY(this.statusText.y + this.statusText.height + HUD_LINE_GAP);
-    // Under the message rather than beside the status line: that line
-    // already wraps to two on a phone, and money is the one number the
-    // player wants to find without reading a sentence.
-    this.coinsText?.setY(this.messageText.y + this.messageText.height + HUD_LINE_GAP);
+    if (!this.messageText) return;
+    this.messageText.setWordWrapWidth(Math.max(120, this.scale.width - HUD_MARGIN * 2));
+    this.messageText.setY(HUD_MARGIN);
     this.placeOptionsButton();
-  }
-
-  // Hidden until she has been paid something. A "0 coins" line on every new
-  // game is a permanent reminder of a currency she has no use for yet.
-  private updateCoins(): void {
-    if (!this.coinsText) return;
-    this.coinsText.setText(this.purse.coins > 0 ? this.currency.format(this.purse.coins) : "");
-    this.layoutHud();
   }
 
   // --- Asset metadata ----------------------------------------------------
@@ -1408,7 +1410,21 @@ export class GameScene extends Phaser.Scene {
       left: keyboard.addKey(KeyCodes.A),
       right: keyboard.addKey(KeyCodes.D),
     };
-    this.plantKeys = [KeyCodes.ONE, KeyCodes.TWO, KeyCodes.THREE]
+    // One number key per crop, in the pouch's own order. The list runs to
+    // nine rather than to however many crops there are today: it was three,
+    // and the day three became six the last three seeds had no key at all
+    // while the pouch showed them perfectly happily.
+    this.plantKeys = [
+      KeyCodes.ONE,
+      KeyCodes.TWO,
+      KeyCodes.THREE,
+      KeyCodes.FOUR,
+      KeyCodes.FIVE,
+      KeyCodes.SIX,
+      KeyCodes.SEVEN,
+      KeyCodes.EIGHT,
+      KeyCodes.NINE,
+    ]
       .slice(0, PLANT_TYPES.length)
       .map((code) => keyboard.addKey(code));
     this.plantActionKey = keyboard.addKey(KeyCodes.SPACE);
@@ -1498,13 +1514,10 @@ export class GameScene extends Phaser.Scene {
       items: PLANT_TYPES.map((plant, index) => ({
         texture: uiTextureKey(cropIcon(plant)),
         act: () => {
-          // Picking a seed here is also what the number keys pick, so the two
-          // routes never disagree about which crop Space would plant. The
-          // caption is refreshed after, not by the tray closing before it:
-          // the tray's own onChange fires while this is still the old crop.
+          // Picking a seed here is also what the number keys pick, so the
+          // two routes never disagree about which crop Space would plant.
           this.selectedPlantIndex = index;
           this.tryPlant();
-          this.updateStatusText();
         },
       })),
       size,
@@ -1516,9 +1529,9 @@ export class GameScene extends Phaser.Scene {
         this.spellTray?.setOpen(false);
         this.basketTray?.setOpen(false);
         this.crateTray?.setOpen(false);
+        this.purseTray?.setOpen(false);
       },
       canOpen: () => !this.modalOpen,
-      onChange: () => this.updateStatusText(),
     });
 
     this.spellTray = new IconTray(this, {
@@ -1533,9 +1546,9 @@ export class GameScene extends Phaser.Scene {
         this.seedTray?.setOpen(false);
         this.basketTray?.setOpen(false);
         this.crateTray?.setOpen(false);
+        this.purseTray?.setOpen(false);
       },
       canOpen: () => !this.modalOpen,
-      onChange: () => this.updateStatusText(),
     });
 
     // What she is carrying, in the same shape as the two containers beside
@@ -1562,9 +1575,9 @@ export class GameScene extends Phaser.Scene {
         this.seedTray?.setOpen(false);
         this.spellTray?.setOpen(false);
         this.crateTray?.setOpen(false);
+        this.purseTray?.setOpen(false);
       },
       canOpen: () => !this.modalOpen,
-      onChange: () => this.updateStatusText(),
     });
 
     // What she has bought and can put down. A fourth container rather than
@@ -1592,12 +1605,56 @@ export class GameScene extends Phaser.Scene {
         this.seedTray?.setOpen(false);
         this.spellTray?.setOpen(false);
         this.basketTray?.setOpen(false);
+        this.purseTray?.setOpen(false);
       },
       canOpen: () => !this.modalOpen,
-      onChange: () => this.updateStatusText(),
     });
 
-    this.edgeAnchored.push(this.seedTray, this.spellTray, this.basketTray, this.crateTray);
+    // Money, as a button with a badge rather than a line of text in the
+    // corner: the coin count belongs beside the things it buys, and the badge
+    // says how much without spending a line of the screen on saying it.
+    // Its items are the three kinds of coin rather than the denominations,
+    // which is what lets it survive the player changing currency — a kuna
+    // purse and a euro purse have different coins in them but the same three
+    // metals, and the counts are read live either way.
+    this.purseTray = new IconTray(this, {
+      texture: uiTextureKey(coinIcon(CoinTier.Gold)),
+      items: COIN_TIERS.map((tier) => ({
+        texture: uiTextureKey(coinIcon(tier)),
+        count: () => this.coinsOfTier(tier).length,
+        act: () => {
+          const coins = this.coinsOfTier(tier);
+          this.setMessage(
+            this.purse.coins <= 0
+              ? this.words.purseEmpty
+              : this.words.purseTier(coins.length, this.currency.format(coinTotal(coins))),
+          );
+        },
+      })),
+      // Whole units, not the minor ones the purse counts in: a badge reading
+      // "5000" for fifty kuna would be a number nobody in the game uses.
+      count: () => Math.floor(this.purse.coins / this.currency.minorPerMajor),
+      size,
+      right: edge + (size + 10) * 4,
+      bottom,
+      depth: TOUCH_UI_DEPTH,
+      register: (object) => this.ui(object),
+      onOpen: () => {
+        this.seedTray?.setOpen(false);
+        this.spellTray?.setOpen(false);
+        this.basketTray?.setOpen(false);
+        this.crateTray?.setOpen(false);
+      },
+      canOpen: () => !this.modalOpen,
+    });
+
+    this.edgeAnchored.push(
+      this.seedTray,
+      this.spellTray,
+      this.basketTray,
+      this.crateTray,
+      this.purseTray,
+    );
   }
 
   // The keyboard route into a tray. Whether it may open is the tray's own
@@ -1725,9 +1782,7 @@ export class GameScene extends Phaser.Scene {
     this.setMessage(this.words.postmanGreeting);
     this.introPanel?.open_(() => {
       this.setMessage("");
-      this.updateStatusText();
     });
-    this.updateStatusText();
   }
 
   /**
@@ -1753,9 +1808,7 @@ export class GameScene extends Phaser.Scene {
     this.setMessage(this.words.teacherGreeting);
     this.lessonPanel?.open_(() => {
       this.setMessage("");
-      this.updateStatusText();
     });
-    this.updateStatusText();
   }
 
   private openShop(): void {
@@ -1778,7 +1831,6 @@ export class GameScene extends Phaser.Scene {
       // basket sits there claiming to hold what was just sold.
       () => this.refreshCarried(),
     );
-    this.updateStatusText();
   }
 
   /**
@@ -1859,8 +1911,7 @@ export class GameScene extends Phaser.Scene {
   private openOptions(): void {
     if (this.modalOpen) return;
     this.closeTrays();
-    this.optionsPanel?.open_(() => this.updateStatusText());
-    this.updateStatusText();
+    this.optionsPanel?.open_(() => this.refreshOptionsButton());
   }
 
   /**
@@ -1881,14 +1932,13 @@ export class GameScene extends Phaser.Scene {
     this.optionsPanel?.setPhrases(this.words);
     this.lessonPanel?.setPhrases(this.words);
     this.introPanel?.setPhrases(this.words);
+    this.mapPanel?.setPhrases(this.words);
     this.shopPanel?.setPhrases(this.words);
     this.shopPanel?.setCurrency(this.currency);
     // The line on screen was written in the old language by whatever the
     // player last did; it would otherwise sit there until they did something
     // else. Clearing it is honest — re-translating a past event is not.
     this.setMessage("");
-    this.updateCoins();
-    this.updateStatusText();
   }
 
   private trays(): Record<string, IconTray | undefined> {
@@ -1897,7 +1947,27 @@ export class GameScene extends Phaser.Scene {
       seeds: this.seedTray,
       basket: this.basketTray,
       crate: this.crateTray,
+      purse: this.purseTray,
     };
+  }
+
+  /**
+   * The coins of one kind the purse holds.
+   *
+   * Counted out the way the shopkeeper counts, largest first, so what the
+   * button says matches what the counter would put in front of the player.
+   */
+  private coinsOfTier(tier: CoinTier): number[] {
+    // Rounded down to something the coins can actually express. Every price
+    // and every wage in the game is a whole number of the smallest coin, so
+    // this only ever bites on a purse handed in from outside — `?coins=5237`
+    // in a currency whose smallest piece is 5 — and the alternative is a
+    // breakdown that says the purse is empty while the badge says 52.
+    const smallest = smallestCoin(this.currency);
+    const payable = this.purse.coins - (this.purse.coins % smallest);
+    return coinsFor(this.currency, payable).filter(
+      (coin) => coinTier(this.currency, coin) === tier,
+    );
   }
 
   private closeTrays(): void {
@@ -1906,10 +1976,9 @@ export class GameScene extends Phaser.Scene {
 
   /** Both badges that count what she is holding, after anything moves it. */
   private refreshCarried(): void {
+    this.purseTray?.refresh();
     this.basketTray?.refresh();
     this.crateTray?.refresh();
-    this.updateCoins();
-    this.updateStatusText();
   }
 
   /**
@@ -2248,6 +2317,46 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * The map on the tower's wall.
+   *
+   * Hung rather than furnished: the room's own art is one sprite with its
+   * furniture baked in, so anything that has to answer a tap has to be a
+   * sprite of its own — the same reason the shopkeeper is spawned into her
+   * room rather than painted into it.
+   *
+   * The tower is the post office, which is the one building in the village
+   * with a reason to have a map of the world on the wall.
+   */
+  private hangWallMap(room: string, sidecar: InteriorSidecar): void {
+    if (room !== MAP_ROOM) return;
+    const cell = wallHangingCell(sidecar);
+    const feet = this.toFeet(cell.col, cell.row);
+    const sprite = this.world(
+      this.add
+        .image(feet.x, feet.y - WALL_MAP_RISE, uiTextureKey(UiAsset.MapWall))
+        .setOrigin(0.5, 1)
+        .setDepth(feet.y),
+    );
+    // A tile-sized hit area, like the crops and the shopkeeper: the art is a
+    // tile square, and the default area of an image this size is the same
+    // thing — stated anyway so it cannot drift if the picture is redrawn.
+    sprite.setInteractive(
+      new Phaser.Geom.Rectangle(0, 0, TILE_SIZE, TILE_SIZE),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    sprite.on("pointerdown", () => this.openMap());
+    this.wallMap = sprite;
+  }
+
+  /** The map, opened. Nothing is refused indoors here — it is on a wall. */
+  private openMap(): void {
+    if (this.modalOpen) return;
+    this.joystick?.release();
+    this.closeTrays();
+    this.mapPanel?.open_(() => this.setMessage(""));
+  }
+
+  /**
    * The one place the indoor mode is set.
    *
    * The scene owns the mode — grids, layers, the camera — but the *rule* that
@@ -2308,6 +2417,7 @@ export class GameScene extends Phaser.Scene {
     // shopkeeper placed while it still pointed at the outdoor world would be
     // drawn several hundred tiles from the room she is standing in.
     this.spawnAttendant(building.id, sidecar);
+    this.hangWallMap(room, sidecar);
     this.worldLayer.setVisible(false);
     this.interiorLayer.setVisible(true);
     this.movePlayerToLayer();
@@ -2358,6 +2468,8 @@ export class GameScene extends Phaser.Scene {
     interior.image.destroy();
     this.interiorLayer.setVisible(false);
     this.worldLayer.setVisible(true);
+    this.wallMap?.destroy();
+    this.wallMap = null;
     this.attendant?.destroy();
     this.attendant = null;
     this.attendantCell = null;
@@ -2691,26 +2803,12 @@ export class GameScene extends Phaser.Scene {
     return screenToGrid(screenX - this.originX, screenY - this.originY);
   }
 
-  private updateStatusText(): void {
-    this.statusText.setText(this.statusLine);
-    this.refreshOptionsButton();
-    // Wrapping changes the status line's height, which the message line sits
-    // under — so re-place it whenever the text changes, not only on resize.
-    this.layoutHud();
-  }
-
+  /** The one line of HUD text left: whatever just happened. */
   private setMessage(text: string): void {
     this.messageText.setText(text);
     this.layoutHud();
   }
 
-  // Kept to two lines on a phone held upright, which is what it wraps to at
-  // this length. It ran to three while it explained the spellbook in full,
-  // and a third of a portrait screen is too much to spend on a caption.
-  //
-  // With an open tray the line says what the icons on screen will do, since
-  // that is the one moment the player is looking at something they have not
-  // seen before. Closed, it names the buttons instead.
   /**
    * Whether anything is covering the world.
    *
@@ -2746,30 +2844,9 @@ export class GameScene extends Phaser.Scene {
       this.shopPanel?.isOpen === true ||
       this.optionsPanel?.isOpen === true ||
       this.lessonPanel?.isOpen === true ||
-      this.introPanel?.isOpen === true
+      this.introPanel?.isOpen === true ||
+      this.mapPanel?.isOpen === true
     );
-  }
-
-  private get statusLine(): string {
-    if (this.introPanel?.isOpen) return this.words.introTitle;
-    if (this.lessonPanel?.isOpen) return this.words.lessonTitle;
-    if (this.optionsPanel?.isOpen) return this.words.statusOptions;
-    if (this.shopPanel?.isOpen) return this.words.statusStore;
-    if (this.seedTray?.isOpen) return this.words.statusSeeds;
-    if (this.spellTray?.isOpen) return this.words.statusSpells;
-    if (this.crateTray?.isOpen) {
-      return this.crateIsEmpty ? this.words.statusCrateEmpty : this.words.statusCrate;
-    }
-    if (this.basketTray?.isOpen) {
-      return this.inventory.isEmpty
-        ? this.words.statusBasketEmpty
-        : this.words.statusCarrying(this.inventory.total, this.inventory.kinds);
-    }
-    const plant = PLANT_TYPES[this.selectedPlantIndex] ?? PLANT_TYPES[0];
-    // The basket's own badge carries the count now, so the caption no longer
-    // repeats it — two places showing the same number is one place too many
-    // on a line that has to fit a phone held upright.
-    return this.mobileControls ? this.words.hintTouch : this.words.hintKeys(plant as PlantType);
   }
 
   private get crateIsEmpty(): boolean {

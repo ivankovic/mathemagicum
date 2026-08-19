@@ -114,6 +114,15 @@ export interface InteriorSidecar {
   door_cell: readonly [number, number];
   blocked_cells: readonly (readonly [number, number])[];
   furniture: readonly { name: string; cell: readonly [number, number]; blocks: boolean }[];
+  /**
+   * Which columns of the north wall a window takes up.
+   *
+   * Windows are wall decoration rather than furniture — the generator draws
+   * them in pixels and they appear in no other list — so a game hanging
+   * something on that wall would have to guess where they are. It guessed
+   * wrong once, and put the world map across the tower's window.
+   */
+  window_columns?: readonly number[];
 }
 
 // Characters carry no blocked-cells list, and deliberately so: they move, so

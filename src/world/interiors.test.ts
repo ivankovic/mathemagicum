@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { BUILDING_SPRITES, ROLE_SPRITES } from "./buildings";
 import {
   INTERIOR_ROOMS,
@@ -10,6 +12,7 @@ import {
   interiorDoor,
   interiorFor,
   interiorOriginY,
+  wallHangingCell,
 } from "./interiors";
 import type { InteriorSidecar } from "./spriteSidecar";
 
@@ -162,5 +165,78 @@ describe("where someone who works in a room stands", () => {
   test("the same room always puts them in the same place", () => {
     const spec = room();
     expect(interiorAttendantCell(spec)).toEqual(interiorAttendantCell(spec));
+  });
+});
+
+describe("where a map hangs", () => {
+  const room = (cols: number, furniture: { cell: [number, number] }[]) =>
+    ({
+      room: "test",
+      size_cells: { cols, rows: 4 },
+      tile_size: 32,
+      wall_rise_px: 18,
+      door_cell: [3, 1],
+      blocked_cells: [],
+      furniture: furniture.map((piece) => ({ name: "thing", blocks: true, ...piece })),
+    }) as unknown as InteriorSidecar;
+
+  test("on the back wall, near the middle", () => {
+    // An even-width room has no middle cell, so either side of the centre
+    // line will do; an odd one has exactly one.
+    const even = wallHangingCell(room(6, []));
+    expect(even.row).toBe(0);
+    expect([2, 3]).toContain(even.col);
+    expect(wallHangingCell(room(5, []))).toEqual({ col: 2, row: 0 });
+  });
+
+  // Furniture against the wall is the thing this has to dodge: a map hung on
+  // top of a bookshelf is a map nobody can see, and rooms are drawn by the
+  // generator rather than by hand here.
+  test("steps aside for anything already against it", () => {
+    const crowded = room(6, [{ cell: [0, 3] }, { cell: [0, 2] }]);
+    const at = wallHangingCell(crowded);
+    expect(at.row).toBe(0);
+    expect([at.col]).not.toContain(3);
+    expect([at.col]).not.toContain(2);
+  });
+
+  test("stays inside the room even with a wall full of furniture", () => {
+    const packed = room(
+      4,
+      [0, 1, 2, 3].map((col) => ({ cell: [0, col] as [number, number] })),
+    );
+    const at = wallHangingCell(packed);
+    expect(at.col).toBeGreaterThanOrEqual(0);
+    expect(at.col).toBeLessThan(4);
+  });
+});
+
+function readJson<T>(room: string): T {
+  return JSON.parse(
+    readFileSync(
+      join(import.meta.dir, "..", "..", "public", "assets", "interiors", `${room}.json`),
+      "utf8",
+    ),
+  ) as T;
+}
+
+describe("the shipped rooms have somewhere to hang a map", () => {
+  // The one that matters today is the tower, whose map is a thing the player
+  // taps — but any room may grow one, and the rule has to hold for all of
+  // them or it is a coordinate wearing a function's clothes.
+  test("the cell is on the back wall, clear of furniture and windows", () => {
+    for (const room of INTERIOR_ROOMS) {
+      const sidecar = readJson<InteriorSidecar>(room);
+      const at = wallHangingCell(sidecar);
+      expect({ room, row: at.row }).toEqual({ room, row: 0 });
+      expect(at.col).toBeGreaterThanOrEqual(0);
+      expect(at.col).toBeLessThan(sidecar.size_cells.cols);
+      const onFurniture = (sidecar.furniture ?? []).some(
+        (piece) => piece.cell[0] === 0 && piece.cell[1] === at.col,
+      );
+      expect({ room, onFurniture }).toEqual({ room, onFurniture: false });
+      const onWindow = (sidecar.window_columns ?? []).includes(at.col);
+      expect({ room, onWindow }).toEqual({ room, onWindow: false });
+    }
   });
 });

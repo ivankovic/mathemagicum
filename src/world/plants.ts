@@ -7,6 +7,9 @@ export const PlantType = {
   Carrot: "carrot",
   Sunflower: "sunflower",
   Cactus: "cactus",
+  Tomato: "tomato",
+  Pepper: "pepper",
+  Wheat: "wheat",
 } as const;
 
 export type PlantType = (typeof PlantType)[keyof typeof PlantType];
@@ -15,10 +18,25 @@ interface PlantDefinition {
   allowedTerrain: readonly TerrainType[];
 }
 
+/**
+ * Everything but the cactus grows on turned earth or grass.
+ *
+ * The sunflower used to want grass alone, which meant one seed in the pouch
+ * was refused by the very beds the player starts standing in — a rule that
+ * only ever showed up as a crop that would not go in. A garden crop grows in
+ * a garden. What the rule is *for* is the cactus: it wants sand, which is
+ * somewhere the player has to go and find, and one crop with a condition
+ * teaches that terrain matters better than five with fussy ones.
+ */
+const GARDEN_GROUND: readonly TerrainType[] = [TerrainType.Dirt, TerrainType.Grass];
+
 export const PLANT_DEFINITIONS: Record<PlantType, PlantDefinition> = {
-  [PlantType.Carrot]: { allowedTerrain: [TerrainType.Dirt, TerrainType.Grass] },
-  [PlantType.Sunflower]: { allowedTerrain: [TerrainType.Grass] },
+  [PlantType.Carrot]: { allowedTerrain: GARDEN_GROUND },
+  [PlantType.Sunflower]: { allowedTerrain: GARDEN_GROUND },
   [PlantType.Cactus]: { allowedTerrain: [TerrainType.Sand] },
+  [PlantType.Tomato]: { allowedTerrain: GARDEN_GROUND },
+  [PlantType.Pepper]: { allowedTerrain: GARDEN_GROUND },
+  [PlantType.Wheat]: { allowedTerrain: GARDEN_GROUND },
 };
 
 export function canPlantOn(plant: PlantType, terrain: TerrainType): boolean {
