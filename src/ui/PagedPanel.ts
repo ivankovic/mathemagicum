@@ -134,7 +134,14 @@ export abstract class PagedPanel<TPage> {
 
   /** Every page, in order. Called during construction, so it must be pure. */
   protected abstract deck(): readonly TPage[];
-  protected abstract titleText(): string;
+  /**
+   * The heading, for the page being shown.
+   *
+   * Per page rather than per deck: most decks are one subject and answer the
+   * same thing every time, but the great tree's opens on what it is asking
+   * for and then teaches — two headings over one deck of paper.
+   */
+  protected abstract titleText(page: TPage): string;
   protected abstract bodyText(page: TPage): string;
   /** The picture for a page, drawn between `top` and `bottom`. */
   protected abstract drawArt(rect: PanelRect, top: number, bottom: number, page: TPage): void;
@@ -210,7 +217,7 @@ export abstract class PagedPanel<TPage> {
     this.ink.setVisible(true);
 
     this.title
-      .setText(this.titleText())
+      .setText(this.titleText(this.page))
       .setPosition(rect.centreX, rect.top + PAD)
       .setVisible(true);
     this.place(this.closeButton, rect.left + rect.width - PAD - 14, rect.top + PAD + 10, 28, 24);

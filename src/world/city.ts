@@ -45,6 +45,16 @@ const RING_WIDTH = 2;
  */
 const STREET_WIDTH = 1;
 const BLOCK_SIZE = 5;
+/**
+ * One rhythm for both axes, so the streets cross at right angles and the
+ * blocks come out rectangular.
+ *
+ * Read as a stride rather than baked into a list of coordinates, because the
+ * box's size is the generator's to choose and a table would go on being
+ * right until somebody changed it. Nothing draws a street any more — the
+ * whole enclosure is one paved surface — so the rhythm's only job now is to
+ * say where the blocks start.
+ */
 const RHYTHM = STREET_WIDTH + BLOCK_SIZE;
 
 export interface CityBlock {
@@ -85,18 +95,6 @@ export interface CityLayout {
    * by appearing in the middle of has no outside.
    */
   readonly doorstep: GridPoint;
-}
-
-/**
- * Whether an offset inside the city falls on a street rather than a block.
- *
- * One rhythm for both axes, so the streets cross at right angles and the
- * blocks come out rectangular. Read as a function rather than baked into a
- * list of coordinates, because the box's size is the generator's to choose
- * and a table would go on being right until somebody changed it.
- */
-function onStreet(offset: number): boolean {
-  return offset % RHYTHM < STREET_WIDTH;
 }
 
 function pave(grid: WorldGrid, col: number, row: number, terrain: TerrainType): void {
@@ -245,47 +243,41 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
     height: box.height - (RING_INSET + RING_WIDTH) * 2,
   };
 
-  // --- the ring road ------------------------------------------------------
+  // --- the ground ---------------------------------------------------------
 
-  for (let row = box.row + RING_INSET; row < box.row + box.height - RING_INSET; row++) {
-    for (let col = box.col + RING_INSET; col < box.col + box.width - RING_INSET; col++) {
-      const onRing =
-        row < inner.row ||
-        row >= inner.row + inner.height ||
-        col < inner.col ||
-        col >= inner.col + inner.width;
-      if (onRing) pave(grid, col, row, TerrainType.Cobble);
+  // The whole enclosure, in one pass, before anything is put on it.
+  //
+  // It was the streets and the ring road only, with each block left as
+  // whatever had grown there and a patch of dirt under each building. That
+  // reads as houses standing in a field: the wall and the street grid were
+  // doing all the work of saying *city* and the ground was arguing with
+  // them. Paving the blocks in *dirt* was tried before that and was worse —
+  // bare orange between grey streets, a building site.
+  //
+  // Cobble everywhere is the third answer and the one a city actually looks
+  // like. It also settles what a block is for: nothing inside these walls is
+  // plantable, because laid stone is not soil, and a city you could farm
+  // would be a village with more houses in it. The garden is at home.
+  for (let row = box.row; row < box.row + box.height; row++) {
+    for (let col = box.col; col < box.col + box.width; col++) {
+      pave(grid, col, row, TerrainType.Cobble);
     }
   }
 
   // --- the streets --------------------------------------------------------
 
+  // The streets are no longer paved *here* — everything is paved. What this
+  // walk still does is say where the blocks are, and a block is a rectangle
+  // with a size rather than a bag of cells that happened not to be paved.
   const blocks: CityBlock[] = [];
-  for (let row = 0; row < inner.height; row++) {
-    for (let col = 0; col < inner.width; col++) {
-      if (onStreet(col) || onStreet(row)) {
-        pave(grid, inner.col + col, inner.row + row, TerrainType.Cobble);
-      }
-    }
-  }
-  // The blocks are what the streets leave. Walked separately rather than
-  // collected above, so a block is a rectangle with a size rather than a bag
-  // of cells that happened not to be paved.
   for (let row = STREET_WIDTH; row < inner.height; row += RHYTHM) {
     for (let col = STREET_WIDTH; col < inner.width; col += RHYTHM) {
       const width = Math.min(BLOCK_SIZE, inner.width - col);
       const height = Math.min(BLOCK_SIZE, inner.height - row);
-      // A sliver left over at the far edge is paved over rather than left as
-      // a block nobody could put a building in — an unpaved scrap inside the
-      // ring road reads as a hole in the city, not as a small yard.
-      if (width < 3 || height < 3) {
-        for (let r = 0; r < height; r++) {
-          for (let c = 0; c < width; c++) {
-            pave(grid, inner.col + col + c, inner.row + row + r, TerrainType.Cobble);
-          }
-        }
-        continue;
-      }
+      // A sliver left over at the far edge is not a block: there is nowhere
+      // in it to stand a building. It is simply street now, which it looks
+      // like, because the whole enclosure is one surface.
+      if (width < 3 || height < 3) continue;
       blocks.push({ col: inner.col + col, row: inner.row + row, width, height });
     }
   }
@@ -298,11 +290,6 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
       Math.hypot(b.col + b.width / 2 - middle.col, b.row + b.height / 2 - middle.row);
     return distance(block) < distance(best) ? block : best;
   }, blocks[0] as CityBlock);
-  for (let row = plaza.row; row < plaza.row + plaza.height; row++) {
-    for (let col = plaza.col; col < plaza.col + plaza.width; col++) {
-      pave(grid, col, row, TerrainType.Cobble);
-    }
-  }
   // Anchored so the tower sits in the middle of the square with its feet on
   // the lower half of it — a two-by-two block centred exactly would leave
   // the square's own middle cell blocked and the approach from the south
@@ -361,17 +348,6 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
       col: block.col + (slack > 0 ? randInt(rng, 0, slack) : 0),
       row: block.row + block.height - height,
     };
-    // Only the ground the building stands on, and a cell of yard round it.
-    // Paving the whole block was the first pass and it filled the city with
-    // bare orange dirt between grey streets — a building site rather than a
-    // town. What is left of a block is whatever grew there, which reads as
-    // the courtyards and gardens a block has behind its street frontage, and
-    // gives the stone something to be stone against.
-    for (let row = topLeft.row - 1; row <= topLeft.row + height; row++) {
-      for (let col = topLeft.col - 1; col <= topLeft.col + width; col++) {
-        pave(grid, col, row, TerrainType.Dirt);
-      }
-    }
     const building: PlacedObject = {
       id: `city-${role}-${n}`,
       type: role,

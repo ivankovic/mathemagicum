@@ -141,7 +141,6 @@ import {
   characterSidecarKey,
   facingFor,
   oppositeFacing,
-  stepForFacing,
 } from "../world/characters";
 import {
   type ChunkCoord,
@@ -1427,7 +1426,7 @@ export class GameScene extends Phaser.Scene {
       const dir = this.pressedDirection();
       if (dir) {
         this.path = []; // manual input overrides an in-progress click path
-        this.tryMove(dir.dCol, dir.dRow);
+        this.walk(dir.dCol, dir.dRow);
       } else if (this.path.length > 0) {
         const next = this.path.shift();
         if (next) this.tryMove(next.col - this.playerCol, next.row - this.playerRow);
@@ -2366,14 +2365,70 @@ export class GameScene extends Phaser.Scene {
     this.harvestKey = keyboard.addKey(KeyCodes.H);
   }
 
+  /**
+   * Where the player is being asked to walk, along both axes at once.
+   *
+   * Two keys held together make a diagonal, rather than the first one found
+   * winning. That was the old rule and a playtest called it annoying: the
+   * world is a grid of roads and gardens laid out to be cut across, and
+   * getting to something up and to the left took two separate pushes.
+   *
+   * Opposite keys cancel, which is what a hand rolling from one arrow to the
+   * next actually does for a few frames.
+   */
   private pressedDirection(): Direction | null {
-    if (this.cursors.up.isDown || this.wasd.up.isDown) return { dCol: 0, dRow: -1 };
-    if (this.cursors.down.isDown || this.wasd.down.isDown) return { dCol: 0, dRow: 1 };
-    if (this.cursors.left.isDown || this.wasd.left.isDown) return { dCol: -1, dRow: 0 };
-    if (this.cursors.right.isDown || this.wasd.right.isDown) return { dCol: 1, dRow: 0 };
+    const held = (a: Phaser.Input.Keyboard.Key, b: Phaser.Input.Keyboard.Key) =>
+      a.isDown || b.isDown ? 1 : 0;
+    const dCol =
+      held(this.cursors.right, this.wasd.right) - held(this.cursors.left, this.wasd.left);
+    const dRow = held(this.cursors.down, this.wasd.down) - held(this.cursors.up, this.wasd.up);
+    if (dCol !== 0 || dRow !== 0) return { dCol, dRow };
     // Keyboard first so an attached keyboard still wins on a touch device.
-    const held = this.joystick?.direction();
-    return held ? stepForFacing(held) : null;
+    return this.joystick?.step() ?? null;
+  }
+
+  /**
+   * Take a step, sliding along whatever is in the way rather than stopping.
+   *
+   * A diagonal needs **both** of its orthogonal neighbours open, or the
+   * player would walk through the corner of a building — the one place a
+   * grid of solid squares has a hole in it that is not a doorway.
+   *
+   * When the diagonal is refused, the step falls back to whichever single
+   * axis is still open. That is what makes a diagonal push against a wall
+   * slide along it instead of stopping dead, and it is most of why eight-way
+   * movement feels better than four. It also means a door is never entered
+   * on a diagonal: pushing into the corner beside one slides past it, and
+   * walking in still takes a straight step at it.
+   */
+  private walk(dCol: number, dRow: number): void {
+    if (dCol === 0 || dRow === 0) {
+      this.tryMove(dCol, dRow);
+      return;
+    }
+    if (this.stepIsOpen(dCol, dRow) && this.stepIsOpen(dCol, 0) && this.stepIsOpen(0, dRow)) {
+      this.tryMove(dCol, dRow);
+      return;
+    }
+    if (this.stepIsOpen(dCol, 0)) {
+      this.tryMove(dCol, 0);
+      return;
+    }
+    if (this.stepIsOpen(0, dRow)) {
+      this.tryMove(0, dRow);
+      return;
+    }
+    // Nothing is open. Still turn, because pressing into a wall should look
+    // like it was heard.
+    this.session.turnToward(dCol, dRow);
+  }
+
+  /** Whether one step from where the player stands would be taken. */
+  private stepIsOpen(dCol: number, dRow: number): boolean {
+    return this.grid.canStep(this.session.tile, {
+      col: this.playerCol + dCol,
+      row: this.playerRow + dRow,
+    });
   }
 
   private tryMove(dCol: number, dRow: number): void {
@@ -2422,7 +2477,11 @@ export class GameScene extends Phaser.Scene {
       targets: this.player,
       x: target.x,
       y: target.y,
-      duration: MOVE_DURATION_MS,
+      // A diagonal covers a longer distance, so it takes longer. Without
+      // this, cutting across is forty per cent faster than walking round —
+      // which turns a convenience into the only sensible way to travel.
+      duration:
+        dCol !== 0 && dRow !== 0 ? Math.round(MOVE_DURATION_MS * Math.SQRT2) : MOVE_DURATION_MS,
       onComplete: () => {
         this.isMoving = false;
       },
@@ -3814,8 +3873,16 @@ export class GameScene extends Phaser.Scene {
       this.saveProfileChange({ learned });
       this.spellTray?.refresh();
     }
-    this.setMessage(first ? this.words.arrayTaught : this.words.groveAsks(progress));
+    // Only the moment of learning goes to the message line. What the tree is
+    // still asking for used to go there too — behind the panel this call then
+    // opened over it, in the smallest type the game has — and is now the
+    // panel's own first page, where it is read rather than missed.
+    if (first) this.setMessage(this.words.arrayTaught);
     this.grovePanel?.setRung(arrayRungAt(this.dev.arrayRung ?? this.profile.arrayRung));
+    this.grovePanel?.setTask(progress, {
+      rows: this.grove.bed.height,
+      columns: this.grove.bed.width,
+    });
     this.grovePanel?.open_(() => {
       this.setMessage("");
     });

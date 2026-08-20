@@ -10,6 +10,7 @@ import {
   arrayRungAt,
   rowTotals,
 } from "../spells/multiplication";
+import { type GroveProgress, GroveTask } from "../world/enchantedForest";
 import { PagedPanel } from "./PagedPanel";
 import type { PanelRect } from "./ParchmentPanel";
 import { UiAsset, type UiIndex } from "./assets";
@@ -33,6 +34,14 @@ const RULE_HEX = 0x8a6a48;
 const SEED_HEX = 0x5f8f3a;
 const SEED_COUNTED_HEX = 0x2f5c1c;
 const ROW_HEX = 0x2f6f9e;
+/** The task page: bare earth, a ripe square, and the wood still on it. */
+const EARTH_HEX = 0x7a5433;
+const RIPE_HEX = 0xd2611b;
+const THICKET_HEX = 0x2f5c1c;
+const BED_CELL = 26;
+const BED_GAP = 3;
+/** Coprime with the twelve squares of the bed, so the wood does not clump. */
+const THICKET_STRIDE = 5;
 
 const SMALL_SIZE = 12;
 // The biggest patch the ladder can set is ten rows deep, so ten labels are
@@ -53,6 +62,17 @@ export class GroveLessonPanel extends PagedPanel<GroveBeat> {
    * a method demonstrated on a picture they have never seen.
    */
   private rung: ArrayRung = arrayRungAt(0);
+
+  /**
+   * How far the tree's own task has got, so the first page can say it.
+   *
+   * Null until the scene has read it off the world, which it does every time
+   * this opens — the task keeps no state anywhere else, and a panel holding
+   * its own copy would be a second place for it to be wrong.
+   */
+  private progress: GroveProgress | null = null;
+  /** The shape of the bed, so the picture is the bed and not a grid. */
+  private bed = { rows: 3, columns: 4 };
 
   /** The running total beside each row, and the label under the patch. */
   private readonly totals: Phaser.GameObjects.Text[] = [];
@@ -83,6 +103,12 @@ export class GroveLessonPanel extends PagedPanel<GroveBeat> {
     if (this.isOpen) this.layout();
   }
 
+  setTask(progress: GroveProgress, bed: { rows: number; columns: number }): void {
+    this.progress = progress;
+    this.bed = bed;
+    if (this.isOpen) this.layout();
+  }
+
   private example(): ArrayProblem {
     return groveLessonFor(this.rung);
   }
@@ -91,13 +117,21 @@ export class GroveLessonPanel extends PagedPanel<GroveBeat> {
     return GROVE_BEATS;
   }
 
-  protected titleText(): string {
-    return this.words.groveLessonTitle;
+  protected titleText(beat: GroveBeat): string {
+    return beat === GroveBeat.Task ? this.words.groveTaskTitle : this.words.groveLessonTitle;
   }
 
   protected bodyText(beat: GroveBeat): string {
     const { rows, columns } = this.example();
     switch (beat) {
+      case GroveBeat.Task: {
+        const progress = this.progress;
+        if (!progress) return this.words.groveLessonTitle;
+        const asked = this.words.groveAsks(progress);
+        // The bargain only while there is still something to do. Offered to
+        // a child who has already finished, it would read as a second task.
+        return progress.task === GroveTask.Done ? asked : `${asked}\n\n${this.words.groveBargain}`;
+      }
       case GroveBeat.Rune:
         return this.words.groveRune;
       case GroveBeat.Rows:
@@ -112,11 +146,75 @@ export class GroveLessonPanel extends PagedPanel<GroveBeat> {
   protected drawArt(rect: PanelRect, top: number, bottom: number, beat: GroveBeat): void {
     for (const total of this.totals) total.setVisible(false);
     this.caption.setVisible(false);
+    if (beat === GroveBeat.Task) {
+      this.drawBed(rect, top, bottom);
+      return;
+    }
     if (beat === GroveBeat.Rune) {
       this.drawIcons(rect, (top + bottom) / 2, [UiAsset.Spellbook, UiAsset.RuneTimes]);
       return;
     }
     this.drawPatch(rect, top, bottom, beat);
+  }
+
+  /**
+   * The bed as it actually stands, which is the task in one picture.
+   *
+   * The same rectangle the lesson goes on to teach about — twelve squares,
+   * four by three — so the thing the child is being asked to fill and the
+   * thing the parchment later draws are visibly one object. Ripe squares are
+   * filled; the rest are bare earth; and while the wood is still standing it
+   * is drawn over the top, because that is the order the work has to be done
+   * in and a picture that showed the bed clear would be a picture of a job
+   * already half finished.
+   */
+  private drawBed(rect: PanelRect, top: number, bottom: number): void {
+    const progress = this.progress;
+    if (!progress) return;
+    const { rows, columns } = this.bed;
+    const step = BED_CELL + BED_GAP;
+    const gridW = step * columns - BED_GAP;
+    const gridH = step * rows - BED_GAP;
+    const left = Math.round(rect.centreX - gridW / 2);
+    const gridTop = Math.round(top + Math.max(0, (bottom - top - gridH) / 2) - 6);
+
+    for (let n = 0; n < rows * columns; n++) {
+      const x = left + (n % columns) * step;
+      const y = gridTop + Math.floor(n / columns) * step;
+      this.ink.fillStyle(EARTH_HEX, 1);
+      this.ink.fillRect(x, y, BED_CELL, BED_CELL);
+      if (n < progress.ripe) {
+        this.ink.fillStyle(RIPE_HEX, 1);
+        this.ink.fillCircle(x + BED_CELL / 2, y + BED_CELL / 2, BED_CELL / 2 - 5);
+      }
+    }
+    this.ink.lineStyle(1, RULE_HEX, 1);
+    this.ink.strokeRect(left - 4, gridTop - 4, gridW + 8, gridH + 8);
+
+    // The wood, laid across the bed rather than beside it, one thicket to a
+    // square. Stepped by five rather than by one: five and twelve share no
+    // factor, so six thickets land on six squares spread over the bed
+    // instead of filling the first six in a block — which would read as a
+    // bed half planted rather than as a bed with wood standing on it.
+    if (progress.task === GroveTask.Overgrown) {
+      const cells = Math.max(1, rows * columns);
+      this.ink.fillStyle(THICKET_HEX, 0.92);
+      for (let n = 0; n < progress.standing; n++) {
+        const cell = (n * THICKET_STRIDE) % cells;
+        const x = left + (cell % columns) * step + BED_CELL / 2;
+        const y = gridTop + Math.floor(cell / columns) * step + BED_CELL / 2;
+        this.ink.fillCircle(x, y, BED_CELL / 2 - 3);
+      }
+    }
+
+    this.caption
+      .setText(
+        progress.task === GroveTask.Overgrown
+          ? String(progress.standing)
+          : `${progress.ripe} / ${progress.squares}`,
+      )
+      .setPosition(rect.centreX, gridTop + gridH + 10)
+      .setVisible(true);
   }
 
   /**

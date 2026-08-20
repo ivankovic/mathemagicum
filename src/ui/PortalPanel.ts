@@ -17,6 +17,7 @@ import {
   journeyBetween,
   markFraction,
   marksAcross,
+  marksOnLegs,
   portalHint,
   stonesAlong,
   submitPortal,
@@ -51,10 +52,43 @@ import { paintWorldMap } from "./worldMapTexture";
  * joystick do it.
  */
 
-const PANEL_MAX_W = 520;
-const PANEL_MAX_H = 560;
+/**
+ * How much of the screen the parchment is allowed to take.
+ *
+ * Bigger than every other panel's, and the map is why. What the map gets is
+ * whatever is left after the question, the answer box and the keypad, and at
+ * 520 x 560 that came to a 222-pixel square on a 900-pixel screen — under
+ * half the panel's own width, with the rest of the sheet blank. A ruler you
+ * are asked to count seven marks on cannot be the smallest thing on the
+ * page.
+ *
+ * Capped rather than unbounded so a desktop window does not get a parchment
+ * the size of a wall, and clamped to the viewport by the panel itself, so a
+ * phone still gets a panel that fits.
+ */
+const PANEL_MAX_W = 660;
+const PANEL_MAX_H = 820;
 const PANEL_MIN_W = 300;
 const PANEL_MIN_H = 360;
+/**
+ * Everything on the sheet that is not the map: the title and the question
+ * above it, and the answer box and keypad below.
+ *
+ * The map is square and takes the paper's width, so the paper wants to be
+ * that wide plus this tall. Without the cap a phone held upright got a
+ * full-height sheet with a 200-pixel band of blank parchment between the map
+ * and the answer box — the map cannot use it, because a square map on a
+ * narrow sheet is limited by the width it has, not the height.
+ */
+const PANEL_TAIL = 320;
+/**
+ * The same, before a destination is picked.
+ *
+ * Choosing has no answer box and no keypad — only the heading, the map and
+ * the line at the foot — so the sheet the cast wants would leave a hand's
+ * width of blank parchment under a map that has nothing to do with it.
+ */
+const PANEL_TAIL_CHOOSING = 150;
 
 const INK = "#4a3422";
 const INK_DIM = "#8a6a48";
@@ -90,6 +124,23 @@ const HERE_SIZE = 7;
 const STONE_SHARE = 0.24;
 const STONE_MIN = 3;
 const STONE_MAX = 8;
+/**
+ * How long a graduation on a leg is, across it, as a share of the space
+ * between two marks.
+ *
+ * The legs used to be bare lines. Every rung above the bottom one asks the
+ * child to read a number of marks off them — *how far south is it* — and the
+ * only graduations on the paper were four-pixel stubs along the outside
+ * edges of the map, on a different axis from the line being read. So the
+ * question was to count something that had not been drawn.
+ *
+ * Ruled at the same places the bottom rung lays its stones, and for the same
+ * reason: the count of them *is* the answer, so a child who counts ticks and
+ * a child who reads the edge ruler arrive at the same number.
+ */
+const LEG_TICK_SHARE = 0.42;
+const LEG_TICK_MIN = 3;
+const LEG_TICK_MAX = 9;
 /** How much room the rulers take along the two edges they sit on. */
 const RULER_BAND = 20;
 const TICK = 4;
@@ -108,8 +159,15 @@ const HINT_LINES = 2;
  */
 const WIDE_RATIO = 1.25;
 
-/** The least room a ruler number needs before the next one is drawn. */
-const TICK_LABEL_PX = 26;
+/**
+ * The least room a ruler number needs before the next one is drawn.
+ *
+ * Two digits of 11-pixel monospace and a gap. At 26 a full-size map numbered
+ * only every other mark on the middle rungs, which meant a child counting to
+ * seven had no seven written anywhere; at 22 the same map numbers every one
+ * of them and the finest ruler still thins out rather than smearing.
+ */
+const TICK_LABEL_PX = 22;
 
 const KEY_GAP = 6;
 const KEY_COLS = 5;
@@ -219,7 +277,10 @@ export class PortalPanel {
     // Enough for the finest ruler the spell ever draws, made once: a text
     // object per opening would leak one per cast.
     for (let n = 0; n < MOST_TICKS * 2; n++) {
-      this.ticks.push(this.own(this.text("", LABEL_SIZE - 1, INK_DIM).setOrigin(0.5)));
+      // Full ink, not the dim shade the foot-notes use. These numbers are
+      // the thing the child is being asked to read; they should not be the
+      // palest text on the page.
+      this.ticks.push(this.own(this.text("", LABEL_SIZE, INK).setOrigin(0.5)));
     }
 
     this.answerBox = this.own(
@@ -396,7 +457,13 @@ export class PortalPanel {
 
   private render(): void {
     const { width, height } = this.scene.scale;
-    const rect = this.paper.layout(width, height);
+    // Laid out twice on purpose. How tall this sheet should be depends on
+    // how wide it came out, and how wide it came out is the panel's own
+    // clamping to decide — so the first call asks it and the second tells
+    // it. `layout` only sizes and positions; running it twice costs nothing
+    // and beats keeping a copy of its clamping rule here to go stale.
+    const tail = this.cast ? PANEL_TAIL : PANEL_TAIL_CHOOSING;
+    const rect = this.paper.layout(width, height, this.paper.layout(width, height).width + tail);
     for (const part of this.parts) part.setVisible(false);
     this.ink.clear();
     this.ink.setVisible(true);
@@ -600,7 +667,16 @@ export class PortalPanel {
     // By pixels rather than by a count of marks: ten numbers fit comfortably
     // on a five-hundred-pixel map and print on top of each other on a
     // hundred-pixel one, which is what a phone held sideways gives.
-    const every = Math.max(1, Math.ceil(TICK_LABEL_PX / step));
+    // Never more numbers than there are text objects to print them with.
+    // Running out mid-draw used to leave the rest of a ruler blank, which is
+    // silent and looks exactly like a ruler that was meant to be sparse.
+    // Thinning them out is the right way to run short.
+    const perAxis = Math.floor(this.ticks.length / 2);
+    const every = Math.max(
+      1,
+      Math.ceil(TICK_LABEL_PX / step),
+      Math.ceil((marks + 1) / Math.max(1, perAxis)),
+    );
     const bottom = sheet.top + sheet.span;
     // Numbered from wherever the ruler counts *from*, so zero always gets a
     // number. Counting every fifth mark from the map's edge instead left a
@@ -671,6 +747,11 @@ export class PortalPanel {
       this.ink.lineStyle(1, RULE_HEX, 0.9);
       this.ink.lineBetween(start.x, start.y, corner.x, corner.y);
       this.ink.lineBetween(corner.x, corner.y, end.x, end.y);
+      // Graduated before the hypotenuse goes over them, and faintly: the two
+      // legs are the numbers this rung is worked *from*, so they have to be
+      // readable — but ticks bolder than the line they rule would make the
+      // scaffolding louder than the answer.
+      this.ruleLegs(sheet, journey, step, false, false);
       this.ink.lineStyle(3, PATH_HEX, 1);
       this.ink.lineBetween(start.x, start.y, end.x, end.y);
       return;
@@ -693,7 +774,11 @@ export class PortalPanel {
     this.ink.lineBetween(start.x, start.y, corner.x, corner.y);
     this.ink.lineStyle(downAsked ? bold : 1, PATH_HEX, downAsked ? solid : 0.35);
     this.ink.lineBetween(corner.x, corner.y, end.x, end.y);
-    if (!counting) return;
+    if (!counting) {
+      // Bare lines are what the child is being asked to read a number off.
+      this.ruleLegs(sheet, journey, step, acrossAsked, downAsked);
+      return;
+    }
 
     const radius = Math.max(STONE_MIN, Math.min(STONE_MAX, step * STONE_SHARE));
     const stones = stonesAlong(journey).map((stone) => point(stone.col, stone.row));
@@ -703,6 +788,48 @@ export class PortalPanel {
     for (const spot of stones) this.ink.fillCircle(spot.x, spot.y, radius);
     this.ink.lineStyle(2, INK_HEX, 1);
     for (const spot of stones) this.ink.strokeCircle(spot.x, spot.y, radius);
+  }
+
+  /**
+   * Graduations across each leg, one per mark.
+   *
+   * Across the line rather than along it, so a tick is something to count
+   * rather than part of the line's own thickness. They stop at the
+   * destination and start one mark out from the traveller, which makes the
+   * number of ticks the number the child has to say — the same arithmetic
+   * the stones do a rung below.
+   *
+   * A leg the question is not about is ruled faintly rather than not at all.
+   * It is still true, and a child who wants to check what the other number
+   * would be should be able to.
+   */
+  private ruleLegs(
+    sheet: Sheet,
+    journey: PortalJourney,
+    step: number,
+    acrossAsked: boolean,
+    downAsked: boolean,
+  ): void {
+    const arm = Math.max(LEG_TICK_MIN, Math.min(LEG_TICK_MAX, step * LEG_TICK_SHARE));
+    const { across, down } = marksOnLegs(journey);
+    const rule = (
+      legMarks: readonly GridPoint[],
+      asked: boolean,
+      // The across leg runs east-west, so its ticks stand up; the down leg
+      // runs north-south, so its ticks lie across. Derived from which leg
+      // this is rather than from the two marks, which are equal whenever a
+      // leg is one mark long.
+      upright: boolean,
+    ) => {
+      this.ink.lineStyle(asked ? 2 : 1, asked ? PATH_HEX : RULE_HEX, asked ? 1 : 0.45);
+      for (const mark of legMarks) {
+        const at = this.markPoint(sheet, journey.league, mark.col, mark.row);
+        if (upright) this.ink.lineBetween(at.x, at.y - arm, at.x, at.y + arm);
+        else this.ink.lineBetween(at.x - arm, at.y, at.x + arm, at.y);
+      }
+    };
+    rule(across, acrossAsked, true);
+    rule(down, downAsked, false);
   }
 
   private drawAnswer(centreX: number, keypad: { top: number } | null): void {
@@ -838,11 +965,12 @@ export class PortalPanel {
 }
 
 /**
- * The most marks a ruler ever carries a number on.
+ * The most marks one ruler ever carries a number on.
  *
- * The finest ruling is one mark to ten cells, which is fifty across a
- * five-hundred-cell world, and numbers go on every fifth of those. Doubled
- * for the two rulers and rounded up, because running out of text objects
- * mid-draw would silently leave a ruler with no numbers on it.
+ * The widest sheet gives the map about six hundred pixels, and a number is
+ * drawn at most every 22 of those, so thirty per ruler covers every case the
+ * spell can produce — one mark to twenty-five cells numbered on every single
+ * mark included. Two more than that for headroom, and `drawRulers` thins the
+ * numbers out rather than running past the end if this is ever wrong.
  */
-const MOST_TICKS = 16;
+const MOST_TICKS = 32;

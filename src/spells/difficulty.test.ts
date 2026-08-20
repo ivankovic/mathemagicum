@@ -62,7 +62,7 @@ describe("the ladder", () => {
   });
 });
 
-describe("the four bands", () => {
+describe("the three bands", () => {
   test("cover the whole ladder between them", () => {
     expect(BANDS[0]?.from).toBe(0);
     expect(BANDS[BANDS.length - 1]?.to).toBe(HARDEST_RUNG);
@@ -107,6 +107,28 @@ describe("the four bands", () => {
     }
     // The band the game shipped at keeps the price the game shipped with.
     expect(bandAt(DEFAULT_BAND).cropPrice).toBe(250);
+  });
+
+  /**
+   * Three, and a crop is worth more the harder the sums are.
+   *
+   * The count is what a playtest asked for: four rows of sums is a row too
+   * many to compare at a glance. The order is the part that was not asked
+   * for and is worth keeping true — the prices used to dip in the middle
+   * (1,00 → 0,50 → …), so the second-easiest band paid least of all, which
+   * is a rule nobody could learn and everybody would notice.
+   */
+  test("there are three of them, and a crop is worth more the harder it gets", () => {
+    expect(BANDS.length).toBe(3);
+    for (let at = 1; at < BANDS.length; at++) {
+      const under = BANDS[at - 1];
+      const over = BANDS[at];
+      if (!under || !over) throw new Error("no band");
+      expect({ at, rising: over.cropPrice > under.cropPrice }).toEqual({ at, rising: true });
+    }
+    // Whole coins and halves only: a price with a five-ray tail would need a
+    // coin the purse does not have.
+    for (const band of BANDS) expect(band.cropPrice % 50).toBe(0);
   });
 });
 

@@ -24,6 +24,7 @@ import {
   markFraction,
   markOf,
   marksAcross,
+  marksOnLegs,
   placeAt,
   portalHint,
   portalRungAt,
@@ -278,6 +279,29 @@ describe("the stones the bottom rung draws", () => {
     for (const stone of stones) {
       const onLeg = stone.row === trip.fromMark.row || stone.col === trip.toMark.col;
       expect({ stone, onLeg }).toEqual({ stone, onLeg: true });
+    }
+  });
+
+  /**
+   * The graduations the panel rules each leg with. A leg whose ticks and
+   * whose ruler number disagree by one is worse than a leg with no ticks on
+   * it: the child counts, gets a different number from the one the spell
+   * wants, and has no way to tell which of the two is wrong.
+   */
+  test("each leg carries exactly as many marks as that leg is worth", () => {
+    for (const [a, b, c, d] of [
+      [100, 100, 340, 300],
+      [400, 400, 40, 40],
+      [50, 300, 300, 60],
+    ] as const) {
+      const trip = journey(a, b, c, d);
+      const legs = marksOnLegs(trip);
+      expect({ across: legs.across.length, down: legs.down.length }).toEqual({
+        across: trip.across.marks,
+        down: trip.down.marks,
+      });
+      // And the two together are still what the bottom rung lays stones on.
+      expect([...legs.across, ...legs.down]).toEqual(stonesAlong(trip) as never);
     }
   });
 

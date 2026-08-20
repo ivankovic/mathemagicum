@@ -41,16 +41,50 @@ export function thumbOffset(from: Vector, to: Vector, radius = BASE_RADIUS): Vec
 }
 
 /**
- * Which way the stick is pushed, or null if it is inside the deadzone.
+ * Which way the stick is pushed, as a *facing*, or null inside the deadzone.
  *
- * Deliberately the same four-way snap the character art and the grid step
- * both use (see facingForVector), rather than an analog angle: the world is
- * walked one cell at a time along the cardinals, so an eight-way or analog
- * stick would report directions the game cannot act on.
+ * Four-way, because four is all the character art has. This is what the
+ * player is drawn as; `joystickStep` is what they move along, and the two
+ * are allowed to differ — somebody walking up and to the left is drawn
+ * facing up.
  */
 export function joystickDirection(offset: Vector, deadzone = DEADZONE): Facing | null {
   if (Math.hypot(offset.x, offset.y) < deadzone) return null;
   return facingForVector(offset.x, offset.y);
+}
+
+/**
+ * How far along each axis the stick asks the player to move, in cells.
+ *
+ * Eight-way, where the facing is four-way. A playtest called four-direction
+ * movement annoying and it is: walking to something up and to the left means
+ * two separate pushes, and every one of the world's roads and gardens is laid
+ * out on a grid a child wants to cut across.
+ *
+ * Snapped into eight equal octants of 45 degrees each — an axis counts once
+ * the stick is more than 22.5 degrees off the other one, which is what
+ * `tan(22.5°)` is. Equal octants matter more than they sound: a diagonal
+ * band narrower than the cardinal ones is a stick that will not go diagonally
+ * when you ask it, and a wider one is a stick that goes diagonally when you
+ * did not.
+ */
+const OCTANT = Math.tan(Math.PI / 8);
+
+export function joystickStep(offset: Vector, deadzone = DEADZONE): Step | null {
+  if (Math.hypot(offset.x, offset.y) < deadzone) return null;
+  const major = Math.max(Math.abs(offset.x), Math.abs(offset.y));
+  if (major === 0) return null;
+  const step = {
+    dCol: Math.abs(offset.x) >= major * OCTANT ? Math.sign(offset.x) : 0,
+    dRow: Math.abs(offset.y) >= major * OCTANT ? Math.sign(offset.y) : 0,
+  };
+  return step.dCol === 0 && step.dRow === 0 ? null : step;
+}
+
+/** One step of movement, along either axis or both at once. */
+export interface Step {
+  readonly dCol: number;
+  readonly dRow: number;
 }
 
 /**

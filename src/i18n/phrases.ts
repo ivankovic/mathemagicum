@@ -201,6 +201,13 @@ export interface Phrases {
     ripe: number;
     squares: number;
   }) => string;
+  /** The heading over the task page, which is not the lesson's heading. */
+  groveTaskTitle: string;
+  /**
+   * The bargain, under the task. The task says what is left to do; this says
+   * what it is for, which is the half a child cannot work out for themselves.
+   */
+  groveBargain: string;
   groveLessonTitle: string;
   /** One idea per page, in the order the tree shows them. */
   groveRune: string;

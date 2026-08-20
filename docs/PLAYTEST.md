@@ -14,6 +14,11 @@ same session, and both were the kind of mistake that repeats.
 Ordered as reported, not by priority. What is done and what is still open is
 at the bottom.
 
+**A second round is at the foot of this file** — 2026-08-20, the first
+session with the world outside the village in it. Rounds are appended rather
+than replacing each other, so a report that comes back twice is visible as
+having come back twice.
+
 ---
 
 ## 1. The children want to share a world — **built**
@@ -358,3 +363,338 @@ What is worth carrying forward from this round rather than from the list:
 - **The permission to lose data has an expiry.** It is what let the world
   move off the profile without a migration, and it stops being true the first
   time a child plays a farm worth keeping.
+
+---
+
+# Playtest — 2026-08-20
+
+Five things came back from the second session, the first with the world
+outside the village in it. Written down before anything is changed, for the
+same reason as the round above: the useful part of a playtest is what was
+*observed*, and that gets rewritten in memory the moment somebody starts
+fixing it.
+
+Ordered as reported. Where I went and looked at the thing before writing it
+down, what I found is under *Found*, and it is separated from *Reported* on
+purpose — the report is evidence and the rest is a guess until it is built.
+
+All five are now done. Three of the five came back worse than reported once
+looked at, which is the argument for looking: the tree's quest text existed
+and was being written somewhere nobody could read it, the portal's rulers had
+no marks on them at all rather than small ones, and the city's ground was
+arguing with its own walls.
+
+---
+
+## 1. The great tree teaches the spell but never sets the quest — **fixed**
+
+**Reported:** the old tree teaches you the spell, but doesn't tell you the
+quest to get the spell. Before you complete the quest, tapping the tree
+should give you the quest.
+
+**Found:** the quest text exists and is being written to the wrong surface.
+`openGroveLesson` does two things in the same breath: it puts
+`words.groveAsks(progress)` into the one-line HUD message at the top of the
+screen — *"The wood has closed over my bed. Take away the 6 that still
+stand."* — and then immediately opens the grove lesson panel over the whole
+screen. The panel is what the child reads. The message is behind it, in small
+type, at the top edge, and by the time the panel is closed it has usually
+timed out.
+
+So the game says the quest exactly once per visit, in the least visible place
+it has, at the moment the child's attention is somewhere else. From the
+outside that is indistinguishable from a tree that teaches rows and columns
+and asks for nothing.
+
+Worth separating two things that are currently one call:
+
+- **The lesson** — what multiplication *is*, four pages of rows and columns.
+  This should keep coming on every visit; it is the thing the tree is for.
+- **The task** — what is still standing and what is still to ripen. This is
+  the part that changes between visits, and it is the part that is invisible.
+
+The order the children need is task first (*why am I here*), lesson second
+(*and here is what you are working toward*). The current order is the reverse
+and the task is a footnote.
+
+Note also that the spell is only *taught* at `GroveTask.Done`, so before the
+quest is finished the tree opens a panel explaining a spell the child cannot
+have, with no visible statement of how to get it. That is the whole
+complaint.
+
+**Fixed: the task is a page, and it is the page the deck opens on.** A fifth
+beat, `GroveBeat.Task`, ahead of the four that teach — headed *The tree's
+bed*, with what is still to do, the bargain under it (*"Do that and the six
+dots are yours"*), and a picture of the bed as it actually stands: twelve
+squares, ripe ones filled, and the wood drawn over the top while it is still
+standing. The wood is stepped five squares at a time so six thickets scatter
+over the bed rather than filling the first six in a block, which would read
+as a bed half planted.
+
+The page is in the deck whether the task is done or not — finished, it says
+so. A deck that grew a page would move the page dots under a child who had
+just learned where "next" was.
+
+`titleText` now takes the page it is heading, because this deck has two
+subjects on one sheaf of paper. Nothing else about the lesson changed: all
+four teaching beats are still shown at every rung, because a lesson is not a
+gate.
+
+## 2. Four-direction movement is annoying — **fixed**
+
+**Reported:** add diagonal movement, 4 directions only is annoying.
+
+**Found:** this is smaller than it looks, because the facing and the movement
+are already separate. `Facing` has four values because that is all the
+character art has, and `facingFor` already snaps *any* vector to those four —
+"the same rule reads a joystick's offset as reads a grid step". So a player
+can move diagonally and still face one of four ways without a single new
+sprite.
+
+What has to be decided rather than derived:
+
+- **Corner-cutting.** Moving diagonally past the corner of a building either
+  clips through it or requires both orthogonal neighbours to be free. The
+  second is the usual answer and the one that will not look like a bug.
+- **What a diagonal step does to the facing.** Up-and-left has to snap to one
+  of them, and whichever it picks is the tile that gardening will act on.
+- **`stepsToSpeak` vs `stepsBetween`.** The comment on `stepsToSpeak` says
+  diagonals are out of reach for gardening *because* there is no diagonal
+  facing to turn to. That reasoning survives — the facing is still one of
+  four — but the comment will need rewriting so the next reader does not
+  conclude the codebase disagrees with itself.
+- **The joystick and the keyboard have to agree**, including two arrow keys
+  held at once.
+
+**Fixed, and it was as small as it looked.** `joystickStep` snaps the stick
+into eight equal octants of 45 degrees, beside the four-way `joystickDirection`
+that still decides how the character is *drawn* — the two are allowed to
+disagree, and a child walking up and to the left is drawn facing up.
+`pressedDirection` adds the held keys along each axis instead of returning the
+first one it finds, so two arrows make a diagonal and opposite arrows cancel.
+
+Three decisions that were not derivable:
+
+- **No corner-cutting.** A diagonal needs *both* its orthogonal neighbours
+  open. Verified in the browser by hunting the world for a diagonal pinch —
+  two blocked cells with a free corner behind them — standing on it and
+  pushing into it.
+- **Sliding.** A refused diagonal falls back to whichever single axis is
+  still open, so pushing diagonally at a wall runs along it instead of
+  stopping dead. That is most of why eight-way movement feels better than
+  four, and it has a second effect worth naming: a door is never entered on a
+  diagonal, because pushing into the corner beside one slides past it.
+- **A diagonal takes longer.** The step tween is scaled by root two.
+  Otherwise cutting across is forty per cent faster than walking round, which
+  turns a convenience into the only sensible way to travel.
+
+Equal octants were worth being careful about: a diagonal band narrower than
+the cardinal ones is a stick that will not go diagonally when you ask it, and
+a wider one goes diagonally when you did not. There is a test that sweeps all
+360 degrees and counts the slices.
+
+The `stepsToSpeak` comment was rewritten rather than left to rot. Its claim —
+that a diagonal neighbour is out of reach *because there is no diagonal facing
+to turn to* — is still true, but only because the facing stayed four-way while
+the walking went to eight, and the next reader would otherwise have concluded
+the codebase disagreed with itself.
+
+## 3. The city is not paved — **fixed**
+
+**Reported:** the city should be completely covered with cobbled terrain.
+
+**Found:** confirmed, and it looks worse in place than it sounds. `city.ts`
+cobbles the ring road, the streets and the two doorstep cells; everything
+*inside* a block is left as whatever the ground already was. In seed 424242
+that is bare dirt with patches of grass growing through it, so a walled city
+of townhouses reads as a set of houses standing in a muddy field with paths
+between them. The wall and the street grid are doing all the work of saying
+"city" and the ground is arguing with them.
+
+The fix is a one-line change in intent — pave the whole enclosure rather than
+the streets — but it is worth checking two things first:
+
+- **What cobble means elsewhere.** `terrain.ts` documents Cobble as "laid
+  stone, not grown ground: the village square", and it is last in the
+  autotile priority so its edge always wins. Paving a whole city is a much
+  larger use of the same terrain than the doc describes; the doc should say
+  what it now means.
+- **Where the paving stops.** The wall is the natural boundary. The gate and
+  the approach outside it are already cobbled, which is right.
+
+**Fixed: the whole enclosure, in one pass, before anything is put on it.** The
+ring road, the streets and the plaza no longer pave anything of their own —
+there is nothing left for them to pave — and the patch of dirt that used to go
+under each building is gone with them. What the block walk still does is say
+where the blocks are.
+
+Two consequences, both intended and both worth having said out loud:
+
+- **Nothing inside the walls is plantable.** Cobble is not in any crop's
+  allowed terrain, so the array spell's patch selection will find no live
+  cells in there. That is right for a city — one you could farm would be a
+  village with more houses in it — and the garden is at home.
+- **A sliver of block too small for a building is simply street now**, rather
+  than a scrap paved separately. The whole enclosure is one surface, so there
+  is nothing for a sliver to be a hole in.
+
+`levelForTerrain` puts Cobble at level 0, the same as dirt and grass, so
+paving cannot introduce a step; and the sweep test below would catch it if the
+box ever sat on ground that was not already flat.
+
+There is a test that walks every cell inside the wall and insists on cobble —
+swept rather than sampled, because the failure being guarded against is
+exactly a patch that got missed.
+
+## 4. Three difficulty levels, not four — **fixed**
+
+**Reported:** let's have 3 difficulty levels, not 4.
+
+**Found:** `BANDS` in `difficulty.ts` has four entries, and each one carries
+more than a difficulty:
+
+| band | starts at rung | ceiling | one crop fetches |
+|---|---|---|---|
+| 0 | 0 | 2 | 1,00 |
+| 1 | 2 | 5 | 0,50 |
+| 2 | 5 | 7 | 1,50 |
+| 3 | 7 | hardest | 2,50 |
+
+They are shown in two places — the options panel and the new-player screen —
+as a *sample sum* built by the spell itself rather than as a label, so
+nothing has to be renamed. `SUGGESTED_BAND` is 1 and `DEFAULT_BAND` is 3 (the
+hardest, because that is what the game was before bands existed).
+
+Three things move when a band is removed:
+
+- **The rung boundaries.** The bands overlap on purpose, so that picking the
+  neighbour is "off by a nudge, not by a year". Three bands over the same
+  ladder means each is wider, and the overlap has to be re-chosen rather than
+  inherited.
+- **The crop-price ladder.** It runs 1,00 → 0,50 → 1,50 → 2,50: a whole coin,
+  then a half, then a sum needing two coins, then the one the game shipped
+  with. One of those four teaching steps has to go, and which one is a real
+  choice.
+- **Saved `band` values.** A save holding band 3 has to mean something. The
+  standing permission to lose data covers this, but silently reinterpreting
+  a saved 3 as the new hardest is different from losing it.
+
+Since the round above already decided *the band is a starting point, not a
+fence*, the ceiling column matters less than it used to — which makes three
+bands cheaper than it would have been.
+
+**Fixed: the two middle bands become one.** They were the two hardest to tell
+apart — both two-place, differing only in whether the ones came done — and
+merging them leaves the outer two untouched. That matters more than it looks:
+the gentlest band still opens on `3 + 4`, and a child put in the suggested
+band still starts on exactly the sum they used to, because `SUGGESTED_BAND`
+is still index 1 and index 1 still starts at rung 2. The new middle band is
+deliberately the widest; it is where most children live, and a band is a
+starting point rather than a fence, so width costs nothing.
+
+| band | starts at | one crop fetches |
+|---|---|---|
+| 0 | `5 + 2` | 1,00 |
+| 1 | `50 + 27` | 1,50 |
+| 2 | `504 + 274` | 2,50 |
+
+**The price that stopped being taught is the half.** The ladder ran
+1,00 → 0,50 → 1,50 → 2,50 — a whole coin, then a half, then a coin and a
+half, then two and a half — which taught halves early but meant the
+second-easiest band paid *least of all*. Dropping the 0,50 makes it climb:
+one coin, one and a half, two and a half. Two of the three still carry a half,
+so the fifty-piece is not a coin a child never meets, and there is now a test
+that the prices rise with the sums.
+
+**Assumption, stated:** a saved `band` of 3 clamps to 2 and a saved 2 becomes
+the new 2 — so a child who was on the old third band finds their crop worth
+2,50 instead of 1,50. Their *rung* is untouched, because `rungInBand` clamps
+to the ladder rather than to the band. This is covered by the standing "ok to
+lose data while we are playtesting" permission, and is a price change rather
+than a difficulty change.
+
+## 5. The portal spell is unusable at the second difficulty — **fixed**
+
+**Reported:** the portal spell is awful at difficulty two, the map is way too
+small and you can't read the coordinates.
+
+**Found:** confirmed, and the second half of the report understates it.
+Reproduced with `?learned=all&reached=all&portalRung=2`, asking for the
+harbour:
+
+- **There are no marks on the map to read.** The panel says *"one mark = 25
+  paces"* and asks *"How far south is it?"*, the answer is 7 — and nothing
+  on the map is graduated. The leg is drawn as a plain line from the player
+  to the target with no ticks along it. The child is asked to count
+  something that is not drawn.
+- **This is a cliff, not a slope.** At rung 0 the counting tier draws actual
+  white stones along the route and they are countable. Rung 1 takes the
+  stones away and puts nothing in their place. The ladder goes from "count
+  these five stones" straight to "read a ruler with no ticks on it".
+- **The map is 222 px in a 520 px panel.** Less than half the width, with
+  about 150 px of blank parchment down each side and the keypad below. The
+  panel is not short of room; the map is just small.
+- **The axis labels are unreadable and sparse.** Roughly 8 px type outside
+  the frame, labelled every third mark at rung 2 and every sixth at rung 5.
+- **The place label covers the target.** *"the harbour"* is drawn as a
+  tooltip that sits over the destination mark and the bottom-right corner of
+  the map, which is exactly where the two legs meet.
+
+The same faults are present at rung 5 (`one mark = 10 paces`, answer 29) —
+this is not specific to one rung, it is the whole reading tier and everything
+above it. Rung 0 is fine because it draws what it asks about.
+
+**Correction to the report above:** the place label does *not* cover the
+destination mark. `drawPlaces` already puts the name on the far side of the
+mark from the traveller, and the screenshot shows the mark clear above it.
+Left in because a note that quietly deletes what it got wrong is a note you
+cannot trust; nothing was changed for it.
+
+**Fixed, in three parts.**
+
+- **The legs are ruled.** `marksOnLegs` splits the marks the bottom rung lays
+  stones on into the two legs, and the panel draws a graduation across each
+  one — bold on the leg the question is about, faint on the other, and faint
+  on both at the crow rung where the hypotenuse is the answer and the legs
+  are the working. The count of ticks on a leg *is* that leg's number, which
+  is the same arithmetic the stones do a rung below, so the ladder now has a
+  step where it had a cliff. There is a test that each leg carries exactly as
+  many marks as it is worth: ticks that disagreed with the ruler by one would
+  be worse than no ticks at all.
+- **The map got the room.** The sheet was capped at 520 x 560 and the map at
+  222; it is capped at 660 x 820 now and the map came out at 480. The
+  parchment is also capped at *its own width plus 320*, because the map is
+  square and is most of the page — without that a phone held upright got a
+  full-height sheet with a 200-pixel band of blank paper across the middle.
+  Checked at 900x900, 1600x1000, 390x844 and 844x390.
+- **The numbers are readable.** Ruler figures are full ink at 11px rather
+  than a dimmed 10, and the spacing that decides how many are printed came
+  down from 26 pixels to 22 — which on a full-size map at one mark to
+  twenty-five paces numbers *every* mark, so the answer 7 is now written on
+  the paper as well as countable along the leg. `drawRulers` also thins the
+  numbers out rather than running off the end of its pool of text objects,
+  which used to fail silently and looked exactly like a ruler meant to be
+  sparse.
+
+---
+
+## Where this stands
+
+**All five are done**, and every one of them is verified in a browser as well
+as by tests — the portal at five rungs and four viewport shapes, the tree by
+walking to it in the wood and reading what it says, the city by standing in
+it, the bands by opening the new-player screen, and the diagonals by holding
+two arrows and then by dragging a joystick on a phone-shaped viewport with a
+phone's user agent (the first attempt at that measured nothing: Playwright's
+`isMobile` does not change `device.os.desktop`, so the joystick was never
+built and the probe was quietly testing click-to-walk).
+
+Two things changed that nobody reported, both found while fixing something
+that was:
+
+- **`drawRulers` could run off the end of its pool of text objects**, which
+  left the rest of a ruler blank — silent, and indistinguishable from a ruler
+  meant to be sparse. It thins the numbers out instead now.
+- **The prices dipped in the middle.** Nobody complained, but a rule nobody
+  could learn and everybody would eventually notice is worth removing while
+  the bands are open anyway.

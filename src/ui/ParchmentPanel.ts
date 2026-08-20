@@ -114,9 +114,19 @@ export class ParchmentPanel {
     for (const part of this.parts()) part.setVisible(visible);
   }
 
-  /** Size the paper to this viewport and report where it landed. */
-  layout(viewWidth: number, viewHeight: number): PanelRect {
-    const { maxWidth, maxHeight, minWidth, minHeight } = this.options;
+  /**
+   * Size the paper to this viewport and report where it landed.
+   *
+   * `capHeight` is for a panel whose content has a shape of its own: the
+   * portal's map is square and is most of the page, so how tall that sheet
+   * ought to be depends on how wide it came out. Without it a tall narrow
+   * screen gets a full-height sheet with a band of blank paper across the
+   * middle. It only ever makes the paper shorter, and never below
+   * `minHeight`.
+   */
+  layout(viewWidth: number, viewHeight: number, capHeight?: number): PanelRect {
+    const { maxWidth, minWidth, minHeight } = this.options;
+    const maxHeight = Math.min(this.options.maxHeight, capHeight ?? Number.POSITIVE_INFINITY);
     this.backdrop.setSize(viewWidth, viewHeight).setPosition(0, 0);
 
     const width = Math.max(minWidth, Math.min(maxWidth, viewWidth - PANEL_MARGIN * 2));

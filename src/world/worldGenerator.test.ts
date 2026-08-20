@@ -219,6 +219,28 @@ function assertTheWallIsAWall(
     city.wall.reduce((least, p) => Math.min(least, p.row), Number.POSITIVE_INFINITY) +
     1;
   expect(city.wall.length).toBe(2 * width + 2 * height - 4);
+
+  // Laid stone from wall to wall, with nothing growing between the houses.
+  //
+  // It was the streets and the ring road only, and a playtest called it a
+  // set of houses standing in a muddy field: the wall and the street grid
+  // were doing all the work of saying *city* and the ground was arguing
+  // with them. Swept rather than sampled, because the failure this is
+  // guarding against is exactly a patch that got missed.
+  //
+  // It follows from this that nothing inside the walls can be planted —
+  // cobble is not soil — and that is intended. The garden is at home.
+  const left = city.wall.reduce((least, p) => Math.min(least, p.col), Number.POSITIVE_INFINITY);
+  const top = city.wall.reduce((least, p) => Math.min(least, p.row), Number.POSITIVE_INFINITY);
+  for (let row = top; row < top + height; row++) {
+    for (let col = left; col < left + width; col++) {
+      if (!grid.inBounds(col, row)) continue;
+      expect({ at: `${col},${row}`, ground: grid.getTerrain(col, row) }).toEqual({
+        at: `${col},${row}`,
+        ground: TerrainType.Cobble,
+      });
+    }
+  }
 }
 
 /**

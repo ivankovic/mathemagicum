@@ -11,8 +11,16 @@ import { type ArrayProblem, type ArrayRung, arrayProblemFor } from "./multiplica
  * page, a picture on every page, and the numbers taken from the spell's own
  * code so that what the tree teaches cannot drift from what the spell sets.
  *
- * Four beats:
+ * Five beats, and the first of them is not a lesson at all:
  *
+ * 0. **the task** — what the tree is asking for and how far along it is.
+ *    This used to be written to the one-line message at the top of the
+ *    screen, in the same breath as opening this panel over it — so the game
+ *    stated its only quest once per visit, in the smallest type it has, at
+ *    the moment the child's eyes were somewhere else. From the outside that
+ *    is a tree that teaches rows and columns and asks for nothing. It is
+ *    first because it is the answer to *why am I here*, and the lesson is
+ *    the answer to *what am I working toward*;
  * 1. **the rune** — the spellbook and the six dots, as they appear in the
  *    corner of the screen, so the lesson names things the player can see;
  * 2. **the rows** — the patch is rows, and every row holds the same number;
@@ -26,12 +34,18 @@ import { type ArrayProblem, type ArrayRung, arrayProblemFor } from "./multiplica
  * that `6 × 4` is the same patch turned round, and it is the single fact
  * that halves how much of the table they have to hold.
  *
- * **Every beat is shown at every rung.** Only the numbers change with the
- * child, which is the rule both other lessons follow and the design's: a
- * lesson is not a gate.
+ * **Every beat is shown at every rung**, and the task page is shown whether
+ * the task is done or not — finished, it says so. A deck that grew a page
+ * would be a deck whose page dots moved under a child who had just learned
+ * where "next" was.
+ *
+ * Only the numbers change with the child, which is the rule both other
+ * lessons follow and the design's: a lesson is not a gate.
  */
 
 export const GroveBeat = {
+  /** What the tree wants, and how much of it is done. Not part of the lesson. */
+  Task: "task",
   /** What the spell is and where it lives: the spellbook and the six dots. */
   Rune: "rune",
   /** The patch as rows, all of them the same. */
@@ -45,6 +59,7 @@ export const GroveBeat = {
 export type GroveBeat = (typeof GroveBeat)[keyof typeof GroveBeat];
 
 export const GROVE_BEATS: readonly GroveBeat[] = [
+  GroveBeat.Task,
   GroveBeat.Rune,
   GroveBeat.Rows,
   GroveBeat.Count,

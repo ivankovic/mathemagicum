@@ -5,10 +5,12 @@ import type Phaser from "phaser";
 import type { Facing } from "../world/characters";
 import {
   BASE_RADIUS,
+  type Step,
   THUMB_RADIUS,
   type Vector,
   clampBase,
   joystickDirection,
+  joystickStep,
   thumbOffset,
 } from "./joystick";
 
@@ -119,6 +121,18 @@ export class VirtualJoystick {
   direction(): Facing | null {
     if (!this.active) return null;
     return joystickDirection(this.offset);
+  }
+
+  /**
+   * The held step, which may be diagonal.
+   *
+   * Separate from `direction` because the two answer different questions:
+   * this is where to walk, that is which way to be drawn, and there are eight
+   * of the first and four of the second.
+   */
+  step(): Step | null {
+    if (!this.active) return null;
+    return joystickStep(this.offset);
   }
 
   private render(): void {

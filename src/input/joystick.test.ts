@@ -3,7 +3,14 @@
 
 import { describe, expect, test } from "bun:test";
 import { Facing } from "../world/characters";
-import { BASE_RADIUS, DEADZONE, clampBase, joystickDirection, thumbOffset } from "./joystick";
+import {
+  BASE_RADIUS,
+  DEADZONE,
+  clampBase,
+  joystickDirection,
+  joystickStep,
+  thumbOffset,
+} from "./joystick";
 
 describe("thumbOffset", () => {
   test("tracks the finger exactly while inside the base", () => {
@@ -103,3 +110,77 @@ describe("clampBase", () => {
     expect(clampBase({ x: 5, y: 300 }, 60, 600)).toEqual({ x: 30, y: 300 });
   });
 });
+
+describe("joystickStep", () => {
+  /**
+   * The reported fault, as a test. Four-way movement was called annoying,
+   * and it is: the world is roads and gardens on a grid, and getting to
+   * something up and to the left took two separate pushes.
+   */
+  test("goes eight ways, not four", () => {
+    expect(joystickStep({ x: 0, y: -40 })).toEqual({ dCol: 0, dRow: -1 });
+    expect(joystickStep({ x: 40, y: 0 })).toEqual({ dCol: 1, dRow: 0 });
+    expect(joystickStep({ x: -30, y: -30 })).toEqual({ dCol: -1, dRow: -1 });
+    expect(joystickStep({ x: 30, y: 30 })).toEqual({ dCol: 1, dRow: 1 });
+  });
+
+  /**
+   * Eight equal octants of 45 degrees. A diagonal band narrower than the
+   * cardinal ones is a stick that will not go diagonally when you ask it;
+   * a wider one goes diagonally when you did not.
+   */
+  test("splits the circle into eight equal slices", () => {
+    const reach = BASE_RADIUS;
+    const counts = new Map<string, number>();
+    for (let degree = 0; degree < 360; degree++) {
+      const radians = (degree * Math.PI) / 180;
+      const step = joystickStep({ x: Math.cos(radians) * reach, y: Math.sin(radians) * reach });
+      if (!step) throw new Error("a full push is never nothing");
+      const key = `${step.dCol},${step.dRow}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    expect(counts.size).toBe(8);
+    for (const [octant, degrees] of counts) {
+      // 45 give or take where a boundary degree happens to land.
+      expect({ octant, near: Math.abs(degrees - 45) <= 1 }).toEqual({ octant, near: true });
+    }
+  });
+
+  test("is nothing inside the deadzone, however it is pushed", () => {
+    expect(joystickStep({ x: DEADZONE - 1, y: 0 })).toBeNull();
+    expect(joystickStep({ x: 0, y: 0 })).toBeNull();
+    expect(joystickStep({ x: 6, y: 6 })).toBeNull();
+  });
+
+  /**
+   * The facing stays four-way while the step goes to eight, and that is the
+   * point: the character art has four poses and a diagonal walk is drawn as
+   * whichever of them is nearest. The two are allowed to disagree; what they
+   * may never do is disagree about a *cardinal* push.
+   */
+  test("agrees with the facing wherever the facing has an answer", () => {
+    for (const [x, y, facing] of [
+      [0, -40, Facing.Up],
+      [0, 40, Facing.Down],
+      [-40, 0, Facing.Left],
+      [40, 0, Facing.Right],
+    ] as const) {
+      const step = joystickStep({ x, y });
+      expect({ x, y, step }).toEqual({ x, y, step: stepFor(facing) });
+      expect(joystickDirection({ x, y })).toBe(facing);
+    }
+  });
+});
+
+function stepFor(facing: Facing): { dCol: number; dRow: number } {
+  switch (facing) {
+    case Facing.Up:
+      return { dCol: 0, dRow: -1 };
+    case Facing.Down:
+      return { dCol: 0, dRow: 1 };
+    case Facing.Left:
+      return { dCol: -1, dRow: 0 };
+    default:
+      return { dCol: 1, dRow: 0 };
+  }
+}

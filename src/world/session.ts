@@ -87,10 +87,12 @@ export function stepsBetween(a: GridPoint, b: GridPoint): number {
  * direction, diagonals included.
  *
  * Deliberately not the same measure as `stepsBetween`. Gardening acts on the
- * tile the player faces and there is no diagonal facing to turn to, so a
- * diagonal neighbour is genuinely out of reach. Talking needs no facing, and
- * refusing someone standing at your corner would be a rule with no reason
- * behind it that the player could see.
+ * tile the player *faces*, and a facing is one of four however the player
+ * got there — walking diagonally is a thing the game now does, but being
+ * drawn diagonally is not — so a diagonal neighbour is still genuinely out
+ * of reach of a trowel. Talking needs no facing, and refusing someone
+ * standing at your corner would be a rule with no reason behind it that the
+ * player could see.
  */
 export function stepsToSpeak(a: GridPoint, b: GridPoint): number {
   return Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row));

@@ -112,17 +112,34 @@ export interface Band {
 }
 
 /**
- * The four a parent or a child picks between.
+ * The three a parent or a child picks between.
  *
  * Overlapping on purpose. A child at the top of one band and one at the
  * bottom of the next are doing the same sums, which is what makes the choice
  * forgiving: picking the neighbouring band is off by a nudge, not by a year.
+ *
+ * **Three rather than four**, from a playtest. Four rows of sums is a row
+ * too many to compare at a glance, and the two in the middle were the two
+ * hardest to tell apart — both two-place, differing only in whether the ones
+ * were done for you. They are one band now, and deliberately the widest: it
+ * is where most children live, and the band is a starting point rather than
+ * a fence, so width costs nothing.
+ *
+ * The outer two are unchanged, which matters more than it looks: the gentlest
+ * band still opens on `3 + 4`, and the band a child is put in by default
+ * still starts them on exactly the sum it used to.
+ *
+ * **The prices climb now.** They ran 1,00 → 0,50 → 1,50 → 2,50 — a whole
+ * coin, then a *half*, then a coin and a half, then two and a half — which
+ * taught halves early but meant the second-easiest band paid least of all.
+ * Dropping the half makes the ladder 1,00 → 1,50 → 2,50: one coin, one and a
+ * half, two and a half, rising with the sums, and still a half in two of the
+ * three so the fifty-piece is not a coin a child never meets.
  */
 export const BANDS: readonly Band[] = [
   { from: 0, to: 2, cropPrice: 100 },
-  { from: 2, to: 5, cropPrice: 50 },
-  { from: 5, to: 7, cropPrice: 150 },
-  { from: 7, to: HARDEST_RUNG, cropPrice: 250 },
+  { from: 2, to: 6, cropPrice: 150 },
+  { from: 6, to: HARDEST_RUNG, cropPrice: 250 },
 ];
 
 /**
@@ -142,7 +159,9 @@ export const DEFAULT_BAND = BANDS.length - 1;
  * child given sums that are too easy climbs out within a few casts, while a
  * six-year-old handed `504 + 274` cannot play at all and has no way to say
  * so. So it opens one band up from the gentlest — close enough to the bottom
- * that nobody is stranded, and one tap from either neighbour.
+ * that nobody is stranded, and one tap from either neighbour. With three
+ * bands that is the middle one, which is the same sum it opened on when
+ * there were four.
  */
 export const SUGGESTED_BAND = 1;
 

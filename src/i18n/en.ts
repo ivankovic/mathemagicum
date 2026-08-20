@@ -211,6 +211,8 @@ export const EN: Phrases = {
       : task === "done"
         ? "My grove is full. Go well."
         : `Fill my bed: ${ripe} of ${squares} squares are ripe.`,
+  groveTaskTitle: "The tree's bed",
+  groveBargain: "Do that and the six dots are yours.",
   groveLessonTitle: "Rows and columns",
   groveRune:
     "The six dots in your spellbook plant a whole patch at once. Say how many seedlings it will hold, and they all go in together.",

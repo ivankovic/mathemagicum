@@ -67,6 +67,8 @@ function sample(p: Phrases): Record<string, string> {
     arrayUntaught: p.arrayUntaught,
     arrayTaught: p.arrayTaught,
     groveAsks: p.groveAsks({ task: "growing", standing: 0, ripe: 4, squares: 12 }),
+    groveTaskTitle: p.groveTaskTitle,
+    groveBargain: p.groveBargain,
     groveLessonTitle: p.groveLessonTitle,
     groveRune: p.groveRune,
     groveRows: p.groveRows(4, 6),

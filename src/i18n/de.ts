@@ -261,6 +261,8 @@ export const DE: Phrases = {
       : task === "done"
         ? "Mein Hain ist voll. Geh in Frieden."
         : `Füll mein Beet: ${ripe} von ${squares} Kästchen sind reif.`,
+  groveTaskTitle: "Das Beet des Baums",
+  groveBargain: "Tu das, und die sechs Punkte gehören dir.",
   groveLessonTitle: "Reihen und Spalten",
   groveRune:
     "Die sechs Punkte in deinem Zauberbuch bepflanzen ein ganzes Beet auf einmal. Sag, wie viele Setzlinge hineinpassen, dann kommen sie alle zusammen in die Erde.",

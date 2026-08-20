@@ -502,14 +502,39 @@ export function portalHint(cast: PortalCast): PortalJourney | null {
  * eight — the one number the whole rung is about.
  */
 export function stonesAlong(journey: PortalJourney): readonly GridPoint[] {
-  const stones: GridPoint[] = [];
+  const { across, down } = marksOnLegs(journey);
+  return [...across, ...down];
+}
+
+/**
+ * The same marks, kept apart by which leg they belong to.
+ *
+ * The bottom rung lays a stone on every one of them and asks how many there
+ * are. Every rung above it draws the legs as bare lines and asks the child
+ * to *read* a number of marks off them — which, until this existed, meant
+ * counting graduations that were drawn only along the outside edges of the
+ * map, on a different axis from the line being read. The panel rules each
+ * leg with these.
+ *
+ * Split rather than concatenated because the reading tier asks about one leg
+ * and the drawing has to be able to tell them apart. The count on each side
+ * is that leg's own `marks`, which is what the child must end up saying, so
+ * a leg whose ticks and whose ruler number disagree is a bug this shape can
+ * be tested for.
+ */
+export function marksOnLegs(journey: PortalJourney): {
+  readonly across: readonly GridPoint[];
+  readonly down: readonly GridPoint[];
+} {
   const stepCol = Math.sign(journey.toMark.col - journey.fromMark.col);
   const stepRow = Math.sign(journey.toMark.row - journey.fromMark.row);
+  const across: GridPoint[] = [];
+  const down: GridPoint[] = [];
   for (let n = 1; n <= journey.across.marks; n++) {
-    stones.push({ col: journey.fromMark.col + n * stepCol, row: journey.fromMark.row });
+    across.push({ col: journey.fromMark.col + n * stepCol, row: journey.fromMark.row });
   }
   for (let n = 1; n <= journey.down.marks; n++) {
-    stones.push({ col: journey.toMark.col, row: journey.fromMark.row + n * stepRow });
+    down.push({ col: journey.toMark.col, row: journey.fromMark.row + n * stepRow });
   }
-  return stones;
+  return { across, down };
 }
