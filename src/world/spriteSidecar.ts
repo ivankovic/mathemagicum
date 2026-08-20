@@ -29,6 +29,34 @@ export interface SheetLayout {
   spacing: number;
 }
 
+/**
+ * How a loader must slice one of these sheets.
+ *
+ * One function, used by everything that turns a sheet into frames, because
+ * the alternative has already gone wrong once: the avatar's recoloured copy
+ * was registered with a frame size and nothing else, so every frame came out
+ * a pixel up and left of where it belonged and drifted further across the
+ * sheet — and what showed inside each frame was a sliver of its neighbour,
+ * which on a character sheet is the next frame's shadow. It appeared as a
+ * shadow smeared over the player.
+ *
+ * The padding is not optional and it is not zero: the generator extrudes
+ * every frame, so `margin` and `spacing` are always part of the answer.
+ */
+export function spriteSheetConfig(sheet: SheetLayout): {
+  frameWidth: number;
+  frameHeight: number;
+  margin: number;
+  spacing: number;
+} {
+  return {
+    frameWidth: sheet.frame_width,
+    frameHeight: sheet.frame_height,
+    margin: sheet.margin,
+    spacing: sheet.spacing,
+  };
+}
+
 // Common to everything the generator draws standing on the ground.
 export interface SheetSprite {
   sheet: SheetLayout | null;
@@ -55,6 +83,17 @@ export interface SpriteSidecar extends SheetSprite {
 }
 
 export interface BuildingSidecar extends SpriteSidecar {
+  /**
+   * Every colour the sheet was drawn in, by slot name.
+   *
+   * Shipped so a game can repaint one ramp — the roof — without having to
+   * work out which of fourteen near-neighbours it is looking at. Two of the
+   * greys in a cottage are a dozen units apart, and nothing outside the
+   * generator is in a position to tell them apart.
+   */
+  palette?: Readonly<Record<string, readonly [number, number, number]>>;
+  /** The roofs a house may wear instead of the one it shipped in. */
+  roof_options?: readonly (readonly (readonly [number, number, number])[])[];
   building: string;
   door_cell_relative_to_anchor: readonly [number, number];
   // One frame range per door position, keyed `door_{state}`. The door is
@@ -71,6 +110,18 @@ export interface ObjectSidecar extends SpriteSidecar {
   // the formation reading as wallpaper.
   animations: Record<string, AnimationRange>;
   instances: number;
+}
+
+/**
+ * The one-of-a-kind thing at the heart of a place.
+ *
+ * Shaped like scenery — a footprint, blocked cells, one looping animation —
+ * and separate from it because there is exactly one of these per place and
+ * no `instances` to vary between. A landmark that varied would not be one.
+ */
+export interface LandmarkSidecar extends SpriteSidecar {
+  landmark: string;
+  animations: Record<string, AnimationRange>;
 }
 
 // A built prop standing on one cell, which it blocks.
@@ -103,6 +154,10 @@ export interface PlantSidecar extends SheetSprite {
 // own — so it carries its size and its own blocked cells rather than a
 // footprint and an offset.
 export interface InteriorSidecar {
+  /** Every colour the room was drawn in, by slot name. See BuildingSidecar. */
+  palette?: Readonly<Record<string, readonly [number, number, number]>>;
+  /** The bedding and rugs a room may be furnished with instead. */
+  fabric_options?: readonly (readonly (readonly [number, number, number])[])[];
   sheet: SheetLayout | null;
   room: string;
   size_cells: { cols: number; rows: number };

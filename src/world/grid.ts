@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { Habitat } from "./habitat";
+import { canStepBetween } from "./levels";
 import type { PlacedObject } from "./objects";
 import {
   type Crop,
@@ -12,6 +13,7 @@ import {
   nextStage,
 } from "./plants";
 import { TerrainType, isPassable } from "./terrain";
+import type { GridPoint } from "./topdown";
 
 // Flat, numerically-indexed storage. At world scale (hundreds of thousands
 // of tiles) an array of {terrain, plant} objects is real GC pressure, while
@@ -53,11 +55,45 @@ export class WorldGrid {
   // Defaults to habitat code 0 (Meadow) for any tile a caller never sets —
   // fine for hand-built test/stub grids that don't care about habitat.
   private readonly habitatCodes: Uint8Array;
+  /**
+   * How high off the ground each cell is, as a whole number of steps.
+   *
+   * Stored rather than derived from terrain, because two patches of the same
+   * terrain can be at different heights — a step up in a meadow is grass
+   * above and grass below. It is also what a ramp is: a place where the
+   * level does not step, cut through a run where it otherwise would. See
+   * src/world/levels.ts.
+   */
+  private readonly levelCodes: Uint8Array;
+  /**
+   * Where the level may be changed: the ways up.
+   *
+   * A flag rather than a shape in the level field, because a ramp cut by
+   * lowering the ground moves the step instead of removing it — see
+   * `canStepBetween`. One cell of this on either side of a step makes that
+   * step crossable, and it is also what tells the renderer to draw the ramp
+   * tile rather than the cliff.
+   */
+  private readonly rampFlags: Uint8Array;
   // Plants are sparse (most tiles are never planted), so a map of only the
   // planted tiles is far cheaper than a dense array sized to the whole grid.
   // A crop carries its growth stage, unlike terrain or habitat: it is the one
   // thing on the map the player changes after generation.
   private readonly crops = new Map<number, Crop>();
+  /**
+   * Cells with a plank deck over them: the harbour's piers.
+   *
+   * A sparse set rather than a terrain, and that is a design decision worth
+   * stating. A pier is a *built thing on top of* water, not a kind of
+   * ground — and making it a terrain would have cost the shipped atlas 2,465
+   * new frames, because the dual-grid blend enumerates every four-corner
+   * combination of every material against every other. Two and a half
+   * thousand frames for something that appears in one place on the map.
+   *
+   * So it rides over whatever is underneath, exactly as a crop does, and the
+   * only rule it changes is that you can stand on it.
+   */
+  private readonly bridges = new Set<number>();
   // Static structures (buildings, the village well) placed at generation
   // time. Sparse for the same reason as plants; a multi-tile object appears
   // once per occupied tile so lookups by (col, row) stay O(1), plus a flat
@@ -72,6 +108,8 @@ export class WorldGrid {
     this.width = terrain[0]?.length ?? 0;
     this.terrainCodes = new Uint8Array(this.width * this.height);
     this.habitatCodes = new Uint8Array(this.width * this.height);
+    this.levelCodes = new Uint8Array(this.width * this.height);
+    this.rampFlags = new Uint8Array(this.width * this.height);
     for (let row = 0; row < this.height; row++) {
       const rowTiles = terrain[row];
       if (!rowTiles) continue;
@@ -124,6 +162,62 @@ export class WorldGrid {
     return codeToHabitat(code);
   }
 
+  getLevel(col: number, row: number): number {
+    const idx = this.requireInBounds(col, row);
+    return this.levelCodes[idx] ?? 0;
+  }
+
+  setLevel(col: number, row: number, level: number): void {
+    const idx = this.requireInBounds(col, row);
+    this.levelCodes[idx] = Math.max(0, Math.min(255, Math.trunc(level)));
+  }
+
+  isRamp(col: number, row: number): boolean {
+    if (!this.inBounds(col, row)) return false;
+    return this.rampFlags[row * this.width + col] === 1;
+  }
+
+  setRamp(col: number, row: number, ramp: boolean): void {
+    const idx = this.requireInBounds(col, row);
+    this.rampFlags[idx] = ramp ? 1 : 0;
+  }
+
+  /**
+   * Whether the player can walk from one cell to a neighbouring one.
+   *
+   * `isPassable` asks whether a cell can be *stood on*; this asks whether a
+   * particular step is allowed, and the difference is the whole of what a
+   * cliff means to movement. Both sides of a step up are perfectly good
+   * ground — you simply cannot get from one to the other, except where a
+   * ramp has brought them to the same level.
+   *
+   * Everything that moves has to ask this rather than `isPassable` alone.
+   * Anything that only asks the old question will walk up cliffs.
+   */
+  canStep(from: GridPoint, to: GridPoint): boolean {
+    if (!this.isPassable(to.col, to.row)) return false;
+    if (!this.inBounds(from.col, from.row)) return false;
+    return canStepBetween(
+      this.getLevel(from.col, from.row),
+      this.getLevel(to.col, to.row),
+      this.isRamp(from.col, from.row),
+      this.isRamp(to.col, to.row),
+    );
+  }
+
+  /** The whole level field, for the passes that work on it in bulk. */
+  levels(): Uint8Array {
+    return this.levelCodes;
+  }
+
+  /** Replace it wholesale, after a pass that returned a new one. */
+  setLevels(levels: Uint8Array): void {
+    if (levels.length !== this.levelCodes.length) {
+      throw new Error("a level field must be the same size as the grid");
+    }
+    this.levelCodes.set(levels);
+  }
+
   setHabitat(col: number, row: number, habitat: Habitat): void {
     const idx = this.requireInBounds(col, row);
     this.habitatCodes[idx] = habitatToCode(habitat);
@@ -140,9 +234,38 @@ export class WorldGrid {
 
   isPassable(col: number, row: number): boolean {
     if (!this.inBounds(col, row)) return false;
-    if (!isPassable(this.getTerrain(col, row))) return false;
+    // A deck over the water is the one thing that makes unwalkable ground
+    // walkable. Checked before the terrain rather than instead of it, so a
+    // pier laid over sand — which happens where it meets the beach — is
+    // still just sand with planks on it.
+    if (!isPassable(this.getTerrain(col, row)) && !this.isBridged(col, row)) return false;
     const object = this.objectsByTile.get(this.index(col, row));
     return !object?.blocksMovement;
+  }
+
+  isBridged(col: number, row: number): boolean {
+    if (!this.inBounds(col, row)) return false;
+    return this.bridges.has(this.index(col, row));
+  }
+
+  setBridge(col: number, row: number, decked: boolean): void {
+    const idx = this.requireInBounds(col, row);
+    if (decked) this.bridges.add(idx);
+    else this.bridges.delete(idx);
+  }
+
+  /**
+   * Every decked cell, for the renderer.
+   *
+   * Walked from the sparse set rather than over the grid, for the reason
+   * `listCrops` is: a world is a quarter of a million cells and a harbour
+   * has a few dozen planks in it.
+   */
+  listBridges(): GridPoint[] {
+    return [...this.bridges].map((idx) => ({
+      col: idx % this.width,
+      row: Math.floor(idx / this.width),
+    }));
   }
 
   // Stamps the object onto every tile of its footprint. Callers are
@@ -192,6 +315,10 @@ export class WorldGrid {
   }
 
   canPlant(col: number, row: number, plant: PlantType): boolean {
+    // Planks are not soil. The rule would mostly hold without this — no
+    // crop grows on water — but a pier reaching up the beach is laid over
+    // sand, and the cactus does grow on that.
+    if (this.isBridged(col, row)) return false;
     return (
       this.inBounds(col, row) &&
       this.getPlant(col, row) === null &&
@@ -203,6 +330,35 @@ export class WorldGrid {
     if (!this.canPlant(col, row, plant)) return false;
     this.crops.set(this.index(col, row), { plant, stage: PLANTED_STAGE });
     return true;
+  }
+
+  /**
+   * Every planted tile, for saving.
+   *
+   * Walked from the sparse map rather than over the grid: a world is a
+   * quarter of a million cells and a well-played one has a few dozen crops
+   * in it, so this is the difference between a save that is instant and one
+   * that stutters the game every time it happens.
+   */
+  listCrops(): readonly (readonly [number, number, Crop])[] {
+    const out: (readonly [number, number, Crop])[] = [];
+    for (const [idx, crop] of this.crops) {
+      out.push([idx % this.width, Math.floor(idx / this.width), crop]);
+    }
+    return out;
+  }
+
+  /**
+   * Put a crop back exactly as it was, growth and all.
+   *
+   * Deliberately not `plant()`: that one starts a seed and refuses ground a
+   * crop cannot grow on, both of which are right for a child planting and
+   * wrong for a save being restored — a carrot that was legal when it was
+   * planted must come back even if the rule about carrots has since changed,
+   * or a world reloads with holes in it.
+   */
+  restoreCrop(col: number, row: number, crop: Crop): void {
+    this.crops.set(this.requireInBounds(col, row), crop);
   }
 
   /**

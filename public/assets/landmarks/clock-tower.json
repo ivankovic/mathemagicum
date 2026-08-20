@@ -1,0 +1,52 @@
+{
+  "sheet": {
+    "file": "clock-tower_sheet.png",
+    "frame_width": 96,
+    "frame_height": 212,
+    "frame_count": 8,
+    "columns": 8,
+    "rows": 1,
+    "margin": 1,
+    "spacing": 2
+  },
+  "landmark": "clock-tower",
+  "tile_size": 32,
+  "footprint_tiles": {
+    "width": 2,
+    "height": 2
+  },
+  "blocked_cells_relative_to_anchor": [
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      1
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      1,
+      1
+    ]
+  ],
+  "sprite_offset_px": {
+    "x": -16,
+    "y": -148
+  },
+  "sprite_size_px": {
+    "width": 96,
+    "height": 212
+  },
+  "frame_count": 8,
+  "animations": {
+    "idle": {
+      "start": 0,
+      "end": 7,
+      "frame_count": 8
+    }
+  }
+}

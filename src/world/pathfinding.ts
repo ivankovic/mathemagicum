@@ -43,7 +43,9 @@ export function findPath(grid: WorldGrid, start: GridPos, goal: GridPos): GridPo
     for (const delta of DIRECTIONS) {
       const next = { col: current.col + delta.col, row: current.row + delta.row };
       const key = posKey(next);
-      if (visited.has(key) || !grid.isPassable(next.col, next.row)) continue;
+      // `canStep` rather than `isPassable`: a villager who only asked
+      // whether a tile could be stood on would walk up a cliff.
+      if (visited.has(key) || !grid.canStep(current, next)) continue;
       visited.add(key);
       cameFrom.set(key, current);
       queue.push(next);

@@ -34,9 +34,27 @@ export type HighCorner = (typeof HighCorner)[keyof typeof HighCorner];
 
 export const HIGH_CORNERS: readonly HighCorner[] = Object.values(HighCorner);
 
-export function pickHighCorner(rng: Rng): HighCorner {
-  return pick(rng, HIGH_CORNERS);
-}
+/**
+ * The corner every world is high in.
+ *
+ * It used to be drawn per seed, and the argument for that was variety: four
+ * worlds instead of one. What that actually bought was four worlds a player
+ * cannot carry between them. The whole point of "water is downhill and rock
+ * is uphill" is that a child who has learned it knows which way to walk in a
+ * world they have never seen — and if the sea is south in one world and west
+ * in the next, the only thing they have learned is that it depends.
+ *
+ * North-west, so **the mountains are north and the sea is south**. Every map
+ * a child has seen has north at the top and mountains drawn at the top; a sea
+ * along the bottom edge is where a sea goes in a picture. The harbour is then
+ * on the south coast in every world, which is also what lets the rest of the
+ * generator stop asking.
+ *
+ * The four-corner machinery below stays, and the tests still exercise all of
+ * it: what changed is which one the world generator asks for, not what the
+ * elevation field can do.
+ */
+export const WORLD_HIGH_CORNER: HighCorner = HighCorner.NorthWest;
 
 /** Which world edges the high corner touches — the ones that get walled. */
 export function highEdges(corner: HighCorner): { top: boolean; left: boolean } {

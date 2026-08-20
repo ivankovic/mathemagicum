@@ -3,32 +3,26 @@
 
 import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
-import {
-  FOLLOW_LANGUAGE,
-  LANGUAGES,
-  LANGUAGE_NAMES,
-  MONEY_CHOICES,
-  type MoneyChoice,
-  type Settings,
-  currencyFor,
-} from "../settings";
-import { Currency, currencyOf } from "../shop/currency";
+import { LANGUAGES, LANGUAGE_NAMES, type Settings } from "../settings";
+import { CURRENCY } from "../shop/currency";
+import { makeAdditionProblem } from "../spells/addition";
+import { BANDS, DEFAULT_BAND, sampleProblem } from "../spells/difficulty";
+import { createRng } from "../world/rng";
 import { CROP_PRICE } from "../world/shop";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
 
 /**
- * The options: which language the game is read in, and which coins are in
- * the purse.
+ * The options: which language the game is read in.
  *
- * Two rows of buttons rather than a dropdown or a cycling label, because the
+ * A row of buttons rather than a dropdown or a cycling label, because the
  * whole set of choices is small enough to show at once and a child should be
  * able to see what the alternatives are before picking one. The chosen one
  * is outlined, so the screen also answers "what is it set to now?".
  *
- * The money row keeps "follow the language" as a first-class answer next to
- * the two currencies — see src/settings.ts for why that is not the same as
- * simply picking the currency the language would have chosen.
+ * There was a money row here too, while the game offered real currencies. It
+ * offers one invented money now and there is nothing left to choose — see
+ * src/shop/currency.ts for why.
  *
  * Every change applies at once and is saved at once. There is no OK button:
  * an options screen with one asks the player to remember a second step in
@@ -52,6 +46,8 @@ const SMALL_SIZE = 12;
 
 const BUTTON_H = 32;
 const BUTTON_GAP = 6;
+/** A heading and the row of buttons under it, plus air before the next one. */
+const ROW_HEIGHT = SMALL_SIZE + 8 + BUTTON_H + 18;
 
 interface Choice {
   readonly box: Phaser.GameObjects.Rectangle;
@@ -70,7 +66,16 @@ export class OptionsPanel {
   private readonly headings: Phaser.GameObjects.Text[] = [];
   private readonly example: Phaser.GameObjects.Text;
   private readonly languageChoices: Choice[] = [];
-  private readonly moneyChoices: Choice[] = [];
+  /**
+   * Which sums this child gets, shown as four sample sums.
+   *
+   * Here as well as on the screen that makes a player, because a setup
+   * choice made once by a parent is a choice made before they had seen the
+   * child play — and an adaptive system that has quietly settled on the
+   * wrong band with no way to overrule it is worse than no adaptation at
+   * all. The game moves *inside* a band; only a person moves between them.
+   */
+  private readonly bandChoices: Choice[] = [];
   private readonly closeButton: Choice;
 
   private open = false;
@@ -79,6 +84,7 @@ export class OptionsPanel {
 
   /** Set by the scene: a choice was made, apply it and remember it. */
   onChange: ((settings: Settings) => void) | null = null;
+  onBandChange: ((band: number) => void) | null = null;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -98,7 +104,7 @@ export class OptionsPanel {
     });
 
     this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 3; i++) {
       this.headings.push(this.own(this.text("", SMALL_SIZE, INK_DIM).setOrigin(0, 0)));
     }
     this.example = this.own(this.text("", SMALL_SIZE, INK_DIM).setOrigin(0.5, 1));
@@ -108,8 +114,15 @@ export class OptionsPanel {
         this.choice(LANGUAGE_NAMES[language], () => this.choose({ language })),
       );
     }
-    for (const money of MONEY_CHOICES) {
-      this.moneyChoices.push(this.choice("", () => this.choose({ money })));
+    for (const [index, band] of BANDS.entries()) {
+      // Built by the spell, so a label here cannot drift from what the band
+      // sets — the same discipline as the teacher's worked example.
+      const sample = sampleProblem(band, (seed, rung) =>
+        makeAdditionProblem(createRng(seed), rung),
+      );
+      this.bandChoices.push(
+        this.choice(`${sample.start} + ${sample.addend}`, () => this.chooseBand(index)),
+      );
     }
     this.closeButton = this.choice("x", () => this.close());
 
@@ -124,7 +137,7 @@ export class OptionsPanel {
   }
 
   private allChoices(): Choice[] {
-    return [...this.languageChoices, ...this.moneyChoices, this.closeButton];
+    return [...this.languageChoices, ...this.bandChoices, this.closeButton];
   }
 
   get isOpen(): boolean {
@@ -168,14 +181,35 @@ export class OptionsPanel {
   }
 
   /** Say everything from here on in another language. */
+  /** What a crop fetches for this child — see src/spells/difficulty.ts. */
+  private cropPrice = CROP_PRICE;
+  private band = DEFAULT_BAND;
+
+  setCropPrice(price: number): void {
+    this.cropPrice = price;
+    if (this.isOpen) this.render();
+  }
+
   setPhrases(words: Phrases): void {
     this.words = words;
     if (this.open) this.render();
   }
 
+  private chooseBand(band: number): void {
+    if (band === this.band) return;
+    this.band = band;
+    this.onBandChange?.(band);
+    this.render();
+  }
+
+  setBand(band: number): void {
+    this.band = band;
+    if (this.open) this.render();
+  }
+
   private choose(change: Partial<Settings>): void {
     const next: Settings = { ...this.settings, ...change };
-    if (next.language === this.settings.language && next.money === this.settings.money) return;
+    if (next.language === this.settings.language) return;
     this.settings = next;
     this.onChange?.(next);
     this.render();
@@ -193,34 +227,31 @@ export class OptionsPanel {
     this.place(this.closeButton, rect.left + rect.width - PAD - 14, rect.top + PAD + 10, 28, 24);
     this.show(this.closeButton);
 
-    let y = rect.top + PAD + TITLE_SIZE + 18;
-    y = this.row(
+    this.row(
       rect,
-      y,
+      rect.top + PAD + TITLE_SIZE + 18,
       0,
       this.words.languageHeading,
       this.languageChoices,
       LANGUAGES,
       this.settings.language,
     );
-    y = this.row(
-      rect,
-      y + 10,
-      1,
-      this.words.moneyHeading,
-      this.moneyChoices,
-      MONEY_CHOICES,
-      this.settings.money,
-    );
-    for (const [i, money] of MONEY_CHOICES.entries()) {
-      this.moneyChoices[i]?.label.setText(this.moneyName(money));
-    }
 
-    // What the choice actually looks like, in the one place it shows up most:
-    // a price. Naming a currency teaches nothing; seeing "2,50 kn" does.
-    const currency = currencyOf(currencyFor(this.settings));
+    this.row(
+      rect,
+      rect.top + PAD + TITLE_SIZE + 18 + ROW_HEIGHT,
+      1,
+      this.words.sumsHeading,
+      this.bandChoices,
+      BANDS.map((_, index) => index),
+      this.band,
+    );
+
+    // The money, stated rather than chosen: it follows the sums above, and
+    // it is the one number on this screen a player might have a question
+    // about — a price answers it better than a name would.
     this.example
-      .setText(this.words.cropSellsFor(currency.format(CROP_PRICE)))
+      .setText(this.words.cropSellsFor(CURRENCY.format(this.cropPrice)))
       .setPosition(rect.centreX, rect.top + rect.height - PAD)
       .setVisible(true);
   }
@@ -252,11 +283,6 @@ export class OptionsPanel {
       this.show(button);
     }
     return y + BUTTON_H;
-  }
-
-  /** What a money choice is called on its button, in the current language. */
-  private moneyName(money: MoneyChoice): string {
-    return money === FOLLOW_LANGUAGE ? this.words.followLanguage : this.words.currencyName(money);
   }
 
   private choice(text: string, onTap: () => void): Choice {

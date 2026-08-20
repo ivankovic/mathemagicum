@@ -7,7 +7,13 @@ import { floodFillReachable, isReachable } from "./connectivity";
 import { FixtureType } from "./fixtures";
 import { WorldGrid } from "./grid";
 import { TerrainType } from "./terrain";
-import { VILLAGE_SIZE, gardenFenceRing, gardenGate, layoutVillage } from "./villageLayout";
+import {
+  VILLAGE_SIZE,
+  gardenFenceRing,
+  gardenGate,
+  layoutVillage,
+  stallCells,
+} from "./villageLayout";
 
 function villageGrid(): { grid: WorldGrid; village: AreaPlacement } {
   const grid = WorldGrid.empty(VILLAGE_SIZE, VILLAGE_SIZE, TerrainType.Grass);
@@ -117,14 +123,26 @@ describe("layoutVillage", () => {
     }
   });
 
-  // The two with something to say are found inside their own building; the
+  // The ones with something to say are found inside their own building; the
   // rest wander. See VillageNpcSpec.indoors.
-  test("the shopkeeper and the teacher are indoors, the others are not", () => {
+  test("everyone with something to explain is indoors, the others are not", () => {
     const { grid, village } = villageGrid();
     const { npcs } = layoutVillage(grid, village);
     const indoors = npcs.filter((npc) => npc.indoors).map((npc) => npc.id);
-    expect(indoors.sort()).toEqual(["shopkeeper", "teacher"]);
+    expect(indoors.sort()).toEqual(["geometer", "shopkeeper", "teacher"]);
     expect(npcs.filter((npc) => !npc.indoors).length).toBeGreaterThan(0);
+  });
+
+  // The post office is the first building with two people in it: the postal
+  // worker walks the square and the geometry teacher is up the tower. Only
+  // one of them is indoors, which is what lets a room have a single
+  // attendant without any of it having to know there is a second person.
+  test("a building may have somebody outside it and somebody in it", () => {
+    const { grid, village } = villageGrid();
+    const { npcs } = layoutVillage(grid, village);
+    const tower = npcs.filter((npc) => npc.homeBuildingId === "post-office");
+    expect(tower.map((npc) => npc.id).sort()).toEqual(["geometer", "postal-worker"]);
+    expect(tower.filter((npc) => npc.indoors).map((npc) => npc.id)).toEqual(["geometer"]);
   });
 
   test("every villager/teacher/postal-worker/shopkeeper gets a home point, player-house does not", () => {
@@ -132,7 +150,15 @@ describe("layoutVillage", () => {
     const { npcs, buildings } = layoutVillage(grid, village);
     const npcIds = npcs.map((n) => n.id).sort();
     expect(npcIds).toEqual(
-      ["postal-worker", "shopkeeper", "teacher", "villager-1", "villager-2", "villager-3"].sort(),
+      [
+        "geometer",
+        "postal-worker",
+        "shopkeeper",
+        "teacher",
+        "villager-1",
+        "villager-2",
+        "villager-3",
+      ].sort(),
     );
     expect(buildings.find((b) => b.id === "player-house")).toBeDefined();
     expect(npcs.some((n) => n.homeBuildingId === "player-house")).toBe(false);
@@ -256,7 +282,11 @@ describe("garden fences", () => {
     const { grid, village } = villageGrid();
     layoutVillage(grid, village);
     const objects = grid.listObjects();
-    const gates = objects.filter((object) => object.type === FixtureType.Gate);
+    // Either kind: a gate on a side run is drawn for a run that goes away
+    // from the camera, and half of them land on one — the gate goes on the
+    // ring cell nearest the square, and two of the four sides run that way.
+    const gateTypes: readonly string[] = [FixtureType.Gate, FixtureType.GateSide];
+    const gates = objects.filter((object) => gateTypes.includes(object.type));
     const fenceTypes: readonly string[] = [FixtureType.Fence, FixtureType.FenceSide];
     const fences = objects.filter((object) => fenceTypes.includes(object.type));
     // Three villager gardens and the player's.
@@ -266,6 +296,46 @@ describe("garden fences", () => {
     for (const fence of fences) expect(fence.blocksMovement).toBe(true);
     // And the way in is walkable, which is the entire point of it.
     for (const gate of gates) expect(grid.isPassable(gate.col, gate.row)).toBe(true);
+  });
+
+  // The defect this fixes: a gate on a side run drawn with the panel that
+  // runs across the camera — rails sticking sideways into the garden, with
+  // the run stopping above it and starting again below.
+  test("a gate in a side run is drawn for a side run", () => {
+    const { grid, village } = villageGrid();
+    layoutVillage(grid, village);
+    const objects = grid.listObjects();
+    const gateTypes: readonly string[] = [FixtureType.Gate, FixtureType.GateSide];
+    for (const gate of objects.filter((object) => gateTypes.includes(object.type))) {
+      const above = grid.getObjectAt(gate.col, gate.row - 1);
+      const below = grid.getObjectAt(gate.col, gate.row + 1);
+      const inSideRun =
+        above?.type === FixtureType.FenceSide || below?.type === FixtureType.FenceSide;
+      const at = { col: gate.col, row: gate.row };
+      expect({ ...at, type: gate.type }).toEqual({
+        ...at,
+        type: inSideRun ? FixtureType.GateSide : FixtureType.Gate,
+      });
+    }
+  });
+
+  // Its leaf swings into the garden, so the right-hand side is the left-hand
+  // sprite mirrored — the same rule the fence beside it follows.
+  test("a gate on the right-hand side is mirrored, like the fence is", () => {
+    const { grid, village } = villageGrid();
+    layoutVillage(grid, village);
+    for (const object of grid.listObjects()) {
+      if (object.type !== FixtureType.GateSide) continue;
+      const neighbour = [-1, 1]
+        .map((step) => grid.getObjectAt(object.col, object.row + step))
+        .find((other) => other?.type === FixtureType.FenceSide);
+      if (!neighbour) continue;
+      const at = { col: object.col, row: object.row };
+      expect({ ...at, flip: object.flip === true }).toEqual({
+        ...at,
+        flip: neighbour.flip === true,
+      });
+    }
   });
 });
 
@@ -406,5 +476,79 @@ describe("which way the fence runs", () => {
       if (!twin) continue;
       expect(cell.flip === true).toBe(cell.col > twin.col);
     }
+  });
+});
+
+describe("the shop's stalls", () => {
+  // The store is drawn with the barn sprite: a good big building, and not
+  // obviously a place that sells anything. What marks it out is what is set
+  // up in front of it.
+  test("stand in the row in front of the building, at either end", () => {
+    const cells = stallCells({ col: 10, row: 20 }, 4, 3);
+    expect(cells).toEqual([
+      { col: 10, row: 23 },
+      { col: 13, row: 23 },
+    ]);
+  });
+
+  // The door is in the middle, and a stall in front of it would be a shop
+  // you cannot walk into.
+  test("never in the middle, where the door is", () => {
+    for (const width of [3, 4, 5, 6]) {
+      const cells = stallCells({ col: 0, row: 0 }, width, 3);
+      const middle = (width - 1) / 2;
+      for (const cell of cells) {
+        expect({ width, clear: Math.abs(cell.col - middle) >= 1 }).toEqual({ width, clear: true });
+      }
+    }
+  });
+
+  test("two of them, not a row: this is a shop, not a market square", () => {
+    expect(stallCells({ col: 0, row: 0 }, 8, 3).length).toBe(2);
+  });
+
+  test("a village puts them in front of its store and nowhere else", () => {
+    const { grid, village } = villageGrid();
+    const { buildings } = layoutVillage(grid, village);
+    const stalls = grid.listObjects().filter((object) => object.type === FixtureType.Stall);
+    expect(stalls.length).toBeGreaterThan(0);
+    expect(stalls.length).toBeLessThanOrEqual(2);
+
+    const store = buildings.find((building) => building.id === "store");
+    if (!store) throw new Error("the village has no store");
+    for (const stall of stalls) {
+      expect(stall.row).toBe(store.row + store.height);
+      expect(stall.col === store.col || stall.col === store.col + store.width - 1).toBe(true);
+    }
+  });
+
+  // A stall blocks its cell, so one dropped onto the path the square carves
+  // to this door would wall the shop off — and a shop you cannot walk into
+  // is worse than a shop with one stall outside it instead of two.
+  test("never onto ground something else already stands on", () => {
+    const { grid, village } = villageGrid();
+    layoutVillage(grid, village);
+    const seen = new Map<string, string>();
+    for (const object of grid.listObjects()) {
+      const key = `${object.col},${object.row}`;
+      expect({ key, first: seen.get(key) ?? object.id }).toEqual({ key, first: object.id });
+      seen.set(key, object.id);
+    }
+  });
+
+  test("and the shop is still reachable from the square", () => {
+    const { grid, village } = villageGrid();
+    const { buildings, well } = layoutVillage(grid, village);
+    const store = buildings.find((building) => building.id === "store");
+    if (!store) throw new Error("the village has no store");
+    const visited = floodFillReachable(grid, { col: well.col, row: well.row + 1 });
+    // The doorstep row, minus the cells the stalls stand on: at least one way
+    // up to the door has to survive them.
+    const doorstep = Array.from({ length: store.width }, (_, at) => ({
+      col: store.col + at,
+      row: store.row + store.height,
+    })).filter((cell) => grid.isPassable(cell.col, cell.row));
+    expect(doorstep.length).toBeGreaterThan(0);
+    expect(doorstep.some((cell) => isReachable(visited, grid, cell))).toBe(true);
   });
 });

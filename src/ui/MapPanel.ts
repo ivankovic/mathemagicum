@@ -5,16 +5,10 @@ import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import type { AnchorPlacements } from "../world/anchors";
 import type { WorldGrid } from "../world/grid";
-import {
-  MINIMAP_COLORS,
-  MINIMAP_STEP,
-  areaCentre,
-  markedPlaces,
-  minimapPoint,
-  minimapSize,
-} from "../world/minimap";
+import { areaCentre, markedPlaces, minimapPoint, minimapSize } from "../world/minimap";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
+import { paintWorldMap } from "./worldMapTexture";
 
 /**
  * The map on the tower wall, opened.
@@ -49,8 +43,6 @@ const TITLE_SIZE = 17;
 const LABEL_SIZE = 11;
 const MARK_SIZE = 5;
 const HERE_SIZE = 7;
-
-const MAP_TEXTURE = "world-map";
 
 type PanelPart = Phaser.GameObjects.GameObject &
   Phaser.GameObjects.Components.Depth &
@@ -176,40 +168,18 @@ export class MapPanel {
   }
 
   /**
-   * Walk the world once and write it into a texture.
+   * Point the sheet at the world's own picture, painting it if nobody has.
    *
    * Once per game rather than per opening: the ground does not move, and the
-   * things that do — the player, and one day whatever they have found — are
-   * drawn over the top afterwards.
+   * things that do — the player, the places — are drawn over the top
+   * afterwards. Shared with the portal spell's parchment, which wants the
+   * same picture and may well ask for it first. See `worldMapTexture.ts`.
    */
   private paintWorld(): void {
     if (this.painted) return;
     this.painted = true;
-    // A texture outlives the panel that made it — a scene restarted on a
-    // resize would otherwise ask for a key already in use and get nothing.
-    if (this.scene.textures.exists(MAP_TEXTURE)) {
-      this.sheet.setTexture(MAP_TEXTURE);
-      return;
-    }
-    const size = minimapSize(this.grid.width, this.grid.height);
-    const canvas = this.scene.textures.createCanvas(MAP_TEXTURE, size.width, size.height);
-    const context = canvas?.context;
-    if (!canvas || !context) return;
-    const image = context.createImageData(size.width, size.height);
-    for (let row = 0; row < this.grid.height; row += MINIMAP_STEP) {
-      for (let col = 0; col < this.grid.width; col += MINIMAP_STEP) {
-        const colour = MINIMAP_COLORS[this.grid.getTerrain(col, row)];
-        const at = minimapPoint(col, row);
-        const offset = (at.y * size.width + at.x) * 4;
-        image.data[offset] = (colour >> 16) & 0xff;
-        image.data[offset + 1] = (colour >> 8) & 0xff;
-        image.data[offset + 2] = colour & 0xff;
-        image.data[offset + 3] = 255;
-      }
-    }
-    context.putImageData(image, 0, 0);
-    canvas.refresh();
-    this.sheet.setTexture(MAP_TEXTURE);
+    const key = paintWorldMap(this.scene, this.grid);
+    if (key) this.sheet.setTexture(key);
   }
 
   private render(): void {

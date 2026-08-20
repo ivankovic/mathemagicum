@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { Currency, coinsFor, currencyOf } from "./currency";
+import { CURRENCY, coinsFor } from "./currency";
 import {
   addCoin,
   beginTender,
@@ -16,8 +16,6 @@ import {
   tenderTotal,
   tenderedCoins,
 } from "./tender";
-
-const kuna = currencyOf(Currency.Kuna);
 
 describe("putting coins on the counter", () => {
   test("starts empty and owing", () => {
@@ -100,25 +98,28 @@ describe("putting coins on the counter", () => {
 
 describe("whether a purchase can be attempted", () => {
   test("affordable when the price is payable and the purse covers it", () => {
-    expect(canTender(kuna, 250, 250)).toEqual({ ok: true, reason: "affordable" });
+    expect(canTender(CURRENCY, 250, 250)).toEqual({ ok: true, reason: "affordable" });
   });
 
   test("too expensive is not the same as impossible", () => {
-    expect(canTender(kuna, 500, 250)).toEqual({ ok: false, reason: "too-expensive" });
+    expect(canTender(CURRENCY, 500, 250)).toEqual({ ok: false, reason: "too-expensive" });
   });
 
-  // A price no coins can make would leave the player counting for ever.
+  // A price no coins can make would leave the player counting for ever. The
+  // smallest coin is one mite, so what cannot be expressed is a fraction of
+  // one — which is exactly what a price should never be.
   test("a price the coins cannot express is refused before counting starts", () => {
-    expect(canTender(kuna, 3, 1000)).toEqual({ ok: false, reason: "unpayable" });
+    expect(canTender(CURRENCY, 2.5, 1000)).toEqual({ ok: false, reason: "unpayable" });
+    expect(canTender(CURRENCY, 0, 1000)).toEqual({ ok: false, reason: "unpayable" });
   });
 });
 
 describe("every price can actually be counted out", () => {
   // The invariant the whole minigame rests on: an amount with no coin
   // decomposition is an unwinnable puzzle.
-  test("greedy makes every multiple of the smallest coin, up to fifty", () => {
-    for (let owed = 5; owed <= 5000; owed += 5) {
-      const tender = tenderOf(owed, owed, coinsFor(kuna, owed));
+  test("greedy makes every whole number of mites, up to fifty ducat", () => {
+    for (let owed = 1; owed <= 5000; owed++) {
+      const tender = tenderOf(owed, owed, coinsFor(CURRENCY, owed));
       expect({ owed, exact: isExact(tender) }).toEqual({ owed, exact: true });
     }
   });

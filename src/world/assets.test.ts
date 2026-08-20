@@ -11,6 +11,7 @@ import { EFFECT_TYPES, effectAnimKey, effectSidecarKey } from "./effects";
 import { FIXTURE_TYPES, fixtureFor } from "./fixtures";
 import { buildInteriorGrid, interiorAttendantCell, interiorDoor } from "./interiors";
 import { INTERIOR_ROOMS, interiorFor } from "./interiors";
+import { LANDMARK_TYPES, landmarkFor } from "./landmarks";
 import { PLANT_STAGES, PLANT_TYPES } from "./plants";
 import { SCENERY_KINDS, sceneryKind } from "./scenery";
 import type {
@@ -19,6 +20,7 @@ import type {
   EffectSidecar,
   FixtureSidecar,
   InteriorSidecar,
+  LandmarkSidecar,
   ObjectSidecar,
   PlantSidecar,
 } from "./spriteSidecar";
@@ -504,7 +506,7 @@ describe("every object the village places", () => {
   // area starts placing something new, this fails before the game does.
   const world = generateWorld(120, 120, 4242);
 
-  test("resolves to a building, a fixture or a piece of scenery", () => {
+  test("resolves to a building, a fixture, a landmark or a piece of scenery", () => {
     const placed = world.grid.listObjects();
     expect(placed.length).toBeGreaterThan(0);
     const kinds = new Set<string>();
@@ -512,16 +514,74 @@ describe("every object the village places", () => {
       const asBuilding = ROLE_SPRITES[object.type as keyof typeof ROLE_SPRITES];
       const asFixture = fixtureFor(object.type);
       const asScenery = sceneryKind(object.type);
+      const asLandmark = landmarkFor(object.type);
       kinds.add(object.type);
-      expect({ type: object.type, hasArt: Boolean(asBuilding ?? asFixture ?? asScenery) }).toEqual({
+      expect({
+        type: object.type,
+        hasArt: Boolean(asBuilding ?? asFixture ?? asScenery ?? asLandmark),
+      }).toEqual({
         type: object.type,
         hasArt: true,
       });
     }
-    // The world places all three kinds, so this is actually exercising the
+    // The world places all four kinds, so this is actually exercising the
     // dispatch rather than one branch of it.
     expect([...kinds].some((t) => sceneryKind(t))).toBe(true);
     expect([...kinds].some((t) => fixtureFor(t))).toBe(true);
+    expect([...kinds].some((t) => landmarkFor(t))).toBe(true);
+  });
+});
+
+describe("the shipped landmarks", () => {
+  const sidecars = new Map(
+    LANDMARK_TYPES.map((k) => [k, readJson<LandmarkSidecar>("landmarks", `${k}.json`)]),
+  );
+
+  test("ships the sheet PNG it names", () => {
+    for (const [name, sidecar] of sidecars) {
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error(`${name} has no sheet`);
+      expect(existsSync(join(ASSETS, "landmarks", sheet.file))).toBe(true);
+      expect(sheet.frame_count).toBe(sidecar.frame_count);
+    }
+  });
+
+  test("names itself, so the game and the generator cannot drift apart", () => {
+    for (const [name, sidecar] of sidecars) expect(sidecar.landmark).toBe(name);
+  });
+
+  // The one thing about a landmark the scene depends on and cannot check for
+  // itself: the tap area is the footprint's own columns centred in the
+  // canvas, so an asymmetric overhang would put it over the wrong tiles.
+  test("overhangs its footprint evenly on both sides, and only upward", () => {
+    for (const sidecar of sidecars.values()) {
+      expect(sidecar.tile_size).toBe(TILE_SIZE);
+      const across = sidecar.sprite_size_px.width - sidecar.footprint_tiles.width * TILE_SIZE;
+      const above = sidecar.sprite_size_px.height - sidecar.footprint_tiles.height * TILE_SIZE;
+      expect(across % 2).toBe(0);
+      expect(across).toBeGreaterThan(0);
+      expect(above).toBeGreaterThan(0);
+      expect(sidecar.sprite_offset_px).toEqual({ x: -across / 2, y: -above });
+    }
+  });
+
+  test("blocks every cell of its footprint — you cannot walk through a tree", () => {
+    for (const sidecar of sidecars.values()) {
+      const { width, height } = sidecar.footprint_tiles;
+      expect(sidecar.blocked_cells_relative_to_anchor.length).toBe(width * height);
+    }
+  });
+
+  test("has one idle animation covering the whole sheet", () => {
+    for (const [name, sidecar] of sidecars) {
+      expect({ name, animations: Object.keys(sidecar.animations) }).toEqual({
+        name,
+        animations: ["idle"],
+      });
+      const idle = sidecar.animations.idle;
+      expect(idle?.start).toBe(0);
+      expect(idle?.end).toBe(sidecar.frame_count - 1);
+    }
   });
 });
 
@@ -545,22 +605,28 @@ describe("the shipped scenery", () => {
     }
   });
 
-  test("is 1:1 art on a 2x2 footprint, overhanging upward", () => {
-    // The barrier packs objects on a 2-tile lattice; a different footprint
-    // would leave gaps a player could walk through.
+  test("is 1:1 art on one tile, overhanging it on three sides", () => {
+    // One tile rather than four. Objects were 2x2 when a tree stood as tall
+    // as a house; at a tree of one and three quarter people that would be a
+    // sapling in the middle of four blocked tiles, and a wood nobody could
+    // walk into. The art still overhangs — a canopy hangs over the tiles
+    // around the one it grows out of, the way a roof overhangs its walls —
+    // and the offsets are what put it back over its own cell.
     for (const sidecar of sidecars.values()) {
       expect(sidecar.tile_size).toBe(TILE_SIZE);
-      expect(sidecar.footprint_tiles).toEqual({ width: 2, height: 2 });
-      expect(sidecar.sprite_size_px.width).toBe(2 * TILE_SIZE);
-      const overhang = sidecar.sprite_size_px.height - 2 * TILE_SIZE;
-      expect(overhang).toBeGreaterThan(0);
-      expect(sidecar.sprite_offset_px).toEqual({ x: 0, y: -overhang });
+      expect(sidecar.footprint_tiles).toEqual({ width: 1, height: 1 });
+      const across = sidecar.sprite_size_px.width - TILE_SIZE;
+      const above = sidecar.sprite_size_px.height - TILE_SIZE;
+      expect(above).toBeGreaterThan(0);
+      // Symmetrical across, so half of the spare width is the x offset.
+      expect(across % 2).toBe(0);
+      expect(sidecar.sprite_offset_px).toEqual({ x: -across / 2, y: -above });
     }
   });
 
-  test("blocks every cell of its footprint", () => {
+  test("blocks the one cell it grows out of", () => {
     for (const sidecar of sidecars.values()) {
-      expect(sidecar.blocked_cells_relative_to_anchor.length).toBe(4);
+      expect(sidecar.blocked_cells_relative_to_anchor).toEqual([[0, 0]]);
     }
   });
 

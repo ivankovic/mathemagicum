@@ -122,3 +122,52 @@ describe("the doorway", () => {
     }
   });
 });
+
+describe("which way you walked into it", () => {
+  const door = { col: 12, row: 20 };
+  // Four wide, door one cell in from the left — so the widened doorway
+  // reaches the building's own left corner, which is where this went wrong.
+  const entrance = entranceFor(door, 11, 4);
+  const up = { dCol: 0, dRow: -1 };
+  const down = { dCol: 0, dRow: 1 };
+  const left = { dCol: -1, dRow: 0 };
+  const right = { dCol: 1, dRow: 0 };
+
+  test("walking into the doorway from in front goes in", () => {
+    expect(isEntrance(entrance, door.col, door.row, up)).toBe(true);
+  });
+
+  // The forgiving part, and the reason the doorway is three cells wide: a
+  // child who is off by one and still walking at the building gets in.
+  test("and so does being off by one to either side", () => {
+    expect(isEntrance(entrance, door.col - 1, door.row, up)).toBe(true);
+    expect(isEntrance(entrance, door.col + 1, door.row, up)).toBe(true);
+  });
+
+  // The defect. A child walking along the front of the building, scraping
+  // the wall beside the door, was put indoors — through a wall, and on this
+  // building through its own corner.
+  test("scraping sideways along the wall does not", () => {
+    expect(isEntrance(entrance, door.col - 1, door.row, right)).toBe(false);
+    expect(isEntrance(entrance, door.col + 1, door.row, left)).toBe(false);
+    expect(isEntrance(entrance, entrance.minCol, door.row, right)).toBe(false);
+    expect(isEntrance(entrance, entrance.maxCol, door.row, left)).toBe(false);
+  });
+
+  // Not even at the door cell itself: you cannot walk in through the side of
+  // a doorway either, and allowing it there but not beside it would be a
+  // rule nobody could see.
+  test("nor sideways onto the door cell itself", () => {
+    expect(isEntrance(entrance, door.col, door.row, left)).toBe(false);
+    expect(isEntrance(entrance, door.col, door.row, right)).toBe(false);
+  });
+
+  test("nor stepping down onto it from behind the building", () => {
+    expect(isEntrance(entrance, door.col, door.row, down)).toBe(false);
+  });
+
+  test("asked without a step, it still says which cells are doorway", () => {
+    expect(isEntrance(entrance, door.col, door.row)).toBe(true);
+    expect(isEntrance(entrance, door.col - 2, door.row)).toBe(false);
+  });
+});

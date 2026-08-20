@@ -2,7 +2,7 @@
   "sheet": {
     "file": "grass_sheet.png",
     "frame_width": 64,
-    "frame_height": 120,
+    "frame_height": 64,
     "frame_count": 32,
     "columns": 8,
     "rows": 4,
@@ -12,34 +12,22 @@
   "terrain": "grass",
   "tile_size": 32,
   "footprint_tiles": {
-    "width": 2,
-    "height": 2
+    "width": 1,
+    "height": 1
   },
   "blocked_cells_relative_to_anchor": [
     [
       0,
       0
-    ],
-    [
-      0,
-      1
-    ],
-    [
-      1,
-      0
-    ],
-    [
-      1,
-      1
     ]
   ],
   "sprite_offset_px": {
-    "x": 0,
-    "y": -56
+    "x": -16,
+    "y": -32
   },
   "sprite_size_px": {
     "width": 64,
-    "height": 120
+    "height": 64
   },
   "frame_count": 32,
   "animations": {

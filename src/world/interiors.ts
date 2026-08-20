@@ -18,7 +18,15 @@ export function interiorFor(sprite: BuildingSprite): string {
 
 // The rooms shipped under public/assets/interiors. interiors.test.ts checks
 // this covers every building the village can place.
-export const INTERIOR_ROOMS: readonly string[] = ["cottage", "barn", "tower", "schoolhouse"];
+export const INTERIOR_ROOMS: readonly string[] = [
+  "cottage",
+  "townhouse",
+  "ship",
+  "barn",
+  "tower",
+  "schoolhouse",
+  "observatory",
+];
 
 /**
  * Where a map hangs on a room's back wall.
@@ -140,4 +148,40 @@ export function interiorDoor(sidecar: InteriorSidecar): GridPoint {
 // stands above cell (0,0).
 export function interiorOriginY(sidecar: InteriorSidecar): number {
   return sidecar.wall_rise_px;
+}
+
+export interface Extent {
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface CameraBounds {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * Where a camera may go while the player is in a room.
+ *
+ * Axis by axis, because a room can overflow one and not the other and the
+ * two want opposite things. The tower is the case that showed it: it grew
+ * wide enough to need scrolling on a phone while staying shorter than the
+ * screen, and an all-or-nothing rule pinned it to the top of the viewport
+ * with a band of black under it.
+ *
+ * Where the room is bigger than the view, the bounds are the room's own
+ * extent and the camera follows inside them. Where it is smaller, the bounds
+ * are a view-sized band centred on the room: the camera cannot move on that
+ * axis at all, so it sits centred and the room is framed rather than hard
+ * against a wall of black. A room that fits on both axes falls out of the
+ * same rule as centred on both, which is what the special case used to do.
+ */
+export function roomCameraBounds(room: Extent, view: Extent): CameraBounds {
+  const span = (size: number, seen: number) =>
+    size >= seen ? { at: 0, size } : { at: (size - seen) / 2, size: seen };
+  const across = span(room.width, view.width);
+  const down = span(room.height, view.height);
+  return { x: across.at, y: down.at, width: across.size, height: down.size };
 }

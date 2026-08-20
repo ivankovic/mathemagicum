@@ -25,10 +25,20 @@ export type TerrainType = (typeof TerrainType)[keyof typeof TerrainType];
 
 export const TERRAIN_TYPES: readonly TerrainType[] = Object.values(TerrainType);
 
-// Woodland and Hilly are walkable ground, not obstacles: the things that
-// actually block a woodland tile are the trees standing on it, which are
-// placed objects with their own footprints (see objects.ts), not the terrain.
-const IMPASSABLE: ReadonlySet<TerrainType> = new Set([TerrainType.Water, TerrainType.Mountain]);
+/**
+ * Only the sea.
+ *
+ * Woodland, hilly and mountain are all walkable *ground*. What blocks a
+ * woodland tile is the trees standing on it and what blocks a mountain tile
+ * is the rock — placed objects with their own footprints (see objects.ts),
+ * not the terrain under them.
+ *
+ * Mountain used to be in here, and playtesting killed it: a whole terrain
+ * nobody can set foot on is a third of the map behind glass. High ground
+ * should be somewhere you climb to and stand on, with the rock making the
+ * going hard in places — not a painted backdrop.
+ */
+const IMPASSABLE: ReadonlySet<TerrainType> = new Set([TerrainType.Water]);
 
 export function isPassable(terrain: TerrainType): boolean {
   return !IMPASSABLE.has(terrain);

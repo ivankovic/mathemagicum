@@ -21,11 +21,42 @@ export const UiAsset = {
   ParchmentFrame: "parchment-frame",
   Spellbook: "spellbook",
   RuneAdd: "rune-add",
+  /** The subtraction spell's rune: the plus with one bar taken away. */
+  RuneMinus: "rune-minus",
+  /** The portal spell's rune: a pair of dividers, the instrument of measuring. */
+  RunePortal: "rune-portal",
+  /**
+   * The multiplication spell's rune: six dots in two rows of three.
+   *
+   * Not a cross. A saltire is the plus turned forty-five degrees, and at
+   * this size on a phone that is the addition rune drawn twice — so this one
+   * leaves the operator signs alone and shows the array itself.
+   */
+  RuneTimes: "rune-times",
+  /**
+   * The hourglass spell's rune: an hourglass, half run through.
+   *
+   * The instrument rather than the effect, as the dividers are. A clock face
+   * would be the obvious drawing and it is the *question* the spell asks,
+   * not the spell — which is time passing, and an hourglass is the one
+   * object that is only ever about that.
+   */
+  RuneHourglass: "rune-hourglass",
   SeedPouch: "seed-pouch",
   Basket: "basket",
   Crate: "crate",
   /** The map hanging on the tower's wall — the object, not the world it shows. */
   MapWall: "map-wall",
+  /**
+   * The chart of the night on the dome's wall — the tower's map, one storey
+   * further up the world.
+   *
+   * Same frame and same proportions on purpose: a child who has learned that
+   * a framed thing on a wall can be tapped should not have to learn it
+   * twice, and what tells the two apart is that one is a coast and the other
+   * is a sky.
+   */
+  StarChart: "star-chart",
 } as const;
 
 export type UiAsset = (typeof UiAsset)[keyof typeof UiAsset];

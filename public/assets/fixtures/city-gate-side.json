@@ -1,0 +1,33 @@
+{
+  "sheet": {
+    "file": "city-gate-side_sheet.png",
+    "frame_width": 32,
+    "frame_height": 72,
+    "frame_count": 8,
+    "columns": 8,
+    "rows": 1,
+    "margin": 1,
+    "spacing": 2
+  },
+  "fixture": "city-gate-side",
+  "tile_size": 32,
+  "footprint_tiles": {
+    "width": 1,
+    "height": 1
+  },
+  "blocked_cells_relative_to_anchor": [
+    [
+      0,
+      0
+    ]
+  ],
+  "sprite_offset_px": {
+    "x": 0,
+    "y": -40
+  },
+  "sprite_size_px": {
+    "width": 32,
+    "height": 72
+  },
+  "frame_count": 8
+}

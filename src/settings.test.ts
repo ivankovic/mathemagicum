@@ -4,20 +4,17 @@
 import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_SETTINGS,
-  FOLLOW_LANGUAGE,
   LANGUAGES,
   LANGUAGE_NAMES,
   Language,
-  MONEY_CHOICES,
   SETTINGS_KEY,
   type Settings,
   type SettingsStore,
-  currencyFor,
   languageOf,
   readSettings,
+  settingsWithOverrides,
   writeSettings,
 } from "./settings";
-import { Currency } from "./shop/currency";
 
 function memory(initial?: string): SettingsStore & { written: string | null } {
   let value = initial ?? null;
@@ -46,49 +43,15 @@ describe("reading a language tag", () => {
   });
 });
 
-describe("which money", () => {
-  test("following the language gives kuna for English and francs for German", () => {
-    expect(
-      currencyFor({ language: Language.English, money: FOLLOW_LANGUAGE, introSeen: false }),
-    ).toBe(Currency.Kuna);
-    expect(
-      currencyFor({ language: Language.German, money: FOLLOW_LANGUAGE, introSeen: false }),
-    ).toBe(Currency.Franc);
-  });
-
-  // The whole point of the setting: a player may want the foreign coins.
-  test("a chosen currency wins over the language", () => {
-    expect(
-      currencyFor({ language: Language.English, money: Currency.Franc, introSeen: false }),
-    ).toBe(Currency.Franc);
-    expect(currencyFor({ language: Language.German, money: Currency.Kuna, introSeen: false })).toBe(
-      Currency.Kuna,
-    );
-  });
-
-  test("following the language follows it when the language changes", () => {
-    const settings: Settings = DEFAULT_SETTINGS;
-    expect(currencyFor({ ...settings, language: Language.German })).toBe(Currency.Franc);
-  });
-});
-
 describe("remembering the choice", () => {
   test("with nothing saved, the browser's language is the first guess", () => {
-    expect(readSettings(memory(), "de-CH")).toEqual({
-      language: Language.German,
-      money: FOLLOW_LANGUAGE,
-      introSeen: false,
-    });
+    expect(readSettings(memory(), "de-CH")).toEqual({ language: Language.German });
     expect(readSettings(memory(), "en-GB")).toEqual(DEFAULT_SETTINGS);
   });
 
   test("what was written comes back", () => {
     const store = memory();
-    const chosen: Settings = {
-      language: Language.German,
-      money: Currency.Kuna,
-      introSeen: true,
-    };
+    const chosen: Settings = { language: Language.German };
     writeSettings(store, chosen);
     expect(readSettings(store, "en")).toEqual(chosen);
   });
@@ -101,30 +64,26 @@ describe("remembering the choice", () => {
   });
 
   test("rubbish in storage costs at most the field that is rubbish", () => {
-    const store = memory(JSON.stringify({ language: "klingon", money: Currency.Franc }));
-    expect(readSettings(store, "de")).toEqual({
-      language: Language.German,
-      money: Currency.Franc,
-      introSeen: false,
-    });
+    const store = memory(JSON.stringify({ language: "klingon" }));
+    expect(readSettings(store, "de")).toEqual({ language: Language.German });
+  });
+
+  // Anybody who played while the game offered kuna, francs and euros has a
+  // `money` key in their storage. Dropping the field must not cost them the
+  // language they chose, and an unknown key must not read as corruption.
+  test("a settings blob from before the money was dropped still loads", () => {
+    const store = memory(JSON.stringify({ language: "de", money: "franc", introSeen: true }));
+    expect(readSettings(store, "en")).toEqual({ language: Language.German });
   });
 
   test("unparseable storage falls back rather than throwing", () => {
-    expect(readSettings(memory("{not json"), "de")).toEqual({
-      language: Language.German,
-      money: FOLLOW_LANGUAGE,
-      introSeen: false,
-    });
+    expect(readSettings(memory("{not json"), "de")).toEqual({ language: Language.German });
     expect(readSettings(memory("null"), "en")).toEqual(DEFAULT_SETTINGS);
   });
 
   // Storage switched off is a supported way to play, not an error path.
   test("no storage at all still gives a playable set", () => {
-    expect(readSettings(null, "de")).toEqual({
-      language: Language.German,
-      money: FOLLOW_LANGUAGE,
-      introSeen: false,
-    });
+    expect(readSettings(null, "de")).toEqual({ language: Language.German });
     expect(() => writeSettings(null, DEFAULT_SETTINGS)).not.toThrow();
   });
 
@@ -149,33 +108,22 @@ describe("remembering the choice", () => {
   });
 });
 
-describe("what the menu offers", () => {
-  test("every language on offer has a name to show for it", () => {
-    for (const language of LANGUAGES) {
-      expect(LANGUAGE_NAMES[language]?.length).toBeGreaterThan(0);
-    }
+describe("a run's overrides", () => {
+  const saved: Settings = { language: Language.English };
+
+  test("nothing asked for leaves the saved settings alone", () => {
+    expect(settingsWithOverrides(saved, {})).toEqual(saved);
+    expect(settingsWithOverrides(saved, { language: null })).toEqual(saved);
   });
 
-  // The one thing here that is progress rather than preference: it is only
-  // ever true once, and a saved file that lost it would replay the tutorial.
-  test("having seen the welcome is remembered", () => {
-    const store = memory();
-    writeSettings(store, { ...DEFAULT_SETTINGS, introSeen: true });
-    expect(readSettings(store, "en").introSeen).toBe(true);
-    expect(readSettings(memory(), "en").introSeen).toBe(false);
+  test("a language override wins over what was saved", () => {
+    const run = settingsWithOverrides(saved, { language: "de-CH" });
+    expect(run.language).toBe(Language.German);
   });
 
-  test("every money choice resolves to a currency", () => {
-    for (const money of MONEY_CHOICES) {
-      expect(currencyFor({ ...DEFAULT_SETTINGS, money })).toBeTruthy();
-    }
-  });
-
-  // Every currency there is should be reachable from the menu; one that
-  // existed in code and nowhere on screen would be dead weight.
-  test("every currency is on offer", () => {
-    for (const currency of Object.values(Currency)) {
-      expect(MONEY_CHOICES).toContain(currency);
-    }
+  test("it never writes anything back", () => {
+    const before = { ...saved };
+    settingsWithOverrides(saved, { language: "de" });
+    expect(saved).toEqual(before);
   });
 });

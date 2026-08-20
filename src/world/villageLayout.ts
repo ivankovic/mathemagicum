@@ -63,11 +63,30 @@ interface BuildingSpec {
   direction: Direction;
   npcId: string | null;
   garden: GardenSpec | null;
+  /**
+   * Whether market stalls stand in front of it.
+   *
+   * Only the store. It is drawn with the barn sprite — a good big building,
+   * and not obviously a place that sells anything — so what marks it out is
+   * what is set up outside it, which is how a village shop announces itself
+   * in the world too.
+   */
+  stalls?: boolean;
   // Whether that NPC is found inside the building rather than around it.
   // The shopkeeper and the teacher are: a shop and a school are somewhere you
   // go in to, and one who wandered the square was somewhere you had to find
   // first.
   npcIndoors?: boolean;
+  /**
+   * Somebody who is only ever found *inside*, alongside whoever the building
+   * already has outside it.
+   *
+   * The post office is the first building with two people: the postal worker
+   * walks the square, and the geometry teacher is up the tower with the map
+   * on the wall. A second `npcId` would not do — that one is the person the
+   * building is *for*, and it decides where they live and wander.
+   */
+  indoorNpcId?: string;
 }
 
 // Player's house has no NPC (see docs/WORLD_GENERATION.md — "A building is
@@ -105,6 +124,10 @@ const BUILDINGS: readonly BuildingSpec[] = [
     direction: DIRECTIONS.SE as Direction,
     npcId: "postal-worker",
     garden: null,
+    // The tower is a study as well as a post office, and the geometry
+    // teacher is in it. He is where the map on the wall is, which is the
+    // one thing in the village that was already about distances.
+    indoorNpcId: "geometer",
   },
   {
     id: "villager-house-2",
@@ -120,6 +143,7 @@ const BUILDINGS: readonly BuildingSpec[] = [
     npcId: "shopkeeper",
     garden: null,
     npcIndoors: true,
+    stalls: true,
   },
   {
     id: "villager-house-3",
@@ -162,6 +186,26 @@ export interface VillageLayout {
    * disappeared the first time this was drawn.
    */
   playerDoorstep: GridPoint;
+}
+
+/**
+ * Where a shop's stalls stand: the row in front of it, at either end.
+ *
+ * The ends rather than the middle, because the door is in the middle. Two
+ * rather than a row of them: a line of stalls across the whole frontage
+ * reads as a market square, and this is a shop with a couple of stalls
+ * outside it.
+ */
+export function stallCells(
+  topLeft: GridPoint,
+  width: number,
+  height: number,
+): readonly GridPoint[] {
+  const row = topLeft.row + height;
+  return [
+    { col: topLeft.col, row },
+    { col: topLeft.col + width - 1, row },
+  ];
 }
 
 function round(point: { x: number; y: number }): GridPoint {
@@ -391,6 +435,27 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
     grid.placeObject(building);
     buildings.push(building);
 
+    if (spec.stalls) {
+      for (const at of stallCells(buildingTopLeft, buildingWidth, buildingHeight)) {
+        // Only where the ground is already clear. A stall blocks its cell, so
+        // one dropped onto the path the square carves to this door would wall
+        // the shop off — and a shop you cannot walk into is a worse outcome
+        // than a shop with one stall in front of it instead of two.
+        if (!grid.isPassable(at.col, at.row)) continue;
+        grid.placeObject({
+          id: `${spec.id}-stall-${at.col}-${at.row}`,
+          type: FixtureType.Stall,
+          col: at.col,
+          row: at.row,
+          width: 1,
+          height: 1,
+          blocksMovement: true,
+          anchorCol: at.col,
+          anchorRow: at.row,
+        });
+      }
+    }
+
     if (spec.garden) {
       const gardenRadialHalf = Math.max(spec.garden.width, spec.garden.height) / 2;
       const gardenDistance =
@@ -421,12 +486,20 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
         // across it, which is two different pictures of the same fence. The
         // corners belong to the top and bottom, because that is the run whose
         // posts the sides line up under.
-        const side = !isGate && (cell.col === left || cell.col === right);
-        const isSide =
-          side &&
+        // Which run a cell belongs to, gate or not: the sides are the two
+        // columns, minus the corners, which belong to the top and bottom —
+        // that is the run whose posts the sides line up under.
+        const onSide =
+          (cell.col === left || cell.col === right) &&
           cell.row !== gardenTopLeft.row - 1 &&
           cell.row !== gardenTopLeft.row + spec.garden.height;
-        const type = isGate ? FixtureType.Gate : isSide ? FixtureType.FenceSide : FixtureType.Fence;
+        const type = isGate
+          ? onSide
+            ? FixtureType.GateSide
+            : FixtureType.Gate
+          : onSide
+            ? FixtureType.FenceSide
+            : FixtureType.Fence;
         grid.placeObject({
           id: `${spec.id}-${type}-${cell.col}-${cell.row}`,
           type,
@@ -439,8 +512,10 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
           blocksMovement: !isGate,
           anchorCol: cell.col,
           anchorRow: cell.row,
-          // The right-hand side is the left-hand sprite mirrored.
-          flip: isSide && cell.col === right,
+          // The right-hand side is the left-hand sprite mirrored — the gate
+          // in it as much as the fence, or its leaf would swing out of the
+          // garden instead of into it.
+          flip: onSide && cell.col === right,
         });
       }
       // Standing in their own beds, inside their own fence: the first thing
@@ -465,6 +540,19 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
         homeBuildingId: spec.id,
         home: doorstep,
         indoors: spec.npcIndoors === true,
+      });
+    }
+    // The indoor one, if the building has somebody as well as its own. Home
+    // is the doorstep for both, which is never used for an indoor NPC — they
+    // are spawned into the room they are found in and thrown away with it —
+    // but a spec with nowhere to live would be a spec every other pass has
+    // to special-case.
+    if (spec.indoorNpcId) {
+      npcs.push({
+        id: spec.indoorNpcId,
+        homeBuildingId: spec.id,
+        home: doorstep,
+        indoors: true,
       });
     }
     // The doorstep is the spawn's fallback too: a player house without a

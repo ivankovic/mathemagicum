@@ -4,223 +4,165 @@
 import { describe, expect, test } from "bun:test";
 import {
   COIN_TIERS,
-  CURRENCIES,
+  CURRENCY,
   CoinTier,
-  Currency,
+  MAJOR_NAME,
+  MINOR_NAME,
   MOST_DENOMINATIONS,
   coinTier,
   coinsFor,
-  currencyForLanguage,
-  currencyOf,
   isPayable,
   smallestCoin,
   totalOf,
 } from "./currency";
 
-const kuna = currencyOf(Currency.Kuna);
-const franc = currencyOf(Currency.Franc);
-
-describe("the coin sets", () => {
-  // Checked against what actually circulated, not what the currencies
-  // technically minted. Switzerland withdrew 1 rappen in 2007 and 2 rappen in
-  // 1978; Croatia stopped minting 1 and 2 lipa for circulation in 2009 and
-  // its 25 kuna was a commemorative nobody spent.
-  test("kuna and francs both start at five and run 5/10/20/50/100/200/500", () => {
-    for (const code of [Currency.Kuna, Currency.Franc]) {
-      expect(currencyOf(code).denominations).toEqual([5, 10, 20, 50, 100, 200, 500]);
+describe("the coins", () => {
+  // The game used to offer real money — kuna, francs, euros — and does not
+  // any more: a children's game that shows a euro price and asks for euros on
+  // a counter can be read as asking for money. What it keeps is the *shape*
+  // of real money, which is the part being taught.
+  test("are a complete 1-2-5 ladder", () => {
+    expect(CURRENCY.denominations).toEqual([1, 2, 5, 10, 20, 50, 100, 200, 500]);
+    for (const coin of CURRENCY.denominations) {
+      let head = coin;
+      while (head % 10 === 0) head /= 10;
+      expect([1, 2, 5]).toContain(head);
     }
   });
 
-  // The euro is the odd one and that is the point of having it: it keeps its
-  // 1 and 2 cent pieces, so a price need not be a round five, and it stops at
-  // 2 € because 5 € is a note.
-  test("the euro runs 1/2/5/10/20/50/100/200", () => {
-    expect(currencyOf(Currency.Euro).denominations).toEqual([1, 2, 5, 10, 20, 50, 100, 200]);
+  test("are listed smallest first, which coinsFor relies on", () => {
+    expect([...CURRENCY.denominations].sort((a, b) => a - b)).toEqual([...CURRENCY.denominations]);
+    expect(smallestCoin(CURRENCY)).toBe(1);
   });
 
-  test("coins are listed smallest first, which coinsFor relies on", () => {
-    for (const currency of Object.values(CURRENCIES)) {
-      const sorted = [...currency.denominations].sort((a, b) => a - b);
-      expect(currency.denominations).toEqual(sorted);
-      expect(smallestCoin(currency)).toBeGreaterThan(0);
-    }
+  test("run a hundred to the ducat, so the decimal point behaves", () => {
+    expect(CURRENCY.minorPerMajor).toBe(100);
+    expect(CURRENCY.denominations).toContain(CURRENCY.minorPerMajor);
   });
 
-  // Greedy change is only the fewest coins because every set is a 1-2-5
-  // ladder; a set that broke it would silently make coinsFor wrong.
-  test("every set is a 1-2-5 ladder, which is what makes greedy optimal", () => {
-    for (const currency of Object.values(CURRENCIES)) {
-      const heads = currency.denominations.map((coin) => {
-        let value = coin;
-        while (value % 10 === 0) value /= 10;
-        return value;
-      });
-      for (const head of heads) expect([1, 2, 5]).toContain(head);
-    }
+  test("the pad is built for exactly as many as there are", () => {
+    expect(MOST_DENOMINATIONS).toBe(CURRENCY.denominations.length);
   });
 });
 
-describe("choosing a currency", () => {
-  test("German shops in francs", () => {
-    expect(currencyForLanguage("de")).toBe(Currency.Franc);
-    expect(currencyForLanguage("de-CH")).toBe(Currency.Franc);
-    expect(currencyForLanguage("de-AT")).toBe(Currency.Franc);
-    expect(currencyForLanguage("DE-ch")).toBe(Currency.Franc);
+describe("writing an amount", () => {
+  test("reads like a price tag: comma, two digits, unit", () => {
+    expect(CURRENCY.format(250)).toBe("2,50 ducat");
+    expect(CURRENCY.format(5)).toBe("0,05 ducat");
+    expect(CURRENCY.format(1234)).toBe("12,34 ducat");
   });
 
-  test("everything else shops in kuna", () => {
-    expect(currencyForLanguage("en")).toBe(Currency.Kuna);
-    expect(currencyForLanguage("en-GB")).toBe(Currency.Kuna);
-    expect(currencyForLanguage("hr")).toBe(Currency.Kuna);
-    expect(currencyForLanguage(undefined)).toBe(Currency.Kuna);
-    expect(currencyForLanguage("")).toBe(Currency.Kuna);
+  // Otherwise "0,5" reads as five mites rather than fifty.
+  test("always pads the mites to two digits", () => {
+    for (let minor = 0; minor < 500; minor++) {
+      const written = CURRENCY.format(minor);
+      expect(written.split(",")[1]?.slice(0, 2)).toMatch(/^\d\d$/);
+    }
   });
 
-  // "de" has to match the subtag, not appear anywhere in the string, or
-  // Swedish (`sv-DE`? no — but `nl-DE`, and plainly `xx-de`) would buy francs.
-  test("a region that merely mentions Germany is not German", () => {
-    expect(currencyForLanguage("en-DE")).toBe(Currency.Kuna);
-    expect(currencyForLanguage("nl-DE")).toBe(Currency.Kuna);
-  });
-});
-
-describe("writing money down", () => {
-  test("kuna uses a comma, with the unit after the number", () => {
-    expect(kuna.format(1250)).toBe("12,50 kn");
-    expect(kuna.format(50)).toBe("0,50 kn");
-    expect(kuna.format(500)).toBe("5,00 kn");
-    expect(kuna.format(0)).toBe("0,00 kn");
+  test("a coin says what it is worth in the unit it is worth it in", () => {
+    expect(CURRENCY.coinLabel(1)).toBe("1 mite");
+    expect(CURRENCY.coinLabel(50)).toBe("50 mite");
+    expect(CURRENCY.coinLabel(100)).toBe("1 ducat");
+    expect(CURRENCY.coinLabel(500)).toBe("5 ducat");
   });
 
-  test("francs use a point, with the code in front", () => {
-    expect(franc.format(1250)).toBe("CHF 12.50");
-    expect(franc.format(5)).toBe("CHF 0.05");
-    expect(franc.format(2000)).toBe("CHF 20.00");
-  });
-
-  // A total of 1.05 written as "1,5 kn" would be read as one and a half.
-  test("the minor part is always two digits", () => {
-    expect(kuna.format(105)).toBe("1,05 kn");
-    expect(franc.format(105)).toBe("CHF 1.05");
-  });
-
-  test("a coin is labelled in whichever unit it is a whole number of", () => {
-    expect(kuna.coinLabel(20)).toBe("20 lp");
-    expect(kuna.coinLabel(50)).toBe("50 lp");
-    expect(kuna.coinLabel(100)).toBe("1 kn");
-    expect(kuna.coinLabel(500)).toBe("5 kn");
-    expect(franc.coinLabel(20)).toBe("20 Rp.");
-    expect(franc.coinLabel(100)).toBe("1 Fr.");
-    expect(franc.coinLabel(500)).toBe("5 Fr.");
+  // The names changed once already: they were suns and rays, and the children
+  // could not tell which was the coin. A money word is the requirement — but
+  // it must not be *anybody's* money word, which is what this guards.
+  test("no coin is named after real money", () => {
+    const banned =
+      /kuna|lipa|franc|rappen|euro|cent|dollar|pound|penny|krona|krone|koruna|shilling|florin|CHF|kn|[€$£¥₣]/i;
+    for (const coin of CURRENCY.denominations) {
+      expect(CURRENCY.coinLabel(coin)).not.toMatch(banned);
+    }
+    expect(CURRENCY.format(250)).not.toMatch(banned);
   });
 });
 
 describe("what can be paid", () => {
-  test("whole numbers of the smallest coin, and nothing else", () => {
-    expect(isPayable(kuna, 5)).toBe(true);
-    expect(isPayable(kuna, 250)).toBe(true);
-    expect(isPayable(kuna, 3)).toBe(false);
-    expect(isPayable(kuna, 12)).toBe(false);
-  });
-
-  test("nothing is not an amount, and neither is a fraction of a coin", () => {
-    expect(isPayable(kuna, 0)).toBe(false);
-    expect(isPayable(kuna, -5)).toBe(false);
-    expect(isPayable(kuna, 2.5)).toBe(false);
+  test("any whole number of mites, and nothing else", () => {
+    expect(isPayable(CURRENCY, 1)).toBe(true);
+    expect(isPayable(CURRENCY, 250)).toBe(true);
+    expect(isPayable(CURRENCY, 0)).toBe(false);
+    expect(isPayable(CURRENCY, -5)).toBe(false);
+    expect(isPayable(CURRENCY, 2.5)).toBe(false);
   });
 });
 
-describe("counting out an amount", () => {
-  test("largest coin first, which is how a person counts", () => {
-    expect(coinsFor(kuna, 1250)).toEqual([500, 500, 200, 50]);
-    expect(coinsFor(kuna, 5)).toEqual([5]);
-    expect(coinsFor(kuna, 35)).toEqual([20, 10, 5]);
+describe("counting an amount out", () => {
+  test("largest coin first, the way a person does it", () => {
+    expect(coinsFor(CURRENCY, 250)).toEqual([200, 50]);
+    expect(coinsFor(CURRENCY, 738)).toEqual([500, 200, 20, 10, 5, 2, 1]);
   });
 
-  test("the pile always comes to the amount asked for", () => {
-    for (let amount = 5; amount <= 2000; amount += 5) {
-      expect({ amount, total: totalOf(coinsFor(kuna, amount)) }).toEqual({ amount, total: amount });
+  test("what it counts out is what was asked for", () => {
+    for (let minor = 1; minor <= 1000; minor++) {
+      expect(totalOf(coinsFor(CURRENCY, minor))).toBe(minor);
     }
   });
 
-  // A 1-2-5 system is one of the ones greedy is optimal for, which is worth
-  // pinning: a change of denominations could quietly make it not.
-  test("greedy is the fewest coins, for every amount up to twenty francs", () => {
-    const coins = [...franc.denominations].sort((a, b) => a - b);
-    const fewest = new Array<number>(2001).fill(Number.POSITIVE_INFINITY);
-    fewest[0] = 0;
-    for (let amount = 5; amount <= 2000; amount += 5) {
-      for (const coin of coins) {
-        if (coin <= amount)
-          fewest[amount] = Math.min(
-            fewest[amount] as number,
-            (fewest[amount - coin] as number) + 1,
-          );
+  // Greedy is only the fewest coins because the ladder is 1-2-5; proved here
+  // against an exhaustive search rather than asserted.
+  test("greedy really is the fewest coins", () => {
+    const best = [0];
+    for (let minor = 1; minor <= 1000; minor++) {
+      let fewest = Number.POSITIVE_INFINITY;
+      for (const coin of CURRENCY.denominations) {
+        if (coin <= minor) fewest = Math.min(fewest, 1 + (best[minor - coin] as number));
       }
-    }
-    for (let amount = 5; amount <= 2000; amount += 5) {
-      expect({ amount, n: coinsFor(franc, amount).length }).toEqual({
-        amount,
-        n: fewest[amount] as number,
-      });
+      best[minor] = fewest;
+      expect(coinsFor(CURRENCY, minor).length).toBe(fewest);
     }
   });
 
-  // Nearly right is worse than plainly refused: a caller handed a short pile
-  // would pay the wrong amount and never know.
-  test("an amount no coins can make is refused rather than approximated", () => {
-    expect(coinsFor(kuna, 3)).toEqual([]);
-    expect(coinsFor(kuna, 12)).toEqual([]);
-    expect(coinsFor(kuna, 0)).toEqual([]);
-  });
-
-  test("totalOf an empty pile is nothing", () => {
-    expect(totalOf([])).toBe(0);
-  });
-});
-
-describe("what the coin pad has to hold", () => {
-  // The pad builds this many buttons once and re-labels them; a currency
-  // that needed more would lose its largest coins without saying so.
-  test("it covers the widest coin set there is", () => {
-    for (const currency of Object.values(CURRENCIES)) {
-      expect(currency.denominations.length).toBeLessThanOrEqual(MOST_DENOMINATIONS);
-    }
-    const widest = Math.max(
-      ...Object.values(CURRENCIES).map((currency) => currency.denominations.length),
-    );
-    expect(MOST_DENOMINATIONS).toBe(widest);
+  test("an amount the coins cannot express comes back empty, not nearly right", () => {
+    expect(coinsFor(CURRENCY, 2.5)).toEqual([]);
+    expect(coinsFor(CURRENCY, 0)).toEqual([]);
   });
 });
 
 describe("which coin a value is drawn as", () => {
-  test("a whole unit and up is gold, a tenth and up is silver, the rest copper", () => {
-    const kuna = currencyOf(Currency.Kuna);
-    expect(coinTier(kuna, 5)).toBe(CoinTier.Copper);
-    expect(coinTier(kuna, 10)).toBe(CoinTier.Silver);
-    expect(coinTier(kuna, 50)).toBe(CoinTier.Silver);
-    expect(coinTier(kuna, 100)).toBe(CoinTier.Gold);
-    expect(coinTier(kuna, 500)).toBe(CoinTier.Gold);
+  test("a whole ducat and up is gold, a tenth and up is silver, the rest copper", () => {
+    for (const value of [1, 2, 5]) expect(coinTier(CURRENCY, value)).toBe(CoinTier.Copper);
+    for (const value of [10, 20, 50]) expect(coinTier(CURRENCY, value)).toBe(CoinTier.Silver);
+    for (const value of [100, 200, 500]) expect(coinTier(CURRENCY, value)).toBe(CoinTier.Gold);
   });
 
-  test("the euro's small change is copper where the others have none", () => {
-    const euro = currencyOf(Currency.Euro);
-    for (const value of [1, 2, 5]) expect(coinTier(euro, value)).toBe(CoinTier.Copper);
-    for (const value of [10, 20, 50]) expect(coinTier(euro, value)).toBe(CoinTier.Silver);
-    for (const value of [100, 200]) expect(coinTier(euro, value)).toBe(CoinTier.Gold);
-  });
-
-  // Three faces have to cover every coin in every currency, and the ladder
-  // has to climb: a bigger coin never gets a lesser face than a smaller one.
+  // Three faces have to cover every coin, and the ladder has to climb: a
+  // bigger coin never gets a lesser face than a smaller one.
   test("every coin has a face, and the faces never go backwards", () => {
-    for (const currency of Object.values(CURRENCIES)) {
-      const tiers = currency.denominations.map((coin) =>
-        COIN_TIERS.indexOf(coinTier(currency, coin)),
-      );
-      expect(tiers.every((tier) => tier >= 0)).toBe(true);
-      expect(tiers).toEqual([...tiers].sort((a, b) => a - b));
-      // And all three are actually used somewhere, or one would be dead art.
-      expect(new Set(tiers).size).toBeGreaterThan(1);
+    const tiers = CURRENCY.denominations.map((coin) =>
+      COIN_TIERS.indexOf(coinTier(CURRENCY, coin)),
+    );
+    expect(tiers.every((tier) => tier >= 0)).toBe(true);
+    expect(tiers).toEqual([...tiers].sort((a, b) => a - b));
+    expect(new Set(tiers).size).toBe(COIN_TIERS.length);
+  });
+});
+
+describe("what the coins are called", () => {
+  // Suns and rays failed for a reason worth keeping written down: they were
+  // *nature* words, so nothing about either said "money", and nothing said
+  // which of the two was the small one. Both halves are checked here.
+  test("both names read as money, and neither is anybody's money", () => {
+    expect(MAJOR_NAME).toBe("ducat");
+    expect(MINOR_NAME).toBe("mite");
+    expect(CURRENCY.format(250)).toContain(MAJOR_NAME);
+    expect(CURRENCY.coinLabel(1)).toContain(MINOR_NAME);
+  });
+
+  test("the small coin's name is not the big one's", () => {
+    expect(MINOR_NAME).not.toBe(MAJOR_NAME);
+    // Nor a prefix of it, which is how "sun"/"sunlet" schemes read at a
+    // glance to a child who is still sounding words out.
+    expect(MAJOR_NAME.startsWith(MINOR_NAME)).toBe(false);
+    expect(MINOR_NAME.startsWith(MAJOR_NAME)).toBe(false);
+  });
+
+  test("a price is always written in the major unit, whatever it is called", () => {
+    for (const amount of [1, 50, 99, 100, 250, 5000]) {
+      expect(CURRENCY.format(amount)).toEndWith(` ${MAJOR_NAME}`);
     }
   });
 });

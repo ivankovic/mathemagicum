@@ -17,6 +17,59 @@ export const FixtureType = {
   // player's fence is the one panel — choosing an orientation per tile is
   // not a decision a single tap can carry — so this is world generation's.
   FenceSide: "fence-side",
+  /**
+   * The gate that stands in one.
+   *
+   * Half of every garden's gate lands on a side run — the gate goes on the
+   * ring cell nearest the square, and two of the four sides are the ones
+   * that run away from the camera — so this is not a corner case. Without
+   * it, half of them were drawn with the across-the-camera panel: rails
+   * sticking sideways into the garden, with the run stopping above and
+   * starting again below.
+   */
+  GateSide: "gate-side",
+  /**
+   * A market stall, and the reason the store looks like a store.
+   *
+   * World generation's, like the well. The store is drawn with the barn
+   * sprite — a good big building and not obviously a place that sells
+   * anything — so what marks it out is what is set up in front of it, which
+   * is how a village shop announces itself in the world too. Nothing sells
+   * you one.
+   */
+  Stall: "stall",
+  /**
+   * The enchanted forest's own light: mushrooms that glow.
+   *
+   * A fixture rather than scenery so it takes the lamp's path — the one
+   * thing in the game that lights the ground around it. The grove is drawn
+   * darker than the world at every hour, and these are what keep it
+   * *readable* rather than merely dark.
+   */
+  Glowcap: "glowcap",
+  /**
+   * The big city's ring wall, in the same four pieces the garden fence
+   * comes in: a run across the camera, a run away from it, and a gateway in
+   * each.
+   *
+   * World generation's, like the fence around a village garden and for the
+   * same reason: a player setting walls down one at a time is drawing a line
+   * across the ground, and choosing an orientation per tile is not a
+   * decision a single tap can carry.
+   */
+  CityWall: "city-wall",
+  CityWallSide: "city-wall-side",
+  /**
+   * The way through it.
+   *
+   * Drawn open and, uniquely among fixtures, placed *unblocked* — a closed
+   * gate on this grid either walls the city off or lets the player walk
+   * through solid stone. What a gate cell blocks is a question about the
+   * world rather than about the picture, which is why the sidecar still says
+   * the cell is solid and the layout overrides it.
+   */
+  CityGate: "city-gate",
+  CityGateSide: "city-gate-side",
 } as const;
 
 export type FixtureType = (typeof FixtureType)[keyof typeof FixtureType];

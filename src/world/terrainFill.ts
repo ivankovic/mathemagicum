@@ -32,6 +32,15 @@ export function fillFromElevation(grid: WorldGrid, corner: HighCorner, seed: num
   }
 }
 
+/**
+ * The one story area allowed to keep water in the middle of it.
+ *
+ * Matched by id rather than by a flag on `AreaPlacement`, because the id is
+ * what the anchor already carries and a second way of saying which box this
+ * is would be a second thing to keep in step.
+ */
+const HARBOUR_ID = "harbour";
+
 // What impassable ground becomes when a story area still needs opening up
 // after the ground beneath it has been lowered: the next band in toward the
 // walkable middle.
@@ -126,9 +135,21 @@ export function flattenReservedAreas(
         grid.setHabitat(col, row, ground.habitat);
         // Well inside the clearing the player must be able to stand
         // anywhere, whatever the shifted ground came out as.
+        //
+        // Except the harbour's sea. This rule used to drain it: the box is
+        // chosen for straddling the waterline, and then the middle of it —
+        // which is the bay — was turned to sand for being unwalkable, and
+        // the docks came out in a field. A harbour is the one story area
+        // whose whole point is a piece of ground you cannot stand on, and
+        // it gets over its water by pier rather than by the water not being
+        // there. Mountains still soften: rock in the middle of a place is
+        // an obstacle, not the reason for it.
         if (strength > 0.5) {
-          const instead = WALKABLE_INSTEAD[grid.getTerrain(col, row)];
-          if (instead) grid.setTerrain(col, row, instead);
+          const here = grid.getTerrain(col, row);
+          const instead = WALKABLE_INSTEAD[here];
+          if (instead && !(here === TerrainType.Water && box.id === HARBOUR_ID)) {
+            grid.setTerrain(col, row, instead);
+          }
         }
       }
     }

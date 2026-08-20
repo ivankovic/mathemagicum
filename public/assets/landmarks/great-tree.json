@@ -1,0 +1,72 @@
+{
+  "sheet": {
+    "file": "great-tree_sheet.png",
+    "frame_width": 160,
+    "frame_height": 216,
+    "frame_count": 8,
+    "columns": 8,
+    "rows": 1,
+    "margin": 1,
+    "spacing": 2
+  },
+  "landmark": "great-tree",
+  "tile_size": 32,
+  "footprint_tiles": {
+    "width": 3,
+    "height": 3
+  },
+  "blocked_cells_relative_to_anchor": [
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      1
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      2,
+      1
+    ],
+    [
+      2,
+      2
+    ]
+  ],
+  "sprite_offset_px": {
+    "x": -32,
+    "y": -120
+  },
+  "sprite_size_px": {
+    "width": 160,
+    "height": 216
+  },
+  "frame_count": 8,
+  "animations": {
+    "idle": {
+      "start": 0,
+      "end": 7,
+      "frame_count": 8
+    }
+  }
+}

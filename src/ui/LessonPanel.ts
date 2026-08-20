@@ -4,7 +4,9 @@
 import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import { PLACES } from "../spells/addition";
-import { LESSON_BEATS, LESSON_EXAMPLE, LessonBeat, partsOf } from "../spells/lesson";
+import type { AdditionProblem } from "../spells/addition";
+import { HARDEST_RUNG, type Rung, rungAt } from "../spells/difficulty";
+import { LESSON_BEATS, LessonBeat, lessonFor, partsOf } from "../spells/lesson";
 import { type Chip, PagedPanel } from "./PagedPanel";
 import type { PanelRect } from "./ParchmentPanel";
 import { UiAsset, type UiIndex } from "./assets";
@@ -46,6 +48,24 @@ const STOP_BOX_W = 46;
 const STOP_BOX_H = 22;
 
 export class LessonPanel extends PagedPanel<LessonBeat> {
+  /**
+   * Which sums this child is being asked, so she can teach on those.
+   *
+   * A teacher who works through `148 + 114` at a child who has only ever
+   * seen `5 + 2` is demonstrating a method on a problem they cannot read,
+   * and the method is the whole of what she has to give.
+   */
+  private rung: Rung = rungAt(HARDEST_RUNG);
+
+  setRung(rung: Rung): void {
+    this.rung = rung;
+    if (this.isOpen) this.layout();
+  }
+
+  private example(): AdditionProblem {
+    return lessonFor(this.rung);
+  }
+
   private readonly caption: Phaser.GameObjects.Text;
   private readonly startLabel: Phaser.GameObjects.Text;
   /** The number pulled apart, where each jump lands, and what each jump adds. */
@@ -86,7 +106,7 @@ export class LessonPanel extends PagedPanel<LessonBeat> {
   }
 
   protected bodyText(beat: LessonBeat): string {
-    const example = LESSON_EXAMPLE;
+    const example = this.example();
     switch (beat) {
       case LessonBeat.Rune:
         return this.words.lessonRune;
@@ -114,7 +134,7 @@ export class LessonPanel extends PagedPanel<LessonBeat> {
 
   /** The addend in pieces, biggest first — which is how a number is read out. */
   private drawSplit(rect: PanelRect, middle: number, bottom: number): void {
-    const parts = partsOf(LESSON_EXAMPLE);
+    const parts = partsOf(this.example());
     const spread = (parts.length - 1) * (CHIP_W + 10);
     for (const [i, part] of parts.entries()) {
       const chip = this.splitChips[i];
@@ -125,7 +145,7 @@ export class LessonPanel extends PagedPanel<LessonBeat> {
       this.show(chip);
     }
     this.caption
-      .setText(this.words.lessonExample(LESSON_EXAMPLE.start, LESSON_EXAMPLE.addend))
+      .setText(this.words.lessonExample(this.example().start, this.example().addend))
       .setPosition(rect.centreX, bottom - SMALL_SIZE)
       .setVisible(true);
   }
@@ -139,7 +159,7 @@ export class LessonPanel extends PagedPanel<LessonBeat> {
    * both take their numbers from one problem built by one function.
    */
   private drawNumberLine(rect: PanelRect, middle: number, answering: boolean): void {
-    const problem = LESSON_EXAMPLE;
+    const problem = this.example();
     const lineLeft = rect.left + 16 + STOP_BOX_W / 2;
     const lineRight = rect.left + rect.width - 16 - STOP_BOX_W / 2;
     const spacing = (lineRight - lineLeft) / PLACES;

@@ -73,6 +73,7 @@ interface Button {
   readonly box: Phaser.GameObjects.Rectangle;
   readonly icon: Phaser.GameObjects.Image;
   readonly badge?: Badge;
+  readonly available?: () => boolean;
 }
 
 export interface TrayItem {
@@ -88,6 +89,16 @@ export interface TrayItem {
    * Items without one carry no badge at all: a spell is not a quantity.
    */
   readonly count?: () => number;
+  /**
+   * Whether the player may use this at all, if that is a thing that changes.
+   *
+   * A spell nobody has taught them yet is drawn dimmed rather than left out,
+   * for the reason an empty basket slot is: a book with a gap in it says
+   * there is something to find, and one that hides what it does not have
+   * says the game is finished. Tapping it still calls `act` — what to say
+   * about it belongs to whoever owns the spell, not to the tray.
+   */
+  readonly available?: () => boolean;
 }
 
 export interface IconTrayOptions {
@@ -108,6 +119,16 @@ export interface IconTrayOptions {
    * something without asking them to open the basket to find out.
    */
   readonly count?: () => number;
+  /**
+   * Whether the player may use this at all, if that is a thing that changes.
+   *
+   * A spell nobody has taught them yet is drawn dimmed rather than left out,
+   * for the reason an empty basket slot is: a book with a gap in it says
+   * there is something to find, and one that hides what it does not have
+   * says the game is finished. Tapping it still calls `act` — what to say
+   * about it belongs to whoever owns the spell, not to the tray.
+   */
+  readonly available?: () => boolean;
   /** Called when this tray opens, so its neighbour can close. */
   readonly onOpen?: () => void;
   /**
@@ -132,7 +153,12 @@ export class IconTray {
     scene: Phaser.Scene,
     private readonly options: IconTrayOptions,
   ) {
-    const make = (texture: string, size: number, count?: () => number): Button => {
+    const make = (
+      texture: string,
+      size: number,
+      count?: () => number,
+      available?: () => boolean,
+    ): Button => {
       const box = scene.add
         .rectangle(0, 0, size, size, BUTTON_FILL, BUTTON_ALPHA)
         .setStrokeStyle(2, BUTTON_STROKE, BUTTON_STROKE_ALPHA)
@@ -145,7 +171,7 @@ export class IconTray {
         .setDepth(options.depth + 1);
       options.register(box);
       options.register(icon);
-      if (!count) return { box, icon };
+      if (!count) return { box, icon, available };
 
       const badgeSize = Math.max(BADGE_MIN, Math.round(size * BADGE_SCALE));
       // Neither the bubble nor the number is interactive, so a tap on the
@@ -167,14 +193,14 @@ export class IconTray {
         .setDepth(options.depth + 3);
       options.register(bubble);
       options.register(text);
-      return { box, icon, badge: { bubble, text, size: badgeSize, count } };
+      return { box, icon, available, badge: { bubble, text, size: badgeSize, count } };
     };
 
     this.container = make(options.texture, options.size, options.count);
     this.container.box.on("pointerdown", () => this.setOpen(!this.open));
 
     for (const item of options.items) {
-      const button = make(item.texture, options.size - 8, item.count);
+      const button = make(item.texture, options.size - 8, item.count, item.available);
       button.box.on("pointerdown", () => {
         // Closed before acting, not after: acting can open a popup over the
         // top, and a tray left open behind it is live the moment it closes.
@@ -223,15 +249,19 @@ export class IconTray {
     for (const item of this.items) this.paint(item, this.open);
   }
 
-  // An item the player has none of is dimmed and carries no badge. Hiding it
-  // outright would reshuffle the tray as things are picked and dropped, and a
-  // row of buttons that moves under a thumb is worse than one with a gap in
-  // it — this way the basket also says what *could* be in it.
+  // An item the player has none of — or has not been taught — is dimmed and
+  // carries no badge. Hiding it outright would reshuffle the tray as things
+  // are picked and dropped, and a row of buttons that moves under a thumb is
+  // worse than one with a gap in it — this way the basket also says what
+  // *could* be in it, and the spellbook what could be in that.
   private paint(button: Button, visible: boolean): void {
     const badge = button.badge;
+    // Two ways to be dim and one look for both: nothing of it in the basket,
+    // or nobody has taught it yet.
+    const label = badge ? badgeLabel(badge.count()) : "";
+    const allowed = button.available ? button.available() : true;
+    button.icon.setAlpha((badge ? label !== "" : true) && allowed ? 1 : EMPTY_ALPHA);
     if (!badge) return;
-    const label = badgeLabel(badge.count());
-    button.icon.setAlpha(label ? 1 : EMPTY_ALPHA);
     badge.bubble.setVisible(visible && label !== null);
     badge.text.setVisible(visible && label !== null);
     if (label) badge.text.setText(label);

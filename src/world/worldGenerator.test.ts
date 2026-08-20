@@ -5,7 +5,10 @@ import { describe, expect, test } from "bun:test";
 import type { AnchorPlacements, AreaPlacement } from "./anchors";
 import { floodFillReachable, isReachable } from "./connectivity";
 import { type HighCorner, highEdges } from "./elevation";
+import type { Grove } from "./enchantedForest";
 import type { WorldGrid } from "./grid";
+import { LANDMARK_FOOTPRINT, LandmarkType } from "./landmarks";
+import { TerrainType } from "./terrain";
 import { generateWorld } from "./worldGenerator";
 
 // Smaller than the real 500x500 target so a 20-seed sweep stays fast
@@ -28,6 +31,223 @@ function centerOf(area: AreaPlacement): { col: number; row: number } {
     col: area.col + Math.floor(area.width / 2),
     row: area.row + Math.floor(area.height / 2),
   };
+}
+
+/**
+ * The grove is walkable-to, and the tree is still standing in it.
+ *
+ * Both halves matter and they pull against each other: a path carved to the
+ * middle of the clearing satisfies the first on its own by deleting the
+ * thing worth walking to.
+ */
+function assertGroveIsReachedAndStandsThere(
+  grid: WorldGrid,
+  reachable: ReturnType<typeof floodFillReachable>,
+  grove: Grove,
+): void {
+  expect(grid.isPassable(grove.doorstep.col, grove.doorstep.row)).toBe(true);
+  expect(isReachable(reachable, grid, grove.doorstep)).toBe(true);
+  const standing = grid.getObjectAt(grove.tree.col + 1, grove.tree.row + 1);
+  expect(standing?.type).toBe(LandmarkType.GreatTree);
+  for (let row = grove.tree.row; row < grove.tree.row + 3; row++) {
+    for (let col = grove.tree.col; col < grove.tree.col + 3; col++) {
+      expect(grid.isPassable(col, row)).toBe(false);
+    }
+  }
+}
+
+/**
+ * A harbour with water in it, and land to build on.
+ *
+ * The world used to make neither reliably. Placement asked only that the
+ * box's *mean* elevation sit in the sand-to-grass band, which a box entirely
+ * above the waterline satisfies comfortably — and then the flatten pass
+ * turned whatever sea was left into sand for being unwalkable. Most seeds
+ * put the docks in a field, and nothing said so, because a field is a
+ * perfectly valid piece of world.
+ *
+ * Checked as a fraction rather than as "at least one water tile": a harbour
+ * with a puddle in the corner passes that and is the same field.
+ */
+function assertTheHarbourHasSeaInIt(grid: WorldGrid, harbour: AreaPlacement): void {
+  let wet = 0;
+  let cells = 0;
+  for (let row = harbour.row; row < harbour.row + harbour.height; row++) {
+    for (let col = harbour.col; col < harbour.col + harbour.width; col++) {
+      if (grid.getTerrain(col, row) === TerrainType.Water) wet++;
+      cells++;
+    }
+  }
+  const sea = wet / cells;
+  expect({ sea: sea > 0.08 }).toEqual({ sea: true });
+  expect({ land: sea < 0.7 }).toEqual({ land: true });
+}
+
+/**
+ * The harbour and the city can be walked into, and walked about in.
+ *
+ * Their *doorsteps*, not their middles — the city's middle is the clock
+ * tower's square and the harbour's is frequently open sea, and connectivity
+ * carves by removing whatever is in the way, so a pass aimed at either would
+ * either delete something or fail. The village learned this the hard way
+ * with its garden gate and the forest with its great tree.
+ *
+ * The piers are checked too, and they are the interesting half: a plank is
+ * the only thing in the world that makes unwalkable ground walkable, so a
+ * pier whose root is not reachable from the shore is a jetty in the middle
+ * of a bay.
+ */
+function assertYouCanGetIntoTheSettlements(
+  grid: WorldGrid,
+  reachable: ReturnType<typeof floodFillReachable>,
+  world: ReturnType<typeof generateWorld>,
+): void {
+  expect(isReachable(reachable, grid, world.city.doorstep)).toBe(true);
+  assertTheWallIsAWall(grid, world.city);
+  // The middle of the city, not merely its gate: a gate that opened onto a
+  // block walled in by its own buildings would pass a doorstep check. A cell
+  // of the square rather than the tower on it, because the tower is a
+  // building and you cannot walk into a building.
+  expect(isReachable(reachable, grid, world.city.plazaCell)).toBe(true);
+  expect(world.city.clockTower?.type).toBe(LandmarkType.ClockTower);
+
+  const harbour = world.harbour;
+  if (!harbour) return;
+  // The beacon stands on land at the end of the shore, on every cell it
+  // blocks. A tower with a foot in the sea is the failure this catches, and
+  // it is not one a screenshot of the other end of the harbour would show.
+  if (harbour.lighthouse) {
+    const tower = harbour.lighthouse;
+    expect(tower.type).toBe(LandmarkType.Lighthouse);
+    expect({ width: tower.width, height: tower.height }).toEqual({
+      width: LANDMARK_FOOTPRINT,
+      height: LANDMARK_FOOTPRINT,
+    });
+    for (let row = tower.row; row < tower.row + tower.height; row++) {
+      for (let col = tower.col; col < tower.col + tower.width; col++) {
+        expect(grid.getTerrain(col, row)).not.toBe(TerrainType.Water);
+        expect(grid.isBridged(col, row)).toBe(false);
+        expect(grid.isPassable(col, row)).toBe(false);
+      }
+    }
+  }
+  expect(grid.isPassable(harbour.doorstep.col, harbour.doorstep.row)).toBe(true);
+  expect(isReachable(reachable, grid, harbour.doorstep)).toBe(true);
+  expect(grid.isBridged(harbour.doorstep.col, harbour.doorstep.row)).toBe(false);
+  const ship = harbour.ship;
+  if (ship) {
+    // She floats. Every cell of her footprint is open water, or she is a
+    // ship aground — which nothing else in the game would notice, because a
+    // building on a beach is a perfectly ordinary building.
+    for (let row = ship.row; row < ship.row + ship.height; row++) {
+      for (let col = ship.col; col < ship.col + ship.width; col++) {
+        expect(grid.getTerrain(col, row)).toBe(TerrainType.Water);
+        expect(grid.isBridged(col, row)).toBe(false);
+      }
+    }
+    // And you can board her. Her door is the middle of her southern row —
+    // every door in this game is in the south wall — so the cell a player
+    // stands on is the one directly below it, and it has to be planked and
+    // walkable and connected to everywhere else.
+    //
+    // This is the check that caught the first gangway: it was laid back
+    // along the line the search walked out on, which moors her perfectly and
+    // leaves her unboardable on any coast that does not happen to face
+    // north.
+    const board = { col: ship.col + Math.floor(ship.width / 2), row: ship.row + ship.height };
+    expect(grid.isBridged(board.col, board.row) || grid.isPassable(board.col, board.row)).toBe(
+      true,
+    );
+    expect(isReachable(reachable, grid, board)).toBe(true);
+    for (const plank of harbour.gangway) {
+      expect(grid.isBridged(plank.col, plank.row)).toBe(true);
+      expect(isReachable(reachable, grid, plank)).toBe(true);
+    }
+  }
+
+  for (const pier of harbour.piers) {
+    for (const plank of pier) {
+      expect(grid.isBridged(plank.col, plank.row)).toBe(true);
+      expect(grid.isPassable(plank.col, plank.row)).toBe(true);
+      expect(isReachable(reachable, grid, plank)).toBe(true);
+    }
+  }
+}
+
+/**
+ * The city wall is unbroken, and there is exactly one way through it.
+ *
+ * The failure this exists for is the one the village's garden gate had:
+ * `ensureConnectivity` carves by *removing whatever is in the way*, so a
+ * route aimed anywhere inside the walls reaches it by knocking a hole in
+ * them — and a hole is invisible to every check that only asks whether the
+ * city can be walked into, because a hole is a perfectly good way in.
+ *
+ * So this counts the pieces. One gap, at the gate, and it is passable;
+ * everything else on the ring is wall, and it is not.
+ */
+function assertTheWallIsAWall(
+  grid: WorldGrid,
+  city: ReturnType<typeof generateWorld>["city"],
+): void {
+  const ways = city.wall.filter((piece) => !piece.blocksMovement);
+  expect(ways.length).toBe(1);
+  const gate = ways[0] as (typeof city.wall)[number];
+  expect(grid.isPassable(gate.col, gate.row)).toBe(true);
+
+  // Every piece the layout laid is still standing where it laid it. A wall
+  // that came back with three of its stones missing would still enclose a
+  // city everywhere this test looked if it only sampled.
+  for (const piece of city.wall) {
+    const standing = grid.getObjectAt(piece.col, piece.row);
+    expect({ at: `${piece.col},${piece.row}`, type: standing?.type }).toEqual({
+      at: `${piece.col},${piece.row}`,
+      type: piece.type,
+    });
+    expect(grid.isPassable(piece.col, piece.row)).toBe(piece === gate);
+  }
+
+  // And the ring really is a ring: four corners and four runs, so the count
+  // is the perimeter of the box it was laid on rather than however many
+  // cells happened to be free when it was built.
+  const width =
+    city.wall.reduce((most, p) => Math.max(most, p.col), 0) -
+    city.wall.reduce((least, p) => Math.min(least, p.col), Number.POSITIVE_INFINITY) +
+    1;
+  const height =
+    city.wall.reduce((most, p) => Math.max(most, p.row), 0) -
+    city.wall.reduce((least, p) => Math.min(least, p.row), Number.POSITIVE_INFINITY) +
+    1;
+  expect(city.wall.length).toBe(2 * width + 2 * height - 4);
+}
+
+/**
+ * The harbour's water is south of its town, in every world.
+ *
+ * The world rises to the north-west and falls to the south-east, so a box
+ * that straddles the waterline can find its water on its eastern side as
+ * easily as its southern. Both are coasts; only one of them is the coast
+ * this game is built around — every door is in the south wall, so a quay
+ * laid along an eastern shore puts the warehouses' fronts to the sea and
+ * their backs to the town, and the great ship moors with her entry port
+ * facing open water.
+ *
+ * It is also the half of "the world always faces the same way" a child can
+ * actually use: the harbour is *down* the map, in this world and the next.
+ */
+function assertTheSeaIsSouthOfTheHarbour(grid: WorldGrid, harbour: AreaPlacement): void {
+  const half = harbour.row + harbour.height / 2;
+  let north = 0;
+  let south = 0;
+  for (let row = harbour.row; row < harbour.row + harbour.height; row++) {
+    for (let col = harbour.col; col < harbour.col + harbour.width; col++) {
+      if (grid.getTerrain(col, row) !== TerrainType.Water) continue;
+      if (row >= half) south++;
+      else north++;
+    }
+  }
+  const southward = south / Math.max(1, south + north);
+  expect({ southward: southward > 0.6 }).toEqual({ southward: true });
 }
 
 function boxesOverlap(a: AreaPlacement, b: AreaPlacement): boolean {
@@ -107,14 +327,18 @@ describe("generateWorld seed sweep", () => {
       // actually be somewhere the player can stand.
       expect(grid.isPassable(playerStart.col, playerStart.row)).toBe(true);
       const reachable = floodFillReachable(grid, playerStart);
-      for (const area of [
-        anchors.harbour,
-        anchors.bigCity,
-        anchors.observatory,
-        anchors.enchantedForest,
-      ]) {
-        expect(isReachable(reachable, grid, centerOf(area))).toBe(true);
-      }
+      // The observatory is still asked about its middle: nothing is built
+      // there yet, so its middle is open ground.
+      expect(isReachable(reachable, grid, centerOf(anchors.observatory))).toBe(true);
+      assertYouCanGetIntoTheSettlements(grid, reachable, world);
+      // The forest is asked about its doorstep rather than its centre,
+      // because its centre is the great tree and a tree you can walk into is
+      // not a tree. This is the invariant that caught the tree being carved
+      // away: connectivity used to aim at the centre and simply removed
+      // whatever stood in the way of getting there.
+      assertGroveIsReachedAndStandsThere(grid, reachable, world.grove);
+      assertTheHarbourHasSeaInIt(grid, anchors.harbour);
+      assertTheSeaIsSouthOfTheHarbour(grid, anchors.harbour);
     });
   }
 
@@ -149,13 +373,8 @@ describe("generateWorld at full target scale", () => {
     assertHighCornerIsHighest(grid, world.highCorner);
 
     const reachable = floodFillReachable(grid, playerStart);
-    for (const area of [
-      anchors.harbour,
-      anchors.bigCity,
-      anchors.observatory,
-      anchors.enchantedForest,
-    ]) {
-      expect(isReachable(reachable, grid, centerOf(area))).toBe(true);
-    }
+    expect(isReachable(reachable, grid, centerOf(anchors.observatory))).toBe(true);
+    assertYouCanGetIntoTheSettlements(grid, reachable, world);
+    assertGroveIsReachedAndStandsThere(grid, reachable, world.grove);
   });
 });

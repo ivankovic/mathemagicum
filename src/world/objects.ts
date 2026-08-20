@@ -24,6 +24,24 @@ export interface PlacedObject {
   anchorCol: number;
   anchorRow: number;
   /**
+   * Not something the connectivity carve may knock down.
+   *
+   * That pass gets where it is going by *removing whatever is in the way*,
+   * and for the ground it cuts through that is right — a route has to be
+   * able to open a wood or a rock field. For architecture it is not. The
+   * city wall is the case that made this necessary: a route to somewhere
+   * beyond the city ran in at one side and out at the other, because two
+   * wall cells were a cheaper crossing than a long detour round a wood, and
+   * nothing noticed — a hole in a wall is a perfectly good way into a city,
+   * so every check that asked whether the city could be walked into passed.
+   *
+   * Marked cells are *routed around* rather than cut: a marked cell that is
+   * passable anyway — a gate — may still be walked over, and is then left
+   * standing. Anything enclosed entirely by marked cells is unreachable and
+   * the carve says so out loud rather than making a door.
+   */
+  unbreakable?: boolean;
+  /**
    * Drawn mirrored about its own centre.
    *
    * For the fence's side run, whose rails sit on the left of its cell so

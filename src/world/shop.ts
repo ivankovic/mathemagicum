@@ -30,14 +30,31 @@ import { PLANT_TYPES, type PlantType } from "./plants";
  */
 
 /**
- * What one harvested crop fetches, in the currency's minor unit — lipa or
- * rappen. The unit everything else is quoted in.
+ * What one harvested crop fetches, in rays — the money's minor unit, and
+ * what everything else here is quoted in.
  *
  * 2.50 rather than a round 1.00 or 5.00 on purpose: a price that is a whole
  * number of the largest coin can be paid with one coin and teaches nothing.
  * This one takes three, and two of them are not the same.
  */
 export const CROP_PRICE = 250;
+
+/**
+ * What a crop fetches for the child currently playing.
+ *
+ * A parameter now rather than the constant above, because a six-year-old
+ * counting out 2,50 is counting the wrong thing: the gentlest setting quotes
+ * a crop at a whole sun so the money is money rather than a second puzzle
+ * (see src/spells/difficulty.ts).
+ *
+ * What it emphatically does *not* do is change what anything is worth.
+ * Everything the store sells is priced in *crops* — a fence is two harvests
+ * at every setting — so quoting a crop differently rescales both sides of
+ * every trade at once and the economy is identical. That is deliberate: the
+ * moment easier sums earned less, the game would be telling a struggling
+ * child they are worth less.
+ */
+export type CropPrice = number;
 
 /**
  * The most of one thing that changes hands in a single trade.
@@ -53,6 +70,17 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
   well: Number.POSITIVE_INFINITY, // not for sale; the village has the one
   gate: Number.POSITIVE_INFINITY, // nor is this: it belongs to a garden wall
   "fence-side": Number.POSITIVE_INFINITY, // the same fence, the world's copy
+  "gate-side": Number.POSITIVE_INFINITY, // and the gate that stands in it
+  glowcap: Number.POSITIVE_INFINITY, // the forest's, and it would not glow anywhere else
+  stall: Number.POSITIVE_INFINITY, // the market's, and it belongs to the market
+  // The city's ring wall and the way through it. Not for sale for the reason
+  // the well is not: it is a piece of a place rather than a thing somebody
+  // owns, and a child who could buy a length of city wall could wall their
+  // own garden in with it.
+  "city-wall": Number.POSITIVE_INFINITY,
+  "city-wall-side": Number.POSITIVE_INFINITY,
+  "city-gate": Number.POSITIVE_INFINITY,
+  "city-gate-side": Number.POSITIVE_INFINITY,
   fence: 2,
   table: 5,
   lamp: 8,
@@ -60,10 +88,10 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
 
 export const SHOP_STOCK: readonly FixtureType[] = PLACEABLE_FIXTURES;
 
-export function priceOf(fixture: FixtureType): number {
+export function priceOf(fixture: FixtureType, cropPrice: CropPrice = CROP_PRICE): number {
   const crops = COST_IN_CROPS[fixture];
   if (!Number.isFinite(crops)) throw new Error(`${fixture} is not for sale`);
-  return crops * CROP_PRICE;
+  return crops * cropPrice;
 }
 
 /**
@@ -72,8 +100,8 @@ export function priceOf(fixture: FixtureType): number {
  * Not `valueOf`, which every object already has: a free function with that
  * name is one import away from being mistaken for the built-in.
  */
-export function sellPriceOf(item: ItemType): number {
-  return (PLANT_TYPES as readonly string[]).includes(item) ? CROP_PRICE : 0;
+export function sellPriceOf(item: ItemType, cropPrice: CropPrice = CROP_PRICE): number {
+  return (PLANT_TYPES as readonly string[]).includes(item) ? cropPrice : 0;
 }
 
 export function isSellable(item: ItemType): item is PlantType {
@@ -130,8 +158,9 @@ export function sellCrops(
   purse: Purse,
   item: ItemType,
   count: number,
+  cropPrice: CropPrice = CROP_PRICE,
 ): Trade {
-  const unit = sellPriceOf(item);
+  const unit = sellPriceOf(item, cropPrice);
   if (unit <= 0 || !Number.isInteger(count) || count <= 0) return { ok: false, amount: 0 };
   if (!inventory.remove(item, count)) return { ok: false, amount: 0 };
   const earned = unit * count;
@@ -151,9 +180,10 @@ export function buyStock(
   purse: Purse,
   fixture: FixtureType,
   count: number,
+  cropPrice: CropPrice = CROP_PRICE,
 ): Trade {
   if (!Number.isInteger(count) || count <= 0) return { ok: false, amount: 0 };
-  const price = priceOf(fixture) * count;
+  const price = priceOf(fixture, cropPrice) * count;
   if (!purse.spend(price)) return { ok: false, amount: 0 };
   inventory.add(fixture, count);
   return { ok: true, amount: price };

@@ -8,7 +8,39 @@
 // name. See ~/src/asset-generator's "Objects and buildings".
 export const BuildingSprite = {
   Cottage: "cottage",
+  /**
+   * The city's house: two tiles of frontage and half again the height.
+   *
+   * A city built from cottages is a large village. What says *city* at a
+   * glance is not how many houses there are but that they are narrow and
+   * tall and stand shoulder to shoulder, because land in a city is worth
+   * something and a house grows upward instead of outward.
+   */
+  Townhouse: "townhouse",
   Barn: "barn",
+  /**
+   * The great ship, moored at the harbour.
+   *
+   * A building, to this game, is a footprint it blocks with a door in it and
+   * a room behind. A ship is all three, so it is one — which is what let it
+   * be added without a single new rule about walking into things. It only
+   * looks nothing like the others, and that is the generator's business.
+   *
+   * Broadside on, because every door here is in the south wall: a ship you
+   * could only board over the bow would be a ship with its gangway pointing
+   * out to sea.
+   */
+  Ship: "ship",
+  /**
+   * The dome on the mountain: a drum of dressed stone under a lead cupola,
+   * with the shutter open on the sky and a telescope sweeping in it.
+   *
+   * Deliberately nothing like the tower it replaced as a stand-in. The tower
+   * is narrow, pointed and purple; this is wide, round and lead-grey, and
+   * the two are the only tall things in the world that a child could
+   * otherwise confuse.
+   */
+  Observatory: "observatory",
   Tower: "tower",
   Schoolhouse: "schoolhouse",
 } as const;
@@ -30,6 +62,9 @@ export interface Footprint {
 
 export const BUILDING_FOOTPRINTS: Record<BuildingSprite, Footprint> = {
   [BuildingSprite.Cottage]: { width: 3, height: 2 },
+  [BuildingSprite.Townhouse]: { width: 2, height: 2 },
+  [BuildingSprite.Ship]: { width: 5, height: 2 },
+  [BuildingSprite.Observatory]: { width: 3, height: 3 },
   [BuildingSprite.Barn]: { width: 4, height: 3 },
   [BuildingSprite.Tower]: { width: 2, height: 2 },
   [BuildingSprite.Schoolhouse]: { width: 4, height: 3 },
@@ -38,10 +73,24 @@ export const BUILDING_FOOTPRINTS: Record<BuildingSprite, Footprint> = {
 // The village's roles, mapped onto the shapes that read most like them.
 // Nothing about a building sprite is specific to its role — swapping these
 // changes only what the village looks like.
-export type BuildingRole = "house" | "school" | "post-office" | "store";
+export type BuildingRole =
+  | "house"
+  | "townhouse"
+  | "school"
+  | "post-office"
+  | "store"
+  | "ship"
+  | "observatory";
 
 export const ROLE_SPRITES: Record<BuildingRole, BuildingSprite> = {
   house: BuildingSprite.Cottage,
+  // A house in the city rather than a different kind of thing. It is its own
+  // role rather than the village's house drawn taller because the *layout*
+  // has to know: a townhouse takes two tiles of frontage where a cottage
+  // takes three, and a block laid out for one does not fit the other.
+  townhouse: BuildingSprite.Townhouse,
+  ship: BuildingSprite.Ship,
+  observatory: BuildingSprite.Observatory,
   school: BuildingSprite.Schoolhouse,
   "post-office": BuildingSprite.Tower,
   store: BuildingSprite.Barn,
@@ -86,11 +135,41 @@ export function entranceFor(
   };
 }
 
-export function isEntrance(entrance: Entrance, col: number, row: number): boolean {
-  return row === entrance.row && col >= entrance.minCol && col <= entrance.maxCol;
+/**
+ * Whether stepping onto this cell, *coming this way*, goes indoors.
+ *
+ * The direction is the whole of what this fixes. Widening the doorway by a
+ * cell each way made it forgiving to walk into, and the widening applied
+ * whichever way the step came from — so a child walking sideways along the
+ * front of a building, scraping the wall a cell to the side of the door, was
+ * put indoors. On a building whose door sits near a corner the widened cell
+ * *is* the corner, so what they walked into was the building's side.
+ *
+ * A doorway is approached from in front of it. `dRow` is the step being
+ * taken, and only a step *into* the wall — northward, from the ground in
+ * front — is an entrance. Sideways along the wall is a wall.
+ */
+export function isEntrance(
+  entrance: Entrance,
+  col: number,
+  row: number,
+  step?: { dCol: number; dRow: number },
+): boolean {
+  if (row !== entrance.row || col < entrance.minCol || col > entrance.maxCol) return false;
+  // No step given means "is this cell part of the doorway at all", which is
+  // what the map and the tests ask.
+  if (!step) return true;
+  return step.dRow < 0 && step.dCol === 0;
 }
 
-export function spriteSheetKey(sprite: BuildingSprite): string {
+/**
+ * The texture a building is drawn from.
+ *
+ * Takes a plain string rather than a `BuildingSprite`, because a repainted
+ * house is registered under a name of its own — "cottage~2" is a real sheet
+ * and not one of the four the generator ships.
+ */
+export function spriteSheetKey(sprite: string): string {
   return `building-${sprite}`;
 }
 
@@ -123,6 +202,6 @@ export function doorStateForDistance(distance: number): DoorState {
 }
 
 // Matches the sidecar's own animation names: `door_{state}`.
-export function buildingAnimKey(sprite: BuildingSprite, state: DoorState): string {
+export function buildingAnimKey(sprite: string, state: DoorState): string {
   return `building-${sprite}-door_${state}`;
 }

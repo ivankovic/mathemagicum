@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { Language } from "../settings";
-import { Currency } from "../shop/currency";
+import { LANGUAGES, Language } from "../settings";
 import { INTRO_BEATS, IntroBeat } from "../ui/intro";
 import { FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
+import { INTERIOR_ROOMS } from "../world/interiors";
 import { PLANT_STAGES, PLANT_TYPES, PlantStage, PlantType } from "../world/plants";
 import { TERRAIN_TYPES } from "../world/terrain";
 import { DE } from "./de";
@@ -32,7 +32,6 @@ function sample(p: Phrases): Record<string, string> {
     terrain: p.terrain("grass"),
     room: p.room("barn"),
     count: p.count(carrot, 3),
-    currencyName: p.currencyName(Currency.Kuna),
 
     nothingGrowsIndoors: p.nothingGrowsIndoors,
     noRoomToPlant: p.noRoomToPlant,
@@ -56,22 +55,65 @@ function sample(p: Phrases): Record<string, string> {
     pickedUp: p.pickedUp(fence, 2),
 
     spellFades: p.spellFades,
+    nothingToClear: p.nothingToClear,
+    willNotClear: p.willNotClear,
+    cleared: p.cleared,
     tooFarToSpeak: p.tooFarToSpeak,
+    tooFarFromLandmark: p.tooFarFromLandmark,
     cannotWalkThere: p.cannotWalkThere,
+    greatTreeGreeting: p.greatTreeGreeting,
+    lighthouseGreeting: p.lighthouseGreeting,
+    clockTowerGreeting: p.clockTowerGreeting,
+    arrayUntaught: p.arrayUntaught,
+    arrayTaught: p.arrayTaught,
+    groveAsks: p.groveAsks({ task: "growing", standing: 0, ripe: 4, squares: 12 }),
+    groveLessonTitle: p.groveLessonTitle,
+    groveRune: p.groveRune,
+    groveRows: p.groveRows(4, 6),
+    groveCount: p.groveCount(4, 6, 24),
+    groveTurn: p.groveTurn(4, 6, 24),
+    arrayTitle: p.arrayTitle(4, 6),
+    arrayMarkOut: p.arrayMarkOut,
+    arrayTooSmall: p.arrayTooSmall,
+    arrayNothingToDo: p.arrayNothingToDo,
+    arrayChooseAction: p.arrayChooseAction,
+    patchAction: p.patchAction("plant", 6),
+    patchDone: p.patchDone("grow", 6),
+    arrayAsk: p.arrayAsk,
+    noRoomForArray: p.noRoomForArray(4, 6),
+    arrayHintRows: p.arrayHintRows(6, 2),
+    arrayPlanted: p.arrayPlanted("carrot", 24),
     entered: p.entered("barn"),
+
+    titleTagline: p.titleTagline,
+    titleLoading: p.titleLoading,
+    titlePlay: p.titlePlay,
 
     mapTitle: p.mapTitle,
     mapYouAreHere: p.mapYouAreHere,
     placeName: p.placeName("harbour"),
 
+    hourglassTitle: p.hourglassTitle,
+    hourglassAsk: p.hourglassAsk,
+    hourglassLeft: p.hourglassLeft,
+    hourglassBack: p.hourglassBack,
+    hourglassCountOn: p.hourglassCountOn(3),
+    hourglassSolved: p.hourglassSolved(5),
+    hourglassNoTime: p.hourglassNoTime,
+    hourglassNothingGrowing: p.hourglassNothingGrowing,
+    hourglassUntaught: p.hourglassUntaught,
+    hourglassTaught: p.hourglassTaught,
+    astronomerGreeting: p.astronomerGreeting,
+    astronomerAsks: p.astronomerAsks(3, 3),
+    astronomerBlocked: p.astronomerBlocked,
+    starChartRead: p.starChartRead,
+    hourglassGrew: p.hourglassGrew(5),
     purseTier: p.purseTier(3, "7,50 kn"),
     purseEmpty: p.purseEmpty,
 
     optionsButton: p.optionsButton,
     optionsTitle: p.optionsTitle,
     languageHeading: p.languageHeading,
-    moneyHeading: p.moneyHeading,
-    followLanguage: p.followLanguage,
     cropSellsFor: p.cropSellsFor("2,50 kn"),
 
     storeTitle: p.storeTitle("50,00 kn"),
@@ -116,6 +158,49 @@ function sample(p: Phrases): Record<string, string> {
     lessonDone: p.lessonDone,
     lessonExample: p.lessonExample(148, 114),
 
+    playersTitle: p.playersTitle,
+    newPlayer: p.newPlayer,
+    makePlayerTitle: p.makePlayerTitle,
+    namePrompt: p.namePrompt,
+    skinHeading: p.skinHeading,
+    hairHeading: p.hairHeading,
+    shirtHeading: p.shirtHeading,
+    bodyHeading: p.bodyHeading,
+    startPlaying: p.startPlaying,
+    neverMind: p.neverMind,
+    deviceFull: p.deviceFull(8),
+    deletePlayer: p.deletePlayer,
+    deleteAreYouSure: p.deleteAreYouSure("Mia"),
+    deleteYes: p.deleteYes,
+    deleteNo: p.deleteNo,
+    worldRebuilt: p.worldRebuilt,
+    sumsHeading: p.sumsHeading,
+
+    geometerGreeting: p.geometerGreeting,
+    portalUntaught: p.portalUntaught,
+    portalTaught: p.portalTaught,
+    geometryLessonTitle: p.geometryLessonTitle,
+    geometryRune: p.geometryRune,
+    geometryRuler: p.geometryRuler(50),
+    geometryLegs: p.geometryLegs(p.portalCompass("east"), 4, p.portalCompass("north"), 3, 7),
+    geometryCrow: p.geometryCrow(4, 3, 25, 5),
+
+    portalTitle: p.portalTitle,
+    portalChoose: p.portalChoose,
+    portalLocked: p.portalLocked,
+    portalHereAlready: p.portalHereAlready,
+    portalScale: p.portalScale(50),
+    portalAskCount: p.portalAskCount,
+    portalAskRead: p.portalAskRead(p.portalCompass("east")),
+    portalAskAdd: p.portalAskAdd,
+    portalAskCrow: p.portalAskCrow,
+    portalCompass: p.portalCompass("north"),
+    portalHintCount: p.portalHintCount(9),
+    portalHintRead: p.portalHintRead(p.portalCompass("west"), 6),
+    portalHintLegs: p.portalHintLegs(p.portalCompass("east"), 6, p.portalCompass("north"), 3),
+    portalHintCrow: p.portalHintCrow(6, 3, 45),
+    portalArrived: p.portalArrived(p.placeName("harbour")),
+
     place: p.place(0),
     jumpPrompt: p.jumpPrompt(0),
     addPlace: p.addPlace(1, 234),
@@ -127,6 +212,29 @@ const BOOKS: [string, Phrases][] = [
   ["English", EN],
   ["German", DE],
 ];
+
+describe("every room the game can put you in has a name in every language", () => {
+  // Not part of the phrase sample above, because a room name is a lookup
+  // rather than a phrase — which is exactly why it needs its own check: the
+  // lookups fall back to the English key, so a room added without a German
+  // name says "Stadthaus" in English and "townhouse" in German, and nothing
+  // anywhere fails.
+  for (const language of LANGUAGES) {
+    const words = phrasesFor(language);
+    for (const room of INTERIOR_ROOMS) {
+      test(`${language} names the ${room}`, () => {
+        const name = words.room(room);
+        expect({ room, named: name.length > 0 }).toEqual({ room, named: true });
+        if (language !== Language.English) {
+          expect({ room, translated: name !== EN.room(room) }).toEqual({ room, translated: true });
+        }
+      });
+      test(`${language} can say you walked into the ${room}`, () => {
+        expect(words.entered(room)).toContain(words.room(room));
+      });
+    }
+  }
+});
 
 describe("every language says everything", () => {
   // The sample list is what the rest of these tests run over, so it has to
@@ -150,9 +258,6 @@ describe("every language says everything", () => {
       }
       for (const terrain of TERRAIN_TYPES) expect(book.terrain(terrain).length).toBeGreaterThan(0);
       for (const stage of PLANT_STAGES) expect(book.stage(stage).length).toBeGreaterThan(0);
-      for (const currency of Object.values(Currency)) {
-        expect(book.currencyName(currency).length).toBeGreaterThan(0);
-      }
     });
   }
 
@@ -163,8 +268,11 @@ describe("every language says everything", () => {
     const en = sample(EN);
     const de = sample(DE);
     // Both are numbers and a plus sign, which every language here writes the
-    // same way.
-    const shared = ["sumQuestion", "lessonExample"];
+    // same way — and "Portal" is the same word in both, the way a currency's
+    // name is.
+    // `arrayTitle` is `4 × 6` in both, because a multiplication sign is not
+    // a word in either language.
+    const shared = ["sumQuestion", "lessonExample", "portalTitle", "arrayTitle"];
     for (const [key, line] of Object.entries(de)) {
       if (shared.includes(key)) continue;
       expect(`${key}: ${line}`).not.toBe(`${key}: ${en[key]}`);
@@ -210,6 +318,17 @@ describe("counting things", () => {
     expect(DE.count(PlantType.Cactus, 2)).toBe("2 Kakteen");
     expect(DE.count(FixtureType.Fence, 2)).toBe("2 Zäune");
     expect(DE.count(FixtureType.Lamp, 1)).toBe("1 Laterne");
+  });
+
+  // The astronomer counts down to one, and one is the line a child sees at
+  // the end of her task — the one place a stray plural would land.
+  test("the astronomer's last lamp is singular in both languages", () => {
+    expect(EN.astronomerAsks(1, 1)).toBe(
+      "One lamp still to set on the path. Here is one — put it on the empty post.",
+    );
+    expect(EN.astronomerAsks(2, 0)).toBe("2 lamps still to set on the path.");
+    expect(DE.astronomerAsks(1, 1)).toContain("Eine Laterne fehlt");
+    expect(DE.astronomerAsks(1, 1)).not.toContain("Laternen");
   });
 });
 

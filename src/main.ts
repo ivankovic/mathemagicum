@@ -4,6 +4,7 @@
 import Phaser from "phaser";
 import { BootScene } from "./scenes/BootScene";
 import { GameScene } from "./scenes/GameScene";
+import { PlayersScene } from "./scenes/PlayersScene";
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -28,7 +29,7 @@ const game = new Phaser.Game({
   input: {
     activePointers: 3,
   },
-  scene: [BootScene, GameScene],
+  scene: [BootScene, PlayersScene, GameScene],
 });
 
 // Drive the resize explicitly rather than relying on the ScaleManager

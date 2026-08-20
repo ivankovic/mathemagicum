@@ -43,9 +43,10 @@ export const MAX_OFFER_COINS = 12;
 /**
  * How many of a thing she can buy at once and still count the money out.
  *
- * Ten was a fine limit while every currency's largest coin was five of the
- * major unit. The euro stops at 2 €, so ten crops is thirteen coins on the
- * counter — more than there is room for and more than anyone would count.
+ * A flat limit of ten was fine while the largest coin was worth five of the
+ * major unit; it stops being fine the moment the ladder changes, and the
+ * ladder has changed once already. So the cap is worked out from the coins
+ * rather than written down beside them.
  *
  * Stops at the first count that does not fit rather than the largest that
  * does: the quantity picker steps through every number on the way, so a

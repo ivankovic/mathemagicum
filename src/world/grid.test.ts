@@ -38,12 +38,16 @@ describe("WorldGrid bounds", () => {
 });
 
 describe("WorldGrid passability", () => {
-  test("grass and sand are passable, water and rock are not", () => {
+  // Only the sea blocks. Mountain used to as well, and playtesting killed
+  // it: a whole terrain nobody can set foot on is a third of the map behind
+  // glass. What makes high ground hard going is the rock standing on it, not
+  // the ground itself.
+  test("only water is impassable ground", () => {
     const grid = smallGrid();
     expect(grid.isPassable(0, 0)).toBe(true);
     expect(grid.isPassable(1, 0)).toBe(true);
     expect(grid.isPassable(0, 1)).toBe(false);
-    expect(grid.isPassable(1, 1)).toBe(false);
+    expect(grid.isPassable(1, 1)).toBe(true);
   });
 
   test("out-of-bounds tiles are not passable", () => {
@@ -298,5 +302,64 @@ describe("WorldGrid harvesting", () => {
     mature(grid, 1, 0, PlantType.Cactus);
     grid.harvestCrop(0, 0);
     expect(grid.getCrop(1, 0)?.plant).toBe(PlantType.Cactus);
+  });
+});
+
+describe("a deck over the water", () => {
+  const decked = () => {
+    const grid = WorldGrid.empty(8, 8, TerrainType.Water);
+    grid.setTerrain(0, 0, TerrainType.Sand);
+    return grid;
+  };
+
+  test("makes ground you could not stand on walkable", () => {
+    const grid = decked();
+    expect(grid.isPassable(3, 3)).toBe(false);
+    grid.setBridge(3, 3, true);
+    expect(grid.isPassable(3, 3)).toBe(true);
+    grid.setBridge(3, 3, false);
+    expect(grid.isPassable(3, 3)).toBe(false);
+  });
+
+  // The one thing a plank must not do: hold up something standing on it and
+  // then let the player walk through that thing anyway.
+  test("does not lift whatever is standing on it", () => {
+    const grid = decked();
+    grid.setBridge(3, 3, true);
+    grid.placeObject({
+      id: "crate",
+      type: "crate",
+      col: 3,
+      row: 3,
+      anchorCol: 3,
+      anchorRow: 3,
+      width: 1,
+      height: 1,
+      blocksMovement: true,
+    });
+    expect(grid.isPassable(3, 3)).toBe(false);
+  });
+
+  test("is not soil — planks are not somewhere a crop grows", () => {
+    const grid = decked();
+    expect(grid.canPlant(0, 0, PlantType.Cactus)).toBe(true);
+    grid.setBridge(0, 0, true);
+    expect(grid.canPlant(0, 0, PlantType.Cactus)).toBe(false);
+  });
+
+  test("lists only the cells that have one, for the renderer", () => {
+    const grid = decked();
+    grid.setBridge(1, 2, true);
+    grid.setBridge(4, 5, true);
+    expect(grid.listBridges()).toEqual([
+      { col: 1, row: 2 },
+      { col: 4, row: 5 },
+    ]);
+  });
+
+  test("refuses a cell off the edge of the world rather than growing one", () => {
+    const grid = decked();
+    expect(() => grid.setBridge(-1, 0, true)).toThrow();
+    expect(grid.isBridged(-1, 0)).toBe(false);
   });
 });

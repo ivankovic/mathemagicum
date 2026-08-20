@@ -8,6 +8,26 @@
 
 export const PLAYER_CHARACTER = "player";
 
+/**
+ * Every sheet the player can be drawn with.
+ *
+ * Four silhouettes: the child picks one when their profile is made, and
+ * their colours are swapped into whichever they picked at load time (see
+ * src/avatar/). They differ only in hair and hem, and every one of them
+ * keeps the wide-brimmed hat, which is what makes the player findable in a
+ * street of villagers drawn from the same palette.
+ *
+ * The catalogue that says which of these a chooser may offer ships beside
+ * the art in `characters/avatar.json`; this list exists so the loader knows
+ * what to fetch, and a test checks the two agree.
+ */
+export const PLAYER_BODIES: readonly string[] = [
+  PLAYER_CHARACTER,
+  "player-bun",
+  "player-trousers",
+  "player-short",
+];
+
 // Generic villagers are rolled from a seed upstream, so they are numbered
 // rather than named. Only the ones actually placed are shipped — see the
 // README's asset sync — and characters.test.ts checks this list against
@@ -16,8 +36,18 @@ export const VILLAGER_CHARACTERS: readonly string[] = ["villager-0", "villager-1
 
 const NAMED_ROLES: Record<string, string> = {
   teacher: "teacher",
+  // The geometry teacher, in the tower. A separate role rather than a second
+  // villager because the player has to know on sight which of the two
+  // teachers they have walked in on — see the generator's note on the robe.
+  geometer: "geometer",
   "postal-worker": "postal-worker",
   shopkeeper: "shopkeeper",
+  // Up in the dome. The fourth teacher, and told apart from the other three
+  // by outline rather than colour, as they are from each other: the tallest
+  // of the cast, long hair, and a spyglass held to the eye — a horizontal
+  // shape where the geometer's square is a triangle and the schoolteacher's
+  // book is an upright block.
+  astronomer: "astronomer",
 };
 
 /**
@@ -30,6 +60,14 @@ const NAMED_ROLES: Record<string, string> = {
  * always produces its NPCs in the same order.
  */
 export function characterFor(npcId: string, index: number): string {
+  // A player body is never anybody else's. They all wear the player's hat,
+  // so a villager handed one would read as a second protagonist standing in
+  // the road — and the four bodies live in the same folder as the cast,
+  // which is exactly the sort of neighbouring list something reaches into
+  // by accident.
+  if (PLAYER_BODIES.includes(npcId)) {
+    throw new Error(`${npcId} is the player's own sheet, not an NPC's`);
+  }
   const named = NAMED_ROLES[npcId];
   if (named) return named;
   const villager = VILLAGER_CHARACTERS[index % VILLAGER_CHARACTERS.length];
@@ -38,7 +76,7 @@ export function characterFor(npcId: string, index: number): string {
 }
 
 export const ALL_CHARACTERS: readonly string[] = [
-  PLAYER_CHARACTER,
+  ...PLAYER_BODIES,
   ...Object.values(NAMED_ROLES),
   ...VILLAGER_CHARACTERS,
 ];
@@ -74,6 +112,25 @@ export function facingForVector(dx: number, dy: number): Facing | null {
   }
   if (dx !== 0) return dx > 0 ? Facing.Right : Facing.Left;
   return null;
+}
+
+/**
+ * The way somebody would be facing if they turned right around.
+ *
+ * The portal wants it: you walk into one and come out of the other with your
+ * back to it, so the far end stands on the cell behind you.
+ */
+export function oppositeFacing(facing: Facing): Facing {
+  switch (facing) {
+    case Facing.Up:
+      return Facing.Down;
+    case Facing.Down:
+      return Facing.Up;
+    case Facing.Left:
+      return Facing.Right;
+    case Facing.Right:
+      return Facing.Left;
+  }
 }
 
 // Which way a step points, holding the current facing if it doesn't move.

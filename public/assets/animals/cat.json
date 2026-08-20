@@ -1,0 +1,75 @@
+{
+  "sheet": {
+    "file": "cat_sheet.png",
+    "frame_width": 32,
+    "frame_height": 32,
+    "frame_count": 32,
+    "columns": 4,
+    "rows": 8,
+    "margin": 1,
+    "spacing": 2
+  },
+  "animal": "cat",
+  "tile_size": 32,
+  "footprint_tiles": {
+    "width": 1,
+    "height": 1
+  },
+  "sprite_offset_px": {
+    "x": 0,
+    "y": 0
+  },
+  "sprite_size_px": {
+    "width": 32,
+    "height": 32
+  },
+  "frame_count": 32,
+  "animations": {
+    "idle_down": {
+      "start": 0,
+      "end": 3,
+      "frame_count": 4
+    },
+    "idle_up": {
+      "start": 4,
+      "end": 7,
+      "frame_count": 4
+    },
+    "idle_left": {
+      "start": 8,
+      "end": 11,
+      "frame_count": 4
+    },
+    "idle_right": {
+      "start": 12,
+      "end": 15,
+      "frame_count": 4
+    },
+    "walk_down": {
+      "start": 16,
+      "end": 19,
+      "frame_count": 4
+    },
+    "walk_up": {
+      "start": 20,
+      "end": 23,
+      "frame_count": 4
+    },
+    "walk_left": {
+      "start": 24,
+      "end": 27,
+      "frame_count": 4
+    },
+    "walk_right": {
+      "start": 28,
+      "end": 31,
+      "frame_count": 4
+    }
+  },
+  "directions": [
+    "down",
+    "up",
+    "left",
+    "right"
+  ]
+}

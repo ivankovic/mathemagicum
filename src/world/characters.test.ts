@@ -2,16 +2,19 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
+import AVATAR_CATALOGUE from "../../public/assets/characters/avatar.json";
 import {
   ALL_CHARACTERS,
   DEFAULT_FACING,
   Facing,
+  PLAYER_BODIES,
   PLAYER_CHARACTER,
   VILLAGER_CHARACTERS,
   characterAnimKey,
   characterFor,
   facingFor,
   facingForVector,
+  oppositeFacing,
   stepForFacing,
 } from "./characters";
 
@@ -134,5 +137,64 @@ describe("characterAnimKey", () => {
       characterAnimKey("teacher", "walk", Facing.Down),
     ]);
     expect(keys.size).toBe(4);
+  });
+});
+
+describe("the player's four bodies", () => {
+  // A body in the catalogue but not in this list is a sheet the loader never
+  // fetches, and a child who picks it gets Phaser's missing-texture box where
+  // their character should be.
+  test("are exactly the ones the art ships a catalogue for", () => {
+    expect([...PLAYER_BODIES].sort()).toEqual([...AVATAR_CATALOGUE.bodies].sort());
+  });
+
+  test("are all loaded", () => {
+    for (const body of PLAYER_BODIES) expect(ALL_CHARACTERS).toContain(body);
+  });
+
+  test("the default body is one of them", () => {
+    expect(PLAYER_BODIES).toContain(PLAYER_CHARACTER);
+  });
+
+  // They all wear the player's hat. A villager handed one would read as a
+  // second protagonist standing in the road.
+  test("are never handed to an NPC", () => {
+    for (const body of PLAYER_BODIES) {
+      expect(() => characterFor(body, 0)).toThrow();
+    }
+    for (let index = 0; index < 20; index++) {
+      expect(PLAYER_BODIES).not.toContain(characterFor(`villager-${index}`, index));
+    }
+  });
+
+  test("no sheet is loaded twice", () => {
+    expect(new Set(ALL_CHARACTERS).size).toBe(ALL_CHARACTERS.length);
+  });
+});
+
+describe("turning right around", () => {
+  // The portal wants it: you walk into one end and come out of the other
+  // with your back to it.
+  test("every facing has an opposite, and it is its own inverse", () => {
+    expect(oppositeFacing(Facing.Up)).toBe(Facing.Down);
+    expect(oppositeFacing(Facing.Down)).toBe(Facing.Up);
+    expect(oppositeFacing(Facing.Left)).toBe(Facing.Right);
+    expect(oppositeFacing(Facing.Right)).toBe(Facing.Left);
+    for (const facing of [Facing.Up, Facing.Down, Facing.Left, Facing.Right]) {
+      expect(oppositeFacing(oppositeFacing(facing))).toBe(facing);
+    }
+  });
+
+  // Which is the same as stepping the other way, and has to stay that way:
+  // the far end of a portal is placed with one and drawn with the other.
+  test("it is the step negated", () => {
+    for (const facing of [Facing.Up, Facing.Down, Facing.Left, Facing.Right]) {
+      const there = stepForFacing(facing);
+      const back = stepForFacing(oppositeFacing(facing));
+      expect({ facing, sum: [there.dCol + back.dCol, there.dRow + back.dRow] }).toEqual({
+        facing,
+        sum: [0, 0],
+      });
+    }
   });
 });

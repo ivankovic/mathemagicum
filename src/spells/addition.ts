@@ -4,6 +4,8 @@
 import { EN } from "../i18n/en";
 import type { Phrases } from "../i18n/phrases";
 import { type Rng, randInt } from "../world/rng";
+import { type CastResult, castResult } from "./cast";
+import { HARDEST_RUNG, type Rung, rungAt } from "./difficulty";
 
 /**
  * The addition spell: column addition, worked on a number line.
@@ -25,78 +27,195 @@ import { type Rng, randInt } from "../world/rng";
  * way round first.
  */
 
-/** How many jumps a problem is broken into: ones, tens, hundreds. */
+/**
+ * The most jumps a problem is ever broken into: ones, tens, hundreds.
+ *
+ * A ceiling now rather than a fixed count — how many a given problem
+ * actually has is `problem.jumps.length`, which the difficulty sets. This is
+ * what the parchment reserves room for.
+ */
 export const PLACES = 3;
 
-export interface AdditionProblem {
-  /** The number the line starts at, and the number jumped along it. */
+// Re-exported so a caller that already has the spell does not need a second
+// import for the shape of its own result.
+export { type CastResult, castResult };
+
+/**
+ * A journey along the number line, whichever way it runs.
+ *
+ * The cast machinery below — typing, submitting, hinting, knowing when it is
+ * finished — never asks *what* the jumps mean. It reads the stops and the
+ * jumps and nothing else, which is why the subtraction spell can use every
+ * line of it without a word of it moving: the two spells differ in how a
+ * problem is *made*, not in how one is answered.
+ */
+export interface NumberLine {
   readonly start: number;
-  readonly addend: number;
-  /** What each jump adds: the addend's ones, tens and hundreds, in order. */
+  /** What each jump moves by, smallest place first. */
   readonly jumps: readonly number[];
   /** Where each jump lands. The last is the answer. */
   readonly stops: readonly number[];
 }
 
-const MIN_THREE_DIGIT = 100;
-const MAX_THREE_DIGIT = 999;
+export interface AdditionProblem extends NumberLine {
+  /** The number jumped along the line. */
+  readonly addend: number;
+}
 
 /**
- * Every addend the spell will ever use: three digits, none of them zero.
+ * How far the whole journey moves: the jumps added up.
  *
- * The zero is what this list exists to exclude. A zero digit makes one of
- * the three jumps a `+0` that lands where it started, and an arrow pointing
- * back at the number it came from reads as a piece missing from the puzzle
- * rather than as an easy one. Nine hundred-somethings drop out on their own,
- * since nothing three-digit can be added to them.
+ * Derived rather than carried, so the number written above the line and the
+ * arrows drawn under it cannot disagree — and so anything drawing a line
+ * needs to know only that it *is* one, not which spell made it.
  */
-const ADDENDS: readonly number[] = (() => {
+export function movedBy(problem: NumberLine): number {
+  return problem.jumps.reduce((total, jump) => total + jump, 0);
+}
+
+/**
+ * Whether the line runs down the page rather than up.
+ *
+ * Read off the stops instead of being passed in. A flag could be set wrong
+ * and would then draw a subtraction with a plus over it; this cannot, because
+ * it is the same arithmetic the boxes are checked against.
+ */
+export function runsDown(problem: NumberLine): boolean {
+  const first = problem.stops[0];
+  return first !== undefined && first < problem.start;
+}
+
+/**
+ * Every pair the spell may set at one difficulty, and how often each addend
+ * should be drawn.
+ *
+ * Built per rung and cached, because the useful thing is not the list of
+ * addends but *how many valid starts each one leaves*. Drawing addends
+ * evenly and then picking a start inside whatever range is left skews the
+ * start badly: a large addend leaves a narrow range, so an evenly drawn
+ * addend squeezes every start into the low end. That happened once already —
+ * it passed every correctness check and simply meant the player never saw a
+ * large first number — and a no-crossing rule makes it far worse, since
+ * `startDigit + addendDigit <= 9` leaves a big addend almost nowhere to
+ * start from.
+ *
+ * So the weight *is* the number of valid starts, and the pair comes out
+ * uniform over the problems that actually exist rather than over the
+ * addends that happen to be legal.
+ */
+interface Pairs {
+  readonly addends: readonly number[];
+  readonly starts: readonly (readonly number[])[];
+  readonly weights: readonly number[];
+  readonly total: number;
+}
+
+const PAIRS = new Map<string, Pairs>();
+
+function digitsOf(value: number, places: number): number[] {
   const out: number[] = [];
-  for (let hundreds = 1; hundreds <= 9; hundreds++) {
-    for (let tens = 1; tens <= 9; tens++) {
-      for (let ones = 1; ones <= 9; ones++) {
-        const addend = hundreds * 100 + tens * 10 + ones;
-        if (addend <= MAX_THREE_DIGIT - MIN_THREE_DIGIT) out.push(addend);
-      }
-    }
-  }
+  for (let at = 0; at < places; at++) out.push(Math.floor(value / 10 ** at) % 10);
   return out;
-})();
+}
 
 /**
- * How many valid starts each addend leaves room for — and therefore how
- * often it should be drawn.
+ * The largest answer a rung allows.
  *
- * Weighting by this is what makes the pair uniform over the problems that
- * actually exist. Drawing the addend evenly instead skews the *start*: an
- * addend near 900 leaves a start no bigger than 99 places wide, so an evenly
- * drawn addend averages about 500 and squeezes every start into the low
- * hundreds. That passed every correctness check and still meant the player
- * never saw a large first number.
+ * At two and three places a carry is *internal*: the tens spill into the
+ * hundreds and the answer is still as wide as the numbers, which is what
+ * keeps the number line the width the parchment draws.
+ *
+ * At one place there is no such thing. Crossing a ten with single digits
+ * means `7 + 5 = 12`, and bridging ten is precisely the exercise at that
+ * size — so the answer is allowed its second digit, and only there.
  */
-const ADDEND_WEIGHTS: readonly number[] = ADDENDS.map(
-  (addend) => MAX_THREE_DIGIT - addend - MIN_THREE_DIGIT + 1,
-);
-const TOTAL_WEIGHT = ADDEND_WEIGHTS.reduce((sum, weight) => sum + weight, 0);
+function sumCeiling(places: number, crossing: boolean): number {
+  const most = 10 ** places - 1;
+  return crossing && places === 1 ? most * 2 : most;
+}
 
-/** A problem: two three-digit numbers whose sum is still three digits. */
-export function makeAdditionProblem(rng: Rng): AdditionProblem {
-  let ticket = randInt(rng, 1, TOTAL_WEIGHT);
-  let addend = ADDENDS[ADDENDS.length - 1] as number;
-  for (const [index, weight] of ADDEND_WEIGHTS.entries()) {
+function pairsFor(places: number, crossing: boolean): Pairs {
+  const key = `${places}:${crossing}`;
+  const cached = PAIRS.get(key);
+  if (cached) return cached;
+
+  const low = places === 1 ? 1 : 10 ** (places - 1);
+  const high = 10 ** places - 1;
+  const ceiling = sumCeiling(places, crossing);
+  const addends: number[] = [];
+  const starts: number[][] = [];
+  const weights: number[] = [];
+
+  for (let addend = low; addend <= high; addend++) {
+    // No zero digit in the addend. A zero makes one of the jumps a `+0` that
+    // lands where it started, and an arrow pointing back at the number it
+    // came from reads as a piece missing from the puzzle rather than as an
+    // easy one.
+    const addendDigits = digitsOf(addend, places);
+    if (addendDigits.some((digit) => digit === 0)) continue;
+
+    const valid: number[] = [];
+    for (let start = low; start <= Math.min(high, ceiling - addend); start++) {
+      if (crossing || noJumpCrosses(digitsOf(start, places), addendDigits)) valid.push(start);
+    }
+    if (valid.length === 0) continue;
+    addends.push(addend);
+    starts.push(valid);
+    weights.push(valid.length);
+  }
+
+  const pairs: Pairs = {
+    addends,
+    starts,
+    weights,
+    total: weights.reduce((sum, weight) => sum + weight, 0),
+  };
+  PAIRS.set(key, pairs);
+  return pairs;
+}
+
+/**
+ * Whether every jump lands without carrying.
+ *
+ * On a number line a carry is "the jump crossed a ten", which is exactly
+ * what makes column addition hard — and it is a step a child takes long
+ * after they can add two digits at all. So it is a dial of its own rather
+ * than something bundled into how big the numbers are.
+ */
+function noJumpCrosses(startDigits: readonly number[], addendDigits: readonly number[]): boolean {
+  return startDigits.every((digit, at) => digit + (addendDigits[at] ?? 0) <= 9);
+}
+
+/**
+ * A problem at one difficulty.
+ *
+ * The rung says how many places, and whether the jumps may carry. What it
+ * does *not* change is the method: the same partial sums in the same order,
+ * on a number line that is simply shorter.
+ */
+export function makeAdditionProblem(rng: Rng, rung: Rung = rungAt(HARDEST_RUNG)): AdditionProblem {
+  const pairs = pairsFor(rung.places, rung.crossing);
+  let ticket = randInt(rng, 1, pairs.total);
+  let index = pairs.addends.length - 1;
+  for (const [at, weight] of pairs.weights.entries()) {
     ticket -= weight;
     if (ticket <= 0) {
-      addend = ADDENDS[index] as number;
+      index = at;
       break;
     }
   }
-  const start = randInt(rng, MIN_THREE_DIGIT, MAX_THREE_DIGIT - addend);
-  return problemFor(start, addend);
+  const addend = pairs.addends[index] as number;
+  const valid = pairs.starts[index] as readonly number[];
+  const start = valid[randInt(rng, 0, valid.length - 1)] as number;
+  return problemFor(start, addend, rung.places);
 }
 
 /** The same problem from a chosen pair — used by tests and worked examples. */
-export function problemFor(start: number, addend: number): AdditionProblem {
-  const jumps = [addend % 10, (Math.floor(addend / 10) % 10) * 10, Math.floor(addend / 100) * 100];
+export function problemFor(start: number, addend: number, places = PLACES): AdditionProblem {
+  const jumps = Array.from(
+    { length: places },
+    (_, at) => (Math.floor(addend / 10 ** at) % 10) * 10 ** at,
+  );
   const stops: number[] = [];
   let at = start;
   for (const jump of jumps) {
@@ -118,8 +237,8 @@ export function problemFor(start: number, addend: number): AdditionProblem {
  * "learning over gating".
  */
 export interface CastState {
-  readonly problem: AdditionProblem;
-  /** Which jump is being answered, 0..PLACES. Equal to PLACES when solved. */
+  readonly problem: NumberLine;
+  /** Which jump is being answered. Equal to the number of jumps when solved. */
   readonly index: number;
   /** The digits typed into the live box, as typed. */
   readonly entry: string;
@@ -127,22 +246,64 @@ export interface CastState {
   readonly solved: readonly number[];
   /** Wrong answers submitted for the live box. Reset when it is solved. */
   readonly attempts: number;
+  /**
+   * Wrong answers submitted across the whole cast, never reset.
+   *
+   * `attempts` cannot answer "did they get this one straight away" because
+   * it is cleared every time a box is solved, so a cast that took four tries
+   * on the tens and then sailed through looks identical to a perfect one by
+   * the time it ends. This is the number the difficulty listens to — and,
+   * like `attempts`, it is never used to punish: nothing about a cast fails,
+   * and a run of clean ones only ever makes the next sums a little bigger.
+   */
+  readonly missteps: number;
   /** Set when the last submission was wrong, so the box can be marked. */
   readonly wrong: boolean;
 }
 
-export function beginCast(problem: AdditionProblem): CastState {
-  return { problem, index: 0, entry: "", solved: [], attempts: 0, wrong: false };
+/**
+ * Start a cast, with the first `given` jumps already worked out.
+ *
+ * Scaffolding is done by pre-solving rather than by drawing a hint: the
+ * boxes the child is not being asked for hold the right answer, in the same
+ * ink as the ones they have solved themselves, so a partially solved problem
+ * looks like a problem they are part-way through rather than like a problem
+ * with pieces missing.
+ */
+export function beginCast(problem: NumberLine, given = 0): CastState {
+  const ahead = Math.max(0, Math.min(given, problem.jumps.length - 1));
+  return {
+    problem,
+    index: ahead,
+    entry: "",
+    solved: problem.stops.slice(0, ahead),
+    attempts: 0,
+    missteps: 0,
+    wrong: false,
+  };
 }
 
 export function isSolved(state: CastState): boolean {
-  return state.index >= PLACES;
+  return state.index >= state.problem.jumps.length;
 }
 
-// A stop is at most three digits, so a fourth keystroke can only be a typo.
-// Capping is friendlier than accepting it and failing: the player sees the
-// box stop taking digits while the number they meant is still readable.
-const MAX_DIGITS = 3;
+/**
+ * How many digits the live box will take.
+ *
+ * Measured from the answer rather than fixed at three: at one place the
+ * biggest stop is 18, and a box that accepted `184` there would let a child
+ * type a number the line has no room for. Capping is friendlier than
+ * accepting and failing — the box simply stops taking digits while what they
+ * meant is still readable.
+ */
+function maxDigits(state: CastState): number {
+  // The *biggest* stop, not the last one. Going up the line they are the
+  // same; coming down they are not, and a subtraction that ends in single
+  // figures would have stopped taking the third digit of its first answer
+  // half way along.
+  const widest = Math.max(0, ...state.problem.stops);
+  return String(widest).length;
+}
 
 export function typeDigit(state: CastState, digit: number): CastState {
   if (isSolved(state)) return state;
@@ -151,7 +312,7 @@ export function typeDigit(state: CastState, digit: number): CastState {
   // starts with one, and silently swallowing the keystroke reads as a broken
   // button.
   if (state.entry === "" && digit === 0) return state;
-  if (state.entry.length >= MAX_DIGITS) return state;
+  if (state.entry.length >= maxDigits(state)) return state;
   // Clearing `wrong` on the next keystroke is what makes the mark on the box
   // read as "that answer was wrong" rather than as a permanent state.
   return { ...state, entry: state.entry + String(digit), wrong: false };
@@ -175,7 +336,13 @@ export function submit(state: CastState): CastState {
   const expected = state.problem.stops[state.index];
   if (expected === undefined) return state;
   if (Number(state.entry) !== expected) {
-    return { ...state, entry: "", attempts: state.attempts + 1, wrong: true };
+    return {
+      ...state,
+      entry: "",
+      attempts: state.attempts + 1,
+      missteps: state.missteps + 1,
+      wrong: true,
+    };
   }
   return {
     ...state,

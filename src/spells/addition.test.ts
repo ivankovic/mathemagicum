@@ -7,6 +7,7 @@ import {
   PLACES,
   backspace,
   beginCast,
+  castResult,
   hintFor,
   isSolved,
   makeAdditionProblem,
@@ -14,6 +15,7 @@ import {
   submit,
   typeDigit,
 } from "./addition";
+import { HARDEST_RUNG, RUNGS, rungAt } from "./difficulty";
 
 const SEEDS = Array.from({ length: 200 }, (_, i) => i * 7919 + 3);
 
@@ -243,5 +245,222 @@ describe("hints", () => {
       state = submit(typeDigit(typeDigit(typeDigit(state, 1), 1), 1));
       expect(hintFor(state)).not.toContain("352");
     }
+  });
+});
+
+describe("problems at every difficulty", () => {
+  const rungs = RUNGS.map((rung, index) => [index, rung] as const);
+
+  test("a problem has exactly as many jumps as its rung has places", () => {
+    for (const [index, rung] of rungs) {
+      for (let seed = 0; seed < 40; seed++) {
+        const problem = makeAdditionProblem(createRng(seed), rung);
+        expect({ index, jumps: problem.jumps.length }).toEqual({ index, jumps: rung.places });
+        expect({ index, stops: problem.stops.length }).toEqual({ index, stops: rung.places });
+      }
+    }
+  });
+
+  test("the jumps still add up to the addend, and the last stop to the sum", () => {
+    for (const [index, rung] of rungs) {
+      for (let seed = 0; seed < 40; seed++) {
+        const p = makeAdditionProblem(createRng(seed), rung);
+        const summed = p.jumps.reduce((sum, jump) => sum + jump, 0);
+        expect({ index, seed, summed }).toEqual({ index, seed, summed: p.addend });
+        expect({ index, seed, last: p.stops[p.stops.length - 1] }).toEqual({
+          index,
+          seed,
+          last: p.start + p.addend,
+        });
+      }
+    }
+  });
+
+  test("both numbers have the rung's number of digits", () => {
+    for (const [index, rung] of rungs) {
+      for (let seed = 0; seed < 40; seed++) {
+        const p = makeAdditionProblem(createRng(seed), rung);
+        expect({ index, ok: String(p.start).length === rung.places }).toEqual({ index, ok: true });
+        expect({ index, ok: String(p.addend).length === rung.places }).toEqual({ index, ok: true });
+      }
+    }
+  });
+
+  // A carry at two or three places is internal — the tens spill into the
+  // hundreds and the answer is still as wide as the numbers, which is what
+  // keeps the number line the width the parchment draws. At one place there
+  // is no such thing: crossing a ten *is* 7 + 5 = 12.
+  test("the answer stays as wide as the numbers, except when bridging ten", () => {
+    for (const [index, rung] of rungs) {
+      const most = 10 ** rung.places - 1;
+      const allowed = rung.crossing && rung.places === 1 ? most * 2 : most;
+      for (let seed = 0; seed < 40; seed++) {
+        const p = makeAdditionProblem(createRng(seed), rung);
+        expect({ index, ok: p.start + p.addend <= allowed }).toEqual({ index, ok: true });
+      }
+      if (rung.places > 1) expect(allowed).toBe(most);
+    }
+  });
+
+  // A zero digit makes one jump a `+0` that lands where it started, which
+  // reads as a piece missing from the puzzle rather than as an easy one.
+  test("no addend has a zero digit, at any size", () => {
+    for (const [index, rung] of rungs) {
+      for (let seed = 0; seed < 60; seed++) {
+        const { addend } = makeAdditionProblem(createRng(seed), rung);
+        expect({ index, zero: String(addend).includes("0") }).toEqual({ index, zero: false });
+      }
+    }
+  });
+
+  // The dial itself: on a number line a carry is "the jump crossed a ten".
+  test("a no-crossing rung never sets a jump that carries", () => {
+    for (const [index, rung] of rungs.filter(([, r]) => !r.crossing)) {
+      for (let seed = 0; seed < 80; seed++) {
+        const p = makeAdditionProblem(createRng(seed), rung);
+        for (let at = 0; at < rung.places; at++) {
+          const startDigit = Math.floor(p.start / 10 ** at) % 10;
+          const addendDigit = Math.floor(p.addend / 10 ** at) % 10;
+          expect({ index, seed, at, sum: startDigit + addendDigit <= 9 }).toEqual({
+            index,
+            seed,
+            at,
+            sum: true,
+          });
+        }
+      }
+    }
+  });
+
+  test("a crossing rung does actually set some that carry", () => {
+    for (const [index, rung] of rungs.filter(([, r]) => r.crossing)) {
+      const crossed = Array.from({ length: 60 }, (_, seed) => {
+        const p = makeAdditionProblem(createRng(seed), rung);
+        return (p.start % 10) + (p.addend % 10) > 9;
+      });
+      expect({ index, any: crossed.some(Boolean) }).toEqual({ index, any: true });
+    }
+  });
+
+  // The bug this whole weighting scheme exists to prevent, and the reason it
+  // has to be rebuilt per rung rather than filtered afterwards: a large
+  // addend leaves very few legal starts, so drawing addends evenly squeezes
+  // every start into the low end. It passed every correctness check the
+  // first time and simply meant the player never saw a large first number —
+  // and `startDigit + addendDigit <= 9` makes it far worse.
+  test("the starting number is spread across its range, not crushed low", () => {
+    for (const [index, rung] of rungs) {
+      const low = rung.places === 1 ? 1 : 10 ** (rung.places - 1);
+      const high = 10 ** rung.places - 1;
+      const starts = Array.from(
+        { length: 600 },
+        (_, seed) => makeAdditionProblem(createRng(seed * 7919 + 13), rung).start,
+      );
+      const mean = starts.reduce((sum, s) => sum + s, 0) / starts.length;
+      const span = high - low;
+      // Comfortably inside the range rather than pinned to its bottom third.
+      expect({ index, low: mean > low + span * 0.2 }).toEqual({ index, low: true });
+      expect({ index, high: mean < high - span * 0.2 }).toEqual({ index, high: true });
+      // And the top of the range is genuinely reachable.
+      expect({ index, reach: Math.max(...starts) > low + span * 0.55 }).toEqual({
+        index,
+        reach: true,
+      });
+    }
+  });
+
+  test("the same seed and rung always sets the same problem", () => {
+    for (const [, rung] of rungs) {
+      expect(makeAdditionProblem(createRng(42), rung)).toEqual(
+        makeAdditionProblem(createRng(42), rung),
+      );
+    }
+  });
+});
+
+describe("a partly worked problem", () => {
+  const rung = rungAt(2); // two places, first jump given
+
+  test("starts on the box after the ones it was given", () => {
+    const problem = makeAdditionProblem(createRng(3), rung);
+    const state = beginCast(problem, rung.given);
+    expect(state.index).toBe(1);
+    expect(state.solved).toEqual([problem.stops[0] as number]);
+    expect(isSolved(state)).toBe(false);
+  });
+
+  test("there is always something left to do", () => {
+    for (const [index, r] of RUNGS.entries()) {
+      const problem = makeAdditionProblem(createRng(index), r);
+      // Even asked for more than the problem has, a cast is never over
+      // before it starts.
+      expect({ index, solved: isSolved(beginCast(problem, 99)) }).toEqual({ index, solved: false });
+    }
+  });
+
+  test("a scaffolded cast still finishes on the right answer", () => {
+    const problem = makeAdditionProblem(createRng(5), rung);
+    let state = beginCast(problem, rung.given);
+    while (!isSolved(state)) {
+      const want = String(problem.stops[state.index] as number);
+      for (const digit of want) state = typeDigit(state, Number(digit));
+      state = submit(state);
+    }
+    expect(state.solved[state.solved.length - 1]).toBe(problem.start + problem.addend);
+    expect(state.missteps).toBe(0);
+  });
+});
+
+describe("what a finished cast reports back", () => {
+  // There is no fail state, so `solved` is true however it went — and a
+  // difficulty that could only see `solved` would see every cast as
+  // identical and never move.
+  test("a cast with no wrong answers is clean", () => {
+    const problem = makeAdditionProblem(createRng(1), rungAt(0));
+    let state = beginCast(problem);
+    for (const digit of String(problem.stops[0] as number)) {
+      state = typeDigit(state, Number(digit));
+    }
+    state = submit(state);
+    expect(castResult(state, true)).toEqual({ solved: true, clean: true });
+  });
+
+  test("one wrong answer anywhere makes it not clean, even once corrected", () => {
+    const problem = makeAdditionProblem(createRng(1), rungAt(HARDEST_RUNG));
+    let state = beginCast(problem);
+    state = typeDigit(state, 1);
+    state = submit(state); // wrong
+    while (!isSolved(state)) {
+      for (const digit of String(problem.stops[state.index] as number)) {
+        state = typeDigit(state, Number(digit));
+      }
+      state = submit(state);
+    }
+    expect(state.missteps).toBe(1);
+    expect(castResult(state, true)).toEqual({ solved: true, clean: false });
+  });
+
+  test("a cast abandoned part-way is neither solved nor clean", () => {
+    expect(castResult(beginCast(makeAdditionProblem(createRng(1))), false)).toEqual({
+      solved: false,
+      clean: false,
+    });
+    expect(castResult(null, true).clean).toBe(false);
+  });
+});
+
+describe("the live box takes only digits the answer could need", () => {
+  test("at one place it stops at two digits, not three", () => {
+    const problem = makeAdditionProblem(createRng(2), rungAt(1));
+    let state = beginCast(problem);
+    state = typeDigit(typeDigit(typeDigit(state, 1), 2), 3);
+    expect(state.entry).toBe("12");
+  });
+
+  test("at three places it still takes three", () => {
+    const problem = makeAdditionProblem(createRng(2), rungAt(HARDEST_RUNG));
+    let state = beginCast(problem);
+    state = typeDigit(typeDigit(typeDigit(typeDigit(state, 1), 2), 3), 4);
+    expect(state.entry).toBe("123");
   });
 });

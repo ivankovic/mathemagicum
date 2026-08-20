@@ -14,6 +14,25 @@ import { VILLAGE_SIZE } from "./villageLayout";
 // villageLayout.ts) since its interior *is* built — a fixed 24 doesn't
 // comfortably fit the square, 7 buildings, and gardens.
 const ANCHOR_SIZE = 24;
+
+/**
+ * The two places that need more room than the default, and why.
+ *
+ * The comment above is now half out of date: the harbour and the big city
+ * have interiors, and both are settlements. A city laid out on a grid of
+ * streets needs enough width for more than two blocks each way — at 24 it
+ * came out four blocks and three buildings, which is a hamlet with paving —
+ * and the harbour has to fit a working front, the town behind it, and
+ * enough sea in front for a pier to reach into.
+ *
+ * Sized here rather than inside each layout because it is placement that has
+ * to know: a box is reserved from the terrain fill and checked against its
+ * neighbours long before anything is built in it.
+ */
+const ANCHOR_SIZES: Readonly<Record<string, number>> = {
+  "big-city": 36,
+  harbour: 30,
+};
 const PADDING = 3;
 const MAX_ATTEMPTS = 500;
 const NEAR_DISTANCE = 40;
@@ -134,6 +153,111 @@ function placeInBand(
 }
 
 /**
+ * How much of a harbour box has to be sea, and how much has to be land.
+ *
+ * A harbour with no water in it is not a harbour, and that is what the world
+ * was making: placement asked only that the box's *mean* elevation sit in
+ * the sand-to-grass band, which a box entirely above the waterline satisfies
+ * comfortably. Most seeds put the docks in a field.
+ *
+ * The band test cannot see this because a mean says nothing about a spread.
+ * So the harbour is placed by what its box *contains* instead — sea on one
+ * side, dry ground on the other, and enough of each to be worth building on.
+ * The lower bound is the sea to moor in; the upper is the ground to stand
+ * the town on.
+ */
+const HARBOUR_SEA_LEAST = 0.2;
+const HARBOUR_SEA_MOST = 0.55;
+/**
+ * How much of the box's sea has to lie in its southern half.
+ *
+ * The world rises to the north-west and falls to the south-east, so a
+ * straddling box can find its water on its eastern side as easily as its
+ * southern. Both are coasts; only one of them is the coast this game is
+ * built around.
+ *
+ * **The harbour's water is south of its town** because everything that
+ * happens there assumes it. Every door in the game is in the south wall, so
+ * a quay laid along an eastern shore puts the warehouses' fronts facing the
+ * sea and their backs to the town; the great ship moors with her entry port
+ * pointing out to open water; and a child who has learned that the harbour
+ * is *down* the map has learned something that holds in the next world too.
+ */
+const HARBOUR_SEA_SOUTH = 0.7;
+/** How finely a box is sampled when asking how much of it is under water. */
+const SHORE_SAMPLES = 8;
+
+interface Shoreline {
+  /** How much of the box is under water. */
+  readonly sea: number;
+  /** How much of that water lies in the box's southern half. */
+  readonly southward: number;
+}
+
+function shorelineOf(box: AreaPlacement, elevation: ElevationAt): Shoreline {
+  const waterline = bandFloor(TerrainType.Sand);
+  let wet = 0;
+  let south = 0;
+  let cells = 0;
+  for (let y = 0; y < SHORE_SAMPLES; y++) {
+    for (let x = 0; x < SHORE_SAMPLES; x++) {
+      const col = box.col + Math.floor(((x + 0.5) * box.width) / SHORE_SAMPLES);
+      const row = box.row + Math.floor(((y + 0.5) * box.height) / SHORE_SAMPLES);
+      if (elevation(col, row) < waterline) {
+        wet++;
+        if (y >= SHORE_SAMPLES / 2) south++;
+      }
+      cells++;
+    }
+  }
+  return { sea: cells === 0 ? 0 : wet / cells, southward: wet === 0 ? 0 : south / wet };
+}
+
+/**
+ * A box with the waterline running through it.
+ *
+ * Scored rather than accepted or rejected outright, and for the reason
+ * `placeInBand` keeps its near miss: a world whose coast is all cliff may
+ * have no box that lands squarely in the window, and a harbour slightly too
+ * wet beats an exception thrown at world generation.
+ */
+function placeOnTheShore(
+  worldWidth: number,
+  worldHeight: number,
+  spec: AnchorSpec,
+  elevation: ElevationAt,
+  placed: readonly AreaPlacement[],
+  rng: Rng,
+): AreaPlacement {
+  const target = (HARBOUR_SEA_LEAST + HARBOUR_SEA_MOST) / 2;
+  let best: AreaPlacement | null = null;
+  let bestMiss = Number.POSITIVE_INFINITY;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const box: AreaPlacement = {
+      id: spec.id,
+      col: randInt(rng, 0, worldWidth - spec.width),
+      row: randInt(rng, 0, worldHeight - spec.height),
+      width: spec.width,
+      height: spec.height,
+    };
+    if (overlapsAny(box, placed)) continue;
+    const { sea, southward } = shorelineOf(box, elevation);
+    const enough = sea >= HARBOUR_SEA_LEAST && sea <= HARBOUR_SEA_MOST;
+    if (enough && southward >= HARBOUR_SEA_SOUTH) return box;
+    // The near miss is scored on the water first and the *side* it is on
+    // second, so a box that is wet enough but wet on the wrong side loses to
+    // one that is slightly too dry and facing the right way.
+    const miss = Math.abs(sea - target) + (1 - southward);
+    if (miss < bestMiss) {
+      bestMiss = miss;
+      best = box;
+    }
+  }
+  if (best) return best;
+  throw new Error(`Could not place "${spec.id}" anywhere without overlapping`);
+}
+
+/**
  * Near another area, and on ground it can actually stand on.
  *
  * The band matters as much as the distance. Placed on proximity alone, the
@@ -187,7 +311,17 @@ export function placeAnchors(
   rng: Rng,
 ): AnchorPlacements {
   const placed: AreaPlacement[] = [];
-  const spec = (id: string): AnchorSpec => ({ id, width: ANCHOR_SIZE, height: ANCHOR_SIZE });
+  // Capped against the world it is being placed in. The sizes above are
+  // chosen for the 500-cell world the game actually generates; the tests
+  // sweep 120- and 150-cell ones to stay fast, and a 36-wide city in a
+  // 120-wide world alongside a 48-wide village leaves `placeNear` nothing it
+  // can fit — which it reported by throwing, at world generation, in a test
+  // that had nothing to do with cities.
+  const room = Math.floor(Math.min(worldWidth, worldHeight) / 6);
+  const spec = (id: string): AnchorSpec => {
+    const size = Math.min(ANCHOR_SIZES[id] ?? ANCHOR_SIZE, Math.max(ANCHOR_SIZE, room));
+    return { id, width: size, height: size };
+  };
 
   const village = placeVillage(worldWidth, worldHeight, {
     id: "village",
@@ -211,18 +345,11 @@ export function placeAnchors(
   );
   placed.push(observatory);
 
-  // On the shore. The sand band is thin, so this asks for anything from the
-  // waterline up to the bottom of the grass.
-  const harbour = placeInBand(
-    worldWidth,
-    worldHeight,
-    spec("harbour"),
-    elevation,
-    bandFloor(TerrainType.Sand),
-    bandFloor(TerrainType.Grass),
-    placed,
-    rng,
-  );
+  // Straddling the waterline rather than merely near it: see
+  // `placeOnTheShore`. Asking for the sand-to-grass band put most harbours
+  // in a field, because a box entirely above the waterline has a mean
+  // elevation squarely inside that band.
+  const harbour = placeOnTheShore(worldWidth, worldHeight, spec("harbour"), elevation, placed, rng);
   placed.push(harbour);
 
   // Near the Harbour, but up out of the water: a city on the coastal plain

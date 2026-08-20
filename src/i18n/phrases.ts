@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { Currency } from "../shop/currency";
 import type { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
 import type { PlantStage, PlantType } from "../world/plants";
@@ -58,7 +57,6 @@ export interface Phrases {
   room: (room: string) => string;
   /** "3 carrots", "1 cactus" — the plural the message line needs. */
   count: (item: ItemType, count: number) => string;
-  currencyName: (currency: Currency) => string;
 
   // --- gardening -----------------------------------------------------------
 
@@ -88,9 +86,37 @@ export interface Phrases {
   // --- the world -----------------------------------------------------------
 
   spellFades: string;
+  /** Nothing in front of you for the clearing spell to take. */
+  nothingToClear: string;
+  /** Something there, but not something the spell will unmake. */
+  willNotClear: string;
+  cleared: string;
   tooFarToSpeak: string;
+  /**
+   * The same, for something rooted to the spot rather than somebody standing.
+   *
+   * One line for every landmark rather than one each. It said "walk up to
+   * the tree first" while there was only a tree, and went on saying it at
+   * the town clock — a message naming the wrong object is worse than a
+   * general one, because a child reads it and looks for a tree.
+   */
+  tooFarFromLandmark: string;
   cannotWalkThere: string;
+  /** What the great tree says when it is touched. */
+  greatTreeGreeting: string;
+  /** The other two landmarks, which teach nothing yet but are not silent. */
+  lighthouseGreeting: string;
+  clockTowerGreeting: string;
   entered: (room: string) => string;
+
+  // --- the title card ------------------------------------------------------
+
+  /** The line under the game's name. */
+  titleTagline: string;
+  /** What the bar is doing. */
+  titleLoading: string;
+  /** And what to do once it has finished. */
+  titlePlay: string;
 
   // --- the map on the tower wall -------------------------------------------
 
@@ -98,6 +124,144 @@ export interface Phrases {
   mapYouAreHere: string;
   /** The places marked on it, by the id world generation gives them. */
   placeName: (place: string) => string;
+
+  // --- the geometry teacher, in the tower ----------------------------------
+
+  /** Said when he is tapped, before the parchment opens. */
+  geometerGreeting: string;
+  /** Tapping the portal rune before anybody has taught it. */
+  portalUntaught: string;
+  /** Said once, the first time the geometer explains it. */
+  portalTaught: string;
+  geometryLessonTitle: string;
+  geometryRune: string;
+  /** One mark is this many paces, and you are nought. */
+  geometryRuler: (paces: number) => string;
+  geometryLegs: (
+    across: string,
+    acrossMarks: number,
+    down: string,
+    downMarks: number,
+    total: number,
+  ) => string;
+  geometryCrow: (acrossMarks: number, downMarks: number, squares: number, crow: number) => string;
+
+  // --- the portal spell ----------------------------------------------------
+
+  portalTitle: string;
+  /** Above the map, while a destination is still being chosen. */
+  portalChoose: string;
+  /** Tapped a place nobody has walked to yet. */
+  portalLocked: string;
+  /** Tapped the place you are standing in. */
+  portalHereAlready: string;
+  /** What one mark on the ruler is worth, in paces. */
+  portalScale: (paces: number) => string;
+  /** The question, one per rung of the spell's own ladder. */
+  portalAskCount: string;
+  portalAskRead: (towards: string) => string;
+  portalAskAdd: string;
+  portalAskCrow: string;
+  /** A direction, for the question and for the legs. */
+  portalCompass: (towards: string) => string;
+  /** The help that arrives after two wrong answers. */
+  portalHintCount: (stones: number) => string;
+  portalHintRead: (towards: string, marks: number) => string;
+  portalHintLegs: (across: string, acrossMarks: number, down: string, downMarks: number) => string;
+  /**
+   * The crow's flight needs its own, and this is why.
+   *
+   * Every other rung's help is one rung's worth: whatever the tier above
+   * would have had drawn for it. At the crow rung the legs are *not* that —
+   * a child there can already read them off the ruler, and being handed them
+   * twice leaves them exactly where they were with nowhere to go but out of
+   * the spell. So this names the method instead, and stops one step short of
+   * the answer.
+   */
+  portalHintCrow: (acrossMarks: number, downMarks: number, squares: number) => string;
+  /** Said on the other side. */
+  portalArrived: (place: string) => string;
+
+  // --- the great tree, in the enchanted forest ------------------------------
+
+  /** Tapping the array rune before the tree has taught it. */
+  arrayUntaught: string;
+  /** Said once, when the tree's grove is finally full. */
+  arrayTaught: string;
+  /**
+   * What the tree is waiting for, as it stands.
+   *
+   * One phrase for the whole task rather than one per step, because the
+   * steps are a sentence about the same thing: the ground, then the bed,
+   * then how much of it is ripe.
+   */
+  groveAsks: (progress: {
+    task: string;
+    standing: number;
+    ripe: number;
+    squares: number;
+  }) => string;
+  groveLessonTitle: string;
+  /** One idea per page, in the order the tree shows them. */
+  groveRune: string;
+  groveRows: (rows: number, columns: number) => string;
+  groveCount: (rows: number, columns: number, total: number) => string;
+  groveTurn: (rows: number, columns: number, total: number) => string;
+
+  // --- the multiplication spell --------------------------------------------
+
+  /** `4 x 6`, over the array. */
+  arrayTitle: (rows: number, columns: number) => string;
+  /** Said when the rune is tapped: mark out the ground you mean. */
+  arrayMarkOut: string;
+  /** Both corners on one square. One square is not a multiplication. */
+  arrayTooSmall: string;
+  /** A patch with nothing in it any of the three actions could touch. */
+  arrayNothingToDo: string;
+  /** Both corners set: now pick what to do with what you marked. */
+  arrayChooseAction: string;
+  /** A button on the little menu over a marked patch, and its tally. */
+  patchAction: (action: string, count: number) => string;
+  /** What happened, once the patch has been cast on. */
+  patchDone: (action: string, count: number) => string;
+  /** The question under it. */
+  arrayAsk: string;
+  /** No patch of clear ground that shape, from the tile she is facing. */
+  noRoomForArray: (rows: number, columns: number) => string;
+  /** The help that arrives after a wrong answer: count along, row by row. */
+  arrayHintRows: (columns: number, counted: number) => string;
+  /** What was planted, once the spell lands. */
+  arrayPlanted: (plant: string, count: number) => string;
+
+  // --- the hourglass spell -------------------------------------------------
+
+  hourglassTitle: string;
+  /** The question under the two faces. */
+  hourglassAsk: string;
+  /** Which face is which: when you put it down, and now. */
+  hourglassLeft: string;
+  hourglassBack: string;
+  /** The help, once the sweep has been drawn: count on from here. */
+  hourglassCountOn: (hours: number) => string;
+  hourglassSolved: (hours: number) => string;
+  /** Nothing to claim: the glass reads the same hour it did. */
+  hourglassNoTime: string;
+  /** Hours passed, but there is nothing in the ground for them to fall on. */
+  hourglassNothingGrowing: string;
+  /** Tapping the rune before the astronomer has taught it. */
+  hourglassUntaught: string;
+  /** Said once, when the last lamp on the climb is lit. */
+  hourglassTaught: string;
+  /** What she says when the way is already lit and the spell already given. */
+  astronomerGreeting: string;
+  /** How many posts are still dark, and how many lamps she has just handed over. */
+  astronomerAsks: (dark: number, given: number) => string;
+  /** Every remaining post has something standing on it. */
+  astronomerBlocked: string;
+  /** The chart of the night on the dome's wall, when it is tapped. */
+  starChartRead: string;
+  /** What grew while they were away. */
+  hourglassGrew: (count: number) => string;
 
   // --- the purse -----------------------------------------------------------
 
@@ -111,9 +275,44 @@ export interface Phrases {
   optionsButton: string;
   optionsTitle: string;
   languageHeading: string;
-  moneyHeading: string;
-  followLanguage: string;
   cropSellsFor: (price: string) => string;
+
+  // --- who is playing ------------------------------------------------------
+
+  /** The heading over the faces. */
+  playersTitle: string;
+  /** The tile that makes a new player. */
+  newPlayer: string;
+  /** Over the name box and the swatches, when a player is being made. */
+  makePlayerTitle: string;
+  namePrompt: string;
+  /** The three rows of swatches, and the row of bodies. */
+  skinHeading: string;
+  hairHeading: string;
+  shirtHeading: string;
+  bodyHeading: string;
+  /** Commits the new player. */
+  startPlaying: string;
+  /** Goes back to the faces without making anybody. */
+  neverMind: string;
+  /** Shown instead of the "+" tile once the device is full. */
+  deviceFull: (most: number) => string;
+  /** The button that opens the are-you-sure. */
+  deletePlayer: string;
+  /** Named, and unmistakable about what goes with them. */
+  deleteAreYouSure: (name: string) => string;
+  deleteYes: string;
+  deleteNo: string;
+  /** Said once, on the first frame, when a world had to be rebuilt. */
+  worldRebuilt: string;
+  /**
+   * Over the row of sample sums.
+   *
+   * A question about the sums rather than about the child: "how big are your
+   * sums" can be answered by looking, and it does not rank anybody on a
+   * screen they share with their siblings.
+   */
+  sumsHeading: string;
 
   // --- the shop ------------------------------------------------------------
 

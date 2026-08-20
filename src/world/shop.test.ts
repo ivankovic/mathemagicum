@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { Currency, currencyOf, isPayable } from "../shop/currency";
+import { CURRENCY, isPayable } from "../shop/currency";
 import { FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import { Inventory } from "./inventory";
 import { PLANT_TYPES, PlantType } from "./plants";
@@ -53,22 +53,22 @@ describe("prices", () => {
   // The bridge between the price list and the two counting games: a sum that
   // no set of coins adds up to is a sum a child cannot pay, and every price
   // here is multiplied by up to MAX_TRADE before it reaches the counter.
-  test("every sum the counter can ask for is payable in real coins", () => {
-    for (const code of [Currency.Kuna, Currency.Franc]) {
-      const currency = currencyOf(code);
-      for (let count = 1; count <= MAX_TRADE; count++) {
-        for (const fixture of SHOP_STOCK) {
-          expect(isPayable(currency, priceOf(fixture) * count)).toBe(true);
-        }
-        for (const plant of PLANT_TYPES) {
-          expect(isPayable(currency, sellPriceOf(plant) * count)).toBe(true);
-        }
+  test("every sum the counter can ask for is payable in coins", () => {
+    for (let count = 1; count <= MAX_TRADE; count++) {
+      for (const fixture of SHOP_STOCK) {
+        expect(isPayable(CURRENCY, priceOf(fixture) * count)).toBe(true);
+      }
+      for (const plant of PLANT_TYPES) {
+        expect(isPayable(CURRENCY, sellPriceOf(plant) * count)).toBe(true);
       }
     }
   });
 
   test("a fence is the cheapest thing on the shelf", () => {
-    const prices = SHOP_STOCK.map(priceOf);
+    // Not `.map(priceOf)`: the second argument is the crop price now, and a
+    // point-free map would hand it the array index instead — which quietly
+    // priced the first fixture at nothing.
+    const prices = SHOP_STOCK.map((fixture) => priceOf(fixture));
     expect(priceOf(FixtureType.Fence)).toBe(Math.min(...prices));
   });
 });

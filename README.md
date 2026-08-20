@@ -19,13 +19,26 @@ in the corner of the screen, and both act on the tile the player faces.
 Ripe crops are picked with a tap and go into a basket, and the village
 shopkeeper buys them for coins you can spend on fences, tables and lamps to
 put down — and the counter is the second minigame: buying means counting the
-exact sum out in real coins — kuna, francs or euros — and selling means
-checking the payment she counts back, which one time in ten is wrong. Planting and harvesting are still direct actions — those spells
-are not speced. The game is playable in English and German — every line, not
-only the money — and the language and the currency are the player's to pick
-from an options panel in the corner of the screen. Money can be Croatian
-kuna, Swiss francs or euros, and the two choices are the only things saved
-between sessions.
+exact sum out in coins — ducats and mites, which are nobody's real money — and
+selling means checking the payment she counts back, which one time in ten is
+wrong. Planting and harvesting are still direct actions — those spells
+are not speced. The game is playable in English and German — every line of it
+— and the language is the player's to pick.
+
+How hard the sums are is a per-child setting, picked from four sample sums
+rather than from ages or difficulty labels: one, two or three places on the
+number line, whether the jumps carry, and how much of a cast arrives already
+worked out. Inside that choice the game nudges quietly up or down on how the
+last few casts went — never announced, never a level, and never able to leave
+the band somebody picked. Easier sums never earn less: every price in the
+store is quoted in crops, so a fence is two harvests at every setting.
+
+Several children share one device. Each is a player of their own: their own
+name, their own character, their own language, and their own world — the game
+asks who is playing every time it starts, and a child picks their face off a
+grid. Making a player means typing a name and choosing skin, hair, clothes
+and one of four bodies. Worlds save themselves as they are played; nothing
+has to be remembered to keep a farm.
 
 ## Assets
 
@@ -39,8 +52,10 @@ To re-sync after regenerating them there:
 ```sh
 cd ../asset-generator
 uv run asset-generator terrain-atlas   --seed 7 --out-dir output/terrain_atlas
+uv run asset-generator terrain-cliffs --seed 7 --out-dir output/terrain_cliffs
 uv run asset-generator terrain-buildings --seed 7 --sheets --out-dir output/terrain_buildings
 uv run asset-generator terrain-characters --seed 7 --out-dir output/terrain_characters
+uv run asset-generator terrain-animals --out-dir output/terrain_animals
 uv run asset-generator terrain-interiors --seed 7 --sheets --out-dir output/terrain_interiors
 uv run asset-generator terrain-plants --seed 7 --out-dir output/terrain_plants
 uv run asset-generator terrain-fixtures --seed 7 --out-dir output/terrain_fixtures
@@ -51,9 +66,16 @@ uv run asset-generator ui --seed 7 --out-dir output/ui
 cd -
 OUT=../asset-generator/output
 cp $OUT/terrain_atlas/terrain*.{png,json} public/assets/terrain/
+cp $OUT/terrain_cliffs/cliffs*.{png,json} public/assets/cliffs/
 cp $OUT/terrain_buildings/{cottage,barn,tower,schoolhouse}{.json,_sheet.png} public/assets/buildings/
-for c in player teacher postal-worker shopkeeper villager-0 villager-1 villager-2; do
-  cp $OUT/terrain_characters/$c{.json,_sheet.png} public/assets/characters/
+for c in player player-bun player-trousers player-short \
+         teacher postal-worker shopkeeper villager-0 villager-1 villager-2; do
+  cp "$OUT/terrain_characters/$c.json" "$OUT/terrain_characters/${c}_sheet.png" \
+     public/assets/characters/
+done
+cp $OUT/terrain_characters/avatar.json public/assets/characters/
+for a in chicken cat rabbit duck; do
+  cp "$OUT/terrain_animals/$a.json" "$OUT/terrain_animals/${a}_sheet.png" public/assets/animals/
 done
 for r in cottage barn tower schoolhouse; do
   cp $OUT/terrain_interiors/$r{.json,_sheet.png} public/assets/interiors/
@@ -61,7 +83,7 @@ done
 for p in carrot sunflower cactus tomato pepper wheat; do
   cp $OUT/terrain_plants/$p{.json,_sheet.png} public/assets/plants/
 done
-for f in well fence fence-side table lamp gate; do
+for f in well fence fence-side table lamp gate stall; do
   cp $OUT/terrain_fixtures/$f{.json,_sheet.png} public/assets/fixtures/
 done
 cp $OUT/terrain_effects/plus{.json,_sheet.png} public/assets/effects/
@@ -154,8 +176,8 @@ run and another screenshot to squint at.
 
 **Art — the asset generator's own suite.** Pixel-level assertions belong
 where the output is deterministic and pure. They have caught real bugs:
-hands drawn below the ground line, a reach that ate the character's own
-shadow.
+hands drawn below the ground line, and a boulder floating a third of a tile
+above the ground it was supposed to be sitting on.
 
 **Wiring — a browser.** What is left is what only a real loader and a real
 input path can show: a texture key that resolves, a hit area over the right
@@ -172,10 +194,11 @@ outside, all gated on `import.meta.env.DEV` (see `src/scenes/devHooks.ts`):
 | `?freezeNpcs` | holds villagers on their home tiles |
 | `?coins=N` | starts with money, so a shop test need not farm first |
 | `?lang=xx` | forces the language for one run, over the browser's and the saved choice |
-| `?money=X` | forces the currency — `kuna`, `franc`, `euro` — over the language and the saved choice |
 | `?intro` | asks the postal worker for the welcome again, without clearing the saved settings — and is the one thing `?freezeNpcs` still lets him move for |
+| `?skipTitle` | starts the game without waiting at the title card **or at the who's-playing screen** — every browser script needs this, since the world does not exist until somebody has said go and picked a player. Plays the most recent player, and makes one (saved, so a reload finds the same world) if the device has none |
+| `?at=col,row` | starts the player on that tile. The world is five hundred tiles across and most of what is worth looking at is nowhere near where they start; walking a script there takes minutes and gets stuck on the first thing it cannot path around, and moving the session alone leaves the sprite and the camera behind |
 | `?hour=N` | pins the clock, so night can be looked at without waiting for it (`?hour=22`, `?hour=6.5`). Moves the tint, the lights *and* whether the villagers are out — everything that reads the hour, which is the point |
-| `window.__mathemagicum` | `{ session, ui(), doors(), npcs(), screenOf() }` — read state; look up buttons, doors and people by name; convert a tile to a screen position |
+| `window.__mathemagicum` | `{ session, ui(), doors(), npcs(), screenOf(), spell() }` — read state; look up buttons, doors and people by name; convert a tile to a screen position; read the cast on the parchment, since a script cannot answer a sum it cannot see |
 
 Each replaced something that had gone wrong. Pinning `Date.now` to make the
 spell predictable also stalled the walk tween, so sprites drew a tile from

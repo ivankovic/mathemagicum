@@ -2,12 +2,21 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Phaser from "phaser";
+import { AVATAR_CATALOGUE_KEY } from "../avatar/texture";
+import { phrasesFor } from "../i18n";
+import { browserStore, readSettings, settingsWithOverrides } from "../settings";
+import { TitleCard } from "../ui/TitleCard";
 import { UI_ASSETS, UI_SIDECAR_KEY, type UiIndex, uiEntry, uiTextureKey } from "../ui/assets";
+import { barFraction } from "../ui/loadingBar";
+import { ANIMAL_KINDS, animalSheetKey, animalSidecarKey } from "../world/animals";
 import { BUILDING_SPRITES, type BuildingSprite, spriteSheetKey } from "../world/buildings";
 import { ALL_CHARACTERS, characterSheetKey, characterSidecarKey } from "../world/characters";
+import { CLIFF_ATLAS_KEY } from "../world/cliffAtlas";
+import { DECK_SHEET_KEY, DECK_SIDECAR_KEY, type DeckSidecar } from "../world/decking";
 import { EFFECT_TYPES, effectSheetKey, effectSidecarKey } from "../world/effects";
 import { FIXTURE_TYPES, fixtureSheetKey, fixtureSidecarKey } from "../world/fixtures";
 import { INTERIOR_ROOMS, interiorSheetKey, interiorSidecarKey } from "../world/interiors";
+import { LANDMARK_TYPES, landmarkSheetKey, landmarkSidecarKey } from "../world/landmarks";
 import { PLANT_TYPES, plantSheetKey, plantSidecarKey } from "../world/plants";
 import { SCENERY_KINDS, scenerySheetKey, scenerySidecarKey } from "../world/scenery";
 import type {
@@ -20,7 +29,9 @@ import type {
   PlantSidecar,
   SheetLayout,
 } from "../world/spriteSidecar";
+import { spriteSheetConfig } from "../world/spriteSidecar";
 import { TERRAIN_ATLAS_KEY } from "../world/terrainAtlas";
+import { devOptions } from "./devHooks";
 
 export function sidecarKey(sprite: BuildingSprite): string {
   return `sidecar-${sprite}`;
@@ -33,6 +44,19 @@ export function sidecarKey(sprite: BuildingSprite): string {
 // exactly the kind of silent cross-repo contract that breaks the next time
 // a building grows a taller roof.
 export class BootScene extends Phaser.Scene {
+  private card?: TitleCard;
+  /**
+   * How much of the bar the first pass is worth.
+   *
+   * Phaser's loader reports progress per batch and this scene runs two of
+   * them, so one `progress` handler would fill the bar, empty it and fill it
+   * again. The first pass is thirty small sidecars and nothing else — the
+   * terrain atlas is deliberately loaded with the sheets — so it is over in
+   * moments and owns a sixth of the bar; everything with any weight to it is
+   * in the second pass, where there is room to watch it arrive.
+   */
+  private static readonly SIDECAR_SHARE = 0.15;
+
   constructor() {
     super("boot");
   }
@@ -42,16 +66,28 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Every terrain tile the world can need, including every 3- and
-    // 4-terrain corner cell: ~5300 of them, over two pages since the village
-    // square was paved. A multiatlas is one request either way. The second
-    // argument is the directory the atlas's own page filenames resolve
-    // against.
-    this.load.multiatlas(
-      TERRAIN_ATLAS_KEY,
-      `${this.base()}assets/terrain/terrain.json`,
-      `${this.base()}assets/terrain`,
-    );
+    // The same language the game will start in, ?lang= and all: a title card
+    // that greeted a German player in English and then handed over to a
+    // German game would be the one screen that had not been told.
+    const dev = devOptions();
+    const settings = settingsWithOverrides(readSettings(browserStore(), navigator.language), {
+      language: dev.language,
+    });
+    this.card = new TitleCard(this, phrasesFor(settings.language));
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.relayout, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.relayout, this);
+      this.card?.destroy();
+      this.card = undefined;
+    });
+    // Six at a time, not Phaser's default of thirty-two. On a slow link the
+    // default has every file in flight at once, so the bar sits at nothing
+    // for the whole download and then fills in a fifth of a second — the
+    // pipe is the same width either way, but a queue that finishes files one
+    // after another is a queue a bar can report on.
+    this.load.maxParallelDownloads = 6;
+    this.trackProgress(0, BootScene.SIDECAR_SHARE);
+
     for (const sprite of BUILDING_SPRITES) {
       this.load.json(sidecarKey(sprite), `${this.base()}assets/buildings/${sprite}.json`);
     }
@@ -60,6 +96,9 @@ export class BootScene extends Phaser.Scene {
         characterSidecarKey(character),
         `${this.base()}assets/characters/${character}.json`,
       );
+    }
+    for (const kind of ANIMAL_KINDS) {
+      this.load.json(animalSidecarKey(kind), `${this.base()}assets/animals/${kind}.json`);
     }
     for (const room of INTERIOR_ROOMS) {
       this.load.json(interiorSidecarKey(room), `${this.base()}assets/interiors/${room}.json`);
@@ -70,18 +109,57 @@ export class BootScene extends Phaser.Scene {
     for (const fixture of FIXTURE_TYPES) {
       this.load.json(fixtureSidecarKey(fixture), `${this.base()}assets/fixtures/${fixture}.json`);
     }
+    for (const landmark of LANDMARK_TYPES) {
+      this.load.json(
+        landmarkSidecarKey(landmark),
+        `${this.base()}assets/landmarks/${landmark}.json`,
+      );
+    }
     for (const kind of SCENERY_KINDS) {
       this.load.json(scenerySidecarKey(kind), `${this.base()}assets/objects/${kind}.json`);
     }
+    this.load.json(DECK_SIDECAR_KEY, `${this.base()}assets/decking/deck.json`);
     for (const effect of EFFECT_TYPES) {
       this.load.json(effectSidecarKey(effect), `${this.base()}assets/effects/${effect}.json`);
     }
     // One index for the whole interface set rather than one per file — the
     // generator writes it that way because a panel has no frames to describe.
     this.load.json(UI_SIDECAR_KEY, `${this.base()}assets/ui/ui.json`);
+    // Which bodies a child may pick and the exact colours the sheets were
+    // drawn to be recoloured with. Shipped beside the art rather than typed
+    // into the game, because a tone that exists in one and not the other is
+    // a swatch that paints on somebody else's skin.
+    this.load.json(AVATAR_CATALOGUE_KEY, `${this.base()}assets/characters/avatar.json`);
   }
 
   create(): void {
+    this.trackProgress(BootScene.SIDECAR_SHARE, 1 - BootScene.SIDECAR_SHARE);
+    // Every terrain tile the world can need, including every 3- and
+    // 4-terrain corner cell: ~5300 of them, over two pages since the village
+    // square was paved. A multiatlas is one request either way. The second
+    // argument is the directory the atlas's own page filenames resolve
+    // against.
+    //
+    // Loaded here with the sheets rather than with the sidecars, though it
+    // needs neither: it is far the biggest thing this game fetches, and the
+    // first pass is worth a sixth of the loading bar. Downloading two
+    // megabytes under a bar that cannot move is the definition of a bar not
+    // worth having.
+    this.load.multiatlas(
+      TERRAIN_ATLAS_KEY,
+      `${this.base()}assets/terrain/terrain.json`,
+      `${this.base()}assets/terrain`,
+    );
+    // The steps between the world's levels. A second atlas rather than more
+    // frames in the first: a cliff is not a terrain, it is a step between
+    // two of them, and folding these in would multiply the terrain atlas by
+    // every rock and every ramp for the benefit of the few tiles that have a
+    // step in them.
+    this.load.multiatlas(
+      CLIFF_ATLAS_KEY,
+      `${this.base()}assets/cliffs/cliffs.json`,
+      `${this.base()}assets/cliffs`,
+    );
     for (const sprite of BUILDING_SPRITES) {
       const sidecar = this.cache.json.get(sidecarKey(sprite)) as BuildingSidecar | undefined;
       this.queueSheet(spriteSheetKey(sprite), "buildings", sprite, sidecar?.sheet);
@@ -91,6 +169,10 @@ export class BootScene extends Phaser.Scene {
         | CharacterSidecar
         | undefined;
       this.queueSheet(characterSheetKey(character), "characters", character, sidecar?.sheet);
+    }
+    for (const kind of ANIMAL_KINDS) {
+      const sidecar = this.cache.json.get(animalSidecarKey(kind)) as CharacterSidecar | undefined;
+      this.queueSheet(animalSheetKey(kind), "animals", kind, sidecar?.sheet);
     }
     for (const room of INTERIOR_ROOMS) {
       const sidecar = this.cache.json.get(interiorSidecarKey(room)) as InteriorSidecar | undefined;
@@ -108,6 +190,16 @@ export class BootScene extends Phaser.Scene {
       const sidecar = this.cache.json.get(scenerySidecarKey(kind)) as ObjectSidecar | undefined;
       this.queueSheet(scenerySheetKey(kind), "objects", kind, sidecar?.sheet);
     }
+    for (const landmark of LANDMARK_TYPES) {
+      const sidecar = this.cache.json.get(landmarkSidecarKey(landmark)) as
+        | ObjectSidecar
+        | undefined;
+      this.queueSheet(landmarkSheetKey(landmark), "landmarks", landmark, sidecar?.sheet);
+    }
+    {
+      const sidecar = this.cache.json.get(DECK_SIDECAR_KEY) as DeckSidecar | undefined;
+      this.queueSheet(DECK_SHEET_KEY, "decking", "deck", sidecar?.sheet);
+    }
     for (const effect of EFFECT_TYPES) {
       const sidecar = this.cache.json.get(effectSidecarKey(effect)) as EffectSidecar | undefined;
       this.queueSheet(effectSheetKey(effect), "effects", effect, sidecar?.sheet);
@@ -122,9 +214,61 @@ export class BootScene extends Phaser.Scene {
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
       this.verifyFrameCounts();
       this.verifyUiSizes(uiIndex);
-      this.scene.start("game");
+      this.begin();
     });
     this.load.start();
+  }
+
+  /**
+   * Point the bar at this pass of the loader.
+   *
+   * Counted in files, because that is all Phaser will say: it has an event
+   * for per-file byte progress and does not fire it for the kinds of file
+   * this game loads, which was checked rather than assumed. Files are enough
+   * once the downloads are queued a few at a time — see maxParallelDownloads
+   * — and the atlas is loaded with the sheets so the long download falls in
+   * the pass that owns most of the bar.
+   */
+  private trackProgress(base: number, span: number): void {
+    const loader = this.load;
+    let high = base;
+    const paint = () => {
+      high = barFraction(
+        { base, span },
+        { complete: loader.totalComplete, total: loader.totalToLoad },
+        high,
+      );
+      this.card?.setProgress(high);
+    };
+    // Off first: this runs once per pass, on the same loader, and a listener
+    // left over from the previous pass repaints the bar with the previous
+    // pass's arithmetic — which is exactly what it did, flickering between a
+    // full bar and a sixth of one.
+    loader.off(Phaser.Loader.Events.PROGRESS);
+    loader.on(Phaser.Loader.Events.PROGRESS, paint);
+  }
+
+  /**
+   * Hold the title card until the player says go.
+   *
+   * Any tap and any key, because there is nothing else on this screen to hit
+   * and a child should not have to find a button. `?skipTitle` is for the
+   * scripts, which have no opinion about titles and every reason to want the
+   * world without one.
+   */
+  private begin(): void {
+    if (devOptions().skipTitle) {
+      this.scene.start("players");
+      return;
+    }
+    this.card?.ready();
+    const go = () => this.scene.start("players");
+    this.input.once("pointerdown", go);
+    this.input.keyboard?.once("keydown", go);
+  }
+
+  private relayout(): void {
+    this.card?.layout();
   }
 
   private queueSheet(
@@ -134,12 +278,11 @@ export class BootScene extends Phaser.Scene {
     sheet: SheetLayout | null | undefined,
   ): void {
     if (!sheet) throw new Error(`${name}.json has no "sheet" — regenerate it with --sheets`);
-    this.load.spritesheet(key, `${this.base()}assets/${directory}/${sheet.file}`, {
-      frameWidth: sheet.frame_width,
-      frameHeight: sheet.frame_height,
-      margin: sheet.margin,
-      spacing: sheet.spacing,
-    });
+    this.load.spritesheet(
+      key,
+      `${this.base()}assets/${directory}/${sheet.file}`,
+      spriteSheetConfig(sheet),
+    );
   }
 
   /**
@@ -163,6 +306,10 @@ export class BootScene extends Phaser.Scene {
       const sidecar = this.cache.json.get(characterSidecarKey(character)) as CharacterSidecar;
       expected.push([character, characterSheetKey(character), sidecar.frame_count]);
     }
+    for (const kind of ANIMAL_KINDS) {
+      const sidecar = this.cache.json.get(animalSidecarKey(kind)) as CharacterSidecar;
+      expected.push([kind, animalSheetKey(kind), sidecar.frame_count]);
+    }
     for (const room of INTERIOR_ROOMS) {
       const sheet = (this.cache.json.get(interiorSidecarKey(room)) as InteriorSidecar).sheet;
       if (sheet) expected.push([room, interiorSheetKey(room), sheet.frame_count]);
@@ -178,6 +325,14 @@ export class BootScene extends Phaser.Scene {
     for (const kind of SCENERY_KINDS) {
       const sidecar = this.cache.json.get(scenerySidecarKey(kind)) as ObjectSidecar;
       expected.push([kind, scenerySheetKey(kind), sidecar.frame_count]);
+    }
+    for (const landmark of LANDMARK_TYPES) {
+      const sidecar = this.cache.json.get(landmarkSidecarKey(landmark)) as ObjectSidecar;
+      expected.push([landmark, landmarkSheetKey(landmark), sidecar.frame_count]);
+    }
+    {
+      const sidecar = this.cache.json.get(DECK_SIDECAR_KEY) as DeckSidecar;
+      expected.push(["deck", DECK_SHEET_KEY, sidecar.frame_count]);
     }
     for (const effect of EFFECT_TYPES) {
       const sidecar = this.cache.json.get(effectSidecarKey(effect)) as EffectSidecar;

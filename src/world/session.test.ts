@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
+import { EN } from "../i18n/en";
 import { Facing } from "./characters";
 import { FixtureType } from "./fixtures";
 import { WorldGrid } from "./grid";
 import { PlantStage, PlantType } from "./plants";
+import { sceneryType } from "./scenery";
 import { GameSession, stepsBetween, stepsToSpeak } from "./session";
 import { CROP_PRICE, priceOf } from "./shop";
 import { TerrainType } from "./terrain";
@@ -358,5 +360,145 @@ describe("the full loop", () => {
     }
     expect(s.harvest().ok).toBe(true);
     expect(s.place(FixtureType.Fence).ok).toBe(true);
+  });
+});
+
+describe("a refusal says where", () => {
+  // The property the on-screen mark rests on. A line of small type along the
+  // top of the display is unreadable to the child it is for — their eyes are
+  // on the square they just tried to plant — so a refusal about a square has
+  // to name that square, and only the rule that refused knows which it is.
+
+  test("planting on ground that will not take the seed", () => {
+    const grid = WorldGrid.empty(6, 6, TerrainType.Water);
+    grid.setTerrain(2, 2, TerrainType.Grass);
+    const session = new GameSession({ grid, start: { col: 2, row: 2 }, facing: Facing.Right });
+    const result = session.plant(PlantType.Carrot);
+    expect(result.ok).toBe(false);
+    expect(result.tile).toEqual({ col: 3, row: 2 });
+  });
+
+  test("planting where something already grows", () => {
+    const grid = WorldGrid.empty(6, 6, TerrainType.Grass);
+    grid.plant(3, 2, PlantType.Carrot);
+    const session = new GameSession({ grid, start: { col: 2, row: 2 }, facing: Facing.Right });
+    const result = session.plant(PlantType.Wheat);
+    expect(result.ok).toBe(false);
+    expect(result.tile).toEqual({ col: 3, row: 2 });
+  });
+
+  test("casting on bare ground", () => {
+    const grid = WorldGrid.empty(6, 6, TerrainType.Grass);
+    const session = new GameSession({ grid, start: { col: 2, row: 2 }, facing: Facing.Right });
+    const result = session.checkGrowth();
+    expect(result.ok).toBe(false);
+    expect(result.tile).toEqual({ col: 3, row: 2 });
+  });
+
+  test("picking something that is not ripe", () => {
+    const grid = WorldGrid.empty(6, 6, TerrainType.Grass);
+    grid.plant(3, 2, PlantType.Carrot);
+    const session = new GameSession({ grid, start: { col: 2, row: 2 }, facing: Facing.Right });
+    const result = session.harvest();
+    expect(result.ok).toBe(false);
+    expect(result.tile).toEqual({ col: 3, row: 2 });
+  });
+
+  test("putting a fence where one cannot go", () => {
+    const grid = WorldGrid.empty(6, 6, TerrainType.Grass);
+    grid.plant(3, 2, PlantType.Carrot);
+    const session = new GameSession({ grid, start: { col: 2, row: 2 }, facing: Facing.Right });
+    session.inventory.add(FixtureType.Fence, 1);
+    const result = session.place(FixtureType.Fence);
+    expect(result.ok).toBe(false);
+    expect(result.tile).toEqual({ col: 3, row: 2 });
+  });
+
+  // The other half of the rule, and the reason `tile` is optional: a refusal
+  // that is not about a square has nowhere to point, and marking one anyway
+  // would put a cross on a tile that is perfectly fine.
+  test("but not when the refusal is about the player rather than a square", () => {
+    const grid = WorldGrid.empty(6, 6, TerrainType.Grass);
+    const session = new GameSession({ grid, start: { col: 2, row: 2 }, facing: Facing.Right });
+    expect(session.place(FixtureType.Fence).tile).toBeUndefined();
+    session.indoors = true;
+    expect(session.plant(PlantType.Carrot).tile).toBeUndefined();
+    expect(session.harvest().tile).toBeUndefined();
+    expect(session.checkGrowth().tile).toBeUndefined();
+  });
+});
+
+describe("clearing what is in the way", () => {
+  const tree = (grid: WorldGrid, col: number, row: number) =>
+    grid.placeObject({
+      id: `tree-${col}-${row}`,
+      type: sceneryType("woodland"),
+      col,
+      row,
+      width: 1,
+      height: 1,
+      blocksMovement: true,
+      anchorCol: col,
+      anchorRow: row,
+    });
+
+  test("the tile in front, the same one planting and growing use", () => {
+    const grid = field();
+    tree(grid, 2, 3);
+    const game = session(grid);
+    const target = game.checkClearing();
+    expect(target.ok).toBe(true);
+    expect(target.tile).toEqual({ col: 2, row: 3 });
+  });
+
+  test("bare ground has nothing to take", () => {
+    const target = session().checkClearing();
+    expect(target.ok).toBe(false);
+    expect(target.message).toBe(EN.nothingToClear);
+  });
+
+  // A fence you bought is yours, and a spell that unmade it would undo an
+  // afternoon's shopping from one mis-aimed cast.
+  test("it will not unmake something the player put there", () => {
+    const grid = field();
+    grid.placeObject({
+      id: "fence-2-3",
+      type: FixtureType.Fence,
+      col: 2,
+      row: 3,
+      width: 1,
+      height: 1,
+      blocksMovement: true,
+      anchorCol: 2,
+      anchorRow: 3,
+    });
+    const game = session(grid);
+    expect(game.checkClearing()).toEqual({
+      ok: false,
+      message: EN.willNotClear,
+      tile: { col: 2, row: 3 },
+    });
+    // And asking it to anyway changes nothing.
+    expect(game.clearAt(2, 3)).toBeNull();
+    expect(grid.getObjectAt(2, 3)).not.toBeNull();
+  });
+
+  test("taking one away leaves the ground walkable", () => {
+    const grid = field();
+    tree(grid, 2, 3);
+    const game = session(grid);
+    expect(grid.isPassable(2, 3)).toBe(false);
+    const taken = game.clearAt(2, 3);
+    expect(taken?.type).toBe(sceneryType("woodland"));
+    expect(grid.getObjectAt(2, 3)).toBeNull();
+    expect(grid.isPassable(2, 3)).toBe(true);
+  });
+
+  test("indoors there is nothing the ground grew", () => {
+    const grid = field();
+    tree(grid, 2, 3);
+    const game = session(grid);
+    game.indoors = true;
+    expect(game.checkClearing()).toEqual({ ok: false, message: EN.nothingToClear });
   });
 });

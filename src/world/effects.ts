@@ -18,6 +18,15 @@
 export const EffectType = {
   /** The addition spell landing on the crop it grows. */
   Plus: "plus",
+  /**
+   * The subtraction spell lifting what was in the way out of the ground.
+   *
+   * The plus's mirror in every respect, including the direction: that one
+   * sinks *into* the tile because it is being added to what is down there,
+   * and this one takes hold at the ground and rises. See the generator's own
+   * note — reversed, it would say the spell puts something down.
+   */
+  Minus: "minus",
 } as const;
 
 export type EffectType = (typeof EffectType)[keyof typeof EffectType];

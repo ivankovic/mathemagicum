@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { parseDevOptions } from "./devHooks";
+import { SPELLS } from "../spells/spellbook";
+import { ALL_PLACES, ALL_SPELLS, parseDevOptions, places } from "./devHooks";
 
 describe("parseDevOptions", () => {
   test("asks for nothing when nothing is asked for", () => {
@@ -11,9 +12,16 @@ describe("parseDevOptions", () => {
       freezeNpcs: false,
       coins: 0,
       language: null,
-      money: null,
       intro: false,
+      reached: [],
+      portalRung: null,
+      arrayRung: null,
+      clockRung: null,
+      away: null,
+      learned: [],
       hour: null,
+      skipTitle: false,
+      at: null,
     });
   });
 
@@ -25,19 +33,51 @@ describe("parseDevOptions", () => {
     expect(parseDevOptions("?lang=").language).toBe(null);
   });
 
-  // The euro is the currency that behaves differently — small coins, so the
-  // shop sells fewer at a time — and it is not the default in any language.
-  test("reads a currency override", () => {
-    expect(parseDevOptions("?money=euro").money).toBe("euro");
-    expect(parseDevOptions("?money=").money).toBe(null);
-    expect(parseDevOptions("").money).toBe(null);
-  });
-
   // The welcome is given once and then remembered, which is right for a
   // player and useless for a test of it.
   test("reads a request for the welcome", () => {
     expect(parseDevOptions("?intro").intro).toBe(true);
     expect(parseDevOptions("").intro).toBe(false);
+  });
+
+  // Walking to a named place is the journey the portal spell exists to
+  // save, and a slow way to find out whether its ruler is drawn right.
+  test("reads the places to count as already reached", () => {
+    expect(parseDevOptions("?reached=harbour").reached).toEqual(["harbour"]);
+    expect(parseDevOptions("?reached=harbour,bigCity").reached).toEqual(["harbour", "bigCity"]);
+    expect(parseDevOptions("?reached=all").reached).toEqual(ALL_PLACES as string[]);
+    expect(parseDevOptions("?reached=").reached).toEqual([]);
+    expect(parseDevOptions("").reached).toEqual([]);
+  });
+
+  // Kept rather than dropped: the profile checks them against the anchors it
+  // knows, and swallowing a typo here would leave a script wondering why its
+  // destination was still locked.
+  test("an unknown place is passed through rather than swallowed", () => {
+    expect(places("atlantis")).toEqual(["atlantis"]);
+    expect(places(" harbour , bigCity ")).toEqual(["harbour", "bigCity"]);
+  });
+
+  // The portal spell is learned from the geometer, so without this every
+  // script that wants it has to walk into the tower and tap him first —
+  // which is a test of the gate rather than of the thing being tested.
+  test("reads the spells to count as already taught", () => {
+    expect(parseDevOptions("?learned=portal").learned).toEqual(["portal"]);
+    expect(parseDevOptions("?learned=all").learned).toEqual(ALL_SPELLS as string[]);
+    // Every spell there is, not every spell there was. This was a hand-kept
+    // list and it fell two spells behind the spellbook, so `?learned=all`
+    // silently could not reach the two newest ones.
+    expect([...ALL_SPELLS].sort()).toEqual([...SPELLS].sort());
+    expect(parseDevOptions("").learned).toEqual([]);
+  });
+
+  // The one spell with four visibly different parchments, and which one a
+  // child sees comes from a profile `?skipTitle` deliberately does not make.
+  test("reads a portal rung to cast at", () => {
+    expect(parseDevOptions("?portalRung=0").portalRung).toBe(0);
+    expect(parseDevOptions("?portalRung=9").portalRung).toBe(9);
+    expect(parseDevOptions("?portalRung=").portalRung).toBe(null);
+    expect(parseDevOptions("").portalRung).toBe(null);
   });
 
   // Night is a third of the day and the game follows the player's own clock,
@@ -47,6 +87,13 @@ describe("parseDevOptions", () => {
     expect(parseDevOptions("?hour=6.5").hour).toBe(6.5);
     expect(parseDevOptions("?hour=").hour).toBe(null);
     expect(parseDevOptions("").hour).toBe(null);
+  });
+
+  // The title card waits to be tapped, which no script wants to do before it
+  // can even see the world.
+  test("reads a request to skip the title", () => {
+    expect(parseDevOptions("?skipTitle").skipTitle).toBe(true);
+    expect(parseDevOptions("").skipTitle).toBe(false);
   });
 
   test("reads a seed, so a script knows which sums it will be asked", () => {
@@ -78,9 +125,35 @@ describe("parseDevOptions", () => {
       freezeNpcs: true,
       coins: 40,
       language: "de",
-      money: null,
       intro: false,
+      reached: [],
+      portalRung: null,
+      arrayRung: null,
+      clockRung: null,
+      away: null,
+      learned: [],
       hour: null,
+      skipTitle: false,
+      at: null,
     });
+  });
+});
+
+describe("standing somewhere in particular", () => {
+  // The world is five hundred tiles across and most of what is worth looking
+  // at is nowhere near where the player starts.
+  test("a pair of whole numbers is a tile", () => {
+    expect(parseDevOptions("?at=12,340").at).toEqual({ col: 12, row: 340 });
+    expect(parseDevOptions("?at=0,0").at).toEqual({ col: 0, row: 0 });
+  });
+
+  // Anything else is nothing, rather than a tile made of guesses: a script
+  // that mistyped this should start where it always starts, not somewhere
+  // arbitrary it will then report on.
+  test("anything else is not", () => {
+    for (const raw of ["", "12", "12,", ",5", "a,b", "1,2,3", "1.5,2", "-1,4", "4,-1"]) {
+      expect({ raw, at: parseDevOptions(`?at=${raw}`).at }).toEqual({ raw, at: null });
+    }
+    expect(parseDevOptions("").at).toBeNull();
   });
 });

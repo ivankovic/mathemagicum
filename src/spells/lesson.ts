@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { type AdditionProblem, problemFor } from "./addition";
+import type { Rung } from "./difficulty";
 
 /**
  * What the teacher explains, and the example she explains it on.
@@ -22,7 +23,7 @@ import { type AdditionProblem, problemFor } from "./addition";
  * hundreds — and the spell enforces the same order box by box.
  */
 
-/** The pair she works through. Small ones digit, so the first jump is easy. */
+/** The pair she works through at the sums the game shipped with. */
 export const LESSON_START = 148;
 export const LESSON_ADDEND = 114;
 
@@ -33,6 +34,46 @@ export const LESSON_ADDEND = 114;
  * quietly stop matching the thing it is teaching.
  */
 export const LESSON_EXAMPLE: AdditionProblem = problemFor(LESSON_START, LESSON_ADDEND);
+
+/**
+ * The example for a child whose sums are a given size.
+ *
+ * She teaches on the numbers they are actually being asked, because a
+ * teacher who works through `148 + 114` at a child who has only ever seen
+ * `5 + 2` is demonstrating a method on a problem they cannot read — and the
+ * method is the whole of what she has to give.
+ *
+ * The pair is cut down from the one above rather than rolled, so the shape
+ * is the same at every size: a small ones digit, so the first jump is the
+ * easy one, and no zero digits, so no jump lands where it started.
+ */
+export function lessonFor(rung: Rung): AdditionProblem {
+  const size = Math.max(1, Math.min(3, Math.trunc(rung.places)));
+  const cut = (value: number) => {
+    const digits = String(value).slice(-size);
+    // A trailing digit could be a zero, which would make a jump a `+0`. The
+    // ones digit of the addend is 4 and of the start 8, so this only bites
+    // when a middle digit is taken — nudge it up rather than reroll, so the
+    // example stays recognisably the same sum at every size.
+    return Number(digits.replace(/0/g, "1"));
+  };
+  const addend = cut(LESSON_ADDEND);
+  let start = cut(LESSON_START);
+  if (!rung.crossing) {
+    // A worked example that carries, shown to a child whose own sums never
+    // do, demonstrates a step they have not been asked for and cannot check.
+    // Bringing the offending digit down keeps the example the same shape —
+    // 148 + 114 becomes 145 + 114 — rather than swapping it for a different
+    // sum at one size only.
+    for (let at = 0; at < size; at++) {
+      const startDigit = Math.floor(start / 10 ** at) % 10;
+      const addendDigit = Math.floor(addend / 10 ** at) % 10;
+      const over = startDigit + addendDigit - 9;
+      if (over > 0) start -= over * 10 ** at;
+    }
+  }
+  return problemFor(start, addend, size);
+}
 
 export const LessonBeat = {
   /** What the spell is and where it lives: the spellbook and the + rune. */

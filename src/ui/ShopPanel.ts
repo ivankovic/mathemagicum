@@ -4,8 +4,8 @@
 import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import {
+  CURRENCY,
   CoinTier,
-  type CurrencyDefinition,
   MOST_DENOMINATIONS,
   coinTier,
   totalOf as coinTotal,
@@ -27,7 +27,7 @@ import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import type { Inventory } from "../world/inventory";
 import { PLANT_TYPES, type PlantType } from "../world/plants";
 import type { Rng } from "../world/rng";
-import { MAX_TRADE, type Purse, priceOf, sellPriceOf } from "../world/shop";
+import { CROP_PRICE, MAX_TRADE, type Purse, priceOf, sellPriceOf } from "../world/shop";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { type UiIndex, coinIcon, cropIcon, itemIcon, uiTextureKey } from "./assets";
 
@@ -133,7 +133,6 @@ export class ShopPanel {
     depth: number,
     private readonly inventory: Inventory,
     private readonly purse: Purse,
-    private currency: CurrencyDefinition,
     private words: Phrases,
     private readonly rng: Rng,
     register: (object: Phaser.GameObjects.GameObject) => void,
@@ -215,23 +214,39 @@ export class ShopPanel {
     return this.open;
   }
 
-  /**
-   * Change the coins the counter deals in.
-   *
-   * Anything half-counted is thrown away with it: a pile of coins put down
-   * for a price in one currency is not a payment towards the same price in
-   * another, even when the two sets happen to look alike.
-   */
   /** Say everything from here on in another language. */
+  /**
+   * What a crop fetches for the child at the counter.
+   *
+   * Asked of the session rather than fixed here: a younger player's crop is
+   * quoted at a whole sun so the counting is money rather than a second
+   * puzzle, and everything in this panel — the price list, the coin pad, how
+   * many can be sold at once — has to agree about it.
+   */
+  private askCropPrice: () => number = () => CROP_PRICE;
+
+  private get cropPrice(): number {
+    return this.askCropPrice();
+  }
+
+  /**
+   * Where to ask what a crop is worth — the session, in practice.
+   *
+   * A question rather than a copy, deliberately. This panel does the money
+   * arithmetic: the price list, the coin pad, how many can be sold at once
+   * and what the shopkeeper counts out all come from this number, and the
+   * session charges the purse from its own. Two copies of it is two things
+   * that can disagree, and the way that shows up is a child counting out
+   * exactly what the counter asked for and being told it is wrong.
+   */
+  bindCropPrice(ask: () => number): void {
+    this.askCropPrice = ask;
+    if (this.isOpen) this.render();
+  }
+
   setPhrases(words: Phrases): void {
     this.words = words;
     if (this.open) this.render();
-  }
-
-  setCurrency(currency: CurrencyDefinition): void {
-    if (currency.code === this.currency.code) return;
-    this.currency = currency;
-    if (this.open) this.toMenu();
   }
 
   // --- opening and closing -------------------------------------------------
@@ -286,7 +301,7 @@ export class ShopPanel {
     this.chosenFixture = fixture;
     this.quantity = 1;
     this.settled = false;
-    this.tender = beginTender(priceOf(fixture), this.purse.coins);
+    this.tender = beginTender(priceOf(fixture, this.cropPrice), this.purse.coins);
     this.render();
   }
 
@@ -296,7 +311,7 @@ export class ShopPanel {
     this.chosenCrop = plant;
     this.quantity = 1;
     this.settled = false;
-    this.offer = makeOffer(this.currency, sellPriceOf(plant), this.rng);
+    this.offer = makeOffer(CURRENCY, sellPriceOf(plant, this.cropPrice), this.rng);
     this.render();
   }
 
@@ -311,10 +326,17 @@ export class ShopPanel {
     if (this.settled) return;
     this.quantity = Math.max(1, Math.min(this.mostTradeable(), next));
     if (this.mode === "buy" && this.chosenFixture) {
-      this.tender = beginTender(priceOf(this.chosenFixture) * this.quantity, this.purse.coins);
+      this.tender = beginTender(
+        priceOf(this.chosenFixture, this.cropPrice) * this.quantity,
+        this.purse.coins,
+      );
     }
     if (this.mode === "sell" && this.chosenCrop) {
-      this.offer = makeOffer(this.currency, sellPriceOf(this.chosenCrop) * this.quantity, this.rng);
+      this.offer = makeOffer(
+        CURRENCY,
+        sellPriceOf(this.chosenCrop, this.cropPrice) * this.quantity,
+        this.rng,
+      );
     }
     this.render();
   }
@@ -327,10 +349,10 @@ export class ShopPanel {
   private mostTradeable(): number {
     if (this.mode === "sell" && this.chosenCrop) {
       const stock = Math.max(1, Math.min(MAX_TRADE, this.inventory.count(this.chosenCrop)));
-      return maxSaleCount(this.currency, sellPriceOf(this.chosenCrop), stock);
+      return maxSaleCount(CURRENCY, sellPriceOf(this.chosenCrop, this.cropPrice), stock);
     }
     if (this.mode === "buy" && this.chosenFixture) {
-      const affordable = Math.floor(this.purse.coins / priceOf(this.chosenFixture));
+      const affordable = Math.floor(this.purse.coins / priceOf(this.chosenFixture, this.cropPrice));
       return Math.max(1, Math.min(MAX_TRADE, affordable));
     }
     return 1;
@@ -386,7 +408,7 @@ export class ShopPanel {
     const plant = this.chosenCrop;
     if (!offer || !plant || this.settled) return;
     this.settled = true;
-    this.verdict = judgeOffer(this.currency, offer, saysCorrect, this.words);
+    this.verdict = judgeOffer(CURRENCY, offer, saysCorrect, this.words);
     this.onSell?.(plant, this.quantity, this.verdict.paid);
     this.onTrade?.();
     this.render();
@@ -416,7 +438,7 @@ export class ShopPanel {
   }
 
   private renderMenu(rect: { left: number; top: number; width: number; centreX: number }): void {
-    this.title.setText(this.words.storeTitle(this.currency.format(this.purse.coins)));
+    this.title.setText(this.words.storeTitle(CURRENCY.format(this.purse.coins)));
     this.fitTitle(rect.width - PAD * 2 - 34);
     this.hint.setText(this.words.storeFooter).setColor(INK_DIM);
 
@@ -444,7 +466,9 @@ export class ShopPanel {
         columnW,
         ROW_H,
       );
-      row.label.setText(this.words.cropRow(plant, held, this.currency.format(sellPriceOf(plant))));
+      row.label.setText(
+        this.words.cropRow(plant, held, CURRENCY.format(sellPriceOf(plant, this.cropPrice))),
+      );
       row.label.setColor(held > 0 ? INK : INK_DIM);
       row.icon?.setAlpha(held > 0 ? 1 : 0.35);
       this.show(row);
@@ -452,7 +476,7 @@ export class ShopPanel {
     for (const [index, fixture] of PLACEABLE_FIXTURES.entries()) {
       const row = this.buyRows[index];
       if (!row) continue;
-      const affordable = this.purse.coins >= priceOf(fixture);
+      const affordable = this.purse.coins >= priceOf(fixture, this.cropPrice);
       this.place(
         row,
         rightX + columnW / 2,
@@ -460,7 +484,9 @@ export class ShopPanel {
         columnW,
         ROW_H,
       );
-      row.label.setText(this.words.stockRow(fixture, this.currency.format(priceOf(fixture))));
+      row.label.setText(
+        this.words.stockRow(fixture, CURRENCY.format(priceOf(fixture, this.cropPrice))),
+      );
       row.label.setColor(affordable ? INK : INK_DIM);
       row.icon?.setAlpha(affordable ? 1 : 0.35);
       this.show(row);
@@ -478,7 +504,7 @@ export class ShopPanel {
     const owed = buying
       ? priceOf(this.chosenFixture as FixtureType) * this.quantity
       : (this.offer?.owed ?? 0);
-    const money = this.currency.format(owed);
+    const money = CURRENCY.format(owed);
     this.title.setText(
       buying
         ? this.words.buyTitle(this.chosenFixture as FixtureType, this.quantity, money)
@@ -519,14 +545,14 @@ export class ShopPanel {
     this.runningTotal
       .setVisible(true)
       .setPosition(rect.centreX, pickerY + 34)
-      .setText(this.words.onTheCounter(this.currency.format(tenderTotal(tender))))
+      .setText(this.words.onTheCounter(CURRENCY.format(tenderTotal(tender))))
       .setColor(off === 0 ? INK_GOOD : INK);
 
     // One button per coin: tap to add, right-click or long-press to take back.
     const columns = 4;
     const width = (rect.width - PAD * 2 - COIN_GAP * (columns - 1)) / columns;
     const top = pickerY + 58;
-    for (const [index, value] of this.currency.denominations.entries()) {
+    for (const [index, value] of CURRENCY.denominations.entries()) {
       const button = this.coinButtons[index];
       if (!button) continue;
       const x = rect.left + PAD + (width + COIN_GAP) * (index % columns) + width / 2;
@@ -534,13 +560,13 @@ export class ShopPanel {
       this.placeCoin(button, x, y, width, value);
       const held = coinCount(tender, value);
       button.label.setText(
-        held > 0 ? `${this.currency.coinLabel(value)} x${held}` : this.currency.coinLabel(value),
+        held > 0 ? `${CURRENCY.coinLabel(value)} x${held}` : CURRENCY.coinLabel(value),
       );
       button.box.setStrokeStyle(2, held > 0 ? ACTIVE_HEX : INK_HEX);
       this.show(button);
     }
 
-    const rows = Math.ceil(this.currency.denominations.length / columns);
+    const rows = Math.ceil(CURRENCY.denominations.length / columns);
     const actionY = top + rows * (COIN_H + COIN_GAP) + 16;
     this.place(this.confirm, rect.centreX + 60, actionY, 110, 30);
     this.confirm.label.setText(this.settled ? this.words.done : this.words.pay);
@@ -561,9 +587,9 @@ export class ShopPanel {
     } else if (off === 0) {
       this.hint.setText(this.words.exactlyRight).setColor(INK_GOOD);
     } else if (off < 0) {
-      this.hint.setText(this.words.moreToGo(this.currency.format(-off))).setColor(INK);
+      this.hint.setText(this.words.moreToGo(CURRENCY.format(-off))).setColor(INK);
     } else {
-      this.hint.setText(this.words.tooMuch(this.currency.format(off))).setColor(INK_BAD);
+      this.hint.setText(this.words.tooMuch(CURRENCY.format(off))).setColor(INK_BAD);
     }
   }
 
@@ -591,7 +617,7 @@ export class ShopPanel {
       const x = rect.left + PAD + (width + COIN_GAP) * (index % columns) + width / 2;
       const y = top + Math.floor(index / columns) * (COIN_H + COIN_GAP) + COIN_H / 2;
       this.placeCoin(chip, x, y, width, value);
-      chip.label.setText(this.currency.coinLabel(value));
+      chip.label.setText(CURRENCY.coinLabel(value));
       this.show(chip);
     }
 
@@ -654,7 +680,7 @@ export class ShopPanel {
 
   /** The value of the nth pad button in the currency now in the purse. */
   private denomination(index: number): number {
-    return this.currency.denominations[index] ?? 0;
+    return CURRENCY.denominations[index] ?? 0;
   }
 
   /**
@@ -673,7 +699,7 @@ export class ShopPanel {
 
   /** Point a coin button at the right face for what it is worth. */
   private faceCoin(button: Button, value: number): void {
-    button.icon?.setTexture(uiTextureKey(coinIcon(coinTier(this.currency, value))));
+    button.icon?.setTexture(uiTextureKey(coinIcon(coinTier(CURRENCY, value))));
     button.icon?.setDisplaySize(COIN_ART, COIN_ART);
   }
 

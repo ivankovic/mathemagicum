@@ -9,7 +9,9 @@ import type { WorldGrid } from "./grid";
 import { Inventory, type ItemType } from "./inventory";
 import type { PlacedObject } from "./objects";
 import { type Crop, HARVEST_YIELD, PlantStage, type PlantType } from "./plants";
-import { Purse, type Trade, buyStock, sellCrops } from "./shop";
+import { sceneryKind } from "./scenery";
+import { type Patch, patchCells } from "./selection";
+import { CROP_PRICE, Purse, type Trade, buyStock, sellCrops } from "./shop";
 import type { GridPoint } from "./topdown";
 
 /**
@@ -37,7 +39,20 @@ import type { GridPoint } from "./topdown";
 export interface ActionResult {
   readonly ok: boolean;
   readonly message: string;
-  /** The tile acted on, when there was one. */
+  /**
+   * The tile acted on — or, when the action was refused, the tile it was
+   * refused *about*.
+   *
+   * Named on a refusal as well as on a success because of what the refusal
+   * has to do on screen. A line of small type along the top of the display
+   * is unreadable to the child it is for: their eyes are on the square they
+   * just tried to plant, several hundred pixels away, and a six-year-old may
+   * not read it at all. So the game says no *where the no happened*, and the
+   * only thing that can tell it where is the rule that refused.
+   *
+   * Absent when the refusal is not about a square — no seeds left, nothing
+   * in the basket — which is exactly when there is nowhere to point.
+   */
   readonly tile?: GridPoint;
 }
 
@@ -94,6 +109,15 @@ export class GameSession {
   private words: Phrases;
   readonly inventory = new Inventory();
   readonly purse = new Purse();
+  /**
+   * What a crop fetches for the child playing.
+   *
+   * Held here and swappable for the same reason the phrases are: it is a
+   * fact about who is playing rather than about the shop, and the panel that
+   * draws the counter should be asking the session rather than being handed
+   * a number to keep in step with everything else that quotes one.
+   */
+  cropPrice = CROP_PRICE;
 
   private position: GridPoint;
   private heading: Facing;
@@ -174,13 +198,17 @@ export class GameSession {
     // world's edge and a tile occupied by a tree are reachable states and
     // `getTerrain` throws off the edge of the grid.
     if (!this.grid.isPassable(col, row)) {
-      return { ok: false, message: this.words.noRoomToPlant };
+      return { ok: false, message: this.words.noRoomToPlant, tile: { col, row } };
     }
     if (this.grid.getPlant(col, row) !== null) {
-      return { ok: false, message: this.words.alreadyPlanted };
+      return { ok: false, message: this.words.alreadyPlanted, tile: { col, row } };
     }
     if (!this.grid.plant(col, row, plant)) {
-      return { ok: false, message: this.words.wrongGround(plant, this.grid.getTerrain(col, row)) };
+      return {
+        ok: false,
+        message: this.words.wrongGround(plant, this.grid.getTerrain(col, row)),
+        tile: { col, row },
+      };
     }
     return {
       ok: true,
@@ -188,6 +216,46 @@ export class GameSession {
       tile: { col, row },
       plant,
     };
+  }
+
+  /**
+   * Which cells of a patch would take a given action.
+   *
+   * The array spell is now an *area* tool: the player draws a rectangle,
+   * picks what to do to it, and one multiplication buys that many of it. So
+   * what the spell needs from the world is not "does this shape fit" but
+   * "how much of what they drew can this actually happen to" — and the
+   * answer is a list, because the scene has to touch each cell afterwards.
+   *
+   * **Every cell that will take it, and no refusal for the rest.** A spell
+   * that chose its own rectangle had to be all-or-nothing: one that planted
+   * nineteen of twenty-four would have lied about what it was going to do.
+   * A rectangle the *player* drew is different — they can see what is in it,
+   * and the game refusing the whole patch because one corner has a rock in
+   * it would be the game arguing with a plain instruction. It does what it
+   * can and says how much that was; it only refuses when the answer is none.
+   */
+  plantableIn(plant: PlantType, patch: Patch): GridPoint[] {
+    if (this.indoors) return [];
+    return patchCells(patch).filter(
+      (at) => this.grid.isPassable(at.col, at.row) && this.grid.canPlant(at.col, at.row, plant),
+    );
+  }
+
+  growableIn(patch: Patch): GridPoint[] {
+    if (this.indoors) return [];
+    return patchCells(patch).filter((at) => {
+      const crop = this.grid.getCrop(at.col, at.row);
+      return crop !== null && crop.stage !== PlantStage.Mature;
+    });
+  }
+
+  clearableIn(patch: Patch): GridPoint[] {
+    if (this.indoors) return [];
+    return patchCells(patch).filter((at) => {
+      const object = this.grid.getObjectAt(at.col, at.row);
+      return object !== null && sceneryKind(object.type) !== null;
+    });
   }
 
   /**
@@ -205,7 +273,7 @@ export class GameSession {
       return { ok: false, message: this.words.faceToGrow };
     }
     const crop = this.grid.getCrop(col, row);
-    if (!crop) return { ok: false, message: this.words.faceToGrow };
+    if (!crop) return { ok: false, message: this.words.faceToGrow, tile: { col, row } };
     if (crop.stage === PlantStage.Mature) {
       return {
         ok: false,
@@ -214,6 +282,37 @@ export class GameSession {
       };
     }
     return { ok: true, message: "", tile: { col, row }, crop };
+  }
+
+  /**
+   * Whether there is something in the way that the clearing spell may take.
+   *
+   * Scenery only: the trees, boulders and outcrops the ground grew. A fence
+   * or a lamp is *yours* — you bought it and set it down, and a spell that
+   * unmade it would be a spell that could undo an afternoon's shopping by
+   * being cast at the wrong tile. A building is not even a candidate.
+   *
+   * The tile in front, like planting and growing, and for the same reason:
+   * three gardening actions that targeted different tiles would mean facing
+   * one way to plant and another to clear.
+   */
+  checkClearing(): ActionResult {
+    if (this.indoors) return { ok: false, message: this.words.nothingToClear };
+    const { col, row } = this.facingTile();
+    if (!this.grid.inBounds(col, row)) return { ok: false, message: this.words.nothingToClear };
+    const object = this.grid.getObjectAt(col, row);
+    if (!object) return { ok: false, message: this.words.nothingToClear, tile: { col, row } };
+    if (sceneryKind(object.type) === null) {
+      return { ok: false, message: this.words.willNotClear, tile: { col, row } };
+    }
+    return { ok: true, message: "", tile: { col, row } };
+  }
+
+  /** Take it away. Gives back what stood there, so the scene can unmake it. */
+  clearAt(col: number, row: number): PlacedObject | null {
+    const object = this.grid.getObjectAt(col, row);
+    if (!object || sceneryKind(object.type) === null) return null;
+    return this.grid.removeObjectAt(col, row);
   }
 
   growAt(col: number, row: number): CropResult {
@@ -256,6 +355,7 @@ export class GameSession {
     return {
       ok: false,
       message: crop ? this.words.notRipe(crop.plant) : this.words.faceToPick,
+      tile: ahead,
     };
   }
 
@@ -284,8 +384,12 @@ export class GameSession {
     const { col, row } = this.facingTile();
     // Generation-time placement could assume it owned the map; this cannot,
     // so the tile has to be checked for everything already on it.
-    if (!this.grid.isPassable(col, row)) return { ok: false, message: this.words.noRoomThere };
-    if (this.grid.getCrop(col, row)) return { ok: false, message: this.words.somethingGrowing };
+    if (!this.grid.isPassable(col, row)) {
+      return { ok: false, message: this.words.noRoomThere, tile: { col, row } };
+    }
+    if (this.grid.getCrop(col, row)) {
+      return { ok: false, message: this.words.somethingGrowing, tile: { col, row } };
+    }
     if (!this.inventory.remove(fixture, 1)) return { ok: false, message: "" };
 
     const object: PlacedObject = {
@@ -313,7 +417,7 @@ export class GameSession {
   takeBack(fixture: FixtureType, col: number, row: number): PlaceResult {
     if (this.indoors) return { ok: false, message: this.words.notInHere };
     if (stepsBetween(this.tile, { col, row }) > 1) {
-      return { ok: false, message: this.words.tooFarToReach };
+      return { ok: false, message: this.words.tooFarToReach, tile: { col, row } };
     }
     if (!this.grid.removeObjectAt(col, row)) return { ok: false, message: "" };
     const held = this.inventory.add(fixture, 1);
@@ -335,11 +439,11 @@ export class GameSession {
    * carrots one at a time would be three sums instead of one.
    */
   sell(item: ItemType, count = 1): Trade {
-    return sellCrops(this.inventory, this.purse, item, count);
+    return sellCrops(this.inventory, this.purse, item, count, this.cropPrice);
   }
 
   /** Buy stock, having already counted the money out. */
   buy(fixture: FixtureType, count = 1): Trade {
-    return buyStock(this.inventory, this.purse, fixture, count);
+    return buyStock(this.inventory, this.purse, fixture, count, this.cropPrice);
   }
 }

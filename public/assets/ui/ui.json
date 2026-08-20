@@ -27,6 +27,26 @@
       "width": 32,
       "height": 32
     },
+    "rune-minus": {
+      "file": "rune_minus.png",
+      "width": 32,
+      "height": 32
+    },
+    "rune-portal": {
+      "file": "rune_portal.png",
+      "width": 32,
+      "height": 32
+    },
+    "rune-times": {
+      "file": "rune_times.png",
+      "width": 32,
+      "height": 32
+    },
+    "rune-hourglass": {
+      "file": "rune_hourglass.png",
+      "width": 32,
+      "height": 32
+    },
     "seed-pouch": {
       "file": "seed_pouch.png",
       "width": 32,
@@ -44,6 +64,11 @@
     },
     "map-wall": {
       "file": "map_wall.png",
+      "width": 32,
+      "height": 32
+    },
+    "star-chart": {
+      "file": "star_chart.png",
       "width": 32,
       "height": 32
     },

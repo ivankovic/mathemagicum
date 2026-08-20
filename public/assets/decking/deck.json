@@ -1,0 +1,16 @@
+{
+  "sheet": {
+    "file": "deck_sheet.png",
+    "frame_width": 32,
+    "frame_height": 32,
+    "frame_count": 4,
+    "columns": 4,
+    "rows": 1,
+    "margin": 1,
+    "spacing": 2
+  },
+  "decking": "deck",
+  "tile_size": 32,
+  "variations": 4,
+  "frame_count": 4
+}

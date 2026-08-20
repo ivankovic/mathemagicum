@@ -4,13 +4,17 @@
 import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import {
-  type AdditionProblem,
+  type CastResult,
   type CastState,
+  type NumberLine,
   PLACES,
   backspace,
   beginCast,
+  castResult,
   hintFor,
   isSolved,
+  movedBy,
+  runsDown,
   submit,
   typeDigit,
 } from "../spells/addition";
@@ -110,7 +114,7 @@ export class SpellPopup {
   private readonly closeText: Phaser.GameObjects.Text;
 
   private state: CastState | null = null;
-  private finish: ((solved: boolean) => void) | null = null;
+  private finish: ((result: CastResult) => void) | null = null;
   private keyHandler: ((event: KeyboardEvent) => void) | null = null;
 
   constructor(
@@ -180,6 +184,17 @@ export class SpellPopup {
     if (this.isOpen) this.layout();
   }
 
+  /**
+   * The cast in progress, or null.
+   *
+   * A dev seam rather than an API: a script driving the spell has to know
+   * what the spell asked, and the alternative was reading the sum back off
+   * the parchment. See `window.__mathemagicum.spell` in devHooks.ts.
+   */
+  get cast(): CastState | null {
+    return this.state;
+  }
+
   get isOpen(): boolean {
     return this.state !== null;
   }
@@ -193,8 +208,22 @@ export class SpellPopup {
    * player gardens and locking them out of gardening for arithmetic is the
    * one thing the design pillars rule out.
    */
-  open(problem: AdditionProblem, onDone: (solved: boolean) => void): void {
-    this.state = beginCast(problem);
+  /**
+   * Start a cast.
+   *
+   * `given` is how many jumps arrive already worked out — the gentlest
+   * settings hand a child the ones and ask for the rest, which is the
+   * design's "train it with partially solved problems" as a dial rather than
+   * as a lesson.
+   *
+   * Any number line, not the growth spell's in particular: this parchment
+   * serves both spells, and it works out which way the line runs from the
+   * stops rather than being told. A flag could be set wrong and would then
+   * draw a subtraction under a plus sign; the stops cannot, because they are
+   * the same numbers the boxes are checked against.
+   */
+  open(problem: NumberLine, given: number, onDone: (result: CastResult) => void): void {
+    this.state = beginCast(problem, given);
     this.finish = onDone;
     this.paper.setVisible(true);
     for (const part of this.parts) part.setVisible(true);
@@ -217,8 +246,11 @@ export class SpellPopup {
 
   private dismiss(solved: boolean): void {
     const done = this.finish;
+    // Read before closing: the state is what says whether every box went in
+    // first time, and `close` throws it away.
+    const result = castResult(this.state, solved);
     this.close();
-    done?.(solved);
+    done?.(result);
   }
 
   private onKeyDown(event: KeyboardEvent): void {
@@ -352,7 +384,8 @@ export class SpellPopup {
     }
 
     const problem = state.problem;
-    this.title.setText(`${problem.start} + ${problem.addend}`).setPosition(cx, top + PAD);
+    const sign = runsDown(problem) ? "−" : "+";
+    this.title.setText(`${problem.start} ${sign} ${movedBy(problem)}`).setPosition(cx, top + PAD);
 
     this.hint
       .setText(this.hintLine(state))
@@ -366,20 +399,36 @@ export class SpellPopup {
     // the line crammed against the keys on a phone.
     const contentTop = top + PAD + TITLE_SIZE + 10;
     const contentBottom = keypadTop - HINT_SIZE - 14;
-    const blockH = ARC_TOP + LINE_GAP + BOX_H;
+    // As many jumps as this problem has, which the difficulty sets — one at
+    // the gentlest setting, three at the one the game shipped with. The
+    // furniture for the rest is built once and simply hidden, because a
+    // parchment that destroyed and rebuilt its boxes every cast would be
+    // rebuilding them mid-animation.
+    const places = problem.jumps.length;
+    // The arcs get taller as they go, so a short line uses the low ones and
+    // reserves the height it actually needs. Measuring from ARC_TOP instead
+    // left about thirty pixels of empty parchment above a single small arc.
+    const arcTop = (ARC_HEIGHTS[places - 1] ?? ARC_TOP) as number;
+    const blockH = arcTop + LINE_GAP + BOX_H;
     const blockTop = contentTop + Math.max(0, (contentBottom - contentTop - blockH) / 2);
-    const lineY = Math.round(blockTop + ARC_TOP);
+    const lineY = Math.round(blockTop + arcTop);
     const lineLeft = left + PAD + BOX_W / 2;
     const lineRight = left + panelW - PAD - BOX_W / 2;
-    const spacing = (lineRight - lineLeft) / PLACES;
-    const stopX = (i: number) => lineLeft + spacing * i;
+    const spacing = (lineRight - lineLeft) / places;
+    // Subtraction runs the other way along the page, and it has to: a number
+    // line has smaller numbers to the left, so drawing 988 at the left edge
+    // and 734 at the right would contradict every number line a child has
+    // ever seen. The start sits on the right and each jump goes left, which
+    // is also the direction the arrowheads then point.
+    const backwards = runsDown(problem);
+    const stopX = (i: number) => (backwards ? lineRight - spacing * i : lineLeft + spacing * i);
 
     this.ink.clear();
     this.ink.lineStyle(2, INK_HEX, 1);
     this.ink.lineBetween(lineLeft - 10, lineY, lineRight + 10, lineY);
     // Ticks, so the points read as places on a line rather than as free
     // floating labels.
-    for (let i = 0; i <= PLACES; i++) {
+    for (let i = 0; i <= places; i++) {
       this.ink.lineBetween(stopX(i), lineY - 4, stopX(i), lineY + 4);
     }
 
@@ -389,7 +438,7 @@ export class SpellPopup {
     // jumps share a landing point, so an arc drawn whole would have the next
     // one's rising stroke laid straight over the head it just finished with.
     // That is not a subtle artefact: the first arrow simply had no head.
-    for (let i = 0; i < PLACES; i++) {
+    for (let i = 0; i < places; i++) {
       this.drawArcCurve(
         stopX(i),
         stopX(i + 1),
@@ -399,11 +448,20 @@ export class SpellPopup {
         i === state.index ? 3 : 2,
       );
     }
-    for (let i = 0; i < PLACES; i++) {
+    for (let i = 0; i < places; i++) {
       this.drawArcHead(stopX(i + 1), lineY, this.arcColor(state, i));
     }
 
     for (let i = 0; i < PLACES; i++) {
+      // Boxes past this problem's last jump belong to a harder setting; they
+      // are hidden rather than left showing an empty "?" the child cannot
+      // reach.
+      const inUse = i < places;
+      this.jumpLabels[i]?.setVisible(inUse);
+      this.boxes[i]?.setVisible(inUse);
+      this.boxTexts[i]?.setVisible(inUse);
+      if (!inUse) continue;
+
       const from = stopX(i);
       const to = stopX(i + 1);
       const rise = ARC_HEIGHTS[i] as number;
@@ -411,7 +469,7 @@ export class SpellPopup {
       const active = i === state.index;
 
       const jumpLabel = this.jumpLabels[i];
-      jumpLabel?.setText(`+${problem.jumps[i]}`);
+      jumpLabel?.setText(`${runsDown(problem) ? "−" : "+"}${problem.jumps[i]}`);
       jumpLabel?.setPosition((from + to) / 2, lineY - rise - 3);
       jumpLabel?.setColor(solved ? DONE_INK : INK);
 
@@ -435,8 +493,10 @@ export class SpellPopup {
   }
 
   private hintLine(state: CastState): string {
-    if (isSolved(state))
-      return `${state.problem.start} + ${state.problem.addend} = ${state.solved.at(-1)}`;
+    if (isSolved(state)) {
+      const sign = runsDown(state.problem) ? "−" : "+";
+      return `${state.problem.start} ${sign} ${movedBy(state.problem)} = ${state.solved.at(-1)}`;
+    }
     const hint = hintFor(state, this.words);
     if (hint) return hint;
     return this.words.jumpPrompt(state.index);

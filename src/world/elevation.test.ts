@@ -5,12 +5,12 @@ import { describe, expect, test } from "bun:test";
 import {
   HIGH_CORNERS,
   HighCorner,
+  WORLD_HIGH_CORNER,
   bandFloor,
   elevationAt,
   groundAt,
   habitatForElevation,
   highEdges,
-  pickHighCorner,
   terrainForElevation,
 } from "./elevation";
 import { Habitat } from "./habitat";
@@ -193,14 +193,44 @@ describe("bandFloor", () => {
   });
 });
 
-describe("pickHighCorner", () => {
-  test("is deterministic for a seed", () => {
-    expect(pickHighCorner(createRng(8))).toBe(pickHighCorner(createRng(8)));
+describe("the corner every world is high in", () => {
+  // It used to be drawn per seed. What that bought was four worlds a player
+  // cannot carry between them: "water is downhill and rock is uphill" is
+  // only worth knowing if it is true of the next world too.
+  test("is the north-west, so the mountains are north and the sea is south", () => {
+    expect(WORLD_HIGH_CORNER).toBe(HighCorner.NorthWest);
+    expect(highEdges(WORLD_HIGH_CORNER)).toEqual({ top: true, left: true });
   });
 
-  test("reaches all four corners over many seeds", () => {
-    const seen = new Set(Array.from({ length: 60 }, (_, i) => pickHighCorner(createRng(i))));
-    expect(seen.size).toBe(4);
+  // Stated as heights rather than as a name, because the name is only a
+  // label on the field — this is the fact a child actually meets.
+  /**
+   * The slope is a corner, so the honest claim is a *direction* rather than
+   * an edge: the world rises to the north-west and falls to the south-east.
+   *
+   * Which is what a player actually meets. From anywhere, walking north or
+   * west goes uphill toward rock and walking south or east goes downhill
+   * toward water — so all four directions mean something, and none of them
+   * means something different in the next world.
+   *
+   * Averaged along each row rather than sampled at one cell: the warp that
+   * gives the coast its bays moves any single tile by up to a third of a
+   * band, so one sample says as much about the noise as about the slope.
+   */
+  test("rises to the north and west, and falls to the south and east", () => {
+    const mean = (cells: { col: number; row: number }[]) =>
+      cells.reduce((sum, at) => sum + elevationAt(at.col, at.row, W, H, WORLD_HIGH_CORNER, 5), 0) /
+      cells.length;
+    const row = (r: number) => Array.from({ length: W }, (_, col) => ({ col, row: r }));
+    const column = (c: number) => Array.from({ length: H }, (_, r) => ({ col: c, row: r }));
+
+    expect(mean(row(0))).toBeGreaterThan(mean(row(H - 1)));
+    expect(mean(column(0))).toBeGreaterThan(mean(column(W - 1)));
+    // And the far corner really is under water, which is the half of it a
+    // harbour depends on.
+    expect(elevationAt(W - 1, H - 1, W, H, WORLD_HIGH_CORNER, 5)).toBeLessThan(
+      bandFloor(TerrainType.Sand),
+    );
   });
 });
 

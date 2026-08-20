@@ -1,0 +1,202 @@
+// SPDX-FileCopyrightText: 2026 Marko Ivankovic
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+import { describe, expect, test } from "bun:test";
+import type { AreaPlacement } from "./anchors";
+import { DUSK_FADE_TILES, GroveTask, duskOver, groveProgress, growGrove } from "./enchantedForest";
+import { FixtureType } from "./fixtures";
+import { WorldGrid } from "./grid";
+import { LandmarkType } from "./landmarks";
+import { PlantStage, PlantType } from "./plants";
+import { createRng } from "./rng";
+import { patchCells } from "./selection";
+import { TerrainType } from "./terrain";
+
+const BOX: AreaPlacement = { id: "enchanted-forest", col: 40, row: 40, width: 24, height: 24 };
+
+function grown() {
+  const grid = WorldGrid.empty(120, 120, TerrainType.Grass);
+  return { grid, grove: growGrove(grid, BOX, createRng(5)) };
+}
+
+describe("the grove", () => {
+  test("stands the great tree at the heart of the box", () => {
+    const { grid, grove } = grown();
+    const middle = { col: BOX.col + BOX.width / 2, row: BOX.row + BOX.height / 2 };
+    expect(Math.abs(grove.tree.col + 1 - middle.col)).toBeLessThanOrEqual(1);
+    expect(Math.abs(grove.tree.row + 1 - middle.row)).toBeLessThanOrEqual(1);
+    expect(grid.getObjectAt(grove.tree.col + 1, grove.tree.row + 1)?.type).toBe(
+      LandmarkType.GreatTree,
+    );
+  });
+
+  // The one thing a visitor has to be able to do. It is also the cell the
+  // world's connectivity carve aims at — see worldGenerator — so a doorstep
+  // that were blocked would be carved open by deleting the tree.
+  test("leaves a doorstep clear, below the tree", () => {
+    const { grid, grove } = grown();
+    expect(grid.isPassable(grove.doorstep.col, grove.doorstep.row)).toBe(true);
+    expect(grove.doorstep.row).toBeGreaterThan(grove.tree.row);
+  });
+
+  test("puts lights in it, and they are not scenery", () => {
+    const { grove } = grown();
+    const lights = grove.placed.filter((object) => object.type === FixtureType.Glowcap);
+    expect(lights.length).toBeGreaterThan(8);
+  });
+
+  // A wood you can see straight through is a field with trees in it. The
+  // scatter thickens outward, so the ring nearest the box edge has to be
+  // denser than the ring nearest the tree.
+  test("thickens outward from the clearing", () => {
+    const { grove } = grown();
+    const middle = { col: BOX.col + BOX.width / 2, row: BOX.row + BOX.height / 2 };
+    const ring = (from: number, to: number) =>
+      grove.placed.filter((object) => {
+        const out = Math.max(Math.abs(object.col - middle.col), Math.abs(object.row - middle.row));
+        return out >= from && out < to;
+      }).length;
+    const cells = (from: number, to: number) => (2 * to - 1) ** 2 - (2 * from - 1) ** 2;
+    const near = ring(6, 8) / cells(6, 8);
+    const far = ring(10, 12) / cells(10, 12);
+    expect({ denser: far > near }).toEqual({ denser: true });
+  });
+
+  test("never stacks two things on one cell", () => {
+    const { grove } = grown();
+    const seen = new Set<string>();
+    for (const object of grove.placed) {
+      for (let row = object.row; row < object.row + object.height; row++) {
+        for (let col = object.col; col < object.col + object.width; col++) {
+          const key = `${col},${row}`;
+          expect({ key, twice: seen.has(key) }).toEqual({ key, twice: false });
+          seen.add(key);
+        }
+      }
+    }
+  });
+
+  test("the same seed grows the same grove", () => {
+    const a = grown();
+    const b = grown();
+    expect(a.grove.placed).toEqual(b.grove.placed);
+  });
+});
+
+describe("what the great tree asks for", () => {
+  /**
+   * The whole design of it: the task keeps no state of its own. Every answer
+   * is read off the world — cleared scenery and planted crops are exactly
+   * what a save already records — so it survives a reload without a field
+   * and cannot drift out of step with the ground it is about.
+   */
+  test("starts overgrown, and says how much wood is still standing", () => {
+    const { grid, grove } = grown();
+    const progress = groveProgress(grid, grove);
+    expect(progress.task).toBe(GroveTask.Overgrown);
+    expect(progress.standing).toBe(grove.thicket.length);
+    expect(progress.standing).toBeGreaterThan(0);
+  });
+
+  // Marked so the world's own route-carving cannot do the player's first
+  // task for them. It is the one pass that removes whatever is in its way.
+  test("the thicket is not something the world may clear for you", () => {
+    const { grid, grove } = grown();
+    for (const at of grove.thicket) {
+      const standing = grid.getObjectAt(at.col, at.row);
+      expect({ at: `${at.col},${at.row}`, unbreakable: standing?.unbreakable }).toEqual({
+        at: `${at.col},${at.row}`,
+        unbreakable: true,
+      });
+    }
+  });
+
+  test("is bare ground once the wood is gone, and asks for the bed", () => {
+    const { grid, grove } = grown();
+    for (const at of grove.thicket) grid.removeObjectAt(at.col, at.row);
+    const progress = groveProgress(grid, grove);
+    expect(progress.task).toBe(GroveTask.Bare);
+    expect({ ripe: progress.ripe, squares: progress.squares }).toEqual({ ripe: 0, squares: 12 });
+  });
+
+  // Twelve squares of *ripe*, not twelve of planted. Doing it the long way
+  // is the point: it is the twenty-four number lines the spell will later
+  // skip, done once by hand.
+  test("counts ripe squares, not planted ones, and is done at the last of them", () => {
+    const { grid, grove } = grown();
+    for (const at of grove.thicket) grid.removeObjectAt(at.col, at.row);
+    const cells = patchCells(grove.bed);
+    for (const at of cells) grid.plant(at.col, at.row, PlantType.Carrot);
+    expect(groveProgress(grid, grove).task).toBe(GroveTask.Growing);
+    expect(groveProgress(grid, grove).ripe).toBe(0);
+
+    for (const [n, at] of cells.entries()) {
+      while (grid.getCrop(at.col, at.row)?.stage !== PlantStage.Mature) {
+        if (!grid.growCrop(at.col, at.row)) break;
+      }
+      const progress = groveProgress(grid, grove);
+      expect({ n, ripe: progress.ripe }).toEqual({ n, ripe: n + 1 });
+      expect({ n, done: progress.task === GroveTask.Done }).toEqual({
+        n,
+        done: n === cells.length - 1,
+      });
+    }
+  });
+
+  test("the bed is bare earth, so it reads as a plot and can be planted", () => {
+    const { grid, grove } = grown();
+    for (const at of patchCells(grove.bed)) {
+      expect(grid.getTerrain(at.col, at.row)).toBe(TerrainType.Dirt);
+      // Under the thicket for now, but the ground itself will take a crop.
+      expect(grid.canPlant(at.col, at.row, PlantType.Carrot)).toBe(true);
+    }
+  });
+
+  // The way in has to stay open: a bed laid across the doorstep would be a
+  // tree you could not walk up to until you had done what it asked.
+  test("the bed is beside the way in, not across it", () => {
+    const { grid, grove } = grown();
+    expect(patchCells(grove.bed).some((at) => at.col === grove.doorstep.col)).toBe(false);
+    expect(grid.isPassable(grove.doorstep.col, grove.doorstep.row)).toBe(true);
+  });
+});
+
+describe("the wood's own dusk", () => {
+  test("is full anywhere inside the box", () => {
+    for (const at of [
+      { col: BOX.col, row: BOX.row },
+      { col: BOX.col + BOX.width - 1, row: BOX.row + BOX.height - 1 },
+      { col: BOX.col + 12, row: BOX.row + 12 },
+    ]) {
+      expect(duskOver(BOX, at)).toBe(1);
+    }
+  });
+
+  test("is nothing well outside it", () => {
+    expect(duskOver(BOX, { col: BOX.col - DUSK_FADE_TILES - 1, row: BOX.row })).toBe(0);
+    expect(duskOver(BOX, { col: 0, row: 0 })).toBe(0);
+  });
+
+  // The reason it is a ramp at all: a hard edge would draw a straight line
+  // across ground the trees say has no line on it.
+  test("falls off smoothly rather than switching", () => {
+    const out = Array.from({ length: DUSK_FADE_TILES + 2 }, (_, n) =>
+      duskOver(BOX, { col: BOX.col - n, row: BOX.row + 12 }),
+    );
+    for (const [n, here] of out.entries()) {
+      const before = out[n - 1];
+      if (before === undefined) continue;
+      expect({ n, falling: here <= before }).toEqual({ n, falling: true });
+      expect({ n, gentle: before - here <= 0.2 }).toEqual({ n, gentle: true });
+    }
+  });
+
+  // Measured to the box, not to its centre: a centre distance would make a
+  // square wood's corners darker than the middle of its edges.
+  test("treats a corner and an edge the same distance out alike", () => {
+    const edge = duskOver(BOX, { col: BOX.col - 4, row: BOX.row + 12 });
+    const corner = duskOver(BOX, { col: BOX.col - 4, row: BOX.row + BOX.height + 3 });
+    expect(corner).toBeLessThan(edge);
+    expect(duskOver(BOX, { col: BOX.col - 4, row: BOX.row - 4 })).toBeLessThan(edge);
+  });
+});

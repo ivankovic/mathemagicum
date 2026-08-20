@@ -1,21 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { Currency, currencyForLanguage } from "./shop/currency";
-
 /**
- * The two things the player gets to decide about, and where they are kept.
+ * What the player gets to decide about, and where it is kept.
  *
- * The language and the money used to be worked out from the browser and left
- * at that: whatever `navigator.language` said, with the currency falling out
- * of it. That is a fine default and a bad rule. A German-speaking child may
- * be reading the game on a household machine set to English, and a child in
- * Zagreb may want to count francs precisely *because* they are foreign.
+ * The language used to be worked out from the browser and left at that:
+ * whatever `navigator.language` said. That is a fine default and a bad rule —
+ * a German-speaking child may be reading the game on a household machine set
+ * to English — so the browser only supplies the first guess and the player's
+ * own choice wins after that.
  *
- * So the browser only supplies the first guess. After that the player's own
- * choice wins, and it is remembered — these are the first two things the game
- * saves at all, which is deliberate: a setting you have to make again every
- * time is not a setting.
+ * It is remembered, which is deliberate: a setting you have to make again
+ * every time is not a setting. The money used to be a choice here too, back
+ * when the game offered real currencies; there is one invented money now and
+ * nothing to choose between (see src/shop/currency.ts).
  *
  * Storage is passed in rather than reached for. It makes the rules testable
  * without a browser, and it means a machine with storage switched off gets
@@ -38,43 +36,26 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
 };
 
 /**
- * "Follow the language" is a real answer, not a missing one.
+ * What the device remembers, as opposed to what a child does.
  *
- * Keeping it distinct from the currency it resolves to means a player who
- * switches language gets the money that goes with it, instead of being stuck
- * with whatever the currency was when they last looked at this screen.
+ * Only one thing, and it is not the game's language: it is the language of
+ * the screen that asks *who is playing*, which has to be written in
+ * something before anybody has been chosen. It follows whoever played last,
+ * so a household that reads German is not asked in English every morning.
+ *
+ * Everything else a player chose — their language in the game, their avatar,
+ * their world, whether they have had the welcome — belongs to the player and
+ * lives in their profile (`src/save/profiles.ts`). It used to live here, one
+ * set for the whole device, which is the wrong shape for the machine this is
+ * built for: two siblings sharing a tablet may not read the same language,
+ * and the one who does not gets a game they cannot play.
  */
-export const FOLLOW_LANGUAGE = "auto";
-
-export type MoneyChoice = typeof FOLLOW_LANGUAGE | Currency;
-
-export const MONEY_CHOICES: readonly MoneyChoice[] = [
-  FOLLOW_LANGUAGE,
-  Currency.Kuna,
-  Currency.Franc,
-  Currency.Euro,
-];
-
 export interface Settings {
   readonly language: Language;
-  readonly money: MoneyChoice;
-  /**
-   * Whether the postal worker has already walked the player through the
-   * basics.
-   *
-   * Saved for the same reason the other two are: a tutorial that interrupts
-   * every single load is one the player learns to dismiss without reading,
-   * which is worse than not having one. He still walks over and can still be
-   * tapped for it again — what is remembered is only whether it opens by
-   * itself.
-   */
-  readonly introSeen: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   language: Language.English,
-  money: FOLLOW_LANGUAGE,
-  introSeen: false,
 };
 
 /** What the game can read a language tag as. `de-CH`, `de-AT` and `de` all agree. */
@@ -83,27 +64,23 @@ export function languageOf(tag: string | null | undefined): Language {
   return lower === "de" || lower.startsWith("de-") ? Language.German : Language.English;
 }
 
-/** Which coins are in the purse, given both choices. */
-export function currencyFor(settings: Settings): Currency {
-  return settings.money === FOLLOW_LANGUAGE
-    ? currencyForLanguage(settings.language)
-    : settings.money;
-}
-
-/** Just enough of `localStorage` to keep two strings, so tests need no browser. */
+/** Just enough of `localStorage` to keep the players and their worlds, so tests need no browser. */
 export interface SettingsStore {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  /**
+   * Optional because a store that cannot forget is still a usable store —
+   * a test double keeping two strings has no reason to implement it — but a
+   * device that deletes a player and keeps their world would be growing a
+   * farm nothing can reach.
+   */
+  removeItem?(key: string): void;
 }
 
 export const SETTINGS_KEY = "mathemagicum.settings";
 
 function isLanguage(value: unknown): value is Language {
   return LANGUAGES.includes(value as Language);
-}
-
-function isMoney(value: unknown): value is MoneyChoice {
-  return MONEY_CHOICES.includes(value as MoneyChoice);
 }
 
 /**
@@ -128,11 +105,7 @@ export function readSettings(store: SettingsStore | null, browserLanguage?: stri
   }
   if (typeof saved !== "object" || saved === null) return fallback;
   const record = saved as Record<string, unknown>;
-  return {
-    language: isLanguage(record.language) ? record.language : fallback.language,
-    money: isMoney(record.money) ? record.money : fallback.money,
-    introSeen: record.introSeen === true,
-  };
+  return { language: isLanguage(record.language) ? record.language : fallback.language };
 }
 
 /** Remember a choice, or carry on without remembering it. */
@@ -144,6 +117,21 @@ export function writeSettings(store: SettingsStore | null, settings: Settings): 
     // Private browsing, a full quota, storage switched off. The game is
     // playable with the choice held only for this session.
   }
+}
+
+/**
+ * The saved settings with a run's overrides applied.
+ *
+ * Two scenes need this — the title card has a language too — and neither
+ * should be reaching into `?lang=` on its own: a card that greeted a German
+ * player in English and then handed over to a German game would be the one
+ * screen that had not been told.
+ */
+export function settingsWithOverrides(
+  stored: Settings,
+  overrides: { language?: string | null },
+): Settings {
+  return overrides.language ? { ...stored, language: languageOf(overrides.language) } : stored;
 }
 
 /** The browser's storage if there is one, and nothing if it is switched off. */

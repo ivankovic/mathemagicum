@@ -276,21 +276,138 @@ Two consequences worth stating plainly:
   to be walled by tight formations of boulders and tall trees rather than by
   terrain.
 
-The wall is built from the impassable scenery each kind of ground already
-grows — rock spires and boulders up in the mountains, close-set conifers
-through the woodland — so what blocks the player is chosen by where they are
-rather than picked. It is two objects deep on a 2-tile lattice, which is what
-packs it with no one-tile corridor straight out of the map, and it stops at
-the waterline: the sea already blocks, and a boulder standing in it is not a
-barrier but a mistake.
+### The steps between the levels
 
-Its depth varies along its length, between one and four objects, so it reads
-as a thicket that happens to be impassable rather than a fence someone built
-along the edge of the map. Each terrain ships several distinct individuals
-and half are mirrored, because one silhouette repeated for hundreds of tiles
-reads as wallpaper.
+The slope runs down from a high corner through mountain, hills, wood, meadow
+and sand to the sea. That reads as a *gradient*, and it always did — what it
+did not read as was **levels**, because nothing marked where one gave way to
+the next.
 
-Only the rim is walled, and reserved story areas are left clear — but that is
+Every cell now carries a **level**: 0 for the coast, meadows and wood, 1 for
+the hills, 2 for the peaks. It is stored rather than derived from terrain,
+because two patches of the same terrain can be at different heights — a step
+up in a meadow is grass above and grass below, and the art ships a
+grass-grass cliff precisely so that case is drawable. Levels are then
+smoothed so no neighbour is more than one step away, because the art has one
+cliff: a step of one, and a two-level jump would have nothing to draw.
+
+The smoothing counts **diagonals**, though nothing walks along one. A tile is
+drawn from the four levels at its corners, and those corners are a 2x2 block
+of cells — so a tile's north-west and south-east corners are diagonal to each
+other, and smoothing only the four cells you can walk to left blocks like
+`0 1 / 1 2` perfectly legal. A tile spanning two levels is one the atlas has
+no frame for: it fell through to plain ground, a hole in the cliff line.
+Taking all eight neighbours makes every 2x2 block span at most one level,
+which is exactly the condition that every step tile is drawable. It costs
+nothing inland — measured on five worlds, not one cell of mountain moves,
+because the fill never sets a peak diagonally against the lowlands. What it
+does fix is the **rim**, which stands one step above whatever it borders and
+so can meet the ground diagonally two levels below it. Every undrawable tile
+in a measured world was on the rim.
+
+**The cliff is a tile, not an object.** A tile whose four corners are not all
+the same level is drawn from the cliff atlas instead of the terrain one — a
+complete tile, ground on both sides included, with a band of rock along the
+seam. It is the same border every pair tile already draws, so it follows the
+contour organically and tiles by exactly the machinery the terrain does.
+
+**A ramp is a permission, not a trench.** The first attempt cut ramps by
+*lowering* a lane of the upper level to meet the lower one, on the reasoning
+that two cells at the same level are walkable between. That cannot work:
+lowering a cell moves the step rather than removing it, so the lane became
+something you could walk into and not out of. With a rule that forbids every
+level change, no arrangement of levels is ever walkable between two of them.
+So a ramp is a flag on a cell — one on either side of a step makes that step
+crossable — and it is also what tells the renderer to draw the ramp tile
+instead of the cliff one.
+
+**The ramp tile tapers, it does not stop.** The first one kept the rock near
+the tile's edges and cut it off at a ruled line, and that line read as the
+tile's own edge showing through — which is the one thing a seam must never
+do. The rock is now laid at a *thickness* that falls from full depth at the
+end where the ramp meets the cliff to nothing across the gap, so the face
+descends into the way up and rises out of it again. It has to reach zero and
+stay there for a stretch: a band one pixel deep is still a band, and a
+hairline of rock through the gap reads as a wall you are not allowed
+through.
+
+A taper needs ends, and the ends have to lie **along** the border — so only a
+step running straight across a tile can be a ramp. Where a contour turns a
+corner inside a tile there is no ramp frame, and that tile is drawn as plain
+ground, which is exactly what a ramp with all its rock tapered away would be.
+That is fine in the middle of a way up and wrong at its edge, where the full
+cliff beside it would stop dead in mid-air — the sharp edge again, one tile
+over. So a second pass **widens each way up until its edges land on a
+straight run**: mark the neighbouring step tile as part of the way up too and
+look again. Most of any contour is straight, so it settles in two or three
+rounds. It runs *after* the connectivity pass, not before, because that pass
+marks ways up of its own where a carved route has to climb — a cell or two at
+a time, which is exactly the shape that leaves an untaperable edge. Running
+it in both places was tried and dropped: it produced worlds identical to the
+byte, because the seal settles on the same answer whenever it is asked. The
+cost is a way up a tile or two wider than the lane asked for, which nobody
+can see.
+Story areas are left alone, so a handful of tiles in a world may keep the old
+blemish rather than have a cliff opened through the middle of the harbour.
+
+Cutting them is not optional. Every level above the first would otherwise be
+sealed, and nothing downstream could rescue it: the connectivity pass carves
+*terrain*, and a step is not terrain. The ways up run in lanes on both axes,
+one per period at a hashed offset inside it, which *guarantees* the spacing
+rather than leaving it to a distribution nobody has looked at.
+
+**And the edge of the world is the same thing.** The outermost ring stands
+one step above the ground just inside it, so the map seals itself: the cliff
+draws itself out of the same tiles as every other step, and the rule that
+stops you climbing a cliff inland stops you climbing out. It replaces a wall
+of objects — trees and boulders at first, then a standing cliff sprite —
+that had to be placed, kept off the story areas and excused to the
+connectivity pass. One step above whatever it borders rather than a fixed
+height, so the smoothing rule holds by construction: a rim pinned to the top
+level would be a sheer drop wherever it met the coast, and there is no art
+for that.
+
+### Trees, boulders and spires
+
+Scattered across the ground that grows them: thick through the woodland, thin
+on the meadows, occasional boulders up in the rock. Density is a property of
+the terrain and so is *which* object appears — conifers in the wood, spires
+in the mountains — so a boulder never turns up in the middle of a wood.
+
+They clump rather than sprinkling evenly. A wood with its trees at a uniform
+spacing reads as an orchard; what makes it a wood is thickets with clearings
+between them, so two noise fields are multiplied — one that wanders slowly to
+make the thickets, one per position to decide within them.
+
+Nothing stands on the lip of a step. A cliff is drawn from the levels at a
+tile's four *corners*, so a tree beside a step has the cliff line drawn
+across its trunk even though the tree itself is on flat ground — the ring
+around a candidate cell has to be one level, not just the cell.
+
+**One tile each, on a one-tile lattice.** Both were two, and both were the
+same constant because they happened to be the same number. They answer
+different questions: how much ground a tree takes, and how finely the world
+is sampled for places to put one. Scenery now blocks the single tile it grows
+out of — a wood is something to walk *through* rather than a lattice of
+four-tile walls — and the lattice went the other way, to one, because a
+lattice as wide as the object is a grid you can see. Trees may stand next to
+each other now, which is what a thicket is.
+
+**And they come and go with the ground they stand on.** Every tree used to be
+a live sprite from the moment the world was made — thirteen thousand of them,
+each with a sway animation running, almost none on screen. They are spawned
+with their chunk and destroyed with it, and cached far more tightly than the
+ground is: a chunk's terrain is one texture, cheap to keep and expensive to
+redraw, so sixty are held against panning; its trees are hundreds of sprites,
+cheap to remake and expensive to keep, so only what is on screen exists. That
+one change bought back more than the finer lattice cost — the village went
+from fifteen frames a second to thirty, and a wood from eight to fifteen.
+
+These used to exist only as the *wall* along the map's two land edges, and
+when the rim became a cliff that wall went — taking every tree in the world
+with it, because the wall was the only thing that had ever placed one.
+
+Reserved story areas are left clear — but that is
 belt and braces rather than the guarantee. The guarantee is that
 `ensureConnectivity` can now clear a blocking object as well as rewrite
 terrain, and verifies afterwards. It could not before: a carve that only
@@ -374,10 +491,10 @@ Five: **Starting Village**, **Enchanted Forest**, **Big City**,
 | Area | Placement mode | Fill strategy |
 |---|---|---|
 | Starting Village | Fixed at world center (player spawn point) | Settlement |
-| Harbour | Algorithmic, constrained to touch a Coastal **outer-edge** border arc | Settlement (+ dock exception) |
-| Big City | Algorithmic, constrained to be near the placed Harbour (port-city) | Settlement |
-| Mountain Star Observatory | Algorithmic, constrained to touch a Highland **outer-edge** border arc | Natural (+ one large "Observatory" building object) |
-| Enchanted Forest | Algorithmic (spacing only); seeds a Woodland habitat blob in step 4 | Natural |
+| Harbour | Algorithmic, constrained to **straddle the waterline** — see below | Settlement (quay, piers, fish market, lighthouse, the great ship) |
+| Big City | Algorithmic, constrained to be near the placed Harbour (port-city) | Settlement (streets, blocks, a plaza) |
+| Mountain Star Observatory | Algorithmic, constrained to touch a Highland **outer-edge** border arc | The dome on its shelf, and the lit path up to it |
+| Enchanted Forest | Algorithmic (spacing only); seeds a Woodland habitat blob in step 4 | Natural (+ the great tree, a grove and its glowing mushrooms — see below) |
 
 Placement order matters and is now baked into the pipeline (step 2):
 Village → Harbour → Big City → Observatory → Enchanted Forest. Each later
@@ -400,16 +517,23 @@ because that's what multiplication is. Exact themes and minigames are
 still a deliberate draft/placeholder, same as before — only the "no
 gating, teach via worked examples" part is now settled.
 
-Illustrative only — none of the math topics below are decided, they're
+Two of these are now settled rather than illustrative — the village teaches
+addition and the forest teaches multiplication, and in both cases the spell's
+*effect* follows the mathematics as the pattern predicted. The forest's
+teacher is also the first that is not a person: the great tree itself, because
+nobody lives in the old wood and a teacher who was somebody standing in a room
+would have needed a house built round them.
+
+The rest are illustrative only — those math topics are not decided, and are
 here to show the pattern holds up across all five areas:
 
 | Area | Thematic hook | Illustrative spell topic |
 |---|---|---|
 | Starting Village | mentor/family, the first lesson | basic arithmetic |
-| Enchanted Forest | growth, the forest's own magic | multiplication (repeated growth) |
+| Enchanted Forest | growth, the forest's own magic | **multiplication — mark out a patch (implemented)** |
 | Big City | trade, market economics | percentages/discounts |
 | Harbour | tides, cargo, proportion | ratios |
-| Mountain Star Observatory | night sky, orbits, distance | geometry/angles |
+| Mountain Star Observatory | night sky, the turning day | **time — telling the clock (designed)** |
 
 Since nothing is gated, the Observatory being the most secluded anchor
 (by construction — border-constrained, placed last) doesn't pace
@@ -572,6 +696,475 @@ purchases) so it doesn't get lost, and flagging that once it's closer to
 real it deserves a short mention in `GAME_DESIGN.md`'s systems list
 alongside Terrain/Plants/Spells, the same way "Learning over gating"
 graduated from a passing mention here into an actual pillar there.
+
+## The enchanted forest — second concrete story area
+
+The second anchor with anything in it, and the first that is not a
+settlement. Where the village is *laid out* — a square, a ring of buildings,
+gardens with fences — this is **grown**: everything in the reserved box is
+placed rather than avoided, because the scatter skips reserved areas, so the
+box arrives flat and empty and the generator fills it.
+
+**One great tree at the heart.** Three tiles by three, blocking every one of
+them, with its crown reaching four tiles above the footprint. It is the only
+thing in the world allowed to stand taller than a building — the scale ladder
+in `GAME_DESIGN.md` puts everything that scatters under the roofline so the
+village reads as the landmark of the map, and one thing at the heart of one
+place is the exception that makes that rule worth having.
+
+Landmarks are their own kind, neither scenery nor a building: scenery is one
+thing per terrain on a single tile, scattered in its thousands, and a building
+has a door you walk through and a room behind it. A landmark is one of a kind,
+covers several tiles, has no inside, and is the reason to walk somewhere.
+
+**A ring of glowing mushrooms about it**, then woodland thickening outward
+from the clearing to the box edge, then more mushrooms scattered through it.
+The clearing is kept clear to five tiles; past that the density ramps, so the
+grove reads as somewhere the wood opens up rather than as a gap in it.
+
+**The doorstep is a generated fact, not a convention.** `growGrove` returns
+the tile a visitor stands on to touch the tree, and the world's connectivity
+carve aims at *that* rather than at the box's centre. It used to aim at the
+centre, and connectivity gets where it is going by removing whatever is in
+the way — so the great tree was carved out of the world every single time and
+the enchanted forest was an empty wood. The same class of bug as the player's
+garden gate disappearing when the spawn moved inside the fence:
+`ensureConnectivity` will delete a story object to reach a cell, so no story
+object may stand on a cell it is aimed at. `worldGenerator.test.ts` pins both
+halves — the doorstep is reachable *and* the tree is still standing on its
+nine cells — because either alone is satisfied by deleting the tree.
+
+**It is never fully light.** A tint keyed to the anchor box would draw a
+straight line across ground the trees say has no line on it, so the dusk
+ramps: full inside the box, falling to nothing ten tiles outside it, measured
+to the box rather than to its centre (a centre distance would make a square
+wood's corners darker than the middle of its edges). The scene eases the
+value over about a second as well, which covers the one case a spatial ramp
+cannot — arriving by portal, with no walk in.
+
+It is a *floor* under the time of day rather than a second overlay: two
+tinted rectangles multiply into a colour neither of them is, and at noon in
+the grove that came out as a blue wash rather than as shade. One tint, taking
+whichever of the two is deeper, with its colour leaning green as the dusk
+rises — night in a wood is not the same colour as night over a field. And
+because everything that glows reads its strength off the resulting alpha, the
+mushrooms are lit at noon, which is the whole point of them.
+
+## The harbour and the big city — three settlements, three grammars
+
+The village, the harbour and the city are built from the same kit of
+buildings, and if they were laid out the same way they would read as the same
+settlement three times. So each one has its own **layout grammar**, and that
+difference is doing the work a new building sprite would otherwise have to:
+
+- **The village is round.** A ring of buildings about a well, everything
+  placed by the *direction* it lies in from the middle.
+- **The harbour is linear.** A working front with the sea on one side and the
+  town on the other, everything placed by *how far along* it sits.
+- **The city is gridded.** Streets at regular intervals with blocks between
+  them, everything placed by *which block* it is in.
+
+A ring says village however many houses are in it; a grid says town at four
+buildings.
+
+### The observatory is a dome at the top of a climb
+
+The fourth layout grammar, and the simplest, because the mountain has already
+done the work. The generator puts this box in the highest band there is and
+then flattens it, which leaves exactly the shape an observatory wants: a
+**shelf** of walkable hill in the middle with rock all round it, at the top of
+a climb the world's own connectivity has already cut in ramps.
+
+So the layout places one building and one path. The village is round, the
+harbour is linear, the city is a grid — this is a **single approach**, and
+everything is arranged along that one line. Arriving should feel like the end
+of a walk rather than like entering a place.
+
+**The shelf is found, not assumed.** How big it is depends on how high the
+mountain was before the flatten pass shifted it, so a layout that guessed
+would be right in the seeds it was written against and nowhere else. It is
+measured as the box's non-mountain extent, and the whole thing refuses —
+returning null, as the harbour does — if what it finds is too small to stand
+a dome on.
+
+**The path is inside the box.** The route *to* the mountain is the world's to
+carve and it does; what this owns is the last stretch, from the rim of the
+shelf to the door. That stretch is what the astronomer asks to have lit: five
+posts up one side of it, empty to start with, and a lamp standing on a post
+is a thing the save already records — so the task needs no field of its own,
+the same trick the great tree's bed uses.
+
+**One side, not both.** Five lamps in a row up the left of a path reads as a
+lit way; five pairs reads as an avenue, and this is a mountain track rather
+than an approach to a palace.
+
+**The spacing is a ceiling, not a spacing.** Five posts three cells apart want
+thirteen cells of path, and how long the path is depends on how big a shelf
+the mountain left. Where there is less, they close up — which is what a lit
+path does on a short climb, and better than a layout that quietly ships four
+lamps and an astronomer who asks for five.
+
+**The empty posts are drawn, not placed.** A lamp needs the cell to be empty,
+so a marker that was an object would be a marker standing in its own way.
+Each unlit post is a socket painted on the ground under the sprite layer, and
+it fills as soon as a lamp stands there. It is the whole of the task's
+instructions and also its progress bar — without it the astronomer says "put
+them on the empty posts" and the posts are five cells of bare dirt in a path
+of bare dirt.
+
+| Area | Grammar | Arranged by |
+|---|---|---|
+| Starting Village | round | the direction it lies in from the well |
+| Harbour | linear | how far along the working front it sits |
+| Big City | gridded | which block it is in |
+| Observatory | a single approach | how far up the path it is |
+
+#### What is inside the dome
+
+**The dome itself** is a 3 × 3 building of 3.69 people: a drum of pale dressed
+stone with its masonry joints offset course by course, and on top a lead
+cupola drawn row by row from a hemisphere rather than as a stack of
+rectangles, so it reads as round from directly above. A shutter is cut down
+the cupola and a brass telescope sweeps across it over the eight frames.
+
+The shutter is drawn in a deep slate of its own and **not** in the doorway
+colour, which is a rule the whole tileset keeps: no building may emit the
+doorway colour with its door shut, or the game will find a second door in it.
+
+**The astronomer** keeps it. She is the fourth teacher and the second to set a
+task. Tall and long-haired, with a spyglass held horizontally at eye height —
+a silhouette that cannot be confused with the geometer's square or the
+schoolteacher's upright book at 32 px.
+
+She is a **lone attendant**: not one of the village's people, because the dome
+is four hundred tiles from the village and an NPC who walks home at dusk would
+walk for a day and a half. She exists while the player is in the room, the way
+the shopkeeper does.
+
+**The star chart** hangs on the wall — the same frame and proportions as the
+post office's map, one storey up: a night sky with the plough joined out on
+it. Wall hangings are keyed to the *building*, not to the room type, for the
+reason the map already learned the hard way.
+
+**The room** is cold dark stone rather than plaster, with the telescope
+standing on a 1 × 2 footprint in the middle under the shutter, and shelves and
+a globe round the walls.
+
+### The grove has a bed in it, and something growing over it
+
+The enchanted forest is the only place that asks the player for anything. The
+great tree's clearing carries two things beyond the tree itself:
+
+- a **bed** of bare earth, four squares by three, beside the doorstep rather
+  than across it — a bed laid over the way in would be a tree you could not
+  walk up to until you had done what it asked;
+- a **thicket** of six saplings scattered over that bed and the ground round
+  it, which is what the tree asks to have taken away first.
+
+The thicket cells are **unbreakable**, which is the flag the city wall
+introduced, used for its second purpose: the connectivity carve removes
+whatever is in its way, and a route that happened to run through the clearing
+would have done the player's first task for them, silently, before they
+arrived. They are scattered rather than ringed for the same reason a wall
+needs a gate — a closed ring inside the clearing is a wall, and the one pass
+that could open a wall is the pass that is now hidden from it.
+
+**The task keeps no state.** How much wood is standing and how much of the bed
+is ripe are read off the grid, and cleared scenery and planted crops are both
+already in a save. See `groveProgress`.
+
+### Every world faces the same way
+
+The corner the world is high in used to be drawn per seed, and the argument
+for that was variety: four worlds instead of one. What it actually bought was
+four worlds a player cannot carry between them. The whole point of "water is
+downhill and rock is uphill" is that a child who has learned it knows which
+way to walk in a world they have never seen — and if the sea is south in one
+and west in the next, the only thing they have learned is that it depends.
+
+It is the **north-west** now, in every world. The mountains are north, the sea
+is south, and every direction means something: north and west go uphill
+toward rock, south and east go downhill toward water. Which is more than a
+pure north-south slope would say, and it is the arrangement of every map a
+child has already seen.
+
+The four-corner machinery stays and the unit tests still exercise all of it.
+What changed is which one the world generator asks for.
+
+**And the harbour's water is south of its town.** A box that straddles the
+waterline can find its water on its eastern side as easily as its southern —
+both are coasts, but only one is the coast this game is built around. Every
+door in the game is in the south wall, so a quay along an eastern shore puts
+the warehouses' fronts to the sea and their backs to the town, and the great
+ship moors with her entry port facing open water. Placement scores the side
+the water is on, not just how much of it there is.
+
+**Which broke the ship, and then fixed her properly.** With the sea to the
+south, her door faces out to sea and the beach is *behind* her: the jetty
+that used to run straight in from the shore now sails away from the land.
+So the gangway is walked instead — breadth-first from her boarding cell, over
+water, to whatever is nearest that a person can already stand on. Round her
+hull and back to a pier, which is what a jetty to a moored ship actually
+looks like, and it works on a coast facing any direction. She moors in eleven
+worlds in twelve now, against eight.
+
+### The rim leaks, and here is how it was closed
+
+Pinning the orientation changed which seeds do what, and that surfaced a
+standing bug: the outermost ring is supposed to stand a step above the ground
+inside it — that step being the whole of what stops a child walking to the
+edge of the map — and it did not, in a dozen cells of every world. The test
+that should have caught it sampled four cells on one seed.
+
+Two leaks, and neither is visible from the code that creates the rim:
+
+1. **Smoothing pulls it back down.** The pass that keeps every level within
+   one step of its neighbours looks at all eight, so a rim cell one above its
+   own inside neighbour is often two above the cell diagonally in — and gets
+   levelled with the ground it is meant to wall off. Raising it by two first
+   was tried and leaks the same way one step further along. It is now
+   repaired *after* smoothing, and only where it actually leaked.
+2. **A ramp just inside it opens it.** A step is crossable if *either* of its
+   two cells is a ramp, so a way up cut on the ground beside the rim opens
+   the rim without a ramp ever being marked on the rim itself. No way up may
+   now be cut within two cells of the edge — by the terracing passes or by
+   the connectivity carve, which marks ramps of its own.
+
+The repair can leave a two-step along the rim where a repaired cell meets an
+unrepaired one, and a two-step inside a tile's own corners has no frame in
+the cliff atlas — so a handful of boundary tiles draw plain ground where a
+cliff belongs. That is the trade, taken deliberately: a seam a player can
+only see by standing at the edge of the map, against a way out of the map.
+The abrupt-cut sweep skips that border for the same reason — the rim is a
+wall, not a way up, and a wall stopping dead at the edge of the world is a
+wall that has run out of world.
+
+### The harbour had no sea in it
+
+The docs above say the harbour is "constrained to touch a Coastal outer-edge
+border arc". It was not. Placement asked only that the box's **mean**
+elevation sit in the sand-to-grass band — which a box entirely above the
+waterline satisfies comfortably — and then `flattenReservedAreas` turned
+whatever sea was left into sand, for being ground the player could not stand
+on. Most seeds put the docks in a field, and nothing said so, because a field
+is a perfectly valid piece of world.
+
+Two changes fix it, and both are about the same mistake: a mean says nothing
+about a spread.
+
+- The harbour is placed by what its box **contains** — a fraction of it under
+  water, between a fifth and a half — rather than by where its average height
+  falls. Scored rather than accepted outright, so a world whose coast is all
+  cliff still gets a harbour rather than an exception.
+- The harbour is the one story area exempt from the "make the middle
+  walkable" rule. It is the one place whose whole point is a piece of ground
+  you *cannot* stand on. Mountains still soften: rock in the middle of a
+  place is an obstacle, not the reason for it.
+
+`worldGenerator.test.ts` checks the water fraction across the seed sweep,
+because "at least one water tile" is a check a puddle in the corner passes.
+
+### Planks are not a terrain
+
+The harbour gets over its water by pier. A pier needs a cell that is walkable
+over water, and the obvious way to give it one — a ninth terrain — is the
+wrong way: the dual-grid blend enumerates every four-corner combination of
+every material against every other, so a ninth material costs the shipped
+atlas **2,465 frames**, for something that appears in one place on the map,
+always in a straight line, and never blending with anything.
+
+So decking is a sparse flag on the grid, like a crop, and a tile drawn *over*
+the ground into the same chunk texture the terrain goes into — no sprite per
+plank, no depth to sort, nothing to spawn or despawn as the camera moves.
+The one thing its art has to do is tile seamlessly against itself in both
+directions, and the generator's tests check exactly that.
+
+**Piers run straight, along one axis.** Laid along the true seaward vector
+they go diagonal the moment the coast does, and a diagonal run of planks is a
+run nobody can walk — the game moves in four directions, so each plank is a
+corner touching the last. Every pier in the world was a jetty standing alone
+in the bay, each plank of it decked, passable, and connected to nothing. It
+took a reachability check to see it.
+
+**A pier's landward end is part of the pier.** Left out of it, that cell
+looked like any other stretch of working front and the fish market put a
+stall on it, sealing the pier off from the land — the same failure by a
+different route, and equally invisible to a per-cell check.
+
+### One landmark each, and two kinds of landmark
+
+The forest has its great tree; the harbour has a **lighthouse** on its
+headland and the city a **clock tower** on its square. All three are
+landmarks — one of a kind, several tiles across, no door, and the reason to
+walk somewhere — but they divide into two kinds, and the division decides how
+tall each may be:
+
+- A **grown** landmark may stand *with* the tallest building and not over it.
+  A wood that towered over a village would take the village's job of being
+  the landmark of the map.
+- A **built** landmark may be the tallest thing there is. Being seen from
+  outside the place is the entire reason somebody put it up — a lighthouse a
+  post office looks down on is not a lighthouse. Capped at twice the tallest
+  house, because this world has no skyscrapers.
+
+Each carries its own footprint and canvas in its sidecar rather than sharing a
+set of constants: a wide crown and a narrow tower are the same *kind* of
+thing without being the same shape.
+
+Both new ones **move**, and neither moves decoratively. The lighthouse's
+optic turns — brightest facing the viewer, sliding across the lamp room in
+between, which is also what gives it eight distinct frames where a simple
+brighten-and-dim gave four, cosine being symmetric. The clock's minute hand
+walks a full circle over the loop and the hour hand creeps an eighth of the
+way behind it: the one thing in the world that shows a fraction of a turn,
+in the city where fractions are taught.
+
+The lighthouse also **lights the ground**, by the same path a lamp and a
+glowcap take, which is what makes the harbour worth walking to after dark.
+
+**The beacon is raised before the market.** The headland is a shoreline cell
+like any other and the stalls are laid along the whole front — placed last,
+the lighthouse found its own point already occupied and quietly gave up.
+That is the third time a one-of-a-kind thing has been quietly displaced by a
+later pass, after the great tree and the piers' landward ends, and the rule
+that comes out of it is: **the one-of-a-kind thing gets first refusal on
+where it stands.**
+
+### The city builds with its own house
+
+The city was laid out with cottages first, and a city of cottages is a large
+village. It builds with **townhouses** now — two tiles of frontage, half again
+the height, windows stacked up the front rather than set either side of the
+door — and the room behind the door is narrow and deep where a cottage's is
+wide and shallow, which is what makes walking into one feel unlike walking
+into the other.
+
+Two things fell out of it, both of which were bugs waiting rather than
+choices:
+
+- **Roof variation now covers townhouses too.** It covered cottages, on the
+  argument that there are four of them and they are the same shape by design.
+  There are twenty townhouses in a city, and twenty of anything identical
+  reads as wallpaper rather than as a street.
+- **The map on the wall belongs to a building, not to a room type.** It was
+  hung in any room named "tower", which was true while there was one tower in
+  the world — and the moment the city started building with towers of its own,
+  every one of them had a map of everywhere hanging in it. The map is the post
+  office's one distinguishing feature and the reason to climb its stairs. The
+  city does not build post offices at all now, and the map is keyed to the
+  building either way.
+
+A third came out of testing rather than the code: **a room name is a lookup,
+not a phrase**, so it falls back to its English key and a room added without a
+German name says "townhouse" in both languages with nothing anywhere failing.
+There is a test per room per language now.
+
+### The great ship is a building
+
+To this game a building is three things: a footprint it blocks, a door with
+three states, and a room behind the door. A ship is all three — so it is one,
+and adding it needed no new rule about walking into things anywhere in the
+game. It only *looks* nothing like the others, and that is the generator's
+business: the building spec grew a renderer hook, and the ship swaps the
+picture while keeping the whole contract, sidecar and door frames and palette
+by slot name included.
+
+The slot names turn out to fit rather than strain. A ship really does have
+timber, canvas, glazed windows in its stern and a dark opening you go down
+through, so the hull borrows the "wall" ramp, the sails the "roof", the masts
+the "trim", the great cabin's lights the "glass", and the pennant the two
+smoke tones. The pennant is what moves, which broke a rule nobody had thought
+to state: the tests knew a building animates *if it has a chimney*, which was
+true while drifting smoke was the only motion in the village and stopped
+being true the moment something flew a flag. A building now declares what
+moves aboard it.
+
+**She floats, and you can board her.** Her footprint is open water, every
+cell of it, or she is a ship aground — which nothing else would notice,
+because a building on a beach is a perfectly ordinary building. And her door
+is in the middle of her southern row, because every door here is, so the cell
+a player stands on to board is the one directly below it. That cell is
+planked, by the same bridge flag the piers use.
+
+The first gangway was laid back along the line the mooring search walked out
+on, which moors her beautifully and leaves her **unboardable on any coast
+that does not happen to face north** — the run arrives at her door from the
+seaward side, and the cell below the door is still open water. The gangway
+runs south from her door now, whatever direction the search came from.
+
+**She does not moor everywhere**, and that is stated rather than faked: about
+two coasts in three. A berth needs open water with something walkable to the
+*south* of it, and a coast that faces south has nothing there but more sea.
+The harbour is a harbour either way; it simply has no ship in today.
+
+### The city has a wall, and one way through it
+
+Four pieces, in the same shapes the garden fence comes in: a run across the
+camera, a run away from it, and a gateway in each. It sits on the outermost
+ring of cells so the ring road runs *inside* it, the way a city's does — a
+wall standing in the middle of its own street would be a fence.
+
+The gate is the one piece that does not block. A closed gate on this grid
+either walls the city off or lets the player walk through solid stone; drawn
+open and left passable, it says "this is the way in" and means it. Exactly
+what the village garden's gate does, one scale up.
+
+**Fixtures now carry their own headroom.** Sixteen pixels is the right
+overhang for something you step over and half the height of something built
+to keep people out, so the wall rises forty. Everything drawn before that was
+true still uses the module's own number and is unchanged to the byte.
+
+### The carve may cut through ground, not through architecture
+
+`ensureConnectivity` gets where it is going by removing whatever is in the
+way. For ground that is right — a route has to be able to open a wood or a
+rock field. For a city wall it is not, and the failure was invisible in the
+usual way: a route to somewhere *beyond* the city ran in at one side and out
+at the other, because two wall cells are a cheaper crossing than a long
+detour round a wood, and **a hole in a wall is a perfectly good way into a
+city** — so every check that asked whether the city could be walked into
+passed.
+
+Two attempts before the one that worked, both worth recording because both
+are plausible and both are wrong:
+
+1. **Charge for crossing a story area.** Expressible in a 0-1 breadth-first
+   search, but the *start* is inside the village, so every route paid to get
+   out of its own home and the relative costs stopped meaning anything.
+2. **Charge for cells with something standing on them.** Nearly a no-op:
+   scenery already blocks, so it only repriced gates — and the scattered
+   woods a detour crosses are objects too, so cutting through a city stayed
+   cheaper than going round.
+
+What works is a flag on the object rather than a price: `unbreakable`. The
+carve routes *around* those cells instead of pricing them, so a wall cannot
+be holed at any cost; a marked cell that is passable anyway — a gate — is
+still walked over and left standing. Anything sealed entirely by marked cells
+is then genuinely unreachable, and the carve says so out loud rather than
+making a door.
+
+The test that holds it is not "can you get into the city". It counts the
+wall: one gap, at the gate, passable; every other piece still standing where
+the layout put it; and the total equal to the perimeter of the box it was
+laid on, so a ring with three stones missing cannot pass by being sampled
+somewhere else.
+
+### Every place says where it is entered
+
+`ensureConnectivity` carves its routes by **removing whatever is in the
+way**, so a target with something on it is a target the pass deletes. That
+has now happened once for real, to the great tree, and it was silent: a route
+to an empty clearing is still a route.
+
+Every settlement therefore returns a **doorstep**, and that is what
+connectivity aims at and what the portal spell lands on:
+
+| Place | Doorstep | Why not the middle |
+|---|---|---|
+| Village | the player's own front door | the spawn is inside a fenced garden |
+| Enchanted Forest | the clear tile before the tree | the middle *is* the tree |
+| Harbour | a cell of quay, never a plank | the middle is often open sea, and a carve to a pier bulldozes its approach |
+| Big City | the cell *outside* the gate | the middle is the clock tower itself; and a doorstep inside the walls is one the carve reaches by holing them |
 
 ## Day-night cycle
 

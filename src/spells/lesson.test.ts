@@ -3,7 +3,8 @@
 
 import { describe, expect, test } from "bun:test";
 import { createRng } from "../world/rng";
-import { PLACES, makeAdditionProblem } from "./addition";
+import { PLACES, makeAdditionProblem, problemFor } from "./addition";
+import { HARDEST_RUNG, RUNGS, rungAt } from "./difficulty";
 import {
   LESSON_ADDEND,
   LESSON_BEATS,
@@ -11,6 +12,7 @@ import {
   LESSON_START,
   LessonBeat,
   isLastBeat,
+  lessonFor,
   nextBeat,
   partsOf,
 } from "./lesson";
@@ -81,5 +83,53 @@ describe("the beats", () => {
   test("only the last beat is the last one", () => {
     expect(isLastBeat(LessonBeat.Answer)).toBe(true);
     for (const beat of LESSON_BEATS.slice(0, -1)) expect(isLastBeat(beat)).toBe(false);
+  });
+});
+
+describe("the lesson at every size of sum", () => {
+  // She teaches on the numbers this child is actually being asked. A worked
+  // example is only worth anything if it is a problem they can read.
+  test("the example has as many jumps as the child's own sums", () => {
+    for (const [index, rung] of RUNGS.entries()) {
+      const example = lessonFor(rung);
+      expect({ index, jumps: example.jumps.length }).toEqual({ index, jumps: rung.places });
+    }
+  });
+
+  test("no jump is ever a plus nothing", () => {
+    for (const rung of RUNGS) {
+      for (const jump of lessonFor(rung).jumps) expect(jump).toBeGreaterThan(0);
+    }
+  });
+
+  // A worked example that carries, shown to a child whose own sums never do,
+  // demonstrates a step they have not been asked for and cannot check.
+  test("it never carries when the child's own sums never carry", () => {
+    for (const [index, rung] of RUNGS.entries()) {
+      if (rung.crossing) continue;
+      const { start, addend } = lessonFor(rung);
+      for (let at = 0; at < rung.places; at++) {
+        const sum = (Math.floor(start / 10 ** at) % 10) + (Math.floor(addend / 10 ** at) % 10);
+        expect({ index, at, ok: sum <= 9 }).toEqual({ index, at, ok: true });
+      }
+    }
+  });
+
+  test("it is still built by the spell, at every size", () => {
+    for (const rung of RUNGS) {
+      const example = lessonFor(rung);
+      expect(problemFor(example.start, example.addend, rung.places)).toEqual(example);
+    }
+  });
+
+  // The sums the game shipped with are what the hardest rung still teaches:
+  // nothing about adding a dial should have restyled the existing lesson.
+  test("the hardest rung teaches exactly what it always did", () => {
+    expect(lessonFor(rungAt(HARDEST_RUNG))).toEqual(LESSON_EXAMPLE);
+  });
+
+  test("the same sum, cut down — not a different one at every size", () => {
+    const ones = RUNGS.map((rung) => lessonFor(rung).addend % 10);
+    expect(new Set(ones).size).toBe(1);
   });
 });

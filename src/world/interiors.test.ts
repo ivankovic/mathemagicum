@@ -12,6 +12,7 @@ import {
   interiorDoor,
   interiorFor,
   interiorOriginY,
+  roomCameraBounds,
   wallHangingCell,
 } from "./interiors";
 import type { InteriorSidecar } from "./spriteSidecar";
@@ -237,6 +238,55 @@ describe("the shipped rooms have somewhere to hang a map", () => {
       expect({ room, onFurniture }).toEqual({ room, onFurniture: false });
       const onWindow = (sidecar.window_columns ?? []).includes(at.col);
       expect({ room, onWindow }).toEqual({ room, onWindow: false });
+    }
+  });
+});
+
+describe("framing a room", () => {
+  // The tower is the case that showed this: it grew wide enough to need
+  // scrolling on a phone while staying shorter than the screen, and an
+  // all-or-nothing rule pinned it to the top with a band of black under it.
+  test("a room bigger than the view on one axis still centres on the other", () => {
+    const bounds = roomCameraBounds({ width: 288, height: 242 }, { width: 195, height: 390 });
+    expect(bounds.width).toBe(288);
+    expect(bounds.height).toBe(390);
+    // The band is centred on the room, so the camera cannot move vertically.
+    expect(bounds.y).toBe((242 - 390) / 2);
+    expect(bounds.x).toBe(0);
+  });
+
+  test("a room that fits entirely is centred on both axes", () => {
+    const bounds = roomCameraBounds({ width: 192, height: 178 }, { width: 400, height: 300 });
+    expect(bounds.width).toBe(400);
+    expect(bounds.height).toBe(300);
+    expect(bounds.x).toBe((192 - 400) / 2);
+    expect(bounds.y).toBe((178 - 300) / 2);
+  });
+
+  test("a room bigger than the view on both axes is the room itself", () => {
+    expect(roomCameraBounds({ width: 800, height: 600 }, { width: 400, height: 300 })).toEqual({
+      x: 0,
+      y: 0,
+      width: 800,
+      height: 600,
+    });
+  });
+
+  // The centred band always holds the room, whatever the sizes: a band that
+  // did not would let the camera sit somewhere the room is not.
+  test("the bounds always contain the room", () => {
+    for (const room of [40, 195, 288, 900]) {
+      for (const view of [195, 390, 800]) {
+        const bounds = roomCameraBounds(
+          { width: room, height: room },
+          { width: view, height: view },
+        );
+        const at = { room, view };
+        expect({ ...at, holds: bounds.x <= 0 && bounds.x + bounds.width >= room }).toEqual({
+          ...at,
+          holds: true,
+        });
+      }
     }
   });
 });
