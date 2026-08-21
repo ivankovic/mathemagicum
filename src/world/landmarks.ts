@@ -52,6 +52,29 @@ export const LANDMARK_TYPES: readonly LandmarkType[] = Object.values(LandmarkTyp
  */
 export const LANDMARK_FOOTPRINT = 2;
 
+/**
+ * How far each one's art rises above the cells it stands on, in tiles.
+ *
+ * Here for the same reason the footprint is: the layout has to know how much
+ * of the *view* a thing takes while it is deciding where to put things
+ * behind it, and world generation runs long before any sidecar is loaded.
+ *
+ * The reason it matters is a playtest report — *buildings behind the
+ * clocktower in the city are blocked*. Nothing was blocked; every door was
+ * reachable and every cell inside the walls could be walked to. The tower is
+ * five tiles taller than the two it stands on, so the block immediately
+ * behind it was drawn over completely, and a building you cannot see is a
+ * building that is not there.
+ *
+ * Rounded up from each sidecar's `sprite_offset_px.y`, and checked against
+ * the shipped art by `assets.test.ts` — the same guard the footprints have.
+ */
+export const LANDMARK_OVERHANG: Record<LandmarkType, number> = {
+  [LandmarkType.GreatTree]: 4,
+  [LandmarkType.Lighthouse]: 6,
+  [LandmarkType.ClockTower]: 5,
+};
+
 export function landmarkSheetKey(landmark: LandmarkType): string {
   return `landmark-${landmark}`;
 }

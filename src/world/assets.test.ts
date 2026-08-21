@@ -11,7 +11,7 @@ import { EFFECT_TYPES, effectAnimKey, effectSidecarKey } from "./effects";
 import { FIXTURE_TYPES, fixtureFor } from "./fixtures";
 import { buildInteriorGrid, interiorAttendantCell, interiorDoor } from "./interiors";
 import { INTERIOR_ROOMS, interiorFor } from "./interiors";
-import { LANDMARK_TYPES, landmarkFor } from "./landmarks";
+import { LANDMARK_OVERHANG, LANDMARK_TYPES, landmarkFor } from "./landmarks";
 import { PLANT_STAGES, PLANT_TYPES } from "./plants";
 import { SCENERY_KINDS, sceneryKind } from "./scenery";
 import type {
@@ -562,6 +562,26 @@ describe("the shipped landmarks", () => {
       expect(across).toBeGreaterThan(0);
       expect(above).toBeGreaterThan(0);
       expect(sidecar.sprite_offset_px).toEqual({ x: -across / 2, y: -above });
+    }
+  });
+
+  /**
+   * The layout has to know how much of the view a landmark takes before any
+   * art is loaded, so the overhang is written down twice — here and in the
+   * sidecar — and this is the guard that keeps the two the same.
+   *
+   * A playtest is why it exists: the city put a townhouse in the block behind
+   * the clock tower, the tower is five tiles taller than the two it stands
+   * on, and the townhouse was drawn over completely. Nothing was blocked;
+   * something was invisible, which from the outside is the same thing.
+   */
+  test("says in tiles how far it rises above what it stands on", () => {
+    for (const [name, sidecar] of sidecars) {
+      const above = sidecar.sprite_size_px.height - sidecar.footprint_tiles.height * TILE_SIZE;
+      expect({ name, tiles: LANDMARK_OVERHANG[name] }).toEqual({
+        name,
+        tiles: Math.ceil(above / TILE_SIZE),
+      });
     }
   });
 

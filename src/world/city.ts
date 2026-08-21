@@ -5,7 +5,7 @@ import type { AreaPlacement } from "./anchors";
 import { type BuildingRole, footprintFor } from "./buildings";
 import { FixtureType } from "./fixtures";
 import type { WorldGrid } from "./grid";
-import { LANDMARK_FOOTPRINT, LandmarkType } from "./landmarks";
+import { LANDMARK_FOOTPRINT, LANDMARK_OVERHANG, LandmarkType } from "./landmarks";
 import type { PlacedObject } from "./objects";
 import { type Rng, randInt } from "./rng";
 import { TerrainType } from "./terrain";
@@ -327,9 +327,31 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
     "store",
     "townhouse",
   ];
+  // What the clock tower's art covers, which is more than what it stands on:
+  // five tiles above the two, so the block behind it is drawn over entirely.
+  // A playtest called that "buildings behind the clocktower are blocked".
+  // Nothing was blocked — every door was reachable and every cell inside the
+  // walls could be walked to — but a building nobody can see is a building
+  // that is not there, and a square in front of a town clock is a better
+  // answer than a townhouse hidden behind it.
+  const shadow = clockTower
+    ? {
+        col: clockTower.col,
+        row: clockTower.row - LANDMARK_OVERHANG[LandmarkType.ClockTower],
+        width: clockTower.width,
+        height: clockTower.height + LANDMARK_OVERHANG[LandmarkType.ClockTower],
+      }
+    : null;
+  const hidden = (block: CityBlock) =>
+    shadow !== null &&
+    block.col < shadow.col + shadow.width &&
+    shadow.col < block.col + block.width &&
+    block.row < shadow.row + shadow.height &&
+    shadow.row < block.row + block.height;
+
   let n = 0;
   for (const block of blocks) {
-    if (block === plaza) continue;
+    if (block === plaza || hidden(block)) continue;
     const role = ROLES[randInt(rng, 0, ROLES.length - 1)] as BuildingRole;
     const { width, height } = footprintFor(role);
     if (width > block.width || height > block.height) {

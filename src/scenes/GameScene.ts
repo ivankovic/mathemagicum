@@ -920,6 +920,8 @@ export class GameScene extends Phaser.Scene {
    * Read by `autosave`, which is the one thing that could undo a reset.
    */
   private worldForgotten = false;
+  /** The room the camera is framing, in pixels, so a rotation can re-frame it. */
+  private framedRoom: { width: number; height: number } | null = null;
 
   private mobileControls = false;
   private joystick?: VirtualJoystick;
@@ -1616,6 +1618,21 @@ export class GameScene extends Phaser.Scene {
   // changes. Called once at setup and again on every resize.
   private layoutForViewport(): void {
     const { width, height } = this.scale;
+    /**
+     * The world camera has to be told, exactly like the interface one.
+     *
+     * Phaser resizes only those cameras whose size still matches the game's
+     * *previous* size, and the manual `game.scale.resize` this game does on
+     * an orientation change (see main.ts) does not reliably leave it looking
+     * like one. So a phone turned sideways kept a portrait camera on a
+     * landscape screen: the world drew into the old rectangle, everything
+     * outside it was black, and the chunk spawner — which asks the camera
+     * what it can see — never filled the rest in.
+     */
+    this.cameras.main.setSize(width, height);
+    // The room's bounds are computed from the camera's own size, so a room
+    // framed for a portrait screen is framed wrong the moment it is not one.
+    if (this.interior) this.reframeInterior();
     this.uiCamera?.setSize(width, height);
     this.nightOverlay?.setSize(width, height);
     for (const button of this.edgeAnchored) button.place(width, height);
@@ -2823,7 +2840,6 @@ export class GameScene extends Phaser.Scene {
     const rung = rungAt(this.profile.rung);
     this.spellPopup.open(makeAdditionProblem(this.spellRng, rung), rung.given, (result) => {
       if (result.solved) this.growCropAt(col, row);
-      else this.showFaded(UiAsset.RuneAdd, { col, row });
       this.noteCast(result);
     });
   }
@@ -3050,7 +3066,6 @@ export class GameScene extends Phaser.Scene {
       // cast had just done.
       this.stopMarking();
       if (result.solved) this.applyToPatch(patch, action);
-      else this.showFaded(UiAsset.RuneTimes, { col: patch.col, row: patch.row });
       this.noteArrayCast(result);
     });
   }
@@ -3147,7 +3162,6 @@ export class GameScene extends Phaser.Scene {
       portalRungAt(this.dev.portalRung ?? this.profile.portalRung),
       (result, journey) => {
         if (journey) this.travelThrough(journey);
-        else this.showFaded(UiAsset.RunePortal);
         this.notePortalCast(result);
       },
     );
@@ -3481,7 +3495,7 @@ export class GameScene extends Phaser.Scene {
       if (result.solved) {
         this.awayFrom = null;
         this.ripenNearest(problem.hours);
-      } else this.showFaded(UiAsset.RuneHourglass);
+      }
       this.noteClockCast(result);
     });
   }
@@ -3598,7 +3612,6 @@ export class GameScene extends Phaser.Scene {
     const rung = rungAt(this.profile.rung);
     this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, (result) => {
       if (result.solved) this.clearAt(col, row);
-      else this.showFaded(UiAsset.RuneMinus, { col, row });
       this.noteCast(result);
     });
   }
@@ -3800,6 +3813,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * Nothing is drawn when a cast is abandoned, and that is deliberate.
+   *
+   * The spell's rune used to fade out where the cast was aimed. It read as a
+   * *result*: a rune over the player, moving, is what earning one looks like
+   * and close enough to what casting one looks like that a playtest could
+   * not tell a closed parchment from a finished spell. Closing a parchment
+   * is not an event and does not need announcing — the parchment closing is
+   * the whole of it.
+   */
+
+  /**
    * A spell just earned: its rune, rising bright over her head.
    *
    * The same picture the spellbook has been showing dimmed since the day she
@@ -3820,39 +3844,6 @@ export class GameScene extends Phaser.Scene {
       alpha: 0,
       duration: EARNED_MS,
       ease: "Quad.easeOut",
-      onComplete: () => mark.destroy(),
-    });
-  }
-
-  /**
-   * A cast that was abandoned: the spell's own rune, dimming away.
-   *
-   * Not a cross. Nothing was refused — she opened the parchment and closed
-   * it, and a cross would say the game had stopped her. A rune that shrinks
-   * and goes out says the spell was there and is not any more, which is what
-   * happened.
-   *
-   * Where the cast was aimed if it was aimed anywhere, and over her head if
-   * it was not: the portal and the hourglass are cast on the world rather
-   * than on a square.
-   */
-  private showFaded(rune: string, at?: GridPoint): void {
-    const where = at
-      ? { x: this.toFeet(at.col, at.row).x, y: this.toFeet(at.col, at.row).y - TILE_SIZE / 2 }
-      : { x: this.player.x, y: this.player.y - TILE_SIZE - RESULT_ICON / 2 };
-    const mark = this.world(
-      this.add
-        .image(where.x, where.y, uiTextureKey(rune))
-        .setDisplaySize(RESULT_ICON, RESULT_ICON)
-        .setAlpha(0.85)
-        .setDepth(where.y + 1),
-    );
-    this.tweens.add({
-      targets: mark,
-      alpha: 0,
-      scale: mark.scale * 0.6,
-      duration: RESULT_MS,
-      ease: "Quad.easeIn",
       onComplete: () => mark.destroy(),
     });
   }
@@ -5405,7 +5396,20 @@ export class GameScene extends Phaser.Scene {
    * that case keeps it. None of the shipped rooms is, but the rule reads
    * better than the coincidence.
    */
+  /**
+   * Frame the room again, at whatever size the screen is now.
+   *
+   * The size is kept rather than recomputed from the sidecar every time: the
+   * interior's own dimensions are the one thing about this that does *not*
+   * change when a phone is turned.
+   */
+  private reframeInterior(): void {
+    const framed = this.framedRoom;
+    if (framed) this.frameRoom(framed.width, framed.height);
+  }
+
   private frameRoom(width: number, height: number): void {
+    this.framedRoom = { width, height };
     const camera = this.cameras.main;
     const bounds = roomCameraBounds(
       { width, height },
@@ -5428,6 +5432,7 @@ export class GameScene extends Phaser.Scene {
     this.attendantCell = null;
     this.attendantId = null;
     this.setInterior(null);
+    this.framedRoom = null;
     this.movePlayerToLayer();
 
     this.grid = this.worldGrid;

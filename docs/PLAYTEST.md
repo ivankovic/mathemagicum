@@ -698,3 +698,136 @@ that was:
 - **The prices dipped in the middle.** Nobody complained, but a rule nobody
   could learn and everybody would eventually notice is worth removing while
   the bands are open anyway.
+
+---
+
+# Playtest — 2026-08-21
+
+Six things, from the first session with the wordless interface and the
+animals in it. Two of them are faults introduced by that work; one is a
+rendering bug that had been waiting for somebody to turn a phone sideways.
+
+Ordered as reported. What was *found* on looking is kept apart from what was
+*reported*, because three of the six turned out not to be what they looked
+like from the outside.
+
+---
+
+## 1. Rotating the device breaks the game — **fixed**
+
+**Reported:** rotating the device breaks the game, the screen rotates and
+goes black.
+
+**Found:** reproduced on the first try at 390x844 turned to 844x390. The
+canvas resizes and the world keeps drawing into the old rectangle; the rest
+is black. Turning back is worse, because the black band is then the *top* of
+the screen rather than the side.
+
+Two separate things were wrong, and the first hid the second.
+
+- **The world camera was never resized.** `layoutForViewport` resized the
+  interface camera and the night overlay and nothing else. Phaser resizes
+  only those cameras whose size still matches the game's *previous* size, and
+  a manual `game.scale.resize` does not reliably leave one looking like that.
+- **The renderer was never resized either**, which is the black. In RESIZE
+  mode `scale.resize` sets the canvas and then calls `refresh`, and `refresh`
+  overwrites the size it was just handed with the parent element's *last
+  measured* bounds — which, on the turn of a phone, are the bounds from
+  before it turned. The renderer compares what it is given against its own
+  size, sees no change, and keeps a portrait viewport on a landscape screen.
+
+The renderer is now resized to the *canvas's* own size rather than to the
+window's, because its scissor is computed against `gl.drawingBufferHeight`
+and a height the canvas has not taken yet puts the scissor off the bottom of
+the buffer. That is the same black band, one turn later, and it is what the
+first attempt at this fix produced.
+
+The whole thing runs twice — once on the event and once on the next frame —
+because the first pass runs before the browser has reflowed. Doing it twice
+is cheap and does not depend on guessing when a reflow lands.
+
+Rooms are re-framed on rotation too: a room's camera bounds are computed from
+the camera's own size, so a room framed for a portrait screen is framed wrong
+the moment it is not one.
+
+## 2. Spell targeting is hard — **open**
+
+**Reported:** instead of the field in front of you, let the player pick the
+tile the spell should affect, in a two-to-three tile circle around the
+player. For multiplication, maybe use that for the starting field.
+
+Every gardening action currently works on `facingTile()` — the one square she
+is pointing at — and that is one rule shared by planting, growing, clearing
+and picking. It reads well in the code and badly in a hand: lining a
+character up with a square is a thing an adult does without noticing and a
+six-year-old cannot do at all.
+
+The array spell already has the machinery this wants — tap a corner, tap the
+other, a painted rectangle — so the shape of the answer is in the game
+already. What has to be decided is what happens to *facing*: it is currently
+the whole of how the game knows which square an action is about, and there is
+art for four of them.
+
+## 3. The city has no people — **open**
+
+**Reported:** the city has no people!
+
+True. `spawnNpcs` is handed `world.village.npcs` and nothing else; the
+harbour, the city and the observatory have exactly one attendant between
+them, and she is indoors. Twenty-four buildings and nobody on the street is
+not a city, it is a model of one.
+
+## 4. The harbour and the city should have shops — **open**
+
+**Reported:** the harbour and city should have shops.
+
+There is one shop in the world and it is in the village. The city already
+builds `store` buildings — a fifth of its blocks — but they are scenery with
+a door: walking in gets a room and nobody in it.
+
+## 5. Buildings behind the clock tower are blocked — **fixed**
+
+**Reported:** buildings behind the clocktower in the city are blocked.
+
+**Found: nothing was blocked.** Every door in the city is reachable from the
+player's start, and every walkable cell inside the walls can be walked to —
+checked by flood fill across four seeds before changing anything.
+
+What is true is that the tower's *art* is five tiles taller than the two
+cells it stands on, so the block immediately behind it was drawn over
+completely. A building nobody can see is a building that is not there, which
+from the outside is the same complaint.
+
+The city now leaves that block empty, which is a better answer than a
+townhouse hidden behind a clock: a square in front of a town clock is what a
+town with a clock looks like. `LANDMARK_OVERHANG` says how far each landmark
+rises above what it stands on, written next to the footprint it already
+duplicates, and checked against the shipped sidecars by the same test.
+
+## 6. A cancelled spell animates like a cast one — **fixed**
+
+**Reported:** cancelling the spell still shows the icon of the spell over the
+player, which looks identical to a spell cast. If the player cancels, just
+don't animate anything.
+
+**Found:** self-inflicted, three commits ago. When the status line went, *the
+spell fades unspoken* became the spell's own rune dimming out where the cast
+was aimed. The reasoning was that a cross would wrongly say the game had
+refused something. The reasoning was fine and the picture was not: a rune
+over the player, moving, is what *earning* one looks like and close enough to
+what casting one looks like that the two cannot be told apart.
+
+Nothing is drawn now. Closing a parchment is not an event and does not need
+announcing — the parchment closing is the whole of it.
+
+---
+
+## Where this stands
+
+**Fixed:** 1, 5 and 6. **Open:** 2, 3 and 4.
+
+Three of the six were not what they looked like from the outside — the
+rotation was two bugs, the blocked buildings were not blocked, and the
+cancelled spell was a picture this session had added. That is the argument
+for reproducing before fixing, and it earned its keep three times in one
+round.

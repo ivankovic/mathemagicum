@@ -7,7 +7,7 @@ import { floodFillReachable, isReachable } from "./connectivity";
 import { type HighCorner, highEdges } from "./elevation";
 import type { Grove } from "./enchantedForest";
 import type { WorldGrid } from "./grid";
-import { LANDMARK_FOOTPRINT, LandmarkType } from "./landmarks";
+import { LANDMARK_FOOTPRINT, LANDMARK_OVERHANG, LandmarkType } from "./landmarks";
 import { TerrainType } from "./terrain";
 import { generateWorld } from "./worldGenerator";
 
@@ -110,6 +110,7 @@ function assertYouCanGetIntoTheSettlements(
   // building and you cannot walk into a building.
   expect(isReachable(reachable, grid, world.city.plazaCell)).toBe(true);
   expect(world.city.clockTower?.type).toBe(LandmarkType.ClockTower);
+  assertNothingHidesBehindTheClock(world.city);
 
   const harbour = world.harbour;
   if (!harbour) return;
@@ -240,6 +241,33 @@ function assertTheWallIsAWall(
         ground: TerrainType.Cobble,
       });
     }
+  }
+}
+
+/**
+ * Nothing is built where the clock tower's own art would cover it.
+ *
+ * A playtest reported "buildings behind the clocktower are blocked". Nothing
+ * was blocked — every door was reachable and every cell inside the walls
+ * could be walked to — but the tower is five tiles taller than the two it
+ * stands on, so the block behind it was drawn over completely, and a
+ * building nobody can see is a building that is not there.
+ *
+ * Swept over every building rather than checking the one nearest the tower:
+ * the plaza is chosen from wherever the blocks fall, so which block sits
+ * behind it is a fact about the seed.
+ */
+function assertNothingHidesBehindTheClock(city: ReturnType<typeof generateWorld>["city"]): void {
+  const tower = city.clockTower;
+  if (!tower) return;
+  const above = LANDMARK_OVERHANG[LandmarkType.ClockTower];
+  for (const building of city.buildings) {
+    const overlaps =
+      building.col < tower.col + tower.width &&
+      tower.col < building.col + building.width &&
+      building.row < tower.row + tower.height &&
+      tower.row - above < building.row + building.height;
+    expect({ building: building.id, overlaps }).toEqual({ building: building.id, overlaps: false });
   }
 }
 
