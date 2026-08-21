@@ -18,14 +18,31 @@ export default defineConfig({
       manifest: {
         name: "Mathemagicum",
         short_name: "Mathemagicum",
-        description: "A free, open-source, on-device educational RPG.",
+        // "source-available", not "open source": the licence is PolyForm
+        // Noncommercial, and the README goes out of its way to say this is
+        // not the OSI meaning of the term. An install card is a worse place
+        // than most to contradict your own licence.
+        description: "A free-to-play, source-available, on-device educational RPG.",
         start_url: ".",
         scope: ".",
         display: "standalone",
         background_color: "#000000",
         theme_color: "#000000",
-        // TODO: add real icons once art direction is settled.
-        icons: [],
+        // One drawing at 64px, exported at whole multiples of itself, so
+        // every size is the same picture rather than a resample of it — an
+        // icon a platform has smoothed is the one place a pixel-art game
+        // stops looking like one. Relative `src` resolves against the
+        // manifest's own URL, which is what keeps `base: "./"` portable.
+        //
+        // `any` and not `maskable`: the drawing runs to its own border on
+        // all four edges, and a maskable icon is cropped to a circle inside
+        // it — declaring both would clip the border off and take the top of
+        // the hat with it, on Android only, long after this was tested.
+        icons: [
+          { src: "./icon-64.png", sizes: "64x64", type: "image/png", purpose: "any" },
+          { src: "./icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "./icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+        ],
       },
       workbox: {
         // Phaser loads atlases/spritesheets via its own loader at runtime

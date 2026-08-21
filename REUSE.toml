@@ -32,3 +32,12 @@ SPDX-License-Identifier = "PolyForm-Noncommercial-1.0.0"
 path = "public/assets/**"
 SPDX-FileCopyrightText = "Marko Ivankovic"
 SPDX-License-Identifier = "CC-BY-NC-ND-4.0"
+
+# The app icon. Drawn by the same generator as everything above and licensed
+# the same way, but it sits at the root of public/ rather than under assets/
+# because it is not game art: the browser and the manifest fetch it by a
+# fixed name next to index.html, and nothing in the game ever loads it.
+[[annotations]]
+path = "public/icon-*.png"
+SPDX-FileCopyrightText = "Marko Ivankovic"
+SPDX-License-Identifier = "CC-BY-NC-ND-4.0"

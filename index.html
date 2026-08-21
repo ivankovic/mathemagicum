@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mathemagicum</title>
+    <!-- Root-absolute on purpose: Vite rewrites a leading slash with the
+         build's base, so these come out relative in dist and the game stays
+         hostable from a subdirectory. The manifest declares the same three
+         icons; iOS reads none of it, which is what apple-touch-icon is for. -->
+    <link rel="icon" type="image/png" href="/icon-64.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="theme-color" content="#000000" />
     <style>
       html,
       body {

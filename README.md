@@ -250,6 +250,30 @@ bun run build     # production build to dist/
 > Workbox dependency crashes under Node <19 (no global WebCrypto). Forcing
 > Bun's own runtime sidesteps the host's Node version entirely.
 
+## Deploying
+
+Pushing to `main` publishes the game to GitHub Pages
+(`.github/workflows/pages.yml`). The workflow turns Pages on the first time
+it runs, so there is no repository setting to remember.
+
+`dist/` is host-agnostic and is meant to stay that way. `vite.config.ts`
+builds with a **relative** base and `BootScene` prefixes every runtime asset
+URL with `import.meta.env.BASE_URL`, so the same folder works served from a
+domain root, from a project subpath like `/mathemagicum/`, or unzipped into
+a directory and opened over a plain file server. The service worker
+registers at `./sw.js` with a `./` scope for the same reason, which is what
+lets the installed game work from a subpath at all — a root-scoped worker
+would need a `Service-Worker-Allowed` header GitHub Pages will not send.
+
+Nothing in the deploy passes `VITE_BASE`. It exists as an escape hatch if a
+host ever needs an absolute path, and setting it would pin the build to that
+one host.
+
+To check a subpath build by hand, serve `dist/` under a prefix and watch the
+*status codes* rather than the failures — a missing icon or a mis-based
+service worker comes back as a perfectly successful `404`, which
+`requestfailed` never sees.
+
 ## License
 
 - Source code: [PolyForm Noncommercial 1.0.0](LICENSE) — noncommercial use,

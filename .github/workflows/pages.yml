@@ -1,0 +1,65 @@
+# Publish the game to GitHub Pages.
+#
+# CI already builds on every push; this runs the same build again rather than
+# reaching across for its artifact, because a deploy that depends on another
+# workflow's leftovers fails in a way nobody can read six months later.
+#
+# The build is deliberately *not* told where it is going. `vite.config.ts`
+# uses a relative base and `BootScene` prefixes every runtime asset URL with
+# `import.meta.env.BASE_URL`, so the same dist works at a domain root, under
+# `/mathemagicum/`, or unzipped into a folder. Setting VITE_BASE here would
+# pin the build to this one host and quietly break the others.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  # So a broken deploy can be retried without an empty commit.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and never cancel one that is running: a half-uploaded
+# site is worse than a stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      # `enablement: true` turns Pages on the first time this runs, so the
+      # repository setting is not a manual step somebody has to be told
+      # about — without it the first run dies at "Get Pages site failed",
+      # which reads like a broken workflow rather than an unflipped switch.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # No .nojekyll: deploy-pages serves the artifact as it is, and nothing
+      # in dist starts with an underscore anyway.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
