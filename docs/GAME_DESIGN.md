@@ -924,43 +924,45 @@ has always had, and no villager is ever given it. Their home is the one
 building they need to find from a distance without thinking, and a house that
 changed colour between worlds would be a landmark that is not one.
 
-### Starting a new world
+### Saved games
 
-**One button on the options screen, and it asks twice.** The row shows the
-map — which is already what "the world" looks like in this game, hanging on
-the tower wall and ruled across by the portal spell. Tapping it turns the row
-into the same map with a tick and a cross beside it. Nothing happens until
-one of those is pressed, and closing the panel forgets the question.
+**There are several, kept side by side.** There used to be one world and a
+button that threw it away, which is honest while a world is an afternoon's
+garden and stops being honest the moment a child has a house they have spent
+three weeks on. A button whose only outcome is *lose everything* is not a
+save system; it is a confession that there isn't one.
 
-**It is the one place left in the game that spends a sentence.** Everything
-else says what it has to say in pictures, and that rule holds because the
-audience includes children who cannot read. This screen does not: the options
-are for an adult, and an adult shown a wordless tick and cross over a picture
-of the world has no way to tell "a new village" from "delete my children".
-A picture cannot say *this but not that*.
+**The children are not in them.** Who a child is — their name, their face,
+the language they read, how hard their sums are — belongs to the device,
+because none of it is a fact about a world. What they have *done* belongs to
+the game they did it in. So starting a new game does not mean typing four
+names again, and loading an old one does not bring back a face somebody has
+since changed. The code says the same thing in two types, `Player` and
+`Progress`, joined into a `Profile` for everything above the save layer:
+splitting them is a fact about storage, joining them is a fact about there
+being one child.
 
-**The children survive; what they earned does not.** Names, faces, the
-language they read and the band somebody picked for them all stay. Spells,
-ladders, places walked to, purse, basket and the tutorial all start again.
+**Three keys, not one blob.** An index of what games exist, a body per game,
+and a note of which is open. The index is what the games row reads, and it
+must not have to parse four farms to draw four buttons — the same reason the
+player list has never been kept inside the world.
 
-Keeping the spells was the first answer and it was wrong. A new world with
-the array spell already in it is not a new world: the great tree has nothing
-left to ask, the geometer is a man in a tower, and the first afternoon of the
-game — which is the best afternoon it has — cannot happen twice on one
-device. The band is on the other side of the line because it is a fact about
-the child rather than about the world: nothing in a fresh village makes a
-six-year-old ready for three-digit sums.
+**The child's route through the game is unchanged**: title, who is playing,
+garden. A device that has never been played gets a game made on the spot, and
+a screen in the middle asking which world would be a question a six-year-old
+cannot answer. Choosing is an adult's business and lives in the options.
 
-**It resets every child on the device, not the one holding it.** The world is
-shared, so a fresh one is fresh for all of them or for none.
+**One rule governs the games row.** *Tap another game to open it; tap the one
+you are in to be asked whether to throw it away.* Opening loses nothing — the
+game being left is written down first and you can tap straight back — so it
+needs no confirming. Throwing away cannot be undone, so it asks twice, and
+the only game that may be thrown away is the one you are looking at.
 
-**The page reloads rather than the scene restarting.** A reset is rare and
-asked for by an adult, and a page that starts from nothing cannot leave a
-stale sprite or a dangling timer behind — which a scene restart, with this
-many pools and panels, very well might. The one hazard is that four things
-call `autosave` (a timer, `visibilitychange`, `pagehide`, and the scene's own
-shutdown) and a reload fires at least two of them; the guard against writing
-the dead world back sits inside `autosave` rather than at any call site.
+**The old world is carried over.** Everybody playing when this shipped has a
+garden under the single-world key; it becomes their first saved game, and the
+old keys go with it so a device cannot be carried over twice. This is also
+where the standing permission to lose data while playtesting runs out — it is
+the change that says a save is worth keeping.
 
 ### Nothing is said in words
 

@@ -226,9 +226,10 @@ export const EN: Phrases = {
   deleteYes: "Yes, remove",
   deleteNo: "No, keep",
   sumsHeading: "Your sums",
-  worldHeading: "This world",
-  resetKeepsPlayers:
-    "Start a new world? The players stay. Everything they have earned starts again.",
+  gamesHeading: "Games on this device",
+  gameWhen: (savedAt) =>
+    new Date(savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+  deleteGameAsk: "Throw this game away? Its world and everything done in it are gone for good.",
 
   // Not "Village Store" any more: there are shops in the city and on the
   // quay, and a counter in a harbour warehouse announcing a village is a

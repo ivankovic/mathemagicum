@@ -3,6 +3,8 @@
 
 import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
+import type { GameEntry } from "../save/games";
+import { MAX_GAMES } from "../save/games";
 import { LANGUAGES, LANGUAGE_NAMES, type Settings } from "../settings";
 import { CURRENCY } from "../shop/currency";
 import { makeAdditionProblem } from "../spells/addition";
@@ -28,13 +30,17 @@ import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
  * an options screen with one asks the player to remember a second step in
  * order for the first to count.
  *
- * **Except one.** Throwing the world away is the single thing on this screen
- * that cannot be undone by tapping the other button, so it asks twice: the
- * row turns into the same map with a tick and a cross beside it, and nothing
- * happens until one of those is pressed. It is also the one place left in
- * the game that spends a sentence — see `resetHint`. This screen is aimed at
- * an adult, and an adult about to be shown a wordless tick and cross will
- * assume the worst about what is being deleted.
+ * **Except the games row.** It lists the games saved on this device, newest
+ * first, with the one being played outlined. One rule governs it: *tap
+ * another game to open it, tap the one you are in to be asked whether to
+ * throw it away.* Opening loses nothing and needs no confirming — you can
+ * tap straight back. Throwing away cannot be undone, so it asks twice: the
+ * row turns into a tick and a cross and nothing happens until one is
+ * pressed.
+ *
+ * That is also the one place left in the game that spends a sentence — see
+ * `resetHint`. This screen is aimed at an adult, and an adult shown a
+ * wordless tick and cross will assume the worst about what is being deleted.
  */
 
 const PANEL_MAX_W = 420;
@@ -87,8 +93,9 @@ export class OptionsPanel {
    */
   private readonly bandChoices: Choice[] = [];
   private readonly closeButton: Choice;
-  /** The world row: the map, and the tick and cross it turns into. */
-  private readonly resetButton: Choice;
+  /** The games row: one tile per saved game, and the "+" that starts another. */
+  private readonly gameChoices: Choice[] = [];
+  private readonly newButton: Choice;
   private readonly yesButton: Choice;
   private readonly noButton: Choice;
   private readonly resetHint: Phaser.GameObjects.Text;
@@ -100,7 +107,40 @@ export class OptionsPanel {
    * The panel does not do it: it has no business knowing what a world is or
    * where one is kept. It knows how to ask.
    */
-  onResetWorld?: () => void;
+  /** Open a saved game, or start one when the id is null. */
+  onOpenGame?: (id: string | null) => void;
+  /** Throw one away, twice-asked. */
+  onDeleteGame?: (id: string | null) => void;
+
+  private games: readonly GameEntry[] = [];
+  private playing: string | null = null;
+
+  /** Tell the row what there is to show. */
+  setGames(games: readonly GameEntry[], playing: string | null): void {
+    this.games = games;
+    this.playing = playing;
+    this.asking = false;
+    if (this.open) this.render();
+  }
+
+  /**
+   * One rule for the whole row: another game opens, this one asks.
+   *
+   * Opening loses nothing — the game being left is written down first and
+   * you can tap straight back — so it needs no confirming. Throwing away
+   * cannot be undone, and the only game you may throw away is the one you
+   * are in, which is also the one whose loss you can see.
+   */
+  private tapGame(slot: number): void {
+    const game = this.games[slot];
+    if (!game) return;
+    if (game.id !== this.playing) {
+      this.onOpenGame?.(game.id);
+      return;
+    }
+    this.asking = true;
+    this.render();
+  }
 
   private open = false;
   /** Whether the world row has been tapped once and is asking. */
@@ -150,13 +190,13 @@ export class OptionsPanel {
         this.choice(`${sample.start} + ${sample.addend}`, () => this.chooseBand(index)),
       );
     }
-    this.resetButton = this.iconChoice(UiAsset.MapWall, () => {
-      this.asking = true;
-      this.render();
-    });
+    for (let n = 0; n < MAX_GAMES; n++) {
+      this.gameChoices.push(this.choice("", () => this.tapGame(n)));
+    }
+    this.newButton = this.iconChoice(UiAsset.MapWall, () => this.onOpenGame?.(null));
     this.yesButton = this.iconChoice(UiAsset.MarkYes, () => {
       this.asking = false;
-      this.onResetWorld?.();
+      this.onDeleteGame?.(this.playing);
     });
     this.noButton = this.iconChoice(UiAsset.MarkNo, () => {
       this.asking = false;
@@ -181,7 +221,8 @@ export class OptionsPanel {
     return [
       ...this.languageChoices,
       ...this.bandChoices,
-      this.resetButton,
+      ...this.gameChoices,
+      this.newButton,
       this.yesButton,
       this.noButton,
       this.closeButton,
@@ -213,11 +254,15 @@ export class OptionsPanel {
    * working. Asked for rather than computed, so it cannot drift.
    */
   buttonPositions(): Record<string, { x: number; y: number }> {
-    return {
-      reset: { x: this.resetButton.box.x, y: this.resetButton.box.y },
-      resetYes: { x: this.yesButton.box.x, y: this.yesButton.box.y },
-      resetNo: { x: this.noButton.box.x, y: this.noButton.box.y },
+    const at: Record<string, { x: number; y: number }> = {
+      newGame: { x: this.newButton.box.x, y: this.newButton.box.y },
+      deleteYes: { x: this.yesButton.box.x, y: this.yesButton.box.y },
+      deleteNo: { x: this.noButton.box.x, y: this.noButton.box.y },
     };
+    for (const [n, button] of this.gameChoices.entries()) {
+      at[`game.${n}`] = { x: button.box.x, y: button.box.y };
+    }
+    return at;
   }
 
   open_(onClose: () => void): void {
@@ -353,29 +398,48 @@ export class OptionsPanel {
   private worldRow(rect: { left: number; width: number; centreX: number }, top: number): void {
     const label = this.headings[2];
     label
-      ?.setText(this.words.worldHeading)
+      ?.setText(this.words.gamesHeading)
       .setPosition(rect.left + PAD, top)
       .setVisible(true);
 
     const y = top + SMALL_SIZE + 8 + BUTTON_H / 2;
-    const width = (rect.width - PAD * 2 - BUTTON_GAP * 2) / 3;
-    this.place(this.resetButton, rect.left + PAD + width / 2, y, width, BUTTON_H);
-    this.resetButton.box.setStrokeStyle(2, this.asking ? CHOSEN_HEX : INK_HEX);
-    this.show(this.resetButton);
-    if (!this.asking) return;
+    // Asking, the row is a tick and a cross and nothing else: a question
+    // with the answers still surrounded by the things you might tap instead
+    // is a question somebody answers by accident.
+    if (this.asking) {
+      const half = (rect.width - PAD * 2 - BUTTON_GAP) / 2;
+      this.place(this.yesButton, rect.left + PAD + half / 2, y, half, BUTTON_H);
+      this.place(this.noButton, rect.left + PAD + half * 1.5 + BUTTON_GAP, y, half, BUTTON_H);
+      this.show(this.yesButton);
+      this.show(this.noButton);
+      // The one sentence left on any screen in the game, and it is here
+      // because this screen is for an adult: somebody shown a wordless tick
+      // and cross will assume the worst about what is being deleted.
+      this.resetHint
+        .setText(this.words.deleteGameAsk)
+        .setWordWrapWidth(rect.width - PAD * 2)
+        .setPosition(rect.centreX, y + BUTTON_H / 2 + 6)
+        .setVisible(true);
+      return;
+    }
 
-    this.place(this.yesButton, rect.left + PAD + width * 1.5 + BUTTON_GAP, y, width, BUTTON_H);
-    this.place(this.noButton, rect.left + PAD + width * 2.5 + BUTTON_GAP * 2, y, width, BUTTON_H);
-    this.show(this.yesButton);
-    this.show(this.noButton);
-    // The one sentence left on any screen in the game, and it is here because
-    // this screen is for an adult: somebody shown a wordless tick and cross
-    // over a picture of the world will assume it deletes the children too.
-    this.resetHint
-      .setText(this.words.resetKeepsPlayers)
-      .setWordWrapWidth(rect.width - PAD * 2)
-      .setPosition(rect.centreX, y + BUTTON_H / 2 + 6)
-      .setVisible(true);
+    // A tile per saved game and a "+" after them, all one width so the row
+    // does not reflow as games come and go.
+    const slots = MAX_GAMES;
+    const width = (rect.width - PAD * 2 - BUTTON_GAP * (slots - 1)) / slots;
+    const at = (n: number) => rect.left + PAD + (width + BUTTON_GAP) * n + width / 2;
+    for (const [n, game] of this.games.slice(0, slots).entries()) {
+      const button = this.gameChoices[n];
+      if (!button) continue;
+      button.label.setText(this.words.gameWhen(game.savedAt));
+      this.place(button, at(n), y, width, BUTTON_H);
+      button.box.setStrokeStyle(2, game.id === this.playing ? CHOSEN_HEX : INK_HEX);
+      this.show(button);
+    }
+    if (this.games.length >= slots) return;
+    this.place(this.newButton, at(this.games.length), y, width, BUTTON_H);
+    this.newButton.box.setStrokeStyle(2, INK_HEX);
+    this.show(this.newButton);
   }
 
   private row<T>(

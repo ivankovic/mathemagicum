@@ -275,9 +275,10 @@ export const DE: Phrases = {
   deleteYes: "Ja, entfernen",
   deleteNo: "Nein, behalten",
   sumsHeading: "Deine Aufgaben",
-  worldHeading: "Diese Welt",
-  resetKeepsPlayers:
-    "Eine neue Welt beginnen? Die Spieler bleiben. Alles, was sie erreicht haben, fängt von vorn an.",
+  gamesHeading: "Spielstände",
+  gameWhen: (savedAt) =>
+    new Date(savedAt).toLocaleDateString("de-DE", { day: "numeric", month: "short" }),
+  deleteGameAsk: "Diesen Spielstand löschen? Die Welt und alles darin sind dann für immer weg.",
 
   storeTitle: (money) => `Laden — ${money}`,
   storeFooter: "Sie kauft deine Ernte und verkauft Sachen für den Garten.",

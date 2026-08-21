@@ -16,6 +16,7 @@ import { PlantStage, PlantType } from "../world/plants";
 import { createRng } from "../world/rng";
 import { GameSession } from "../world/session";
 import { TerrainType } from "../world/terrain";
+import { loadGame, newGame, writeGame } from "./games";
 import {
   MAX_PROFILES,
   NAME_MAX,
@@ -39,15 +40,7 @@ import {
   snapshotPlayer,
   worldBaseline,
 } from "./snapshot";
-import {
-  LoadOutcome,
-  deleteProfile,
-  loadWorld,
-  readProfiles,
-  saveProfile,
-  writeWorld,
-} from "./store";
-import { WORLD_KEY, WORLD_SEED_KEY, deviceSeed, forgetWorld, worldSeed } from "./world";
+import { deleteProfile, readProfiles, saveProfile } from "./store";
 
 function memory(seed: Record<string, string> = {}): SettingsStore {
   const held = new Map(Object.entries(seed));
@@ -151,6 +144,7 @@ describe("the list of players", () => {
     avatar: DEFAULT_AVATAR,
     language: Language.English,
     lastPlayed,
+    house: 0,
     introSeen: false,
     band: DEFAULT_BAND,
     rung: HARDEST_RUNG,
@@ -336,12 +330,14 @@ describe("deleting a player", () => {
     saveProfile(store, mia);
     const grid = world();
     grid.plant(2, 2, PlantType.Carrot);
-    writeWorld(store, snapshotGame(grid, new Map(), 99, CLOCK));
-    expect(store.getItem(WORLD_KEY)).not.toBeNull();
+    const game = newGame(store, 0.25, CLOCK);
+    writeGame(store, { ...game, world: snapshotGame(grid, new Map(), 99, CLOCK) });
 
     deleteProfile(store, mia.id);
     expect(readProfiles(store)).toEqual([]);
-    expect(loadWorld(store).snapshot?.world.crops.length).toBe(1);
+    // The garden is the game's, not hers. The last child leaving does not
+    // take the village with them.
+    expect(loadGame(store, game.id)?.world?.world.crops.length).toBe(1);
   });
 
   test("a store that cannot forget still loses the player from the list", () => {
@@ -586,198 +582,5 @@ describe("a save that no longer fits its world", () => {
     expect(session.purse.coins).toBe(0);
     expect(session.inventory.total).toBe(0);
     expect(session.facing).toBe(Facing.Down);
-  });
-});
-
-describe("loading a world the generator has moved on from", () => {
-  test("nothing saved yet is a fresh world, not an error", () => {
-    expect(loadWorld(memory()).outcome).toBe(LoadOutcome.Fresh);
-    expect(loadWorld(null).outcome).toBe(LoadOutcome.Fresh);
-  });
-
-  test("a save from this generator is restored", () => {
-    const store = memory();
-    writeWorld(store, snapshotGame(world(), new Map(), 99, CLOCK));
-    const loaded = loadWorld(store);
-    expect(loaded.outcome).toBe(LoadOutcome.Restored);
-    expect(loaded.snapshot?.generatorVersion).toBe(GENERATOR_VERSION);
-  });
-
-  // A fence saved against a coastline that has since moved comes back inside
-  // a rock, so the ground is rebuilt. Nothing about any child is at risk —
-  // their purses and baskets live on their profiles and were never in here.
-  test("a save from an older generator drops the farm and nothing else", () => {
-    const grid = world();
-    grid.plant(2, 2, PlantType.Carrot);
-    const stale = {
-      ...snapshotGame(grid, new Map(), 99, CLOCK),
-      generatorVersion: GENERATOR_VERSION - 1,
-    };
-    const store = memory({ [WORLD_KEY]: JSON.stringify(stale) });
-
-    const loaded = loadWorld(store);
-    expect(loaded.outcome).toBe(LoadOutcome.Rebuilt);
-    expect(loaded.snapshot).toBeNull();
-    // Nothing in a world file describes a person any more, so there is
-    // nothing here that a rebuild could take away from one.
-    expect(Object.keys(loaded).sort()).toEqual(["outcome", "snapshot"]);
-  });
-});
-
-describe("one world, shared", () => {
-  const child = (name: string, at: number) =>
-    createProfile(
-      [],
-      { name, avatar: DEFAULT_AVATAR, language: Language.English, band: DEFAULT_BAND },
-      at,
-    );
-
-  // The point of the whole change: a crop one child plants is a crop the
-  // other can pick, because they are standing in the same field.
-  test("what one child plants, the next child finds", () => {
-    const store = memory();
-    const ana = child("Ana", 1);
-    const bo = child("Bo", 2);
-
-    // Ana plays: plants two carrots and puts a fence down.
-    const grid = world();
-    const baseline = worldBaseline(grid);
-    grid.plant(3, 3, PlantType.Carrot);
-    grid.plant(4, 3, PlantType.Carrot);
-    grid.placeObject(fence(5, 5));
-    writeWorld(store, snapshotGame(grid, baseline, 99, CLOCK));
-
-    // Bo plays: the same ground, generated from the same seed.
-    const bosGrid = world();
-    restoreWorld(bosGrid, loadWorld(store).snapshot?.world);
-    expect(bosGrid.getCrop(3, 3)?.plant).toBe(PlantType.Carrot);
-    expect(bosGrid.getObjectAt(5, 5)?.type).toBe("fence");
-    expect(ana.id).not.toBe(bo.id);
-  });
-
-  // The half that is *not* shared, and the reason it is not: a shared purse
-  // would let one child spend what another earned.
-  test("but not what one child is carrying", () => {
-    const grid = world();
-    const ana = sessionOn(grid);
-    ana.purse.earn(500);
-    ana.inventory.add(PlantType.Carrot, 3);
-
-    const anas = snapshotPlayer(ana, ana.tile);
-    const bo = sessionOn(grid);
-    restorePlayer(bo, null);
-
-    expect(anas.coins).toBe(500);
-    expect(bo.purse.coins).toBe(0);
-    expect(bo.inventory.total).toBe(0);
-  });
-
-  test("a world file describes ground, and nothing about anybody", () => {
-    const grid = world();
-    grid.plant(1, 1, PlantType.Carrot);
-    const saved = snapshotGame(grid, worldBaseline(grid), 99, CLOCK);
-    // `savedAt` is *when the ground was written*, not a fact about a child —
-    // which is exactly why it belongs here rather than on the profile, where
-    // "when did they stop" is not something `lastPlayed` can answer.
-    expect(Object.keys(saved).sort()).toEqual([
-      "generatorVersion",
-      "savedAt",
-      "seed",
-      "snapshotVersion",
-      "world",
-    ]);
-    expect(saved.savedAt).toBe(CLOCK);
-  });
-});
-
-describe("the device's world number", () => {
-  test("is minted once and then never reissued", () => {
-    const store = memory();
-    const first = deviceSeed(store, 0.3);
-    expect(first).toBeGreaterThan(0);
-    // A game that minted one per session would give each child a different
-    // village and call it shared.
-    for (const draw of [0.9, 0.1, 0.5]) expect(deviceSeed(store, draw)).toBe(first);
-    expect(store.getItem(WORLD_SEED_KEY)).toBe(String(first));
-  });
-
-  test("is always a usable positive number", () => {
-    const rng = createRng(7);
-    for (let i = 0; i < 200; i++) {
-      const seed = worldSeed(rng());
-      expect(Number.isInteger(seed)).toBe(true);
-      expect(seed).toBeGreaterThan(0);
-    }
-    expect(worldSeed(0)).toBeGreaterThan(0);
-  });
-
-  test("with no storage, the game still gets a world", () => {
-    expect(deviceSeed(null, 0.42)).toBeGreaterThan(0);
-  });
-
-  test("rubbish in storage is replaced rather than played", () => {
-    const store = memory({ [WORLD_SEED_KEY]: "not a number" });
-    expect(deviceSeed(store, 0.42)).toBeGreaterThan(0);
-  });
-
-  /**
-   * A new world starts everybody from scratch.
-   *
-   * Keeping the spells was tried and reversed: a new world with the array
-   * spell already in it is not a new world — the great tree has nothing left
-   * to ask, and the first afternoon of the game cannot happen twice on one
-   * device.
-   *
-   * What survives is who the child *is*, not what they did. The band is on
-   * that side of the line: nothing about a fresh village makes a six-year-old
-   * ready for three-digit sums.
-   */
-  test("a new world starts everybody again, but nobody has to be made twice", () => {
-    const played = {
-      ...createProfile(
-        [],
-        { name: "Mia", avatar: DEFAULT_AVATAR, language: Language.German, band: 0 },
-        1000,
-      ),
-      introSeen: true,
-      rung: HARDEST_RUNG,
-      portalRung: 7,
-      arrayRung: HARDEST_ARRAY_RUNG,
-      clockRung: 4,
-      reached: ["village", "harbour", "observatory"],
-      learned: [Spell.Portal, Spell.Array, Spell.Hourglass],
-      carried: null,
-    };
-    const again = freshStart(played);
-
-    // Who they are.
-    expect({ id: again.id, name: again.name, language: again.language, band: again.band }).toEqual({
-      id: played.id,
-      name: played.name,
-      language: played.language,
-      band: played.band,
-    });
-    expect(again.avatar).toEqual(played.avatar);
-
-    // What they did.
-    expect(knowsSpell(again.learned, Spell.Portal)).toBe(false);
-    expect(knowsSpell(again.learned, Spell.Array)).toBe(false);
-    expect(again.reached).toEqual(["village"]);
-    expect(again.rung).toBe(bandAt(played.band).from);
-    expect(again.portalRung).toBe(bandAt(played.band).from);
-    expect(again.carried).toBeNull();
-    // And the postman walks them through it again, because it is again.
-    expect(again.introSeen).toBe(false);
-  });
-
-  // Throwing the seed away without the difference beside it would lay one
-  // child's fences over a coastline that has moved.
-  test("forgetting a world forgets both halves of it", () => {
-    const store = memory();
-    deviceSeed(store, 0.3);
-    writeWorld(store, snapshotGame(world(), new Map(), 99, CLOCK));
-    forgetWorld(store);
-    expect(store.getItem(WORLD_SEED_KEY)).toBeNull();
-    expect(loadWorld(store).outcome).toBe(LoadOutcome.Fresh);
   });
 });

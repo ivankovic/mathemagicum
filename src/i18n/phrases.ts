@@ -228,16 +228,12 @@ export interface Phrases {
    */
   sumsHeading: string;
   /** The options row that throws the world away. */
-  worldHeading: string;
-  /**
-   * What a reset keeps, said in words.
-   *
-   * The one sentence left on any screen in the game, and it is deliberate:
-   * the options are for an adult, and an adult shown a wordless tick and
-   * cross over a picture of the world will assume it deletes the children
-   * too. A picture cannot say "everything except this".
-   */
-  resetKeepsPlayers: string;
+  /** The options row that lists the games saved on this device. */
+  gamesHeading: string;
+  /** When a saved game was last written down, for telling them apart. */
+  gameWhen: (savedAt: number) => string;
+  /** What throwing one away costs, said in words. */
+  deleteGameAsk: string;
 
   // --- the shop ------------------------------------------------------------
 

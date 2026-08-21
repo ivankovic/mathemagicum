@@ -3,8 +3,6 @@
 
 import type { SettingsStore } from "../settings";
 import { type Profile, readProfile, replaceProfile, withoutProfile } from "./profiles";
-import { GENERATOR_VERSION, type GameSnapshot } from "./snapshot";
-import { WORLD_KEY } from "./world";
 
 /**
  * Where the children and their worlds are kept.
@@ -14,12 +12,14 @@ import { WORLD_KEY } from "./world";
  * without a browser, and what makes moving to IndexedDB later a change to
  * this file rather than to the game.
  *
- * Two keys: one index listing who plays on this device, and one world they
- * all share (`src/save/world.ts`). Split rather than kept as a single blob
- * so that reading the who's-playing screen does not have to parse the farm.
+ * One key: an index of who plays on this device. The games they play are
+ * next door in `games.ts`, one key each, and the split is what lets the
+ * who's-playing screen be drawn without parsing four farms.
  *
- * There used to be a world per child. The children asked to share, so there
- * is one — which also means removing a player no longer removes a garden.
+ * There used to be a world per child; then one world shared; then several
+ * saved games with the children kept out of them. What survived all three
+ * shapes is that a *person* and a *world* are different things — see
+ * `Player` and `Progress`.
  */
 
 export const PROFILES_KEY = "mathemagicum.players";
@@ -72,58 +72,16 @@ export function saveProfile(store: SettingsStore | null, profile: Profile): read
 }
 
 /**
- * Remove a child, and leave the world exactly where it is.
+ * Remove a child, and leave every game exactly where it is.
  *
- * The world used to go with them, because it was theirs. It is the device's
- * now and everybody is gardening it, so deleting a player must take their
- * name, their face and their purse and touch nothing that is planted. The
- * last child leaving does not take the village with them either.
+ * The world used to go with them, because it was theirs. A game belongs to
+ * the device now, so deleting a player takes their name and their face and
+ * touches nothing that is planted. Their progress stays in the games it was
+ * made in, unread — which costs a few bytes and means a child re-made under
+ * the same name is a new person, which is what they are.
  */
 export function deleteProfile(store: SettingsStore | null, id: string): readonly Profile[] {
   const profiles = withoutProfile(readProfiles(store), id);
   writeProfiles(store, profiles);
   return profiles;
-}
-
-export function writeWorld(store: SettingsStore | null, snapshot: GameSnapshot): void {
-  writeJson(store, WORLD_KEY, snapshot);
-}
-
-export const LoadOutcome = {
-  /** Nothing saved yet: a new world, which is also what a new player gets. */
-  Fresh: "fresh",
-  /** The save fits the world this game generates, and was restored. */
-  Restored: "restored",
-  /**
-   * The save is from a world this game no longer builds the same way.
-   *
-   * The farm goes and everything about every child stays — their names,
-   * their faces, their purses and their baskets all live on their profiles
-   * and were never in this file. Only the ground is rebuilt, because a fence
-   * saved against a coastline that has since moved can come back inside a
-   * rock. Told to the player rather than done quietly: a farm that vanishes
-   * without explanation reads as the game having lost it, which is a
-   * different and worse thing than being told the world was rebuilt.
-   */
-  Rebuilt: "rebuilt",
-} as const;
-
-export type LoadOutcome = (typeof LoadOutcome)[keyof typeof LoadOutcome];
-
-export interface LoadedWorld {
-  readonly outcome: LoadOutcome;
-  /** Present only when the outcome is `Restored`. */
-  readonly snapshot: GameSnapshot | null;
-}
-
-export function loadWorld(store: SettingsStore | null): LoadedWorld {
-  const saved = readJson(store, WORLD_KEY);
-  if (typeof saved !== "object" || saved === null) {
-    return { outcome: LoadOutcome.Fresh, snapshot: null };
-  }
-  const snapshot = saved as GameSnapshot;
-  if (snapshot.generatorVersion !== GENERATOR_VERSION) {
-    return { outcome: LoadOutcome.Rebuilt, snapshot: null };
-  }
-  return { outcome: LoadOutcome.Restored, snapshot };
 }

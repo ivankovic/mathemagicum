@@ -37,13 +37,45 @@ import type { PlayerSnapshot } from "./snapshot";
  * the person.
  */
 
-export interface Profile {
+/**
+ * Who a child is. Kept by the device, and never by a saved game.
+ *
+ * Their name, their face, the language they read and how hard their sums
+ * are. None of that is a fact about a world, so none of it goes into one:
+ * starting a new game must not mean typing four names and picking four faces
+ * again, and loading an old one must not bring back a face somebody has
+ * since changed.
+ *
+ * `band` is on this side of the line for the same reason it survives a fresh
+ * start — nothing about a new village makes a six-year-old ready for
+ * three-digit sums.
+ */
+export interface Player {
   readonly id: string;
   readonly name: string;
   readonly avatar: AvatarStyle;
   readonly language: Language;
   /** Milliseconds since the epoch, for ordering the who's-playing screen. */
   readonly lastPlayed: number;
+  /**
+   * How hard their sums are, as somebody picked at setup.
+   *
+   * Never moves on its own; it is a floor the adaptation works from rather
+   * than a score. See src/spells/difficulty.ts.
+   */
+  readonly band: number;
+  /** Which of the village's four cottages is theirs. */
+  readonly house: number;
+}
+
+/**
+ * What a child has done *in one game*. Kept by that game and nothing else.
+ *
+ * Every ladder they have climbed, every place they have walked to, every
+ * spell they have earned and everything in their pockets. Loading another
+ * game swaps all of it and leaves the person alone.
+ */
+export interface Progress {
   /**
    * Whether the postal worker has walked *this child* through the basics.
    *
@@ -55,16 +87,13 @@ export interface Profile {
    */
   readonly introSeen: boolean;
   /**
-   * How hard this child's sums are.
+   * Where inside their band the game currently has them.
    *
-   * `band` is what somebody picked when the player was made — one of four
-   * sample sums — and it never moves on its own. `rung` is where inside that
-   * band the game currently has them, and it does move: quietly, a step at a
-   * time, on how the last few casts went. Both are per child for the obvious
-   * reason, and the band is a floor and a ceiling so the adaptation can only
-   * ever nudge. See src/spells/difficulty.ts.
+   * `band` is what somebody picked when the player was made and is a fact
+   * about the child, so it lives with them. This moves: quietly, a step at a
+   * time, on how the last few casts went — and it is a fact about one game,
+   * so it lives here. See src/spells/difficulty.ts.
    */
-  readonly band: number;
   readonly rung: number;
   /**
    * Where this child is on the *portal* spell's ladder.
@@ -132,6 +161,25 @@ export interface Profile {
 }
 
 /**
+ * The two halves seen as one, which is what everything above the save layer
+ * wants.
+ *
+ * The scene holds a child and asks it for their name and their rung without
+ * caring that those live in two different places on disk. Splitting them is
+ * a fact about storage; joining them is a fact about there being one child.
+ */
+export type Profile = Player & Progress;
+
+export function splitProfile(profile: Profile): { player: Player; progress: Progress } {
+  const { id, name, avatar, language, lastPlayed, band, house, ...progress } = profile;
+  return { player: { id, name, avatar, language, lastPlayed, band, house }, progress };
+}
+
+export function joinProfile(player: Player, progress: Progress): Profile {
+  return { ...player, ...progress };
+}
+
+/**
  * How long a name may be.
  *
  * Short on purpose: it is written under a face on a screen full of faces,
@@ -143,12 +191,16 @@ export const NAME_MAX = 12;
 /**
  * How many players one device holds.
  *
- * A limit rather than a warning: the who's-playing screen shows every child
- * at a size a finger can hit, and past eight it either shrinks the faces or
- * starts scrolling — and a screen a child has to scroll to find themselves
- * on is one they will tap the wrong face on.
+ * Four, and the number is now a fact about the *village* rather than about
+ * the screen: four cottages stand on the ring waiting for them, and a fifth
+ * child would be a child with nowhere to live. The villagers moved into one
+ * longhouse between them to make the room.
+ *
+ * It was eight, for a reason that still holds and no longer decides: the
+ * who's-playing screen shows every child at a size a finger can hit, and
+ * past eight it either shrinks the faces or starts scrolling.
  */
-export const MAX_PROFILES = 8;
+export const MAX_PROFILES = 4;
 
 /** Whether there is room for another child on this device. */
 export function canAddProfile(existing: readonly Profile[]): boolean {
@@ -218,6 +270,10 @@ export function createProfile(
     lastPlayed: now,
     introSeen: false,
     band: wanted.band,
+    // The first cottage nobody has taken. Houses are not handed out in the
+    // order children are made, because a child removed and replaced would
+    // otherwise move into somebody else's home.
+    house: freeHouse(existing),
     rung: bandAt(wanted.band).from,
     portalRung: bandAt(wanted.band).from,
     arrayRung: arrayRungInBand(bandAt(wanted.band), bandAt(wanted.band).from),
@@ -253,9 +309,19 @@ export function createProfile(
  * three-digit sums.
  */
 export function freshStart(profile: Profile): Profile {
-  const band = bandAt(profile.band);
+  return { ...profile, ...freshProgress(profile.band) };
+}
+
+/**
+ * A child's progress at the start of a game they have not played.
+ *
+ * What a new game hands every player, and what `freshStart` hands one who is
+ * beginning again. Written once because those two are the same thing said
+ * from different ends.
+ */
+export function freshProgress(bandAt_: number): Progress {
+  const band = bandAt(bandAt_);
   return {
-    ...profile,
     introSeen: false,
     rung: band.from,
     portalRung: band.from,
@@ -325,6 +391,13 @@ export function findProfile(profiles: readonly Profile[], id: string | null): Pr
  * language should still be a child with a farm, and one bad entry in the
  * list must not take the other children's saves down with it.
  */
+/** The lowest-numbered cottage nobody on this device lives in. */
+function freeHouse(existing: readonly Profile[]): number {
+  const taken = new Set(existing.map((profile) => profile.house));
+  for (let n = 0; n < MAX_PROFILES; n++) if (!taken.has(n)) return n;
+  return 0;
+}
+
 export function readProfile(value: unknown): Profile | null {
   if (typeof value !== "object" || value === null) return null;
   const record = value as Record<string, unknown>;
@@ -338,6 +411,9 @@ export function readProfile(value: unknown): Profile | null {
     avatar: readAvatar(record.avatar),
     language: languageOf(typeof record.language === "string" ? record.language : null),
     lastPlayed: Number.isFinite(Number(record.lastPlayed)) ? Number(record.lastPlayed) : 0,
+    house: Number.isInteger(record.house)
+      ? Math.max(0, Math.min(MAX_PROFILES - 1, record.house as number))
+      : 0,
     introSeen: record.introSeen === true,
     // A child saved before there was a choice was playing the hardest sums
     // the game had, because that was the only setting there was. Anything

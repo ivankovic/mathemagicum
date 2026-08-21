@@ -15,6 +15,18 @@ import type { Phrases } from "../i18n/phrases";
 import { VirtualJoystick } from "../input/VirtualJoystick";
 import { type Rgb, rampPlan } from "../render/recolour";
 import { repaintedSheet } from "../render/sheetTexture";
+import {
+  type SavedGame,
+  deleteGame,
+  listGames,
+  newGame,
+  openGame,
+  playingId,
+  profileIn,
+  setPlaying,
+  withProgress,
+  writeGame,
+} from "../save/games";
 import { type Profile, createProfile, freshStart } from "../save/profiles";
 import {
   type WorldBaseline,
@@ -25,8 +37,7 @@ import {
   snapshotPlayer,
   worldBaseline,
 } from "../save/snapshot";
-import { LoadOutcome, loadWorld, readProfiles, saveProfile, writeWorld } from "../save/store";
-import { deviceSeed, forgetWorld } from "../save/world";
+import { saveProfile } from "../save/store";
 import {
   Language,
   type Settings,
@@ -780,7 +791,15 @@ export class GameScene extends Phaser.Scene {
   private lastSaved = "";
   /** The device's world number — everybody's, not this child's. */
   private seed = 0;
-  private loadOutcome: LoadOutcome = LoadOutcome.Fresh;
+  /** The game that is open: a seed, a world, and everybody's progress in it. */
+  private savedGame!: SavedGame;
+  /**
+   * Whether the page is on its way out to open another game.
+   *
+   * Read by `autosave`, which is the one thing that could write this game
+   * back over the top of the switch.
+   */
+  private leavingGame = false;
   /**
    * How the last few casts went, for the difficulty to read.
    *
@@ -1059,12 +1078,17 @@ export class GameScene extends Phaser.Scene {
     this.interiorLayer = this.add.layer().setVisible(false);
     this.loadAssetMetadata();
 
-    // Each child's own world. The game shipped with one number here, so
-    // every player who ever started it stood in the same village; the seed
-    // is now minted when a profile is made and never reissued.
-    // The device's world, not this child's. Minted the first time anybody
-    // plays and never reissued — everybody gardens the same land, in turns.
-    this.seed = deviceSeed(browserStore(), Math.random());
+    // The game that is open, which is a seed and a difference and everybody's
+    // progress in it. One of several kept side by side — see save/games.ts.
+    // Never nothing: a device that has never been played gets one made on
+    // the spot, so a child's route through the game is title, who is
+    // playing, garden, with nothing in the middle to choose.
+    this.savedGame = openGame(browserStore(), Math.random(), Date.now());
+    this.seed = this.savedGame.seed;
+    // Their progress belongs to this game, and their name and face do not.
+    // A child who has not opened this one before starts it from scratch
+    // without losing who they are.
+    if (!this.anonymous) this.profile = profileIn(this.savedGame, this.profile);
     const world = generateWorld(WORLD_SIZE, WORLD_SIZE, this.seed);
     this.grid = world.grid;
     this.worldGrid = world.grid;
@@ -1292,9 +1316,11 @@ export class GameScene extends Phaser.Scene {
       (object) => this.ui(object),
     );
     this.optionsPanel.onChange = (next) => this.applySettings(next);
-    this.optionsPanel.onResetWorld = () => this.resetWorld();
+    this.optionsPanel.onOpenGame = (id) => this.openAnotherGame(id);
+    this.optionsPanel.onDeleteGame = (id) => this.throwGameAway(id);
     this.optionsPanel.onBandChange = (band) => this.applyBand(band);
     this.optionsPanel.setBand(this.profile.band);
+    this.optionsPanel.setGames(listGames(browserStore()), playingId(browserStore()));
     this.applyCropPrice();
     this.applyRung();
     this.createOptionsButton();
@@ -4409,24 +4435,21 @@ export class GameScene extends Phaser.Scene {
    * added to a scene already running.
    */
   private restoreSavedWorld(): void {
-    const loaded = loadWorld(browserStore());
-    this.loadOutcome = loaded.outcome;
+    const saved = this.savedGame.world;
     // When the ground was last written down, read *before* the autosave
     // timer starts moving it. The hourglass reads this as "when you put the
     // game down"; asked later it would find the answer creeping up to now
     // and pay nothing. `?away=` fakes it, because the alternative way to see
     // this spell is to close the game and come back in an hour.
     this.awayFrom =
-      this.dev.away === null
-        ? savedAtOf(loaded.snapshot)
-        : Date.now() - this.dev.away * 60 * 60 * 1000;
-    if (loaded.outcome === LoadOutcome.Restored && loaded.snapshot) {
-      restoreWorld(this.grid, loaded.snapshot.world);
-    }
-    // The child's own things come from their profile, never from the world
-    // file — which is why a rebuilt world cannot cost them a coin. Only the
-    // tile they were standing on is dropped when the ground has moved.
-    restorePlayer(this.session, this.profile.carried, loaded.outcome !== LoadOutcome.Rebuilt);
+      this.dev.away === null ? savedAtOf(saved) : Date.now() - this.dev.away * 60 * 60 * 1000;
+    if (saved) restoreWorld(this.grid, saved.world);
+    // The child's own things come from their progress in this game, never
+    // from the ground — which is why a world the generator can no longer
+    // rebuild cannot cost them a coin. `loadGame` drops such a world and
+    // keeps everything else, so what is missing here is only the tile they
+    // were standing on.
+    restorePlayer(this.session, this.profile.carried, saved !== null);
   }
 
   /**
@@ -4442,61 +4465,73 @@ export class GameScene extends Phaser.Scene {
    * not rewrite the same bytes into storage every few seconds.
    */
   private autosave(): void {
-    // A world that has just been thrown away must not be written back. Four
-    // things call this — the timer, `visibilitychange`, `pagehide` and the
-    // scene's own shutdown — and the reload that follows a reset fires at
-    // least two of them, so the guard belongs here rather than at any of the
-    // call sites. Without it the reset deletes the world and the page saves
-    // it again on its way out, under the new seed.
-    if (this.worldForgotten) return;
+    // A game that is being left for another must not be written back. Three
+    // things call this besides the timer — `visibilitychange`, `pagehide`
+    // and the scene's own shutdown — and the reload that follows switching
+    // games fires at least two of them, so the guard belongs here rather
+    // than at any of the call sites.
+    if (this.leavingGame) return;
     const store = browserStore();
-    // The ground, which everybody shares.
-    const snapshot = snapshotGame(this.worldGrid, this.baseline, this.seed, Date.now());
-    // Compared without its timestamp: the stamp changes every tick, so a
-    // world nobody has touched would be rewritten every few seconds and the
-    // "nothing changed, do not write" check would never fire again.
-    const written = JSON.stringify({ ...snapshot, savedAt: 0 });
-    if (written !== this.lastSaved) {
-      this.lastSaved = written;
-      writeWorld(store, snapshot);
-    }
+    const now = Date.now();
+    // The ground, which everybody in this game shares.
+    const snapshot = snapshotGame(this.worldGrid, this.baseline, this.seed, now);
     // And this child's own things, which nobody else's game may touch. Kept
     // separate all the way down: a shared purse would let one child spend
     // what another earned, and the crops in a basket belong to whoever
     // picked them.
-    if (this.anonymous) return;
     const outdoorAt = this.interior ? this.interior.returnTo : this.session.tile;
-    this.saveProfileChange({ carried: snapshotPlayer(this.session, outdoorAt) });
+    if (!this.anonymous) {
+      this.profile = { ...this.profile, carried: snapshotPlayer(this.session, outdoorAt) };
+    }
+    // Compared without its timestamp: the stamp changes every tick, so a
+    // game nobody has touched would be rewritten every few seconds and the
+    // "nothing changed, do not write" check would never fire again.
+    const next: SavedGame = this.anonymous
+      ? { ...this.savedGame, world: snapshot, savedAt: now }
+      : withProgress({ ...this.savedGame, world: snapshot }, this.profile, now);
+    const written = JSON.stringify({ ...next, savedAt: 0 });
+    if (written === this.lastSaved) return;
+    this.lastSaved = written;
+    this.savedGame = next;
+    writeGame(store, next);
+    if (!this.anonymous) saveProfile(store, this.profile);
   }
 
   /**
-   * Throw this world away and start another.
+   * Open another game, or a new one.
    *
-   * The seed and the difference beside it go together: deleting the seed and
-   * keeping the snapshot would lay one child's fences over a coastline that
-   * has moved.
+   * Reloading rather than rebuilding the scene in place. Switching games is
+   * rare, it is asked for by an adult, and a page that starts again from
+   * nothing cannot leave a stale sprite or a dangling timer behind — which a
+   * scene restart, with this many pools and panels, very well might.
    *
-   * **The children are kept; what they earned is not.** Their names, their
-   * faces and the band somebody picked for them survive, and everything else
-   * starts again — see `freshStart`. A new world with the spells already in
-   * it is not a new world: the great tree has nothing left to ask, and the
-   * first afternoon of this game, which is the best afternoon it has, cannot
-   * happen twice on one device.
-   *
-   * Reloading rather than rebuilding the scene in place. A reset is rare, it
-   * is asked for by an adult, and a page that starts again from nothing
-   * cannot leave a stale sprite or a dangling timer behind — which a scene
-   * restart, with this many pools and panels, very well might.
+   * Nothing is thrown away. The game being left is written down first and
+   * stays exactly where it is; that is the whole difference between this and
+   * the button it replaced, which had one outcome and it was *lose
+   * everything*.
    */
-  private resetWorld(): void {
-    // Before anything else: nothing may write a world or a profile from here
-    // on, or the reload will save the old one back on its way out.
-    this.worldForgotten = true;
+  /**
+   * Throw the game she is in away, and open whatever is left.
+   *
+   * Only the open one may be thrown away — see `OptionsPanel` — so there is
+   * nothing to identify beyond "this one", and the id is passed only so the
+   * panel does not have to know which that is.
+   */
+  private throwGameAway(id: string | null): void {
+    if (!id) return;
+    this.leavingGame = true;
+    deleteGame(browserStore(), id);
+    globalThis.location.reload();
+  }
+
+  private openAnotherGame(id: string | null): void {
+    this.autosave();
+    // From here on nothing may write this game back: the reload fires
+    // `pagehide` and `visibilitychange` on its way out.
+    this.leavingGame = true;
     const store = browserStore();
-    // Every child on the device, not only the one holding it: the world is
-    // shared, so a fresh one is fresh for all of them or for none.
-    for (const profile of readProfiles(store)) saveProfile(store, freshStart(profile));
-    forgetWorld(store);
+    if (id) setPlaying(store, id);
+    else newGame(store, Math.random(), Date.now());
     globalThis.location.reload();
   }
 
