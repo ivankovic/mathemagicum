@@ -206,6 +206,8 @@ import {
 } from "../world/houses";
 import {
   INTERIOR_ROOMS,
+  LightKind,
+  type RoomLight,
   buildInteriorGrid,
   hearthCell,
   interiorAnimKey,
@@ -215,7 +217,9 @@ import {
   interiorOriginY,
   interiorSheetKey,
   interiorSidecarKey,
+  lightBreath,
   roomCameraBounds,
+  roomLights,
   wallHangingCell,
 } from "../world/interiors";
 import type { Inventory, ItemType } from "../world/inventory";
@@ -401,6 +405,23 @@ const HEARTH_GLOW_ALPHA = 0.72;
  * fault rather than as firelight.
  */
 const HEARTH_FLICKER = 0.18;
+/**
+ * The other three lights a room can have, and how each behaves.
+ *
+ * Radius, colour and how much it moves. A shop's lantern is a flame behind
+ * glass, so it is warm and it wavers a little; the school's tube is cold and
+ * does not move at all, because nothing electric does; the tower's orbs are
+ * the coldest thing in the game and breathe slowly, which is the only thing
+ * here that says *magic* without a word.
+ */
+const ROOM_LIGHTS: Record<
+  string,
+  { radius: number; color: number; alpha: number; move: number; period: number }
+> = {
+  [LightKind.Lamp]: { radius: 96, color: 0xffb257, alpha: 0.66, move: 0.08, period: 900 },
+  [LightKind.Electric]: { radius: 132, color: 0xdfe8ff, alpha: 0.6, move: 0, period: 0 },
+  [LightKind.Orb]: { radius: 104, color: 0x9fd0ff, alpha: 0.7, move: 0.3, period: 2600 },
+};
 /** What the player carries: paler and smaller, so a lamp is still worth having. */
 const PLAYER_GLOW_COLOR = 0xffe6b0;
 const PLAYER_GLOW_ALPHA = 0.5;
@@ -1142,6 +1163,15 @@ export class GameScene extends Phaser.Scene {
   private hearthGlow?: Phaser.GameObjects.Image;
   /** Which cell it is over, or null in a room with no fire. */
   private hearth: GridPoint | null = null;
+  /**
+   * The lamps, tubes and orbs in whatever room is on screen.
+   *
+   * Beside the hearth rather than in with it, because the hearth's flicker
+   * comes from the room's own animation frame and these have no frames to
+   * read — the generator draws them still and the movement is here. Made
+   * with the room and destroyed with it, like the hearth.
+   */
+  private roomGlows: { light: RoomLight; glow: Phaser.GameObjects.Image }[] = [];
   private npcs: NpcRuntime[] = [];
   /**
    * The village's chickens, ducks, cats and rabbits.
@@ -1967,6 +1997,7 @@ export class GameScene extends Phaser.Scene {
         .setAlpha(strength * LAMP_GLOW_ALPHA);
     }
     this.paintHearth(strength);
+    this.paintRoomLights(strength);
     this.paintWindows(strength);
   }
 
@@ -2086,20 +2117,70 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Light the fire in a room that has one. Nothing at all in a barn. */
+  /**
+   * The lamps, tubes and orbs, once it is dark enough for them to matter.
+   *
+   * Same machinery as the hearth and the lamp posts — an additive halo over
+   * the tint, growing with the darkness — and the differences between them
+   * are the whole point: how big, how cold, and how much they move.
+   *
+   * The movement runs off the clock rather than off an animation frame,
+   * because the generator draws all three still. That is deliberate: a lamp
+   * that is on is a lamp that is on, and moving the *light* over an orb
+   * instead of the orb costs nothing and keeps three of the seven rooms at a
+   * single frame rather than eight nearly identical ones.
+   *
+   * Half a tile up from the cell's feet, as the hearth is: a lantern and a
+   * tube are mounted on the north wall, and an orb floats.
+   */
+  private paintRoomLights(strength: number): void {
+    if (this.roomGlows.length === 0) return;
+    const now = this.time.now;
+    for (const { light, glow } of this.roomGlows) {
+      glow.setVisible(strength > 0);
+      if (strength <= 0) continue;
+      const how = ROOM_LIGHTS[light.kind];
+      if (!how) continue;
+      const breath = lightBreath(now, how.period, how.move);
+      const at = this.screenOf(light.cell.col, light.cell.row);
+      glow
+        .setPosition(at.x, at.y - TILE_SIZE)
+        .setDisplaySize(how.radius * 2, how.radius * 2)
+        .setAlpha(strength * how.alpha * breath);
+    }
+  }
+
+  /**
+   * Light whatever the room is lit by: a fire, lanterns, tubes, or orbs.
+   *
+   * Read off the room's furniture, so a room the generator relights needs
+   * nothing here — and a kind this game has not learned yet is dropped by
+   * `roomLights` rather than drawn in some default colour.
+   */
   private lightHearth(sidecar: InteriorSidecar): void {
     this.snuffHearth();
-    const cell = hearthCell(sidecar);
-    if (!cell) return;
-    this.hearth = cell;
-    this.hearthGlow = this.ui(
+    for (const light of roomLights(sidecar)) {
+      if (light.kind === LightKind.Fire) {
+        this.hearth = light.cell;
+        this.hearthGlow = this.newGlow(HEARTH_GLOW_COLOR);
+        continue;
+      }
+      const how = ROOM_LIGHTS[light.kind];
+      if (!how) continue;
+      this.roomGlows.push({ light, glow: this.newGlow(how.color) });
+    }
+  }
+
+  /** One halo, additive over the night tint and hidden until there is one. */
+  private newGlow(color: number): Phaser.GameObjects.Image {
+    return this.ui(
       this.add
         .image(0, 0, LIGHT_TEXTURE)
         .setOrigin(0.5)
         .setScrollFactor(0)
         .setDepth(NIGHT_TINT_DEPTH + 1)
         .setBlendMode(Phaser.BlendModes.ADD)
-        .setTint(HEARTH_GLOW_COLOR)
+        .setTint(color)
         .setVisible(false),
     );
   }
@@ -2116,6 +2197,8 @@ export class GameScene extends Phaser.Scene {
     this.hearthGlow?.destroy();
     this.hearthGlow = undefined;
     this.hearth = null;
+    for (const { glow } of this.roomGlows) glow.destroy();
+    this.roomGlows = [];
   }
 
   /** Remember a lamp, and give it the halo that says it is lit. */

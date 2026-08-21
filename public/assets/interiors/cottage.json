@@ -157,7 +157,8 @@
         2,
         1
       ],
-      "blocks": true
+      "blocks": true,
+      "light": "fire"
     },
     {
       "name": "bookshelf",

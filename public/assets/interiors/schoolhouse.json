@@ -302,6 +302,32 @@
         1
       ],
       "blocks": true
+    },
+    {
+      "name": "electriclamp",
+      "cell": [
+        1,
+        2
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": false,
+      "light": "electric"
+    },
+    {
+      "name": "electriclamp",
+      "cell": [
+        1,
+        6
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": false,
+      "light": "electric"
     }
   ],
   "window_columns": [

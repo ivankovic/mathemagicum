@@ -298,6 +298,32 @@
         1
       ],
       "blocks": true
+    },
+    {
+      "name": "orb",
+      "cell": [
+        2,
+        3
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": false,
+      "light": "orb"
+    },
+    {
+      "name": "orb",
+      "cell": [
+        5,
+        5
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": false,
+      "light": "orb"
     }
   ],
   "window_columns": [

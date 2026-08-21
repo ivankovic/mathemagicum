@@ -7,13 +7,16 @@ import { join } from "node:path";
 import { BUILDING_SPRITES, ROLE_SPRITES } from "./buildings";
 import {
   INTERIOR_ROOMS,
+  LightKind,
   buildInteriorGrid,
   hearthCell,
   interiorAttendantCell,
   interiorDoor,
   interiorFor,
   interiorOriginY,
+  lightBreath,
   roomCameraBounds,
+  roomLights,
   wallHangingCell,
 } from "./interiors";
 import type { InteriorSidecar } from "./spriteSidecar";
@@ -347,5 +350,86 @@ describe("the fire in a room that has one", () => {
     for (const name of INTERIOR_ROOMS) {
       expect(() => hearthCell(readJson<InteriorSidecar>(name))).not.toThrow();
     }
+  });
+});
+
+describe("what else a room is lit by", () => {
+  /**
+   * The shop, the school and the tower had nothing in them after dark, and a
+   * shop at dusk is not a place with no lamps in it. Three more kinds, and
+   * they are three different *shapes* of light rather than one lamp in three
+   * colours — what tells a child that a classroom is lit differently from a
+   * shop is the silhouette before it is the hue.
+   */
+  test("each room is lit the way that room is lit", () => {
+    const kinds = (room: string) =>
+      [...new Set(roomLights(readJson<InteriorSidecar>(room)).map((light) => light.kind))].sort();
+    expect(kinds("cottage")).toEqual([LightKind.Fire]);
+    expect(kinds("townhouse")).toEqual([LightKind.Fire]);
+    expect(kinds("barn")).toEqual([LightKind.Lamp]);
+    expect(kinds("schoolhouse")).toEqual([LightKind.Electric]);
+    expect(kinds("tower")).toEqual([LightKind.Orb]);
+  });
+
+  // The hold has no business being lit and the dome is the one room in the
+  // game meant to be dim, because it is where somebody looks at the sky from.
+  test("and two of them are dark on purpose", () => {
+    expect(roomLights(readJson<InteriorSidecar>("ship"))).toEqual([]);
+    expect(roomLights(readJson<InteriorSidecar>("observatory"))).toEqual([]);
+  });
+
+  /**
+   * A kind this game has not learned is dropped rather than drawn in some
+   * default colour. A generator that learns to draw a candle should not have
+   * the game guessing what a candle looks like lit.
+   */
+  test("a light this game does not know is not drawn", () => {
+    const made = room({
+      furniture: [
+        { name: "candle", cell: [2, 2], blocks: false, light: "candle" },
+        { name: "fireplace", cell: [1, 1], blocks: true, light: "fire" },
+      ],
+    });
+    expect(roomLights(made).map((light) => light.kind)).toEqual([LightKind.Fire]);
+  });
+
+  // `[row, col]`, which is the sidecar's order and the wrong way round from
+  // every function that takes one.
+  test("cells come out the way round the rest of the game wants them", () => {
+    const made = room({
+      furniture: [{ name: "orb", cell: [5, 2], blocks: false, light: "orb" }],
+    });
+    expect(roomLights(made)[0]?.cell).toEqual({ col: 2, row: 5 });
+  });
+
+  test("the hearth is one of these now, and still answers on its own", () => {
+    expect(hearthCell(readJson<InteriorSidecar>("cottage"))).not.toBeNull();
+    // A shop has lamps and no fire, and that is what keeps its windows dark
+    // from the road: a lit shop is a shop somebody is standing in.
+    expect(roomLights(readJson<InteriorSidecar>("barn")).length).toBeGreaterThan(0);
+    expect(hearthCell(readJson<InteriorSidecar>("barn"))).toBeNull();
+  });
+});
+
+describe("a light breathing", () => {
+  test("a thing that does not move is exactly at full, not nearly", () => {
+    for (const at of [0, 137, 5000]) expect(lightBreath(at, 900, 0)).toBe(1);
+    expect(lightBreath(500, 0, 0.3)).toBe(1);
+  });
+
+  test("it stays between its dimmest and full", () => {
+    for (let at = 0; at < 6000; at += 37) {
+      const breath = lightBreath(at, 2600, 0.3);
+      expect(breath).toBeLessThanOrEqual(1);
+      expect(breath).toBeGreaterThanOrEqual(1 - 0.3 - 1e-9);
+    }
+  });
+
+  // A cosine rather than a ramp, so it turns round smoothly at both ends: a
+  // light that arrived at its brightest and set off back would tick.
+  test("it is brightest at the top of the cycle and dimmest halfway", () => {
+    expect(lightBreath(0, 1000, 0.4)).toBeCloseTo(1, 6);
+    expect(lightBreath(1000, 1000, 0.4)).toBeCloseTo(1, 6);
+    expect(lightBreath(500, 1000, 0.4)).toBeCloseTo(0.6, 6);
   });
 });

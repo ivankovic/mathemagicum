@@ -180,7 +180,19 @@ export interface InteriorSidecar {
   wall_rise_px: number;
   door_cell: readonly [number, number];
   blocked_cells: readonly (readonly [number, number])[];
-  furniture: readonly { name: string; cell: readonly [number, number]; blocks: boolean }[];
+  furniture: readonly {
+    name: string;
+    cell: readonly [number, number];
+    blocks: boolean;
+    /**
+     * What kind of light this piece gives off, if it gives any.
+     *
+     * The kind rather than a colour, because how a light behaves is not only
+     * what colour it is — a fire flickers, an orb breathes, an electric lamp
+     * does neither. See `LightKind`.
+     */
+    light?: string;
+  }[];
   /**
    * Which columns of the north wall a window takes up.
    *

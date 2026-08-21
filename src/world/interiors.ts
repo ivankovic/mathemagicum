@@ -58,6 +58,75 @@ export function wallHangingCell(sidecar: InteriorSidecar): GridPoint {
 }
 
 /**
+ * The kinds of light a room can be lit by.
+ *
+ * Four, and they are four different *shapes* of light rather than one lamp
+ * in four colours — what tells a child that a classroom is lit differently
+ * from a shop is the silhouette before it is the hue. The generator draws
+ * them and says which is which; this side decides how each behaves after
+ * dark, which is a fact about the night rather than about the picture.
+ */
+export const LightKind = {
+  /** A hearth. Warm, and it moves with the flame. */
+  Fire: "fire",
+  /** A bracket lantern on a shop wall: a flame behind glass, so also warm. */
+  Lamp: "lamp",
+  /** A tube in a metal fitting, in the school. Cold, and perfectly steady. */
+  Electric: "electric",
+  /** A thing floating in the tower with no business being there. */
+  Orb: "orb",
+} as const;
+
+export type LightKind = (typeof LightKind)[keyof typeof LightKind];
+
+export interface RoomLight {
+  readonly kind: LightKind;
+  readonly cell: GridPoint;
+}
+
+const KINDS = new Set<string>(Object.values(LightKind));
+
+/**
+ * How bright a light is *this instant*, as a fraction of its full strength.
+ *
+ * A cosine, so it turns round smoothly at both ends rather than arriving at
+ * its brightest and setting off back immediately — a light that ramped
+ * linearly would tick. `depth` is how far it dims at the bottom of the
+ * breath: zero for a thing that does not move at all, which is the electric
+ * lamp and is why this returns exactly one for it rather than very nearly
+ * one.
+ */
+export function lightBreath(elapsedMs: number, periodMs: number, depth: number): number {
+  if (depth <= 0 || periodMs <= 0) return 1;
+  return 1 - (depth * (1 - Math.cos((elapsedMs / periodMs) * Math.PI * 2))) / 2;
+}
+
+/**
+ * Everything in a room that gives off light, and what kind each is.
+ *
+ * Read off the furniture rather than written down per room, for the reason
+ * `wallHangingCell` is: where a hearth and a lamp are is a fact about the
+ * picture, and a coordinate typed in here would go on being right only until
+ * somebody rearranged the room.
+ *
+ * A kind this game does not know is dropped rather than drawn in some
+ * default colour. A generator that learns to draw a candle should not have
+ * the game guessing what a candle looks like lit.
+ */
+export function roomLights(sidecar: InteriorSidecar): readonly RoomLight[] {
+  const lights: RoomLight[] = [];
+  for (const piece of sidecar.furniture ?? []) {
+    if (!piece.light || !KINDS.has(piece.light)) continue;
+    // `[row, col]`, as everywhere in a sidecar.
+    lights.push({
+      kind: piece.light as LightKind,
+      cell: { col: piece.cell[1], row: piece.cell[0] },
+    });
+  }
+  return lights;
+}
+
+/**
  * Where the fire is in a room that has one, or nothing.
  *
  * Two of the seven rooms have a fireplace — the cottage and the townhouse,
@@ -65,16 +134,12 @@ export function wallHangingCell(sidecar: InteriorSidecar): GridPoint {
  * the only rooms with more than one frame, because a fire is the one thing
  * in a room that moves.
  *
- * Read off the furniture rather than written down per room, for the reason
- * `wallHangingCell` is: where a bookshelf and a hearth stand is a fact about
- * the picture, and a coordinate typed in here would go on being right only
- * until somebody rearranged the room.
+ * Kept as its own question after `roomLights` was added, because a *fire* is
+ * what lights a house's windows from the road. A shop with its lamps on is
+ * a shop somebody is standing in; it is not a lit street.
  */
 export function hearthCell(sidecar: InteriorSidecar): GridPoint | null {
-  const fire = (sidecar.furniture ?? []).find((piece) => piece.name === "fireplace");
-  if (!fire) return null;
-  // `[row, col]`, as everywhere in a sidecar.
-  return { col: fire.cell[1], row: fire.cell[0] };
+  return roomLights(sidecar).find((light) => light.kind === LightKind.Fire)?.cell ?? null;
 }
 
 export function interiorSheetKey(room: string): string {

@@ -1535,12 +1535,39 @@ them against each other in both directions — a fireplace with one frame is a
 fire that does not burn, and eight frames with no fireplace is something
 moving that the game cannot find to light.
 
+**And every room is lit the way that room is lit.** A house has a fire; the
+store has bracket lanterns on the wall, a flame behind glass; the school has
+a tube in a metal fitting, in the chalk white, because it is the one room
+here lit to be *worked* in; and the tower has orbs floating over the floor.
+Every store in the game is the barn's room, so that is the harbour's and the
+city's lighting as well as the village's.
+
+Three different **shapes** of light rather than one lamp in three colours.
+What tells a child that a classroom is lit differently from a shop is the
+silhouette before it is the hue — and the behaviour follows: the fire moves
+with its own flame, the lantern wavers a little, the orbs breathe slowly, and
+the electric lamp does not move at all, because nothing electric does.
+
+The ship's hold and the observatory's dome stay dark, and that is a decision
+rather than an omission. A hold has no business being lit, and the dome is
+the one room in the game meant to be dim, because it is where somebody looks
+at the sky from.
+
+The generator says which piece of furniture gives light and what *kind* it
+is; this side decides what a kind looks like after dark. So a room somebody
+relights needs nothing changed here — and a kind the game has not learned is
+drawn as nothing at all rather than guessed at in some default colour.
+
+None of the three new fixtures animates. A lamp that is on is a lamp that is
+on, and moving the *glow* over an orb costs nothing and keeps three of the
+seven rooms at a single frame instead of eight nearly identical ones.
+
 **And the village lights up from the inside.** A house with a fire in it has
 lit windows after dark — the same warm colour as the hearth, because it is
 the same fire. What decides whether a building lights is whether the room
-behind its door has a fireplace, which keeps the barn dark, keeps the shops
-dark, and cannot fall out of step with the hearths because it is the same
-question asked once.
+behind its door has **a fire** specifically — not merely some light. That
+keeps the shops and the school dark from the road, which is right: a lit shop
+is a shop somebody is standing in, not a lit street.
 
 Not all at once. Each house has its own moment in the dusk, stable per world
 from a hash of its name — a square of windows coming on together reads as a
