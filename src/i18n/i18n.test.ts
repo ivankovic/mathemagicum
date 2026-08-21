@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { LANGUAGES, Language } from "../settings";
 import { INTRO_BEATS, IntroBeat } from "../ui/intro";
+import { AnimalKind } from "../world/animals";
 import { FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import { INTERIOR_ROOMS } from "../world/interiors";
 import { PLANT_STAGES, PLANT_TYPES, PlantStage, PlantType } from "../world/plants";
@@ -31,6 +32,7 @@ function sample(p: Phrases): Record<string, string> {
     stage: p.stage(PlantStage.Mature),
     terrain: p.terrain("grass"),
     room: p.room("barn"),
+    animal: p.animal(AnimalKind.Chicken).bare,
     count: p.count(carrot, 3),
 
     nothingGrowsIndoors: p.nothingGrowsIndoors,
@@ -69,6 +71,10 @@ function sample(p: Phrases): Record<string, string> {
     groveAsks: p.groveAsks({ task: "growing", standing: 0, ripe: 4, squares: 12 }),
     groveTaskTitle: p.groveTaskTitle,
     groveBargain: p.groveBargain,
+    animalAsks: p.animalAsks(AnimalKind.Chicken, carrot),
+    animalFed: p.animalFed(AnimalKind.Rabbit, carrot),
+    animalFull: p.animalFull(AnimalKind.Duck),
+    animalTooFar: p.animalTooFar(AnimalKind.Cat),
     groveLessonTitle: p.groveLessonTitle,
     groveRune: p.groveRune,
     groveRows: p.groveRows(4, 6),

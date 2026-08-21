@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import type { AnimalKind } from "../world/animals";
 import type { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
 import type { PlantStage, PlantType } from "../world/plants";
@@ -49,6 +50,8 @@ export interface Phrases {
   // --- names ---------------------------------------------------------------
 
   plant: (plant: PlantType) => Noun;
+  /** A chicken, a duck, a cat or a rabbit, in the forms a sentence needs. */
+  animal: (kind: AnimalKind) => Noun;
   fixture: (fixture: FixtureType) => Noun;
   item: (item: ItemType) => Noun;
   stage: (stage: PlantStage) => string;
@@ -208,6 +211,19 @@ export interface Phrases {
    * what it is for, which is the half a child cannot work out for themselves.
    */
   groveBargain: string;
+  /** What an animal is hoping for, when you have not got it. */
+  animalAsks: (kind: AnimalKind, wants: PlantType) => string;
+  /** Handing it over. */
+  animalFed: (kind: AnimalKind, wants: PlantType) => string;
+  /**
+   * It has had something already.
+   *
+   * Says that it will be hungry again, because being fed is not written down
+   * anywhere — a child who fed four chickens and came back to four bubbles
+   * would otherwise read it as the game having lost their afternoon.
+   */
+  animalFull: (kind: AnimalKind) => string;
+  animalTooFar: (kind: AnimalKind) => string;
   groveLessonTitle: string;
   /** One idea per page, in the order the tree shows them. */
   groveRune: string;

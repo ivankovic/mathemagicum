@@ -443,6 +443,22 @@ function mixTint(dusk: number): number {
 const PHASE_STEPS = 16;
 
 const NPC_MOVE_DURATION_MS = 500;
+
+/**
+ * The cloud an animal thinks in, and where the food goes in it.
+ *
+ * The same numbers the generator drew it to, and they have to agree: the
+ * bubble ships with a hole left in it for a crop, and an icon laid anywhere
+ * else is an icon overlapping the question mark. See `render_thought_bubble`
+ * in the generator's `ui.py`.
+ */
+const BUBBLE_W = 46;
+const BUBBLE_H = 38;
+const BUBBLE_SLOT = 16;
+const BUBBLE_SLOT_X = 5;
+const BUBBLE_SLOT_Y = 8;
+/** How far above the animal's head the tail's last puff floats. */
+const BUBBLE_LIFT = 2;
 /**
  * How often an animal takes a step, and how long the step takes.
  *
@@ -559,6 +575,19 @@ const STEP_DIRECTIONS: readonly Direction[] = [
   { dCol: -1, dRow: 0 },
   { dCol: 1, dRow: 0 },
 ];
+
+/**
+ * A chicken, and what it is hoping somebody brings it.
+ *
+ * An NPC with two extra things: the crop it is asking for, and the cloud it
+ * is asking in. `wants` goes to null when it has been fed, which is also
+ * what takes the bubble away.
+ */
+interface AnimalRuntime extends NpcRuntime {
+  kind: AnimalKind;
+  wants: PlantType | null;
+  bubble?: Phaser.GameObjects.Container;
+}
 
 interface NpcRuntime {
   id: string;
@@ -909,12 +938,12 @@ export class GameScene extends Phaser.Scene {
    * The village's chickens, ducks, cats and rabbits.
    *
    * A list of their own rather than more entries in `npcs`, because the two
-   * differ in exactly one way that matters: nothing happens when you tap an
-   * animal. Keeping them apart is what stops a stray tap looking for
-   * dialogue that does not exist — and it means every "who is near the
-   * player" check does not have to remember to skip the poultry.
+   * differ in what a tap on them means: a person talks, and an animal is
+   * hungry. Keeping them apart means every "who is near the player" check
+   * does not have to remember to skip the poultry, and the thought bubble
+   * has one list to follow.
    */
-  private animals: NpcRuntime[] = [];
+  private animals: AnimalRuntime[] = [];
   // Who the village put where, kept because an indoor NPC is not spawned
   // until the player walks into their building.
   private villageNpcs: readonly VillageNpcSpec[] = [];
@@ -989,6 +1018,9 @@ export class GameScene extends Phaser.Scene {
     this.spellRng = createRng(seed);
     this.shopRng = createRng(seed ^ 0x5f37_1e2b);
     if (this.dev.coins > 0) this.session.purse.earn(this.dev.coins);
+    if (this.dev.crops > 0) {
+      for (const plant of PLANT_TYPES) this.inventory.add(plant, this.dev.crops);
+    }
 
     const bounds = computeMapScreenBounds(this.grid.width, this.grid.height);
     this.originX = -bounds.minX;
@@ -1281,6 +1313,15 @@ export class GameScene extends Phaser.Scene {
           lit: lampsLit(this.worldGrid, observatory),
         };
       },
+      animals: () =>
+        this.animals.map((animal) => ({
+          id: animal.id,
+          kind: animal.kind,
+          col: animal.col,
+          row: animal.row,
+          wants: animal.wants,
+          bubble: animal.bubble !== undefined,
+        })),
       portalMarks: () => this.portalPanel?.marks() ?? {},
       portal: () => {
         const journey = this.portalPanel?.journey;
@@ -4397,9 +4438,16 @@ export class GameScene extends Phaser.Scene {
    * chickens end up in a row against a fence.
    */
   private spawnAnimals(well: PlacedObject, buildings: readonly PlacedObject[], rng: Rng): void {
+    const taken = new Set<string>();
     for (const spot of animalSpots(well, buildings, rng)) {
       const { col, row } = spot.at;
       if (!this.grid.inBounds(col, row) || !this.grid.isPassable(col, row)) continue;
+      // One to a tile. Two suggestions can land on the same cell, and two
+      // animals standing in the same place used to be a curiosity nobody
+      // noticed — it is two thought bubbles drawn exactly on top of each
+      // other now, and only one of them can be tapped.
+      if (taken.has(tileKey(col, row))) continue;
+      taken.add(tileKey(col, row));
       const feet = this.toFeet(col, row);
       const sprite = this.world(
         this.add
@@ -4407,8 +4455,9 @@ export class GameScene extends Phaser.Scene {
           .setOrigin(0.5, 1)
           .setDepth(feet.y),
       );
-      this.animals.push({
+      const animal: AnimalRuntime = {
         id: `${spot.kind}-${this.animals.length}`,
+        kind: spot.kind,
         character: animalSheetKey(spot.kind),
         facing: Facing.Down,
         homeCol: col,
@@ -4421,8 +4470,102 @@ export class GameScene extends Phaser.Scene {
         sprite,
         isMoving: false,
         nextStepAt: 0,
-      });
+        wants: spot.wants,
+      };
+      sprite.setInteractive({ useHandCursor: true });
+      sprite.on("pointerdown", () => this.feedAnimal(animal));
+      this.animals.push(animal);
+      this.raiseBubble(animal);
     }
+  }
+
+  /**
+   * The cloud over an animal's head, and the crop in it.
+   *
+   * A container of two: the bubble the generator drew, with a slot left
+   * empty in it, and one crop icon laid into that slot. The icon is drawn at
+   * thirty-two because it is a button under a thumb everywhere else in the
+   * game; in here it is scaled to the slot, because a chicken is eighteen
+   * pixels tall and the food has to fit in what it is thinking.
+   */
+  private raiseBubble(animal: AnimalRuntime): void {
+    animal.bubble?.destroy();
+    animal.bubble = undefined;
+    const wants = animal.wants;
+    if (!wants) return;
+    const cloud = this.add.image(0, 0, uiTextureKey(UiAsset.ThoughtBubble)).setOrigin(0, 1);
+    const icon = this.add
+      .image(
+        BUBBLE_SLOT_X + BUBBLE_SLOT / 2,
+        -BUBBLE_H + BUBBLE_SLOT_Y + BUBBLE_SLOT / 2,
+        uiTextureKey(cropIcon(wants)),
+      )
+      .setDisplaySize(BUBBLE_SLOT, BUBBLE_SLOT);
+    const bubble = this.world(this.add.container(0, 0, [cloud, icon]));
+    animal.bubble = bubble;
+    this.placeBubble(animal);
+  }
+
+  /**
+   * Put the cloud where its animal is, this frame.
+   *
+   * Every frame rather than on each completed step: an animal spends most of
+   * its time part-way between two cells, and a bubble that only moved when
+   * the step finished would slide up behind its owner and then jump.
+   *
+   * Depth is the animal's own plus a hair, so the cloud is over the chicken
+   * it belongs to and still behind anything standing in front of it.
+   */
+  private placeBubble(animal: AnimalRuntime): void {
+    const bubble = animal.bubble;
+    if (!bubble) return;
+    bubble.setPosition(
+      animal.sprite.x - BUBBLE_W / 2,
+      animal.sprite.y - animal.sprite.displayHeight - BUBBLE_LIFT,
+    );
+    bubble.setDepth(animal.sprite.depth + 0.5);
+  }
+
+  /**
+   * A tap on an animal: hand over what it is asking for, if you have it.
+   *
+   * The reach is `stepsToSpeak`, the same one a person answers on, diagonals
+   * included — a chicken standing at your corner is a chicken you can hand a
+   * carrot to, and refusing it would be a rule with no reason a child could
+   * see.
+   *
+   * **Being fed is not written down anywhere.** Which crop an animal wants
+   * comes back out of the world seed on every load, so a fed chicken is
+   * hungry again next time — which the message says, because a child who
+   * fed four of them and came back to four bubbles would otherwise read it
+   * as the game having lost their afternoon.
+   */
+  private feedAnimal(animal: AnimalRuntime): void {
+    if (this.modalOpen || this.marking) return;
+    // Indoors the whole world layer is hidden, but a hidden sprite can still
+    // be under a pointer as far as Phaser is concerned — and a chicken four
+    // hundred tiles away answering a tap on somebody's floor would be a
+    // puzzle with no visible cause.
+    if (this.session.indoors) return;
+    if (stepsToSpeak(this.session.tile, { col: animal.col, row: animal.row }) > 1) {
+      this.setMessage(this.words.animalTooFar(animal.kind));
+      return;
+    }
+    const wants = animal.wants;
+    if (!wants) {
+      this.setMessage(this.words.animalFull(animal.kind));
+      return;
+    }
+    if (this.inventory.count(wants) <= 0) {
+      this.setMessage(this.words.animalAsks(animal.kind, wants));
+      return;
+    }
+    this.inventory.remove(wants, 1);
+    animal.wants = null;
+    this.raiseBubble(animal);
+    this.refreshCarried();
+    this.playGesture(PLANT); // she bends to hand it over, same as planting
+    this.setMessage(this.words.animalFed(animal.kind, wants));
   }
 
   private spawnPlacedObjects(objects: readonly PlacedObject[]): void {
@@ -4971,6 +5114,10 @@ export class GameScene extends Phaser.Scene {
    * whole of why they are a separate list rather than more villagers.
    */
   private updateAnimals(now: number): void {
+    // The clouds follow their owners whatever else is happening, including
+    // while the animals are frozen for a test and while one is part-way
+    // through a step.
+    for (const animal of this.animals) this.placeBubble(animal);
     if (this.dev.freezeNpcs) return;
     for (const animal of this.animals) {
       if (animal.isMoving || now < animal.nextStepAt) continue;

@@ -72,6 +72,11 @@
       "width": 32,
       "height": 32
     },
+    "thought-bubble": {
+      "file": "thought_bubble.png",
+      "width": 46,
+      "height": 38
+    },
     "item-fence": {
       "file": "item_fence.png",
       "width": 32,

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { PlacedObject } from "./objects";
+import { PlantType } from "./plants";
 import type { Rng } from "./rng";
 import { randInt } from "./rng";
 import type { GridPoint } from "./topdown";
@@ -16,11 +17,18 @@ import type { GridPoint } from "./topdown";
  * exist is the half that answers what was actually asked.
  *
  * They wander like villagers do, because they are the same problem: a thing
- * that walks a short circuit near where it belongs. What is different is
- * that nothing happens when you tap one. A creature that answered a tap with
- * silence would be worse than one that plainly is not for tapping, so they
- * are not interactive at all, and the design's own note about the villagers
- * with nothing behind them applies here twice over.
+ * that walks a short circuit near where it belongs.
+ *
+ * **Each of them is hungry for one thing.** That is the whole of it: a
+ * thought bubble over its head with a crop in it and a question mark, and a
+ * tap hands the crop over if you are carrying it. Nothing is counted and no
+ * arithmetic is asked, which is deliberate — what a child gets out of it is
+ * a reason to walk over and a reason to have grown a second kind of crop.
+ *
+ * They used to do nothing at all, on the argument that a creature which
+ * answered a tap with silence is worse than one that plainly is not for
+ * tapping. The bubble is what makes the tap obviously *offered* rather than
+ * guessed at, which is the half that was missing.
  */
 
 export const AnimalKind = {
@@ -59,9 +67,38 @@ export const ANIMAL_RANGE: Record<AnimalKind, number> = {
   [AnimalKind.Rabbit]: 4,
 };
 
+/**
+ * What each kind will ask for.
+ *
+ * Storybook menus rather than a zoologist's: what matters is that a child can
+ * believe it, and that a rabbit asking for a carrot is the one pairing every
+ * picture book has already taught them. Each kind has more than one so that
+ * two chickens in the same village are not the same errand.
+ *
+ * **No cactus anywhere**, and that is a rule about the world rather than
+ * about diet: a cactus only grows on sand, the village has none, and an
+ * animal asking for something you cannot grow within a day's walk is a
+ * bubble that never clears.
+ */
+export const ANIMAL_MENU: Record<AnimalKind, readonly PlantType[]> = {
+  [AnimalKind.Chicken]: [PlantType.Wheat, PlantType.Sunflower, PlantType.Tomato],
+  [AnimalKind.Duck]: [PlantType.Wheat, PlantType.Sunflower, PlantType.Carrot],
+  [AnimalKind.Rabbit]: [PlantType.Carrot, PlantType.Wheat, PlantType.Sunflower],
+  [AnimalKind.Cat]: [PlantType.Tomato, PlantType.Pepper, PlantType.Carrot],
+};
+
 export interface AnimalSpot {
   readonly kind: AnimalKind;
   readonly at: GridPoint;
+  /**
+   * The crop this one is hungry for.
+   *
+   * Drawn here rather than in the scene, so it is a pure function of the
+   * layout and the seed like the position is: the same village grows the
+   * same animals wanting the same things, and the game needs to record
+   * nothing to have that survive a reload.
+   */
+  readonly wants: PlantType;
 }
 
 /**
@@ -108,12 +145,14 @@ export function animalSpots(
           ? { col: well.col, row: well.row }
           : nearestAnchor(anchors, index);
       const reach = kind === AnimalKind.Rabbit ? ANIMAL_RANGE[kind] * 4 : NEAR;
+      const menu = ANIMAL_MENU[kind];
       spots.push({
         kind,
         at: {
           col: near.col + randInt(rng, -reach, reach),
           row: near.row + randInt(rng, -reach, reach),
         },
+        wants: menu[randInt(rng, 0, menu.length - 1)] as PlantType,
       });
     }
   }

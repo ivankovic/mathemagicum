@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { AnimalKind } from "../world/animals";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
 import { PlantStage, PlantType } from "../world/plants";
@@ -56,6 +57,13 @@ const PLANTS: Record<PlantType, Noun> = {
   [PlantType.Pepper]: noun({ bare: "Paprika", gender: "f", plural: "Paprika" }),
   // Stoffname: man erntet Weizen, nicht Weizens.
   [PlantType.Wheat]: noun({ bare: "Weizen", gender: "m", plural: "Weizen" }),
+};
+
+const ANIMALS: Record<AnimalKind, Noun> = {
+  [AnimalKind.Chicken]: noun({ bare: "Huhn", gender: "n", plural: "Hühner" }),
+  [AnimalKind.Duck]: noun({ bare: "Ente", gender: "f", plural: "Enten" }),
+  [AnimalKind.Cat]: noun({ bare: "Katze", gender: "f", plural: "Katzen" }),
+  [AnimalKind.Rabbit]: noun({ bare: "Kaninchen", gender: "n", plural: "Kaninchen" }),
 };
 
 const FIXTURES: Record<FixtureType, Noun> = {
@@ -168,6 +176,7 @@ function item(item: ItemType): Noun {
 export const DE: Phrases = {
   plant: (plant) => PLANTS[plant] ?? item(plant),
   fixture: (fixture) => FIXTURES[fixture] ?? item(fixture),
+  animal: (kind) => ANIMALS[kind] ?? item(kind as never),
   item,
   stage: (stage) => STAGES[stage] ?? stage,
   terrain: (terrain) => TERRAIN[terrain] ?? terrain,
@@ -263,6 +272,19 @@ export const DE: Phrases = {
         : `Füll mein Beet: ${ripe} von ${squares} Kästchen sind reif.`,
   groveTaskTitle: "Das Beet des Baums",
   groveBargain: "Tu das, und die sechs Punkte gehören dir.",
+  // Tier und Futter stehen beide im Nominativ — den Akkusativ mit bestimmtem
+  // Artikel („den Weizen") kennt `Noun` nicht, und ein Satz, der ihn braucht,
+  // wäre ein Satz, der für ein Geschlecht falsch ist.
+  animalAsks: (kind, wants) =>
+    // „nichts davon" statt „keine": Weizen ist ein Stoffname, und „keine
+    // Weizen" wäre für genau eine der Feldfrüchte falsch.
+    cap(
+      `${ANIMALS[kind]?.definite} hätte gern ${PLANTS[wants]?.plural} — du hast nichts davon dabei`,
+    ),
+  animalFed: (kind, wants) =>
+    cap(`${ANIMALS[kind]?.definite} ist zufrieden — ${PLANTS[wants]?.definite} ist weg`),
+  animalFull: (kind) => cap(`${ANIMALS[kind]?.definite} ist satt — aber nicht für lange`),
+  animalTooFar: (kind) => cap(`${ANIMALS[kind]?.definite} ist zu weit weg — geh näher heran`),
   groveLessonTitle: "Reihen und Spalten",
   groveRune:
     "Die sechs Punkte in deinem Zauberbuch bepflanzen ein ganzes Beet auf einmal. Sag, wie viele Setzlinge hineinpassen, dann kommen sie alle zusammen in die Erde.",

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { AnimalKind } from "../world/animals";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
 import { PlantStage, PlantType } from "../world/plants";
@@ -35,6 +36,13 @@ const PLANTS: Record<PlantType, Noun> = {
   // A mass noun: you grow wheat, not wheats, and "3 wheat" is what a person
   // says. The plural field carries the same word rather than an invented one.
   [PlantType.Wheat]: noun("wheat", "wheat"),
+};
+
+const ANIMALS: Record<AnimalKind, Noun> = {
+  [AnimalKind.Chicken]: noun("chicken"),
+  [AnimalKind.Duck]: noun("duck"),
+  [AnimalKind.Cat]: noun("cat"),
+  [AnimalKind.Rabbit]: noun("rabbit"),
 };
 
 const FIXTURES: Record<FixtureType, Noun> = {
@@ -119,6 +127,7 @@ function item(item: ItemType): Noun {
 export const EN: Phrases = {
   plant: (plant) => PLANTS[plant] ?? noun(plant),
   fixture: (fixture) => FIXTURES[fixture] ?? noun(fixture),
+  animal: (kind) => ANIMALS[kind] ?? noun(kind),
   item,
   stage: (stage) => STAGES[stage] ?? stage,
   terrain: (terrain) => TERRAIN[terrain] ?? terrain,
@@ -213,6 +222,14 @@ export const EN: Phrases = {
         : `Fill my bed: ${ripe} of ${squares} squares are ripe.`,
   groveTaskTitle: "The tree's bed",
   groveBargain: "Do that and the six dots are yours.",
+  // The plural and the definite, never "a": one of the crops is wheat, and
+  // "a wheat" is the sort of thing only a template writes.
+  animalAsks: (kind, wants) =>
+    `The ${ANIMALS[kind]?.bare} is hoping for ${PLANTS[wants]?.plural} — you have none`,
+  animalFed: (kind, wants) =>
+    `The ${ANIMALS[kind]?.bare} is happy — the ${PLANTS[wants]?.bare} is gone`,
+  animalFull: (kind) => `The ${ANIMALS[kind]?.bare} has had enough — but not for long`,
+  animalTooFar: (kind) => `The ${ANIMALS[kind]?.bare} is too far away — step up to it first`,
   groveLessonTitle: "Rows and columns",
   groveRune:
     "The six dots in your spellbook plant a whole patch at once. Say how many seedlings it will hold, and they all go in together.",

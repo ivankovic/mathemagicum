@@ -8,6 +8,7 @@ import duckSidecar from "../../public/assets/animals/duck.json";
 import rabbitSidecar from "../../public/assets/animals/rabbit.json";
 import {
   ANIMAL_KINDS,
+  ANIMAL_MENU,
   ANIMAL_RANGE,
   AnimalKind,
   animalSheetKey,
@@ -15,6 +16,7 @@ import {
   animalSpots,
 } from "./animals";
 import type { PlacedObject } from "./objects";
+import { PLANT_DEFINITIONS, PlantType } from "./plants";
 import { createRng } from "./rng";
 import type { CharacterSidecar } from "./spriteSidecar";
 
@@ -158,5 +160,51 @@ describe("how far they stray", () => {
 
   test("cats go further than birds, because cats go further than birds", () => {
     expect(ANIMAL_RANGE[AnimalKind.Cat]).toBeGreaterThan(ANIMAL_RANGE[AnimalKind.Chicken]);
+  });
+});
+
+describe("what they are hungry for", () => {
+  /**
+   * A cactus only grows on sand, the village has none, and an animal asking
+   * for one is a bubble that never clears. Every other crop is on somebody's
+   * menu, or it is a crop a child can grow and never be asked for.
+   */
+  test("nobody asks for a cactus, and everything else is asked for", () => {
+    const asked = new Set(Object.values(ANIMAL_MENU).flat());
+    expect(asked.has(PlantType.Cactus)).toBe(false);
+    for (const plant of Object.keys(PLANT_DEFINITIONS) as PlantType[]) {
+      if (plant === PlantType.Cactus) continue;
+      expect({ plant, asked: asked.has(plant) }).toEqual({ plant, asked: true });
+    }
+  });
+
+  // More than one, so two chickens in the same village are not the same
+  // errand — and a rabbit's list opens with the one pairing every picture
+  // book has already taught a child.
+  test("every kind has a menu, and a rabbit's starts with a carrot", () => {
+    for (const kind of ANIMAL_KINDS) {
+      expect({ kind, choices: ANIMAL_MENU[kind].length > 1 }).toEqual({ kind, choices: true });
+      expect(new Set(ANIMAL_MENU[kind]).size).toBe(ANIMAL_MENU[kind].length);
+    }
+    expect(ANIMAL_MENU[AnimalKind.Rabbit][0]).toBe(PlantType.Carrot);
+  });
+
+  /**
+   * Drawn from the seed with the position, so the game records nothing and a
+   * reload brings back the same village wanting the same things. A craving
+   * picked in the scene would be a new one every time the page was opened.
+   */
+  test("what each one wants comes out of the seed, from its own kind's menu", () => {
+    const spots = animalSpots(WELL, HOUSES, createRng(9));
+    const again = animalSpots(WELL, HOUSES, createRng(9));
+    expect(spots.map((spot) => spot.wants)).toEqual(again.map((spot) => spot.wants));
+    for (const spot of spots) {
+      expect({ kind: spot.kind, onMenu: ANIMAL_MENU[spot.kind].includes(spot.wants) }).toEqual({
+        kind: spot.kind,
+        onMenu: true,
+      });
+    }
+    // And they are not all the same, or the village is one errand repeated.
+    expect(new Set(spots.map((spot) => spot.wants)).size).toBeGreaterThan(1);
   });
 });

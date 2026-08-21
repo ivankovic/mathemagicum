@@ -57,6 +57,14 @@ export const UiAsset = {
    * is a sky.
    */
   StarChart: "star-chart",
+  /**
+   * The cloud an animal thinks in: a slot for a food, and a question mark.
+   *
+   * Interface art, but drawn into the *world* layer rather than over it — it
+   * belongs to a chicken and has to slide with the camera and sort against
+   * what is standing in front of it.
+   */
+  ThoughtBubble: "thought-bubble",
 } as const;
 
 export type UiAsset = (typeof UiAsset)[keyof typeof UiAsset];

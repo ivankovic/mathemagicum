@@ -926,19 +926,41 @@ changed colour between worlds would be a landmark that is not one.
 
 ### The animals
 
-**Creatures to see, not livestock to keep.** Chickens, ducks, cats and
-rabbits, asked for by the children who play it. Nothing feeds them, nothing
-counts them, and none of them is the subject of any arithmetic — that is
-deliberate. Animals to look after is a whole system, needing a pen, feed that
-comes from crops and something countable they produce; animals that simply
-exist is the half that answers what was actually asked, and it is the half
-worth building first, before there is anything to watch children do with them.
+**Creatures to see, and now to feed.** Chickens, ducks, cats and rabbits,
+asked for by the children who play it. Each one is hungry for one crop: a
+thought bubble over its head with that crop in it and a question mark, and a
+tap hands it over if you are carrying it.
 
-**Nothing happens when you tap one**, and they are kept in a list of their own
-so that stays true by construction. A creature that answered a tap with
-silence would be worse than one that plainly is not for tapping — the same
-note the design already makes about the villagers with nothing behind them,
-which applies here twice over.
+**Nothing is counted and no arithmetic is asked**, which is deliberate.
+Animals to look after is a whole system — a pen, feed that has to be grown to
+a schedule, something countable they produce — and what a child gets out of
+this is smaller and enough: a reason to walk over, and a reason to have grown
+a second kind of crop. The bigger system is still not built, and this does not
+prejudge it.
+
+**The bubble is why the tap is offered rather than guessed at.** They used to
+do nothing at all, on the argument that a creature which answers a tap with
+silence is worse than one that plainly is not for tapping. That argument was
+right and the fix was not to remove the tap but to say, on screen and without
+words, that there is one — which is what a cloud with a carrot in it does.
+
+**Each kind has a menu and draws from it**, so two chickens in the same
+village are not the same errand. A rabbit's opens with a carrot, because that
+is the one pairing every picture book has already taught. Nobody asks for a
+cactus: it only grows on sand, the village has none, and an animal asking for
+something you cannot grow within a day's walk is a bubble that never clears.
+
+**What an animal wants comes out of the world seed**, with where it stands, so
+the game records nothing and the same village comes back wanting the same
+things. **Being fed is not recorded**, so a fed animal is hungry again next
+time — and the message says so, because a child who fed four chickens and came
+back to four bubbles would otherwise read it as the game having lost their
+afternoon.
+
+**Nothing is given back**, and that is an open question rather than a
+decision. A crop already has a price in the store, so anything an animal
+handed over would have to be priced against that, and there is no reason yet
+to think a child wants paying for this.
 
 **They are the same problem as a villager at a different size**, so they use
 the same machinery: four facings drawn rather than rotated, right mirrored

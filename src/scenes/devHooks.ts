@@ -34,6 +34,15 @@ export interface DevOptions {
   /** Coins to start with, so a test of the shop need not first farm for them. */
   readonly coins: number;
   /**
+   * Put this many of every crop in the basket.
+   *
+   * For the things a full basket is a precondition of rather than the
+   * subject: feeding an animal what it asked for otherwise means planting
+   * one, growing it through three stages and harvesting it before the test
+   * can begin, which is a test of the garden wearing a test of a chicken.
+   */
+  readonly crops: number;
+  /**
    * Which language the game is being read in, overriding the browser's.
    *
    * Without it a script checking the German half of the game would have to
@@ -133,6 +142,7 @@ const NONE: DevOptions = {
   seed: null,
   freezeNpcs: false,
   coins: 0,
+  crops: 0,
   language: null,
   intro: false,
   reached: [],
@@ -213,6 +223,7 @@ export function parseDevOptions(search: string): DevOptions {
     // wrong in a way nothing tells it about.
     freezeNpcs: params.has("freezeNpcs"),
     coins: Math.max(0, number("coins") ?? 0),
+    crops: Math.max(0, number("crops") ?? 0),
     language: params.get("lang")?.trim() || null,
     intro: params.has("intro"),
     reached: places(params.get("reached")),
@@ -355,6 +366,22 @@ export interface DevHandle {
     posts: readonly { col: number; row: number }[];
     lit: number;
   } | null;
+  /**
+   * Every animal, where it is, and what it is hungry for.
+   *
+   * Which crop a given chicken wants comes out of the world seed, so a
+   * script cannot know it without either generating the world itself or
+   * reading the icon out of a screenshot — and reading the icon is the one
+   * thing a test of the bubble should not depend on.
+   */
+  readonly animals: () => {
+    id: string;
+    kind: string;
+    col: number;
+    row: number;
+    wants: string | null;
+    bubble: boolean;
+  }[];
   /** Where each place's mark sits on screen, so a script can tap one. */
   readonly portalMarks: () => Record<string, { x: number; y: number }>;
   readonly portal: () => {

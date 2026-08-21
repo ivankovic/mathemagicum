@@ -11,6 +11,7 @@ describe("parseDevOptions", () => {
       seed: null,
       freezeNpcs: false,
       coins: 0,
+      crops: 0,
       language: null,
       intro: false,
       reached: [],
@@ -117,6 +118,10 @@ describe("parseDevOptions", () => {
     expect(parseDevOptions("?coins=100").coins).toBe(100);
     expect(parseDevOptions("?coins=-5").coins).toBe(0);
     expect(parseDevOptions("?coins=2.9").coins).toBe(2);
+    // Same clamping for a basketful, which is the other thing a script needs
+    // to be handed rather than to earn.
+    expect(parseDevOptions("?crops=3").crops).toBe(3);
+    expect(parseDevOptions("?crops=-1").crops).toBe(0);
   });
 
   test("several at once", () => {
@@ -124,6 +129,7 @@ describe("parseDevOptions", () => {
       seed: 7,
       freezeNpcs: true,
       coins: 40,
+      crops: 0,
       language: "de",
       intro: false,
       reached: [],
