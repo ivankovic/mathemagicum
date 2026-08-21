@@ -1590,6 +1590,24 @@ from 6,405 to 1,862. The picture is unchanged — checked by rendering the
 densest wood in the world twice, with the culling on and off, and diffing:
 zero differing pixels.
 
+**On the machine it was reported from**, which is a 3840×2160 display at
+scale one driven by an Intel UHD 630: Firefox at full screen went from 41–45
+fps to 52–55, day and night, in the village and in the wood. At 1920×1080 it
+sits at 55–59.
+
+That measurement took a headed browser on the real X display. A headless one
+has no graphics card, rasterises in software, and that cost swamps everything
+else — which is why 300 trees and 8,500 trees came out at the same frame rate
+there, a result that cannot be true and was the clue that the harness was
+measuring itself. The portable number is the quad count, which does not
+depend on having a GPU at all.
+
+**And the card matters.** The reporting machine has a GTX 1060 in it that
+Firefox is not using: `about:support` lists it as GPU #2, `Active: No`, with
+WebGL bound to the integrated Intel. Firefox is installed as a snap, which
+generally cannot reach the NVIDIA driver. Worth knowing before optimising:
+the game is being drawn by an integrated chip pushing eight megapixels.
+
 Hidden trees also stop swaying, which takes them out of the animation work
 without taking them off the list. Only on the change, because pausing
 something already paused is the work this is avoiding.
