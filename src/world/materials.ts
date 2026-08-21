@@ -35,10 +35,6 @@ export type MaterialType = (typeof MaterialType)[keyof typeof MaterialType];
 
 export const MATERIAL_TYPES: readonly MaterialType[] = Object.values(MaterialType);
 
-export function materialIcon(material: MaterialType): string {
-  return `material-${material}`;
-}
-
 /**
  * What one of each kind of scenery is worth, by the generator's own name for
  * it — the same keys `SCENERY_FOR_TERRAIN` maps terrain to.

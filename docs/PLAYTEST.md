@@ -883,8 +883,70 @@ was two bugs, the blocked buildings were not blocked, and the cancelled spell
 was a picture this session had added. That is the argument for reproducing
 before fixing, and it earned its keep three times in one round.
 
-Three of the six were not what they looked like from the outside — the
-rotation was two bugs, the blocked buildings were not blocked, and the
-cancelled spell was a picture this session had added. That is the argument
-for reproducing before fixing, and it earned its keep three times in one
-round.
+---
+
+# Playtest — 2026-08-21, second round
+
+One thing, reported in five words: *the wood and stone icons are missing.*
+
+---
+
+## 1. Wood and stone draw nothing — **fixed**
+
+They were drawn, indexed and shipped. `public/assets/ui/material_wood.png`
+and `material_stone.png` were both on disk, both named in `ui.json`, and
+both correct. Nothing ever loaded them.
+
+`BootScene` loads exactly `UI_ASSETS`, and that list is built by spreading
+the four families of icon that are named rather than listed:
+
+```ts
+export const UI_ASSETS: readonly string[] = [
+  ...Object.values(UiAsset),
+  ...PLANT_TYPES.map(cropIcon),
+  ...PLACEABLE_FIXTURES.map(itemIcon),
+  ...COIN_TIERS.map(coinIcon),
+];
+```
+
+Materials are a fifth family and were never added to it. Three places asked
+for the texture anyway — the basket tray, the shop's rows, and the reward
+that pops up when a tree comes out of the ground — and Phaser draws a
+missing texture rather than refusing, so the failure was silent everywhere.
+
+**Why it was missed.** `materialIcon` was defined in `world/materials.ts`,
+next to *what a cleared conifer is worth*, while `cropIcon`, `itemIcon` and
+`coinIcon` all live in `ui/assets.ts` directly above the list. Putting the
+name of an icon somewhere other than beside the list of icons to load is
+the whole mechanism of the bug, so `materialIcon` moved in beside its three
+siblings.
+
+**Why the tests said nothing.** There were two, and both looked the same
+way: *for every asset in `UI_ASSETS`, is it in `ui.json`, and is the file
+there?* Neither can catch this. The game never asked for the materials, so
+the list it checked was perfectly consistent — the art was the part that
+was orphaned. The missing test looks the other way:
+
+```ts
+expect([...Object.keys(index.assets)].sort()).toEqual([...UI_ASSETS].sort());
+```
+
+An entry in `ui.json` that nothing asks for is now a failure, which makes
+the index and the loader one thing rather than two that agree by habit.
+Confirmed it fails with the fix reverted before keeping it.
+
+**Verified on the canvas, not in a test.** A passing unit test here only
+says a string is in a list. The check put four wood and three stone in the
+basket through the dev handle and photographed the open tray: three log
+ends with a 4 beside them, a grey stone with a 3, and no console errors.
+
+---
+
+## Where this stands
+
+**Fixed.**
+
+The lesson is the one about mirrors. Every list in this game that the
+generator and the game both hold has to be checked from both ends, because
+a one-way check passes exactly when the half you did not write is the half
+that is wrong.

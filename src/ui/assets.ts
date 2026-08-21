@@ -14,6 +14,7 @@
 
 import { COIN_TIERS, type CoinTier } from "../shop/currency";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
+import { MATERIAL_TYPES, type MaterialType } from "../world/materials";
 import { PLANT_TYPES, type PlantType } from "../world/plants";
 
 export const UiAsset = {
@@ -91,6 +92,11 @@ export function itemIcon(fixture: FixtureType): string {
   return `item-${fixture}`;
 }
 
+/** And for what the world gives up when it is cleared. */
+export function materialIcon(material: MaterialType): string {
+  return `material-${material}`;
+}
+
 // The crop icons are per-plant rather than named one by one, which is what
 // keeps them in step: adding a crop to PLANT_TYPES asks the loader for an
 // icon that has to exist, and `uiEntry` throws by name if the generator has
@@ -100,6 +106,7 @@ export const UI_ASSETS: readonly string[] = [
   ...PLANT_TYPES.map(cropIcon),
   ...PLACEABLE_FIXTURES.map(itemIcon),
   ...COIN_TIERS.map(coinIcon),
+  ...MATERIAL_TYPES.map(materialIcon),
 ];
 
 export const UI_SIDECAR_KEY = "ui-index";

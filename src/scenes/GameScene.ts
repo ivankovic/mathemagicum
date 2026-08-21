@@ -111,6 +111,7 @@ import {
   coinIcon,
   cropIcon,
   itemIcon,
+  materialIcon,
   uiTextureKey,
 } from "../ui/assets";
 import type { AreaPlacement } from "../world/anchors";
@@ -217,7 +218,7 @@ import {
   landmarkSidecarKey,
 } from "../world/landmarks";
 import { hasStep } from "../world/levels";
-import { MATERIAL_TYPES, materialIcon, yieldOf } from "../world/materials";
+import { MATERIAL_TYPES, yieldOf } from "../world/materials";
 import type { PlacedObject } from "../world/objects";
 import { LAMP_POSTS, type Observatory, lampsLit, postsFree } from "../world/observatory";
 import { findPath } from "../world/pathfinding";

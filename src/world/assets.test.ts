@@ -692,6 +692,23 @@ describe("the shipped interface art", () => {
     }
   });
 
+  /**
+   * The direction the other two do not look, and the one that was missing.
+   *
+   * Both tests above start from `UI_ASSETS` and ask whether the art is
+   * there. That can only ever catch art the generator forgot to draw — and
+   * the wood and stone icons were drawn, indexed and shipped, and then not
+   * loaded, because their name was defined next to what a cleared tree is
+   * worth rather than next to the list of icons to load. Every basket, shop
+   * row and clearing reward drew a texture that did not exist.
+   *
+   * So: an entry in `ui.json` that nothing asks for is a bug too, and it is
+   * the same bug seen from the generator's side.
+   */
+  test("and asks for every asset it names", () => {
+    expect([...Object.keys(index.assets)].sort()).toEqual([...UI_ASSETS].sort());
+  });
+
   test("ships the file each entry points at", () => {
     for (const asset of UI_ASSETS) {
       expect({ asset, there: existsSync(join(ASSETS, "ui", uiEntry(index, asset).file)) }).toEqual({

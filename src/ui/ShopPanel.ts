@@ -25,7 +25,7 @@ import {
 } from "../shop/tender";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import type { Inventory, ItemType } from "../world/inventory";
-import { MATERIAL_TYPES, materialIcon } from "../world/materials";
+import { MATERIAL_TYPES } from "../world/materials";
 import { PLANT_TYPES } from "../world/plants";
 
 /**
@@ -45,7 +45,7 @@ const SOLD: readonly { item: ItemType; icon: string }[] = [
 import type { Rng } from "../world/rng";
 import { CROP_PRICE, MAX_TRADE, type Purse, priceOf, sellPriceOf } from "../world/shop";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
-import { type UiIndex, coinIcon, cropIcon, itemIcon, uiTextureKey } from "./assets";
+import { type UiIndex, coinIcon, cropIcon, itemIcon, materialIcon, uiTextureKey } from "./assets";
 
 /**
  * The village store, and the two things it teaches.
