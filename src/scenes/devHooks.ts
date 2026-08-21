@@ -279,6 +279,15 @@ export interface DevHandle {
    */
   readonly armed: () => string | null;
   /**
+   * The fire in the room she is standing in: where it is and how brightly it
+   * is throwing light, or null if there is no room, no fireplace, or no
+   * night to see it against.
+   *
+   * A glow is an additive sprite over a tint, so a screenshot can say the
+   * room looks warm but not why. This says whether the fire is what did it.
+   */
+  readonly hearth: () => { col: number; row: number; alpha: number } | null;
+  /**
    * The door tile of each building, by id.
    *
    * The world half of the same problem `ui` solves. Walking to a building

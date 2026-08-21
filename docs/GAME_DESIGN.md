@@ -1514,6 +1514,27 @@ landed on a one-tile spoke. Each throws a warm halo, bigger and more orange
 than the player's, so a lamp is somewhere you can actually see by and worth
 buying one of your own for.
 
+**And a house lights itself from the inside.** The cottage and the townhouse
+have a fireplace, and it is the one thing in a room that moves — eight frames
+of it, burning at every hour. It threw no light at all, which meant that at
+night the fire was the darkest thing in the room while a lamp on the plaza
+outside lit the ground round it. A fire that gives no light is a picture of a
+fire. Now it has a halo of its own: smaller than a lamp's and redder, because
+a lamp is hung to light a path and a fire is in a box against a wall.
+
+It flickers, and the flicker comes from the room's own animation frame rather
+than from the clock. A glow pulsing at any other rate beats against the flame
+it is supposed to belong to, which reads as a fault rather than as firelight.
+
+Where the fire is is read off the room's furniture, like everything else
+about these rooms: a hearth is a fact about the picture, and a coordinate
+written down here would go on being right only until somebody rearranged the
+furniture. The rooms with a fireplace and the rooms with more than one frame
+are two lists written by different halves of the generator, so a test holds
+them against each other in both directions — a fireplace with one frame is a
+fire that does not burn, and eight frames with no fireplace is something
+moving that the game cannot find to light.
+
 The lights are drawn *additively over* the tint rather than erased out of it.
 Erasing is what it wants to mean, and a render texture can do exactly that —
 which is how it was written first, and it went wrong in a way worth

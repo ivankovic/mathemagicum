@@ -57,6 +57,26 @@ export function wallHangingCell(sidecar: InteriorSidecar): GridPoint {
   return { col: Math.round(middle), row: 0 };
 }
 
+/**
+ * Where the fire is in a room that has one, or nothing.
+ *
+ * Two of the seven rooms have a fireplace — the cottage and the townhouse,
+ * which is to say the places people live — and the generator ships those as
+ * the only rooms with more than one frame, because a fire is the one thing
+ * in a room that moves.
+ *
+ * Read off the furniture rather than written down per room, for the reason
+ * `wallHangingCell` is: where a bookshelf and a hearth stand is a fact about
+ * the picture, and a coordinate typed in here would go on being right only
+ * until somebody rearranged the room.
+ */
+export function hearthCell(sidecar: InteriorSidecar): GridPoint | null {
+  const fire = (sidecar.furniture ?? []).find((piece) => piece.name === "fireplace");
+  if (!fire) return null;
+  // `[row, col]`, as everywhere in a sidecar.
+  return { col: fire.cell[1], row: fire.cell[0] };
+}
+
 export function interiorSheetKey(room: string): string {
   return `interior-${room}`;
 }

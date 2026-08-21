@@ -8,6 +8,7 @@ import { BUILDING_SPRITES, ROLE_SPRITES } from "./buildings";
 import {
   INTERIOR_ROOMS,
   buildInteriorGrid,
+  hearthCell,
   interiorAttendantCell,
   interiorDoor,
   interiorFor,
@@ -287,6 +288,64 @@ describe("framing a room", () => {
           holds: true,
         });
       }
+    }
+  });
+});
+
+describe("the fire in a room that has one", () => {
+  /**
+   * The two lists that have to agree, checked from both ends.
+   *
+   * A fireplace is a piece of furniture in the sidecar and a fire is extra
+   * frames in the sheet, and they are written by different parts of the
+   * generator. A room with a fireplace and one frame is a fire that does not
+   * burn; a room with eight frames and no fireplace is a room with something
+   * moving in it that the game cannot find to light. Neither shows up as an
+   * error anywhere — the wood and stone icons were exactly this shape of
+   * bug, shipped and never loaded.
+   */
+  test("is in the sheet if and only if it is in the furniture", () => {
+    const withFire: string[] = [];
+    const animated: string[] = [];
+    for (const name of INTERIOR_ROOMS) {
+      const sidecar = readJson<InteriorSidecar>(name);
+      if (hearthCell(sidecar)) withFire.push(name);
+      if ((sidecar.sheet?.frame_count ?? 1) > 1) animated.push(name);
+    }
+    expect(withFire.sort()).toEqual(animated.sort());
+    // And there is at least one, or this test passes by having nothing to say.
+    expect(withFire.length).toBeGreaterThan(0);
+  });
+
+  // The places people live, and nowhere else. A barn does not need a hearth
+  // and the observatory would be a fire hazard under a telescope.
+  test("burns in the cottage and the townhouse", () => {
+    expect(hearthCell(readJson<InteriorSidecar>("cottage"))).not.toBeNull();
+    expect(hearthCell(readJson<InteriorSidecar>("townhouse"))).not.toBeNull();
+    expect(hearthCell(readJson<InteriorSidecar>("barn"))).toBeNull();
+    expect(hearthCell(readJson<InteriorSidecar>("schoolhouse"))).toBeNull();
+  });
+
+  /**
+   * `[row, col]`, which is the sidecar's order everywhere and the wrong way
+   * round from every function that takes one. Read off the blocked cells,
+   * which cover the same two squares from the other side: the cottage blocks
+   * row 1 at columns 0, 1 and 2, and the fireplace is the middle pair of
+   * those. A hearth read as `[col, row]` would land on the doorway wall.
+   */
+  test("is read out of the sidecar the way the sidecar writes it", () => {
+    const sidecar = readJson<InteriorSidecar>("cottage");
+    const at = hearthCell(sidecar);
+    if (!at) throw new Error("the cottage lost its fireplace");
+    const blocked = sidecar.blocked_cells.some(([row, col]) => row === at.row && col === at.col);
+    expect({ ...at, blocked }).toEqual({ ...at, blocked: true });
+    // Not on the north wall itself, which is where a swapped pair would put it.
+    expect(at.row).toBeGreaterThan(0);
+  });
+
+  test("every room the village can place is asked, and none of them throws", () => {
+    for (const name of INTERIOR_ROOMS) {
+      expect(() => hearthCell(readJson<InteriorSidecar>(name))).not.toThrow();
     }
   });
 });

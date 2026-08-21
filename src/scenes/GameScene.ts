@@ -198,6 +198,7 @@ import { FABRIC_SLOTS, ROOF_SLOTS, type Ramp, houseLook, rampOf, varies } from "
 import {
   INTERIOR_ROOMS,
   buildInteriorGrid,
+  hearthCell,
   interiorAnimKey,
   interiorAttendantCell,
   interiorDoor,
@@ -372,6 +373,25 @@ const LAMP_LIGHT_RADIUS = 150;
 /** The warm halo a flame throws. */
 const LAMP_GLOW_COLOR = 0xffb347;
 const LAMP_GLOW_ALPHA = 0.62;
+/**
+ * The fire in a cottage, once it is dark enough to matter.
+ *
+ * Smaller than a lamp and redder. A lamp is hung to light a path and throws
+ * its light evenly for some way; a fire is in a box against a wall, so it
+ * reaches the hearthrug and not the far corner.
+ */
+const HEARTH_LIGHT_RADIUS = 118;
+const HEARTH_GLOW_COLOR = 0xff8a3c;
+const HEARTH_GLOW_ALPHA = 0.72;
+/**
+ * How much the light moves as the flame does.
+ *
+ * Taken from the room's own animation frame rather than from the clock. The
+ * fire is eight frames at `BUILDING_ANIM_FPS`, and a glow pulsing at any
+ * other rate beats against it — two flickers out of step, which reads as a
+ * fault rather than as firelight.
+ */
+const HEARTH_FLICKER = 0.18;
 /** What the player carries: paler and smaller, so a lamp is still worth having. */
 const PLAYER_GLOW_COLOR = 0xffe6b0;
 const PLAYER_GLOW_ALPHA = 0.5;
@@ -1045,6 +1065,17 @@ export class GameScene extends Phaser.Scene {
    * instead of the one in your hand.
    */
   private readonly lampGlows = new Map<string, Phaser.GameObjects.Image>();
+  /**
+   * The halo over a fireplace, while the player is in a room that has one.
+   *
+   * Kept apart from `lampGlows` rather than filed as a lamp at a tile. The
+   * lamps are a fact about the world — the astronomer counts them, the
+   * player carries them about — and a hearth is a fact about a picture that
+   * is on screen for as long as somebody is standing in it.
+   */
+  private hearthGlow?: Phaser.GameObjects.Image;
+  /** Which cell it is over, or null in a room with no fire. */
+  private hearth: GridPoint | null = null;
   private npcs: NpcRuntime[] = [];
   /**
    * The village's chickens, ducks, cats and rabbits.
@@ -1358,6 +1389,12 @@ export class GameScene extends Phaser.Scene {
       session: this.session,
       ui: () => this.uiPositions(),
       armed: () => this.armed,
+      hearth: () => {
+        const glow = this.hearthGlow;
+        const at = this.hearth;
+        if (!glow || !at || !glow.visible) return null;
+        return { col: at.col, row: at.row, alpha: glow.alpha };
+      },
       doors: () =>
         Object.fromEntries(this.buildings.map((b) => [b.id, { col: b.doorCol, row: b.doorRow }])),
       screenOf: (col, row) => this.screenOf(col, row),
@@ -1849,6 +1886,72 @@ export class GameScene extends Phaser.Scene {
         .setDisplaySize(LAMP_LIGHT_RADIUS * 2, LAMP_LIGHT_RADIUS * 2)
         .setAlpha(strength * LAMP_GLOW_ALPHA);
     }
+    this.paintHearth(strength);
+  }
+
+  /**
+   * The fire in a cottage, throwing light once the room goes dark.
+   *
+   * The room already had a fire — eight frames of it, burning at every hour
+   * of the day — and at night it was the darkest thing in the room, while a
+   * lamp on the plaza outside lit the ground round it. A fire that gives no
+   * light is a picture of a fire.
+   *
+   * Half a tile up from the cell's feet, which puts it on the flame: the
+   * hearth is set into the north wall, so the fire sits above the floor line
+   * rather than on it. Measured off the room on screen rather than reasoned
+   * about — it is the one number in here no test can check.
+   *
+   * The flicker comes from the room sprite's own frame, so the light moves
+   * when the flame does. See `HEARTH_FLICKER`.
+   */
+  private paintHearth(strength: number): void {
+    const glow = this.hearthGlow;
+    if (!glow) return;
+    const cell = this.hearth;
+    glow.setVisible(cell !== null && strength > 0);
+    if (!cell || strength <= 0) return;
+    const at = this.screenOf(cell.col, cell.row);
+    const frames = this.interior?.image.anims.currentAnim?.frames.length ?? 1;
+    const index = this.interior?.image.anims.currentFrame?.index ?? 1;
+    const phase = frames > 1 ? ((index - 1) % frames) / frames : 0;
+    const flicker = 1 - (HEARTH_FLICKER * (1 - Math.cos(phase * Math.PI * 2))) / 2;
+    glow
+      .setPosition(at.x, at.y - TILE_SIZE)
+      .setDisplaySize(HEARTH_LIGHT_RADIUS * 2, HEARTH_LIGHT_RADIUS * 2)
+      .setAlpha(strength * HEARTH_GLOW_ALPHA * flicker);
+  }
+
+  /** Light the fire in a room that has one. Nothing at all in a barn. */
+  private lightHearth(sidecar: InteriorSidecar): void {
+    this.snuffHearth();
+    const cell = hearthCell(sidecar);
+    if (!cell) return;
+    this.hearth = cell;
+    this.hearthGlow = this.ui(
+      this.add
+        .image(0, 0, LIGHT_TEXTURE)
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(NIGHT_TINT_DEPTH + 1)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setTint(HEARTH_GLOW_COLOR)
+        .setVisible(false),
+    );
+  }
+
+  /**
+   * And put it out on the way out of the door.
+   *
+   * Called wherever the room sprite is torn down rather than from a handler
+   * of its own: the glow does not scroll and is placed from `screenOf`, so
+   * one left behind would be a patch of firelight hanging in the middle of
+   * the screen over open country.
+   */
+  private snuffHearth(): void {
+    this.hearthGlow?.destroy();
+    this.hearthGlow = undefined;
+    this.hearth = null;
   }
 
   /** Remember a lamp, and give it the halo that says it is lit. */
@@ -5659,6 +5762,7 @@ export class GameScene extends Phaser.Scene {
     );
     if ((sidecar.sheet?.frame_count ?? 1) > 1) image.play(interiorAnimKey(painted));
     entered.image = image;
+    this.lightHearth(sidecar);
 
     this.grid = entered.grid;
     this.originX = 0;
@@ -5723,6 +5827,7 @@ export class GameScene extends Phaser.Scene {
     const interior = this.interior;
     if (!interior) return;
     interior.image.destroy();
+    this.snuffHearth();
     this.interiorLayer.setVisible(false);
     this.worldLayer.setVisible(true);
     this.wallMap?.destroy();
