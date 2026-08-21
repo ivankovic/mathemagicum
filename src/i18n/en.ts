@@ -229,6 +229,7 @@ export const EN: Phrases = {
   animalFed: (kind, wants) =>
     `The ${ANIMALS[kind]?.bare} is happy — the ${PLANTS[wants]?.bare} is gone`,
   animalFull: (kind) => `The ${ANIMALS[kind]?.bare} has had enough — but not for long`,
+  animalNotHungry: (kind) => `The ${ANIMALS[kind]?.bare} isn't hungry just now`,
   animalTooFar: (kind) => `The ${ANIMALS[kind]?.bare} is too far away — step up to it first`,
   groveLessonTitle: "Rows and columns",
   groveRune:

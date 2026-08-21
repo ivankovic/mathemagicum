@@ -103,7 +103,13 @@ import {
 import type { AreaPlacement } from "../world/anchors";
 import type { AnchorPlacements } from "../world/anchors";
 import {
+  ANIMAL_ASK_MAX_MS,
+  ANIMAL_ASK_MIN_MS,
+  ANIMAL_FED_QUIET_MS,
+  ANIMAL_GLAD_MS,
   ANIMAL_KINDS,
+  ANIMAL_QUIET_MAX_MS,
+  ANIMAL_QUIET_MIN_MS,
   ANIMAL_RANGE,
   type AnimalKind,
   animalSheetKey,
@@ -455,8 +461,11 @@ const NPC_MOVE_DURATION_MS = 500;
 const BUBBLE_W = 46;
 const BUBBLE_H = 38;
 const BUBBLE_SLOT = 16;
-const BUBBLE_SLOT_X = 5;
-const BUBBLE_SLOT_Y = 8;
+const BUBBLE_SLOT_GAP = 3;
+const BUBBLE_INNER_X = 4;
+const BUBBLE_INNER_Y = 8;
+const BUBBLE_INNER_W = 38;
+const BUBBLE_INNER_H = 17;
 /** How far above the animal's head the tail's last puff floats. */
 const BUBBLE_LIFT = 2;
 /**
@@ -576,16 +585,35 @@ const STEP_DIRECTIONS: readonly Direction[] = [
   { dCol: 1, dRow: 0 },
 ];
 
+/** What an animal is thinking about, if anything. */
+const AnimalMood = {
+  /** Nothing. No bubble. */
+  Quiet: "quiet",
+  /** A crop and a question mark. */
+  Asking: "asking",
+  /** A smile, for a moment after being fed. */
+  Glad: "glad",
+} as const;
+
+type AnimalMood = (typeof AnimalMood)[keyof typeof AnimalMood];
+
 /**
  * A chicken, and what it is hoping somebody brings it.
  *
- * An NPC with two extra things: the crop it is asking for, and the cloud it
- * is asking in. `wants` goes to null when it has been fed, which is also
- * what takes the bubble away.
+ * An NPC with a hunger clock. `craves` never changes — it comes out of the
+ * world seed — and `mood` is whether it is saying so right now. Every animal
+ * asking at once is a checklist a child clears in one lap; on separate
+ * clocks, a quarter of them are asking at any moment and the village keeps
+ * having something in it.
  */
 interface AnimalRuntime extends NpcRuntime {
   kind: AnimalKind;
-  wants: PlantType | null;
+  craves: PlantType;
+  mood: AnimalMood;
+  /** When the current mood runs out. */
+  moodUntil: number;
+  /** When it was last fed, or 0. Only used to tell two silences apart. */
+  fedAt: number;
   bubble?: Phaser.GameObjects.Container;
 }
 
@@ -1319,7 +1347,8 @@ export class GameScene extends Phaser.Scene {
           kind: animal.kind,
           col: animal.col,
           row: animal.row,
-          wants: animal.wants,
+          craves: animal.craves,
+          mood: animal.mood,
           bubble: animal.bubble !== undefined,
         })),
       portalMarks: () => this.portalPanel?.marks() ?? {},
@@ -1429,6 +1458,11 @@ export class GameScene extends Phaser.Scene {
     if (!this.interior) {
       this.refreshVisibleChunks();
       this.updateNpcs(isDaytime(hour));
+      // Called from here rather than from inside `updateNpcs`, which returns
+      // early on `?freezeNpcs` — and did so before it ever reached the
+      // animals, so with that seam set their hunger clocks stopped as well as
+      // their feet. Freezing a village for a screenshot should not stop time.
+      this.updateAnimals(this.time.now);
     }
     // The tint still applies indoors: it is the time of day, not the weather
     // outside a window.
@@ -4470,39 +4504,92 @@ export class GameScene extends Phaser.Scene {
         sprite,
         isMoving: false,
         nextStepAt: 0,
-        wants: spot.wants,
+        craves: spot.wants,
+        ...this.firstMood(),
+        fedAt: 0,
       };
       sprite.setInteractive({ useHandCursor: true });
       sprite.on("pointerdown", () => this.feedAnimal(animal));
       this.animals.push(animal);
-      this.raiseBubble(animal);
+      this.showThought(animal);
     }
   }
 
   /**
-   * The cloud over an animal's head, and the crop in it.
+   * Where in its own cycle an animal starts.
    *
-   * A container of two: the bubble the generator drew, with a slot left
-   * empty in it, and one crop icon laid into that slot. The icon is drawn at
-   * thirty-two because it is a button under a thumb everywhere else in the
-   * game; in here it is scaled to the slot, because a chicken is eighteen
-   * pixels tall and the food has to fit in what it is thinking.
+   * Dropped into the middle of one rather than started at the beginning.
+   * Started at the beginning they are all quiet when the player arrives and
+   * then, a minute later, all asking together — which is the very thing the
+   * separate clocks exist to avoid. Picking a random point in the whole
+   * ask-then-quiet round puts the village in its steady state from the first
+   * frame.
    */
-  private raiseBubble(animal: AnimalRuntime): void {
+  private firstMood(): { mood: AnimalMood; moodUntil: number } {
+    const now = this.time.now;
+    if (this.dev.hungry) return { mood: AnimalMood.Asking, moodUntil: Number.POSITIVE_INFINITY };
+    const round = ANIMAL_ASK_MAX_MS + ANIMAL_QUIET_MAX_MS;
+    const at = Phaser.Math.Between(0, round);
+    return at < ANIMAL_ASK_MAX_MS
+      ? { mood: AnimalMood.Asking, moodUntil: now + at }
+      : { mood: AnimalMood.Quiet, moodUntil: now + at - ANIMAL_ASK_MAX_MS };
+  }
+
+  /**
+   * Move an animal on to what it is thinking about next.
+   *
+   * Asking runs out into silence and silence runs out into asking, on rolls
+   * of their own; being glad runs out into the ten minutes a fed animal says
+   * nothing for.
+   */
+  private turnMood(animal: AnimalRuntime, now: number): void {
+    if (animal.mood === AnimalMood.Asking) {
+      animal.mood = AnimalMood.Quiet;
+      animal.moodUntil = now + Phaser.Math.Between(ANIMAL_QUIET_MIN_MS, ANIMAL_QUIET_MAX_MS);
+    } else if (animal.mood === AnimalMood.Glad) {
+      animal.mood = AnimalMood.Quiet;
+      animal.moodUntil = now + ANIMAL_FED_QUIET_MS;
+    } else {
+      animal.mood = AnimalMood.Asking;
+      animal.moodUntil = this.dev.hungry
+        ? Number.POSITIVE_INFINITY
+        : now + Phaser.Math.Between(ANIMAL_ASK_MIN_MS, ANIMAL_ASK_MAX_MS);
+    }
+    this.showThought(animal);
+  }
+
+  /**
+   * The cloud over an animal's head, and what is in it.
+   *
+   * Rebuilt when the mood turns rather than kept and hidden: it is a handful
+   * of objects a few times a minute, and the alternative is two sprites that
+   * both have to be told which of them is showing.
+   *
+   * The crop icon is drawn at thirty-two everywhere else, because everywhere
+   * else it is a button under a thumb; in here it is scaled to the slot,
+   * because a chicken is eighteen pixels tall and the food has to fit in what
+   * it is thinking.
+   */
+  private showThought(animal: AnimalRuntime): void {
     animal.bubble?.destroy();
     animal.bubble = undefined;
-    const wants = animal.wants;
-    if (!wants) return;
+    if (animal.mood === AnimalMood.Quiet) return;
+    const asking = animal.mood === AnimalMood.Asking;
+    const marks = asking ? [cropIcon(animal.craves), UiAsset.MarkQuestion] : [UiAsset.MarkGlad];
+    const span = marks.length * BUBBLE_SLOT + (marks.length - 1) * BUBBLE_SLOT_GAP;
+    const left = BUBBLE_INNER_X + (BUBBLE_INNER_W - span) / 2;
+    const middle = -BUBBLE_H + BUBBLE_INNER_Y + BUBBLE_INNER_H / 2;
     const cloud = this.add.image(0, 0, uiTextureKey(UiAsset.ThoughtBubble)).setOrigin(0, 1);
-    const icon = this.add
-      .image(
-        BUBBLE_SLOT_X + BUBBLE_SLOT / 2,
-        -BUBBLE_H + BUBBLE_SLOT_Y + BUBBLE_SLOT / 2,
-        uiTextureKey(cropIcon(wants)),
-      )
-      .setDisplaySize(BUBBLE_SLOT, BUBBLE_SLOT);
-    const bubble = this.world(this.add.container(0, 0, [cloud, icon]));
-    animal.bubble = bubble;
+    const drawn = marks.map((mark, at) =>
+      this.add
+        .image(
+          left + at * (BUBBLE_SLOT + BUBBLE_SLOT_GAP) + BUBBLE_SLOT / 2,
+          middle,
+          uiTextureKey(mark),
+        )
+        .setDisplaySize(BUBBLE_SLOT, BUBBLE_SLOT),
+    );
+    animal.bubble = this.world(this.add.container(0, 0, [cloud, ...drawn]));
     this.placeBubble(animal);
   }
 
@@ -4534,11 +4621,17 @@ export class GameScene extends Phaser.Scene {
    * carrot to, and refusing it would be a rule with no reason a child could
    * see.
    *
-   * **Being fed is not written down anywhere.** Which crop an animal wants
-   * comes back out of the world seed on every load, so a fed chicken is
-   * hungry again next time — which the message says, because a child who
-   * fed four of them and came back to four bubbles would otherwise read it
-   * as the game having lost their afternoon.
+   * **Only an animal that is asking can be fed.** One thinking about nothing
+   * says so and keeps its crop: a bubble that could be pre-empted would be a
+   * bubble that meant nothing, and the ten quiet minutes after a meal would
+   * be ten minutes a child could simply talk over.
+   *
+   * **Being fed is not written down anywhere.** The ten minutes are a timer
+   * in memory, and what an animal craves comes back out of the world seed on
+   * every load — so a chicken fed just before a reload is asking again after
+   * it. The message says as much when a full one is tapped, because a child
+   * who fed four of them and came back to four bubbles would otherwise read
+   * it as the game having lost their afternoon.
    */
   private feedAnimal(animal: AnimalRuntime): void {
     if (this.modalOpen || this.marking) return;
@@ -4551,18 +4644,25 @@ export class GameScene extends Phaser.Scene {
       this.setMessage(this.words.animalTooFar(animal.kind));
       return;
     }
-    const wants = animal.wants;
-    if (!wants) {
-      this.setMessage(this.words.animalFull(animal.kind));
+    if (animal.mood !== AnimalMood.Asking) {
+      // Two silences, and a child can tell them apart from the outside: one
+      // has just been fed and the other simply is not hungry.
+      const justFed = this.time.now - animal.fedAt < ANIMAL_FED_QUIET_MS;
+      this.setMessage(
+        justFed ? this.words.animalFull(animal.kind) : this.words.animalNotHungry(animal.kind),
+      );
       return;
     }
+    const wants = animal.craves;
     if (this.inventory.count(wants) <= 0) {
       this.setMessage(this.words.animalAsks(animal.kind, wants));
       return;
     }
     this.inventory.remove(wants, 1);
-    animal.wants = null;
-    this.raiseBubble(animal);
+    animal.fedAt = this.time.now;
+    animal.mood = AnimalMood.Glad;
+    animal.moodUntil = this.time.now + ANIMAL_GLAD_MS;
+    this.showThought(animal);
     this.refreshCarried();
     this.playGesture(PLANT); // she bends to hand it over, same as planting
     this.setMessage(this.words.animalFed(animal.kind, wants));
@@ -5101,7 +5201,6 @@ export class GameScene extends Phaser.Scene {
       if (daytime) this.npcWanderStep(npc);
       else this.npcRetreatStep(npc);
     }
-    this.updateAnimals(now);
   }
 
   /**
@@ -5117,7 +5216,12 @@ export class GameScene extends Phaser.Scene {
     // The clouds follow their owners whatever else is happening, including
     // while the animals are frozen for a test and while one is part-way
     // through a step.
-    for (const animal of this.animals) this.placeBubble(animal);
+    for (const animal of this.animals) {
+      this.placeBubble(animal);
+      // The hunger clock runs whether or not the animals are held still for
+      // a test: it is about time passing, not about walking about.
+      if (now >= animal.moodUntil) this.turnMood(animal, now);
+    }
     if (this.dev.freezeNpcs) return;
     for (const animal of this.animals) {
       if (animal.isMoving || now < animal.nextStepAt) continue;

@@ -43,6 +43,15 @@ export interface DevOptions {
    */
   readonly crops: number;
   /**
+   * Make every animal ask, and keep it asking.
+   *
+   * They ask on random clocks of their own, which is the point of them and
+   * the one thing a script cannot wait out: a test that stood in the village
+   * hoping a chicken would get hungry would be a test that passes at three
+   * in the afternoon.
+   */
+  readonly hungry: boolean;
+  /**
    * Which language the game is being read in, overriding the browser's.
    *
    * Without it a script checking the German half of the game would have to
@@ -143,6 +152,7 @@ const NONE: DevOptions = {
   freezeNpcs: false,
   coins: 0,
   crops: 0,
+  hungry: false,
   language: null,
   intro: false,
   reached: [],
@@ -224,6 +234,7 @@ export function parseDevOptions(search: string): DevOptions {
     freezeNpcs: params.has("freezeNpcs"),
     coins: Math.max(0, number("coins") ?? 0),
     crops: Math.max(0, number("crops") ?? 0),
+    hungry: params.has("hungry"),
     language: params.get("lang")?.trim() || null,
     intro: params.has("intro"),
     reached: places(params.get("reached")),
@@ -379,7 +390,8 @@ export interface DevHandle {
     kind: string;
     col: number;
     row: number;
-    wants: string | null;
+    craves: string;
+    mood: string;
     bubble: boolean;
   }[];
   /** Where each place's mark sits on screen, so a script can tap one. */

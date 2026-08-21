@@ -929,7 +929,27 @@ changed colour between worlds would be a landmark that is not one.
 **Creatures to see, and now to feed.** Chickens, ducks, cats and rabbits,
 asked for by the children who play it. Each one is hungry for one crop: a
 thought bubble over its head with that crop in it and a question mark, and a
-tap hands it over if you are carrying it.
+tap hands it over if you are carrying it. Feed one and the bubble turns to a
+smile for a moment before it goes.
+
+**They ask on their own clocks, not all together.** Every animal asking at
+once is a *checklist*: a child walks one lap, clears every bubble and is
+finished with the village. Each one instead spends twenty to forty seconds
+asking and forty to a hundred saying nothing, rolled separately, which leaves
+about three in ten asking at any moment — usually something to do, never a
+list to work through. The ratio between those two windows is the only number
+that sets it, so it has a test rather than a comment.
+
+They start in the *middle* of a cycle rather than at the beginning of one.
+Started at the beginning they would all be quiet when the player arrives and
+then, a minute later, all asking together — which is the very thing separate
+clocks exist to avoid.
+
+**A fed animal says nothing for ten minutes.** Long enough that a child cannot
+farm one chicken; short enough that one fed at the start of an afternoon is
+asking again by the end of it. And an animal that is not asking cannot be fed
+— a bubble you could pre-empt would be a bubble that meant nothing, and the
+quiet ten minutes would be ten minutes anybody could talk over.
 
 **Nothing is counted and no arithmetic is asked**, which is deliberate.
 Animals to look after is a whole system — a pen, feed that has to be grown to
@@ -952,10 +972,11 @@ something you cannot grow within a day's walk is a bubble that never clears.
 
 **What an animal wants comes out of the world seed**, with where it stands, so
 the game records nothing and the same village comes back wanting the same
-things. **Being fed is not recorded**, so a fed animal is hungry again next
-time — and the message says so, because a child who fed four chickens and came
-back to four bubbles would otherwise read it as the game having lost their
-afternoon.
+things. **Being fed is not recorded** — the ten minutes are a timer in memory
+— so a chicken fed just before a reload is asking again after it. The message
+says as much when a full one is tapped, because a child who fed four chickens
+and came back to four bubbles would otherwise read it as the game having lost
+their afternoon.
 
 **Nothing is given back**, and that is an open question rather than a
 decision. A crop already has a price in the store, so anything an animal

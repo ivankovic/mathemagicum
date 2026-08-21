@@ -19,11 +19,18 @@ import type { GridPoint } from "./topdown";
  * They wander like villagers do, because they are the same problem: a thing
  * that walks a short circuit near where it belongs.
  *
- * **Each of them is hungry for one thing.** That is the whole of it: a
- * thought bubble over its head with a crop in it and a question mark, and a
- * tap hands the crop over if you are carrying it. Nothing is counted and no
- * arithmetic is asked, which is deliberate — what a child gets out of it is
- * a reason to walk over and a reason to have grown a second kind of crop.
+ * **Each of them is hungry for one thing, sometimes.** A thought bubble over
+ * its head with a crop in it and a question mark, and a tap hands the crop
+ * over if you are carrying it. Nothing is counted and no arithmetic is asked,
+ * which is deliberate — what a child gets out of it is a reason to walk over
+ * and a reason to have grown a second kind of crop.
+ *
+ * **Sometimes** is the word doing the work. Every animal asking at once is a
+ * checklist: a child walks a lap, clears every bubble and is finished with
+ * the village. They ask on their own clocks instead, so a couple are asking
+ * at any moment and a lap is never the whole of it — and a fed animal says
+ * nothing for ten minutes afterwards, because an animal that wanted a second
+ * carrot straight away would be a well, not a chicken.
  *
  * They used to do nothing at all, on the argument that a creature which
  * answered a tap with silence is worse than one that plainly is not for
@@ -49,6 +56,32 @@ export function animalSheetKey(kind: AnimalKind): string {
 export function animalSidecarKey(kind: AnimalKind): string {
   return `animal-sidecar-${kind}`;
 }
+
+/**
+ * How long an animal spends asking, and how long it spends thinking about
+ * nothing, in milliseconds.
+ *
+ * Quiet is longer than asking on purpose: the ratio between them is what sets
+ * how much of the village is asking at any moment. At these numbers it is
+ * about three in ten, which is a village where there is usually something to
+ * do and never a list to work through. Much lower and a child walks past
+ * eleven animals with nothing to say; much higher and it is a checklist
+ * again.
+ */
+export const ANIMAL_ASK_MIN_MS = 20_000;
+export const ANIMAL_ASK_MAX_MS = 40_000;
+export const ANIMAL_QUIET_MIN_MS = 40_000;
+export const ANIMAL_QUIET_MAX_MS = 100_000;
+/** How long the smile stays up after being fed. */
+export const ANIMAL_GLAD_MS = 1_800;
+/**
+ * And how long it says nothing afterwards.
+ *
+ * Ten minutes, which is long enough that a child cannot farm one chicken and
+ * short enough that an animal fed at the start of an afternoon is asking
+ * again by the end of it.
+ */
+export const ANIMAL_FED_QUIET_MS = 10 * 60_000;
 
 /**
  * How far each kind strays from where it was put down.

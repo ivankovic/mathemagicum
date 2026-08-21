@@ -223,6 +223,8 @@ export interface Phrases {
    * would otherwise read it as the game having lost their afternoon.
    */
   animalFull: (kind: AnimalKind) => string;
+  /** It is not asking, and it has not just been fed either. */
+  animalNotHungry: (kind: AnimalKind) => string;
   animalTooFar: (kind: AnimalKind) => string;
   groveLessonTitle: string;
   /** One idea per page, in the order the tree shows them. */

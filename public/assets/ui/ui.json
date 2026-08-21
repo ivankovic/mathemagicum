@@ -77,6 +77,16 @@
       "width": 46,
       "height": 38
     },
+    "mark-question": {
+      "file": "mark_question.png",
+      "width": 16,
+      "height": 16
+    },
+    "mark-glad": {
+      "file": "mark_glad.png",
+      "width": 16,
+      "height": 16
+    },
     "item-fence": {
       "file": "item_fence.png",
       "width": 32,

@@ -7,8 +7,14 @@ import chickenSidecar from "../../public/assets/animals/chicken.json";
 import duckSidecar from "../../public/assets/animals/duck.json";
 import rabbitSidecar from "../../public/assets/animals/rabbit.json";
 import {
+  ANIMAL_ASK_MAX_MS,
+  ANIMAL_ASK_MIN_MS,
+  ANIMAL_FED_QUIET_MS,
+  ANIMAL_GLAD_MS,
   ANIMAL_KINDS,
   ANIMAL_MENU,
+  ANIMAL_QUIET_MAX_MS,
+  ANIMAL_QUIET_MIN_MS,
   ANIMAL_RANGE,
   AnimalKind,
   animalSheetKey,
@@ -206,5 +212,44 @@ describe("what they are hungry for", () => {
     }
     // And they are not all the same, or the village is one errand repeated.
     expect(new Set(spots.map((spot) => spot.wants)).size).toBeGreaterThan(1);
+  });
+});
+
+describe("when they ask", () => {
+  const average = (low: number, high: number) => (low + high) / 2;
+  const asking = average(ANIMAL_ASK_MIN_MS, ANIMAL_ASK_MAX_MS);
+  const quiet = average(ANIMAL_QUIET_MIN_MS, ANIMAL_QUIET_MAX_MS);
+
+  /**
+   * The one number the whole cycle exists to set.
+   *
+   * Every animal asking at once is a checklist: a child walks one lap, clears
+   * every bubble and is finished with the village. Nobody asking is eleven
+   * animals with nothing to say. The ratio of asking to quiet is what puts it
+   * between the two, and it is worth a test rather than a comment because it
+   * is the sort of thing that gets nudged and never re-checked.
+   */
+  test("about three in ten of them are asking at any moment", () => {
+    const share = asking / (asking + quiet);
+    expect({ low: share > 0.2, high: share < 0.45 }).toEqual({ low: true, high: true });
+  });
+
+  test("each window is a range, so they never fall into step", () => {
+    expect(ANIMAL_ASK_MAX_MS).toBeGreaterThan(ANIMAL_ASK_MIN_MS);
+    expect(ANIMAL_QUIET_MAX_MS).toBeGreaterThan(ANIMAL_QUIET_MIN_MS);
+  });
+
+  // Ten minutes: long enough that a child cannot farm one chicken, short
+  // enough that one fed at the start of an afternoon is asking by the end.
+  test("a fed animal says nothing for ten minutes", () => {
+    expect(ANIMAL_FED_QUIET_MS).toBe(10 * 60_000);
+    expect(ANIMAL_FED_QUIET_MS).toBeGreaterThan(ANIMAL_QUIET_MAX_MS);
+  });
+
+  // The smile is a beat, not a state. Long enough to see from across the
+  // square, short enough that it is over before you have walked away.
+  test("the smile is brief", () => {
+    expect(ANIMAL_GLAD_MS).toBeGreaterThan(800);
+    expect(ANIMAL_GLAD_MS).toBeLessThan(ANIMAL_ASK_MIN_MS);
   });
 });

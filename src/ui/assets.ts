@@ -65,6 +65,10 @@ export const UiAsset = {
    * what is standing in front of it.
    */
   ThoughtBubble: "thought-bubble",
+  /** What goes in it while an animal is asking: a crop, then this. */
+  MarkQuestion: "mark-question",
+  /** And what goes in it for a moment after it has been fed. */
+  MarkGlad: "mark-glad",
 } as const;
 
 export type UiAsset = (typeof UiAsset)[keyof typeof UiAsset];

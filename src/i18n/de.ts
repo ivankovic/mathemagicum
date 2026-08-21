@@ -284,6 +284,7 @@ export const DE: Phrases = {
   animalFed: (kind, wants) =>
     cap(`${ANIMALS[kind]?.definite} ist zufrieden — ${PLANTS[wants]?.definite} ist weg`),
   animalFull: (kind) => cap(`${ANIMALS[kind]?.definite} ist satt — aber nicht für lange`),
+  animalNotHungry: (kind) => cap(`${ANIMALS[kind]?.definite} hat gerade keinen Hunger`),
   animalTooFar: (kind) => cap(`${ANIMALS[kind]?.definite} ist zu weit weg — geh näher heran`),
   groveLessonTitle: "Reihen und Spalten",
   groveRune:

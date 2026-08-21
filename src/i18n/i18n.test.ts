@@ -74,6 +74,7 @@ function sample(p: Phrases): Record<string, string> {
     animalAsks: p.animalAsks(AnimalKind.Chicken, carrot),
     animalFed: p.animalFed(AnimalKind.Rabbit, carrot),
     animalFull: p.animalFull(AnimalKind.Duck),
+    animalNotHungry: p.animalNotHungry(AnimalKind.Rabbit),
     animalTooFar: p.animalTooFar(AnimalKind.Cat),
     groveLessonTitle: p.groveLessonTitle,
     groveRune: p.groveRune,
