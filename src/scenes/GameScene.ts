@@ -229,7 +229,13 @@ import {
   scenerySidecarKey,
 } from "../world/scenery";
 import { type Patch, patchBetween, patchCells, patchIsCastable } from "../world/selection";
-import { type ActionResult, GameSession, Outcome, stepsToSpeak } from "../world/session";
+import {
+  type ActionResult,
+  GameSession,
+  Outcome,
+  stepsToSpeak,
+  withinReach,
+} from "../world/session";
 import type { Purse } from "../world/shop";
 import {
   type BuildingSidecar,
@@ -824,6 +830,8 @@ export class GameScene extends Phaser.Scene {
   private socketInk?: Phaser.GameObjects.Graphics;
   /** The rune hanging over her head while the array spell waits for a tap. */
   private armedRune?: Phaser.GameObjects.Image;
+  /** The outline round the square she is pointing at. */
+  private aimInk?: Phaser.GameObjects.Graphics;
   /** Everything `ui()` has claimed, so a tap can be told from a world tap. */
   private readonly uiObjects = new WeakSet<Phaser.GameObjects.GameObject>();
   private portalPanel?: PortalPanel;
@@ -1161,6 +1169,10 @@ export class GameScene extends Phaser.Scene {
     // with it when the camera moves — and under everything that stands on
     // that earth, so a marked crop is still a crop you can see.
     this.patchInk = this.world(this.add.graphics().setDepth(0).setVisible(false));
+    // The square she is pointing at. In the world layer with the patch
+    // marker and for the same reason: it is over a piece of ground and has
+    // to slide with it.
+    this.aimInk = this.world(this.add.graphics().setDepth(0));
 
     // The empty lamp posts on the climb, for the same reason and in the same
     // layer: a socket a lamp is standing in must be drawn under the lamp.
@@ -1502,6 +1514,7 @@ export class GameScene extends Phaser.Scene {
       // their feet. Freezing a village for a screenshot should not stop time.
       this.updateAnimals(this.time.now);
       this.placeArmedRune();
+      this.checkAim();
     }
     // The tint still applies indoors: it is the time of day, not the weather
     // outside a window.
@@ -2879,7 +2892,13 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.joystick?.release();
-    this.marking = { from: null, patch: null };
+    // The square she is pointing at is the patch's first corner, if she is
+    // pointing at one. That is what the pointing is *for* — she has already
+    // said where, and asking again would be asking twice.
+    const aimed = this.session.aimed;
+    this.marking = aimed
+      ? { from: aimed, patch: patchBetween(aimed, aimed, this.worldGrid) }
+      : { from: null, patch: null };
     // The rune hangs over her head for as long as the spell is armed. It is
     // the whole of "mark out the ground": a spell that is waiting for a tap
     // and says nothing is a spell that looks like it did not fire.
@@ -2960,6 +2979,39 @@ export class GameScene extends Phaser.Scene {
       ink.lineStyle(1, SOCKET_RIM, 0.9);
       ink.strokeEllipse(feet.x, feet.y - TILE_SIZE / 3, SOCKET_WIDE, SOCKET_TALL);
     }
+  }
+
+  /**
+   * The square she is pointing at, outlined on the ground.
+   *
+   * A ring rather than a fill: what is on the square is the thing she is
+   * about to act on, and a wash over it would be a wash over the crop she is
+   * aiming at. The same yellow the array spell's rectangle uses, because it
+   * means the same thing — *this ground, and what happens next happens here*.
+   */
+  private paintAim(): void {
+    const ink = this.aimInk;
+    if (!ink) return;
+    ink.clear();
+    const at = this.session.aimed;
+    if (!at) return;
+    const corner = this.toFeet(at.col, at.row);
+    ink.lineStyle(2, PATCH_EDGE, 1);
+    ink.strokeRect(corner.x - TILE_SIZE / 2, corner.y - TILE_SIZE, TILE_SIZE, TILE_SIZE);
+  }
+
+  /**
+   * Let a square go when she has walked out of pointing range of it.
+   *
+   * Otherwise the aim is a thing that follows her about invisibly: she walks
+   * off, presses a seed, and a carrot appears somewhere behind her.
+   */
+  private checkAim(): void {
+    const at = this.session.aimed;
+    if (!at) return;
+    if (withinReach(this.session.tile, at)) return;
+    this.session.aimAt(null);
+    this.paintAim();
   }
 
   private paintPatch(): void {
@@ -4738,8 +4790,27 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * A tap on bare ground: point at it if it is close, walk to it if it is not.
+   *
+   * Pointing is what a child does. Lining a character up with the square in
+   * front of them is a thing an adult does without noticing, and a playtest
+   * put it as *spell targeting is hard* — so a tap within three squares aims
+   * everything at that square instead: planting, growing, clearing, picking
+   * and putting down. Tapping the aimed square again lets it go.
+   *
+   * Beyond that ring the tap still means walk, because it always has and
+   * because a child who taps somewhere far away means *go there*.
+   */
   private handleTileClick(screenX: number, screenY: number): void {
     const target = this.toGrid(screenX, screenY);
+    if (withinReach(this.session.tile, target)) {
+      const held = this.session.aimed;
+      const same = held?.col === target.col && held?.row === target.row;
+      this.session.aimAt(same ? null : target);
+      this.paintAim();
+      return;
+    }
     if (!this.grid.isPassable(target.col, target.row)) {
       this.markRefusal(target.col, target.row);
       return;

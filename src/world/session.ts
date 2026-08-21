@@ -147,6 +147,21 @@ export function stepsBetween(a: GridPoint, b: GridPoint): number {
  * standing at your corner would be a rule with no reason behind it that the
  * player could see.
  */
+/**
+ * How far she can point.
+ *
+ * Three squares in any direction, diagonals included, which is a seven-by-
+ * seven patch with her in the middle. Far enough that a child can point at
+ * the thing they meant without walking to it first; near enough that it is
+ * still *her* garden square rather than a cursor loose on the map.
+ */
+export const AIM_REACH = 3;
+
+/** Whether a square is close enough for her to point at from where she is. */
+export function withinReach(from: GridPoint, at: GridPoint): boolean {
+  return stepsToSpeak(from, at) <= AIM_REACH;
+}
+
 export function stepsToSpeak(a: GridPoint, b: GridPoint): number {
   return Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row));
 }
@@ -215,7 +230,7 @@ export class GameSession {
   }
 
   /**
-   * The tile the player is facing — the one every gardening action works on.
+   * The tile the player is facing.
    *
    * Gardening used to happen on the tile the player was *standing* on, which
    * has two problems the moment a crop is something you come back to. A
@@ -228,11 +243,46 @@ export class GameSession {
     return { col: this.position.col + step.dCol, row: this.position.row + step.dRow };
   }
 
+  /**
+   * The square she has pointed at, if she has pointed at one.
+   *
+   * Null means she has not, and everything falls back to the tile she is
+   * facing. See `targetTile`.
+   */
+  private aim: GridPoint | null = null;
+
+  get aimed(): GridPoint | null {
+    return this.aim;
+  }
+
+  aimAt(at: GridPoint | null): void {
+    this.aim = at ? { col: at.col, row: at.row } : null;
+  }
+
+  /**
+   * The tile every gardening action works on.
+   *
+   * The one she has pointed at, or the one she is facing if she has not.
+   *
+   * It used to be the facing tile and nothing else, which is one rule for
+   * planting, growing, clearing and picking and reads very well in the code.
+   * It reads badly in a hand: lining a character up with a square is a thing
+   * an adult does without noticing and a six-year-old cannot do at all. A
+   * playtest put it as *spell targeting is hard*.
+   *
+   * The facing tile stays as the fallback rather than being replaced,
+   * because it is what the keyboard route has and because a child who has
+   * not learned to point yet should still be able to plant something.
+   */
+  targetTile(): GridPoint {
+    return this.aim ?? this.facingTile();
+  }
+
   // --- gardening ----------------------------------------------------------
 
   plant(plant: PlantType): PlantResult {
     if (this.indoors) return { ok: false, outcome: Outcome.Indoors };
-    const { col, row } = this.facingTile();
+    const { col, row } = this.targetTile();
     // The tile underfoot was passable by definition; the one ahead is not.
     // Checked before anything reads the terrain there, because both the
     // world's edge and a tile occupied by a tree are reachable states and
@@ -308,7 +358,7 @@ export class GameSession {
    */
   checkGrowth(): CropResult {
     if (this.indoors) return { ok: false, outcome: Outcome.Indoors };
-    const { col, row } = this.facingTile();
+    const { col, row } = this.targetTile();
     if (!this.grid.inBounds(col, row)) {
       return { ok: false, outcome: Outcome.FacingNothing };
     }
@@ -338,7 +388,7 @@ export class GameSession {
    */
   checkClearing(): ActionResult {
     if (this.indoors) return { ok: false, outcome: Outcome.NothingThere };
-    const { col, row } = this.facingTile();
+    const { col, row } = this.targetTile();
     if (!this.grid.inBounds(col, row)) return { ok: false, outcome: Outcome.NothingThere };
     const object = this.grid.getObjectAt(col, row);
     if (!object) return { ok: false, outcome: Outcome.NothingThere, tile: { col, row } };
@@ -376,7 +426,7 @@ export class GameSession {
    */
   harvest(): CropResult {
     if (this.indoors) return { ok: false, outcome: Outcome.Indoors };
-    const ahead = this.facingTile();
+    const ahead = this.targetTile();
     const picked = this.pickAt(ahead) ?? this.pickAt(this.tile);
     if (picked) {
       const held = this.inventory.add(picked.crop.plant, HARVEST_YIELD);
@@ -423,7 +473,7 @@ export class GameSession {
     if (this.inventory.count(fixture) <= 0) {
       return { ok: false, outcome: Outcome.NoneLeft };
     }
-    const { col, row } = this.facingTile();
+    const { col, row } = this.targetTile();
     // Generation-time placement could assume it owned the map; this cannot,
     // so the tile has to be checked for everything already on it.
     if (!this.grid.isPassable(col, row)) {

@@ -750,7 +750,7 @@ Rooms are re-framed on rotation too: a room's camera bounds are computed from
 the camera's own size, so a room framed for a portrait screen is framed wrong
 the moment it is not one.
 
-## 2. Spell targeting is hard — **open**
+## 2. Spell targeting is hard — **fixed**
 
 **Reported:** instead of the field in front of you, let the player pick the
 tile the spell should affect, in a two-to-three tile circle around the
@@ -767,6 +767,31 @@ other, a painted rectangle — so the shape of the answer is in the game
 already. What has to be decided is what happens to *facing*: it is currently
 the whole of how the game knows which square an action is about, and there is
 art for four of them.
+
+**Fixed: a tap within three squares points at that square.** Everything then
+acts there — planting, growing, clearing, picking, putting down — and the
+square is outlined on the ground in the same yellow the array spell's
+rectangle uses, because it means the same thing. Tapping it again lets it go,
+and walking out of range lets it go too: an aim that followed her about
+invisibly would be a carrot appearing somewhere behind her.
+
+Beyond three squares a tap still means *walk there*, which is what it has
+always meant and what a child tapping something far away means.
+
+**The facing tile stays as the fallback** rather than being replaced. It is
+what the keyboard route has, and a child who has not learned to point yet
+should still be able to plant something. So the change is additive: nothing
+behaves differently until somebody points.
+
+Three squares in any direction, diagonals included — a seven-by-seven patch
+with her in the middle. Far enough to point at the thing you meant without
+walking to it; near enough that it is still her own garden square rather than
+a cursor loose on the map.
+
+**The array spell starts from it.** Arming the spell while pointing at a
+square makes that square the patch's first corner, so the second tap finishes
+the rectangle. That is what the pointing was for — she has already said
+where, and asking again would be asking twice.
 
 ## 3. The city has no people — **fixed**
 
@@ -851,8 +876,12 @@ announcing — the parchment closing is the whole of it.
 
 ## Where this stands
 
-**Fixed:** 1, 3, 4, 5 and 6. **Open:** 2 — spell targeting, which is the
-one that changes a rule the whole game is built on rather than adding to it.
+**All six are fixed.**
+
+Three of them were not what they looked like from the outside — the rotation
+was two bugs, the blocked buildings were not blocked, and the cancelled spell
+was a picture this session had added. That is the argument for reproducing
+before fixing, and it earned its keep three times in one round.
 
 Three of the six were not what they looked like from the outside — the
 rotation was two bugs, the blocked buildings were not blocked, and the

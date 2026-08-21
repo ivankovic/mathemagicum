@@ -7,7 +7,14 @@ import { FixtureType } from "./fixtures";
 import { WorldGrid } from "./grid";
 import { PlantStage, PlantType } from "./plants";
 import { sceneryType } from "./scenery";
-import { GameSession, Outcome, stepsBetween, stepsToSpeak } from "./session";
+import {
+  AIM_REACH,
+  GameSession,
+  Outcome,
+  stepsBetween,
+  stepsToSpeak,
+  withinReach,
+} from "./session";
 import { CROP_PRICE, priceOf } from "./shop";
 import { TerrainType } from "./terrain";
 
@@ -499,5 +506,61 @@ describe("clearing what is in the way", () => {
     const game = session(grid);
     game.indoors = true;
     expect(game.checkClearing()).toEqual({ ok: false, outcome: Outcome.NothingThere });
+  });
+});
+
+describe("pointing at a square", () => {
+  const pointing = () =>
+    new GameSession({
+      grid: WorldGrid.empty(12, 12, TerrainType.Dirt),
+      start: { col: 5, row: 5 },
+      facing: Facing.Down,
+    });
+
+  /**
+   * The reported fault: *spell targeting is hard*. Every action worked on
+   * the square she was facing, which is one rule for planting, growing,
+   * clearing and picking — and lining a character up with a square is a
+   * thing an adult does without noticing and a six-year-old cannot do.
+   */
+  test("everything acts on the square she pointed at", () => {
+    const s = pointing();
+    expect(s.targetTile()).toEqual({ col: 5, row: 6 });
+    s.aimAt({ col: 7, row: 3 });
+    expect(s.targetTile()).toEqual({ col: 7, row: 3 });
+    expect(s.plant(PlantType.Carrot).tile).toEqual({ col: 7, row: 3 });
+    expect(s.grid.getCrop(7, 3)).not.toBeNull();
+  });
+
+  // The facing tile is the fallback rather than being replaced: it is what
+  // the keyboard route has, and a child who has not learned to point yet
+  // should still be able to plant something.
+  test("and on the square she faces when she has not pointed", () => {
+    const s = pointing();
+    s.face(Facing.Right);
+    s.aimAt({ col: 7, row: 3 });
+    s.aimAt(null);
+    expect(s.targetTile()).toEqual({ col: 6, row: 5 });
+  });
+
+  // Three in any direction, diagonals included — a seven-by-seven patch with
+  // her in the middle. Far enough to point at what she meant without walking
+  // there; near enough that it is still her own garden square.
+  test("she can point three squares in any direction and no further", () => {
+    const here = { col: 5, row: 5 };
+    expect(withinReach(here, { col: 5 + AIM_REACH, row: 5 + AIM_REACH })).toBe(true);
+    expect(withinReach(here, { col: 5 - AIM_REACH, row: 5 })).toBe(true);
+    expect(withinReach(here, { col: 5 + AIM_REACH + 1, row: 5 })).toBe(false);
+    expect(withinReach(here, { col: 5, row: 5 - AIM_REACH - 1 })).toBe(false);
+  });
+
+  // Held as a copy. An aim that was the caller's own object would move when
+  // they moved it, which is a square that quietly changes under her.
+  test("holds the square rather than a reference to it", () => {
+    const s = pointing();
+    const at = { col: 6, row: 6 };
+    s.aimAt(at);
+    at.col = 19;
+    expect(s.aimed).toEqual({ col: 6, row: 6 });
   });
 });
