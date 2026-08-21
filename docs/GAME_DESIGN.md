@@ -924,6 +924,68 @@ has always had, and no villager is ever given it. Their home is the one
 building they need to find from a distance without thinking, and a house that
 changed colour between worlds would be a landmark that is not one.
 
+### Nothing is said in words
+
+**The status line is gone.** There was one line of small type along the top of
+the screen, and everything the game had to say went into it: a refusal, a
+result, a greeting, an errand. A playtest killed it in one sentence — *the
+status update text is unreadable, and our youngest audience can't read
+anyway.* Both halves are true and the second is the one that matters. This is
+a game for a six-year-old and a nine-year-old sharing a device, and half of
+that audience cannot read a word of either language it speaks.
+
+So nothing is written there any more, and nothing replaced it in that corner.
+What the line used to say is drawn.
+
+**The mark goes where the child has to act.** That is the whole rule, and it
+is what decides between the three places anything can appear:
+
+| what is wrong | where it shows | what it is |
+|---|---|---|
+| the square is taken, bare, or not yours | on that square | a red cross |
+| she is carrying none of the thing | over her own head | the thing, with one red bar across it |
+| she is somewhere nothing grows | over her own head | a red cross alone |
+| it is out of reach | on the square, and between | the cross, and a trail of dots back to her feet |
+| something happened | on the square it happened to | the thing that changed, rising and fading |
+| a cast was abandoned | where it was aimed | the spell's own rune, shrinking out |
+| a spell was earned | over her head | its rune, rising and growing |
+| somebody is asking | over them | a thought bubble with the thing in it |
+| somebody's errand | on a sheet of parchment | a row of things to do, and what it earns |
+
+A few of those choices are worth the sentence they cost:
+
+- **A bar, not a cross, for "you have none of these."** A cross over a picture
+  hides the picture, and the picture is the half that says *which* thing she
+  is short of.
+- **A trail for "too far".** Every other refusal is answered by doing
+  something else; that one is answered by *walking*, and a cross alone does
+  not say so.
+- **A rune dimming out, not a cross, for an abandoned cast.** Nothing was
+  refused — she opened the parchment and closed it, and a cross would say the
+  game had stopped her.
+- **Results rise.** A picture that stayed put would be a thing on the ground,
+  and there is already a thing on the ground. A picture that moves is an
+  event.
+
+**Some lines were deleted rather than drawn.** Walking into a building used to
+announce the room — she can see the room. Tapping a crop in the basket used to
+count it — the badge on the button had already counted it. Arriving through
+the portal used to say where you had arrived; you have arrived. A rebuilt save
+used to explain itself, in a sentence addressed to somebody who can read,
+about a thing a child cannot act on.
+
+**The rules stopped writing sentences.** `ActionResult` carries an `Outcome`
+now — one name per condition — and `GameSession` no longer holds a `Phrases`
+at all. It never had any business knowing what language the game was in; it
+knew because it was the thing doing the talking. Sixty-odd phrases went with
+the line, and that deletion is the proof: nothing can still be writing to a
+line that no longer has the words to write.
+
+**Numerals are not words.** `347 + 265`, a clock face's `12`, `4 × 6` — those
+stay, and no amount of drawing replaces them. They are the subject. What the
+rule is about is *prose*: the sentences that told a child what had happened
+and what to do next.
+
 ### The animals
 
 **Creatures to see, and now to feed.** Chickens, ducks, cats and rabbits,

@@ -34,39 +34,17 @@ function sample(p: Phrases): Record<string, string> {
     room: p.room("barn"),
     count: p.count(carrot, 3),
 
-    nothingGrowsIndoors: p.nothingGrowsIndoors,
-
-    putDown: p.putDown(fence),
-
-    spellFades: p.spellFades,
     cleared: p.cleared,
-    tooFarToSpeak: p.tooFarToSpeak,
-    tooFarFromLandmark: p.tooFarFromLandmark,
-    cannotWalkThere: p.cannotWalkThere,
-    lighthouseGreeting: p.lighthouseGreeting,
-    clockTowerGreeting: p.clockTowerGreeting,
-    arrayUntaught: p.arrayUntaught,
-    arrayTaught: p.arrayTaught,
     groveAsks: p.groveAsks({ task: "growing", standing: 0, ripe: 4, squares: 12 }),
     groveTaskTitle: p.groveTaskTitle,
     groveBargain: p.groveBargain,
-    animalAsks: p.animalAsks(AnimalKind.Chicken, carrot),
-    animalFed: p.animalFed(AnimalKind.Rabbit, carrot),
-    animalFull: p.animalFull(AnimalKind.Duck),
-    animalNotHungry: p.animalNotHungry(AnimalKind.Rabbit),
-    animalTooFar: p.animalTooFar(AnimalKind.Cat),
     groveLessonTitle: p.groveLessonTitle,
     groveRune: p.groveRune,
     groveRows: p.groveRows(4, 6),
     groveCount: p.groveCount(4, 6, 24),
     groveTurn: p.groveTurn(4, 6, 24),
     arrayTitle: p.arrayTitle(4, 6),
-    arrayMarkOut: p.arrayMarkOut,
-    arrayTooSmall: p.arrayTooSmall,
-    arrayNothingToDo: p.arrayNothingToDo,
-    arrayChooseAction: p.arrayChooseAction,
     patchAction: p.patchAction("plant", 6),
-    patchDone: p.patchDone("grow", 6),
     arrayAsk: p.arrayAsk,
     arrayHintRows: p.arrayHintRows(6, 2),
 
@@ -84,17 +62,6 @@ function sample(p: Phrases): Record<string, string> {
     hourglassBack: p.hourglassBack,
     hourglassCountOn: p.hourglassCountOn(3),
     hourglassSolved: p.hourglassSolved(5),
-    hourglassNoTime: p.hourglassNoTime,
-    hourglassNothingGrowing: p.hourglassNothingGrowing,
-    hourglassUntaught: p.hourglassUntaught,
-    hourglassTaught: p.hourglassTaught,
-    astronomerGreeting: p.astronomerGreeting,
-    astronomerAsks: p.astronomerAsks(3, 3),
-    astronomerBlocked: p.astronomerBlocked,
-    starChartRead: p.starChartRead,
-    hourglassGrew: p.hourglassGrew(5),
-    purseTier: p.purseTier(3, "7,50 kn"),
-    purseEmpty: p.purseEmpty,
 
     optionsButton: p.optionsButton,
     optionsTitle: p.optionsTitle,
@@ -129,10 +96,8 @@ function sample(p: Phrases): Record<string, string> {
     verdictWasRight: p.verdictWasRight("7,50 kn"),
     verdictLookAgain: p.verdictLookAgain("7,00 kn", "7,50 kn"),
 
-    postmanGreeting: p.postmanGreeting,
     introTitle: p.introTitle,
     intro: p.intro(IntroBeat.Seeds),
-    teacherGreeting: p.teacherGreeting,
     lessonTitle: p.lessonTitle,
     lessonRune: p.lessonRune,
     lessonSplit: p.lessonSplit(114, [100, 10, 4]),
@@ -158,12 +123,8 @@ function sample(p: Phrases): Record<string, string> {
     deleteAreYouSure: p.deleteAreYouSure("Mia"),
     deleteYes: p.deleteYes,
     deleteNo: p.deleteNo,
-    worldRebuilt: p.worldRebuilt,
     sumsHeading: p.sumsHeading,
 
-    geometerGreeting: p.geometerGreeting,
-    portalUntaught: p.portalUntaught,
-    portalTaught: p.portalTaught,
     geometryLessonTitle: p.geometryLessonTitle,
     geometryRune: p.geometryRune,
     geometryRuler: p.geometryRuler(50),
@@ -184,7 +145,6 @@ function sample(p: Phrases): Record<string, string> {
     portalHintRead: p.portalHintRead(p.portalCompass("west"), 6),
     portalHintLegs: p.portalHintLegs(p.portalCompass("east"), 6, p.portalCompass("north"), 3),
     portalHintCrow: p.portalHintCrow(6, 3, 45),
-    portalArrived: p.portalArrived(p.placeName("harbour")),
 
     place: p.place(0),
     jumpPrompt: p.jumpPrompt(0),
@@ -302,16 +262,12 @@ describe("counting things", () => {
     expect(DE.count(FixtureType.Lamp, 1)).toBe("1 Laterne");
   });
 
-  // The astronomer counts down to one, and one is the line a child sees at
-  // the end of her task — the one place a stray plural would land.
-  test("the astronomer's last lamp is singular in both languages", () => {
-    expect(EN.astronomerAsks(1, 1)).toBe(
-      "One lamp still to set on the path. Here is one — put it on the empty post.",
-    );
-    expect(EN.astronomerAsks(2, 0)).toBe("2 lamps still to set on the path.");
-    expect(DE.astronomerAsks(1, 1)).toContain("Eine Laterne fehlt");
-    expect(DE.astronomerAsks(1, 1)).not.toContain("Laternen");
-  });
+  // The astronomer used to have a line here, counting her lamps down to one,
+  // and it needed a singular case in two languages to say "one lamp" rather
+  // than "1 lamps". She draws the lamps now — five tokens on a sheet, the
+  // lit ones lit — so there is no sentence to get wrong and no plural to
+  // agree with. Left as a note rather than as a test, because the thing the
+  // test guarded no longer exists.
 });
 
 describe("German grammar", () => {
@@ -333,25 +289,29 @@ describe("German grammar", () => {
   // of the change that removed them: the game no longer *says* that a carrot
   // was planted, it draws a carrot rising off the square it was planted on.
   // What is left is what a picture cannot carry.
+  // Only the shop writes sentences about things now, so it is the shop that
+  // has to decline them. Everything else that used to — planted a carrot,
+  // put down a fence, you have no fence — is a picture.
   test("a sentence that opens with a noun opens with a capital", () => {
     for (const line of [
-      DE.putDown(FixtureType.Fence),
-      DE.animalFed(AnimalKind.Rabbit, PlantType.Carrot),
-      DE.animalAsks(AnimalKind.Chicken, PlantType.Wheat),
+      DE.buyTitle(FixtureType.Fence, 2, "2,00"),
+      DE.sellTitle(PlantType.Carrot, 3, "1,50"),
     ]) {
       expect(line[0]).toBe(line[0]?.toUpperCase() as string);
     }
   });
 
-  test("sentences read as German, not as English word order", () => {
-    expect(DE.putDown(FixtureType.Fence)).toContain("Einen Zaun hingestellt");
+  test("the noun forms decline, which is why they are stored and not built", () => {
     expect(DE.fixture(FixtureType.Fence).none).toBe("keinen Zaun");
+    expect(DE.plant(PlantType.Carrot).none).toBe("keine Karotte");
+    expect(DE.fixture(FixtureType.Gate).none).toBe("kein Tor");
   });
 
-  // Every placeable thing turns up in "put down a …".
+  // Every placeable thing has a name the shop can put in a row and a form
+  // for "you have none of them", whether or not a sentence uses it today.
   test("everything the shop sells has both forms", () => {
     for (const fixture of PLACEABLE_FIXTURES) {
-      expect(DE.putDown(fixture)).not.toContain("undefined");
+      expect(DE.fixture(fixture).bare).not.toContain("undefined");
       expect(DE.fixture(fixture).none).not.toContain("undefined");
     }
   });

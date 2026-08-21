@@ -88,9 +88,11 @@ import { LessonPanel } from "../ui/LessonPanel";
 import { MapPanel } from "../ui/MapPanel";
 import { OptionsPanel } from "../ui/OptionsPanel";
 import { PatchMenu } from "../ui/PatchMenu";
+import { PicturePanel } from "../ui/PicturePanel";
 import { PortalPanel } from "../ui/PortalPanel";
 import { ShopPanel } from "../ui/ShopPanel";
 import { SpellPopup } from "../ui/SpellPopup";
+import { TaskPanel } from "../ui/TaskPanel";
 import {
   UI_SIDECAR_KEY,
   UiAsset,
@@ -205,7 +207,7 @@ import {
 } from "../world/landmarks";
 import { hasStep } from "../world/levels";
 import type { PlacedObject } from "../world/objects";
-import { type Observatory, lampsLit, postsFree } from "../world/observatory";
+import { LAMP_POSTS, type Observatory, lampsLit, postsFree } from "../world/observatory";
 import { findPath } from "../world/pathfinding";
 import {
   type Crop,
@@ -308,6 +310,10 @@ const RESULT_MS = 700;
 /** The trail that says *too far*: this many dots between her and the square. */
 const TOO_FAR_STEPS = 4;
 const TOO_FAR_DOT = 2.5;
+/** How slowly the armed rune breathes. */
+const ARMED_PULSE_MS = 520;
+/** How long a newly earned rune hangs in the air. Longer: it is a moment. */
+const EARNED_MS = 1400;
 const MOVE_DURATION_MS = 160;
 // Depth is a pixel y now (see topdown.ts's depthFor), not the tile-unit
 // col + row the isometric projection sorted on — so it runs to the world's
@@ -738,7 +744,6 @@ export class GameScene extends Phaser.Scene {
   private playerGesture: string | null = null;
 
   private selectedPlantIndex = 0;
-  private messageText!: Phaser.GameObjects.Text;
 
   // One sprite per planted tile, so a crop that grows can be re-animated
   // rather than found again by hunting the display list.
@@ -798,6 +803,10 @@ export class GameScene extends Phaser.Scene {
   private lessonPanel?: LessonPanel;
   private introPanel?: IntroPanel;
   private mapPanel?: MapPanel;
+  /** One picture, held up close, for the things that are only pictures. */
+  private picturePanel?: PicturePanel;
+  /** Somebody's errand, drawn as a row of things to do and what it earns. */
+  private taskPanel?: TaskPanel;
   private geometryPanel?: GeometryLessonPanel;
   private grovePanel?: GroveLessonPanel;
   private arrayPopup?: ArrayPopup;
@@ -813,6 +822,8 @@ export class GameScene extends Phaser.Scene {
   private marking: { from: GridPoint | null; patch: Patch | null } | null = null;
   private patchInk?: Phaser.GameObjects.Graphics;
   private socketInk?: Phaser.GameObjects.Graphics;
+  /** The rune hanging over her head while the array spell waits for a tap. */
+  private armedRune?: Phaser.GameObjects.Image;
   /** Everything `ui()` has claimed, so a tap can be told from a world tap. */
   private readonly uiObjects = new WeakSet<Phaser.GameObjects.GameObject>();
   private portalPanel?: PortalPanel;
@@ -1132,17 +1143,6 @@ export class GameScene extends Phaser.Scene {
     );
     this.spawnNpcs(world.village.npcs, world.anchors.village);
 
-    this.messageText = this.ui(
-      this.add
-        .text(HUD_MARGIN, 0, "", {
-          fontFamily: "monospace",
-          fontSize: "13px",
-          color: "#ffeb3b",
-        })
-        .setScrollFactor(0)
-        .setDepth(HUD_DEPTH),
-    );
-
     // The marker the array spell draws on the ground. In the world rather
     // than on the screen — it is over a patch of earth, and it has to slide
     // with it when the camera moves — and under everything that stands on
@@ -1221,6 +1221,14 @@ export class GameScene extends Phaser.Scene {
       world.anchors,
       () => this.session.tile,
       (object) => this.ui(object),
+    );
+    this.picturePanel = new PicturePanel(this, uiIndex, MODAL_DEPTH, (object) => this.ui(object));
+    this.taskPanel = new TaskPanel(
+      this,
+      uiIndex,
+      MODAL_DEPTH,
+      (object) => this.ui(object),
+      LAMP_POSTS,
     );
     this.geometryPanel = new GeometryLessonPanel(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
@@ -1400,7 +1408,11 @@ export class GameScene extends Phaser.Scene {
     document.addEventListener("visibilitychange", flush);
     globalThis.addEventListener("pagehide", flush);
 
-    if (this.loadOutcome === LoadOutcome.Rebuilt) this.setMessage(this.words.worldRebuilt);
+    // A rebuilt world used to announce itself along the top of the screen.
+    // Nothing draws it now and nothing should: it is a sentence about a save
+    // file, addressed to somebody who can read, about a thing a child cannot
+    // act on. The world being different is the whole of what they can see,
+    // and it is also the whole of what happened.
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layoutForViewport, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -1475,6 +1487,7 @@ export class GameScene extends Phaser.Scene {
       // animals, so with that seam set their hunger clocks stopped as well as
       // their feet. Freezing a village for a screenshot should not stop time.
       this.updateAnimals(this.time.now);
+      this.placeArmedRune();
     }
     // The tint still applies indoors: it is the time of day, not the weather
     // outside a window.
@@ -1608,6 +1621,8 @@ export class GameScene extends Phaser.Scene {
     this.lessonPanel?.layout();
     this.introPanel?.layout();
     this.mapPanel?.layout();
+    this.picturePanel?.layout();
+    this.taskPanel?.layout();
     this.layoutHud();
   }
 
@@ -1746,18 +1761,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Place what is left of the HUD.
+   * Place what is left of the HUD, which is one button.
    *
-   * What is left is one line: whatever just happened. The caption above it —
-   * the key hints, the "you are carrying three carrots", the name of the
-   * panel you have open — is gone. It was a paragraph of interface explaining
-   * an interface that had learned to explain itself: the trays show what they
-   * hold, the badges count it, and the panels have titles of their own.
+   * There was a caption once — key hints, "you are carrying three carrots",
+   * the name of the panel you had open — and then there was one line saying
+   * whatever had just happened. Both are gone, and the second went for the
+   * reason the first did, only more so: it was an interface explaining an
+   * interface, in a typeface too small to read at arm's length, to children
+   * the youngest of whom cannot read at all.
+   *
+   * Nothing replaced it in this corner. What it used to say is said on the
+   * square it is about, over the head of whoever is asking, or on a sheet of
+   * parchment held up close — see `report`.
    */
   private layoutHud(): void {
-    if (!this.messageText) return;
-    this.messageText.setWordWrapWidth(Math.max(120, this.scale.width - HUD_MARGIN * 2));
-    this.messageText.setY(HUD_MARGIN);
     this.placeOptionsButton();
   }
 
@@ -2730,14 +2747,10 @@ export class GameScene extends Phaser.Scene {
       items: COIN_TIERS.map((tier) => ({
         texture: uiTextureKey(coinIcon(tier)),
         count: () => this.coinsOfTier(tier).length,
-        act: () => {
-          const coins = this.coinsOfTier(tier);
-          this.setMessage(
-            this.purse.coins <= 0
-              ? this.words.purseEmpty
-              : this.words.purseTier(coins.length, CURRENCY.format(coinTotal(coins))),
-          );
-        },
+        // Nothing, like the basket's. The badge on the button already says
+        // how many of this coin she has, and the shop counts the purse out
+        // in front of her when there is something to pay for.
+        act: () => {},
       })),
       // Whole units, not the minor ones the purse counts in: a badge reading
       // "5000" for fifty sun would be a number nobody in the game uses.
@@ -2799,11 +2812,10 @@ export class GameScene extends Phaser.Scene {
     // A stick still held when the parchment opens never sends its release,
     // and the player walks off the moment the popup closes.
     this.joystick?.release();
-    this.setMessage("");
     const rung = rungAt(this.profile.rung);
     this.spellPopup.open(makeAdditionProblem(this.spellRng, rung), rung.given, (result) => {
       if (result.solved) this.growCropAt(col, row);
-      else this.setMessage(this.words.spellFades);
+      else this.showFaded(UiAsset.RuneAdd, { col, row });
       this.noteCast(result);
     });
   }
@@ -2827,11 +2839,11 @@ export class GameScene extends Phaser.Scene {
     if (this.modalOpen) return;
     this.spellTray?.setOpen(false);
     if (!this.knowsArray) {
-      this.setMessage(this.words.arrayUntaught);
+      this.showRefusalOnPlayer(UiAsset.RuneTimes);
       return;
     }
     if (this.interior) {
-      this.setMessage(this.words.nothingGrowsIndoors);
+      this.showRefusalOnPlayer();
       return;
     }
     if (this.marking) {
@@ -2840,7 +2852,10 @@ export class GameScene extends Phaser.Scene {
     }
     this.joystick?.release();
     this.marking = { from: null, patch: null };
-    this.setMessage(this.words.arrayMarkOut);
+    // The rune hangs over her head for as long as the spell is armed. It is
+    // the whole of "mark out the ground": a spell that is waiting for a tap
+    // and says nothing is a spell that looks like it did not fire.
+    this.raiseArmedRune();
     this.paintPatch();
   }
 
@@ -2850,7 +2865,8 @@ export class GameScene extends Phaser.Scene {
     this.marking = null;
     this.patchMenu?.close();
     this.paintPatch();
-    this.setMessage("");
+    this.armedRune?.destroy();
+    this.armedRune = undefined;
   }
 
   /**
@@ -2879,7 +2895,10 @@ export class GameScene extends Phaser.Scene {
       // twice almost certainly meant.
       this.marking = { from: at, patch: patchBetween(at, at, this.worldGrid) };
       this.paintPatch();
-      this.setMessage(this.words.arrayTooSmall);
+      // One square is not a rectangle. The corner has already moved to where
+      // she tapped, so the only thing left to say is *not that one* — on the
+      // square, where she is looking.
+      this.markRefusal(at.col, at.row);
       return;
     }
     this.marking = { from: marking.from, patch };
@@ -2983,7 +3002,12 @@ export class GameScene extends Phaser.Scene {
   private openPatchMenu(patch: Patch): void {
     const offers = this.patchOffers(patch).filter(({ cells }) => cells.length > 0);
     if (offers.length === 0) {
-      this.setMessage(this.words.arrayNothingToDo);
+      // Every square in it is already dimmed by `paintPatch`; the cross says
+      // that the dimming is the whole patch rather than part of it.
+      this.markRefusal(
+        patch.col + Math.floor(patch.width / 2),
+        patch.row + Math.floor(patch.height / 2),
+      );
       return;
     }
     const at = this.toFeet(patch.col + patch.width / 2, patch.row);
@@ -2996,7 +3020,6 @@ export class GameScene extends Phaser.Scene {
       })),
       (action) => this.beginPatchCast(patch, action),
     );
-    this.setMessage(this.words.arrayChooseAction);
   }
 
   /**
@@ -3013,19 +3036,26 @@ export class GameScene extends Phaser.Scene {
     const rung = arrayRungAt(this.dev.arrayRung ?? this.profile.arrayRung);
     const problem = arrayProblemFor(patch.height, patch.width, rung);
     this.joystick?.release();
-    this.setMessage("");
     this.arrayPopup?.open(problem, (result) => {
       // The marker goes away *first*: it clears the message line on its way
       // out, so putting it after the cast wiped the one line saying what the
       // cast had just done.
       this.stopMarking();
       if (result.solved) this.applyToPatch(patch, action);
-      else this.setMessage(this.words.spellFades);
+      else this.showFaded(UiAsset.RuneTimes, { col: patch.col, row: patch.row });
       this.noteArrayCast(result);
     });
   }
 
-  /** Do it, to every square of the patch that will take it. */
+  /**
+   * Do it, to every square of the patch that will take it.
+   *
+   * Each square that took it says so on itself — a crop rising off the ones
+   * that were planted, the plus and minus effects on the ones that grew or
+   * were cleared. That is the count, drawn: a child who wants to know how
+   * many squares the spell reached can see them all move at once, which is
+   * the whole reason to cast it on a patch rather than one at a time.
+   */
   private applyToPatch(patch: Patch, action: PatchAction): void {
     const plant = PLANT_TYPES[this.selectedPlantIndex] ?? PLANT_TYPES[0];
     let done = 0;
@@ -3033,6 +3063,7 @@ export class GameScene extends Phaser.Scene {
       for (const at of this.session.plantableIn(plant, patch)) {
         if (!this.grid.plant(at.col, at.row, plant)) continue;
         this.spawnCropSprite(at.col, at.row, { plant, stage: PLANTED_STAGE });
+        this.showResult(cropIcon(plant), at.col, at.row);
         done++;
       }
       this.playGesture(PLANT);
@@ -3047,7 +3078,7 @@ export class GameScene extends Phaser.Scene {
         done++;
       }
     }
-    this.setMessage(this.words.patchDone(action, done));
+    void done;
   }
 
   /**
@@ -3070,15 +3101,14 @@ export class GameScene extends Phaser.Scene {
     // Refused with a reason, and the reason says where to go. A rune that
     // did nothing when tapped would read as a broken button.
     if (!this.knowsPortal) {
-      this.setMessage(this.words.portalUntaught);
+      this.showRefusalOnPlayer(UiAsset.RunePortal);
       return;
     }
     if (this.interior) {
-      this.setMessage(this.words.cannotWalkThere);
+      this.showRefusalOnPlayer();
       return;
     }
     this.joystick?.release();
-    this.setMessage("");
     const at = this.session.tile;
     // `?reached=` is a dev seam, and it adds rather than replaces: a script
     // asking for the harbour should still be able to go home.
@@ -3109,7 +3139,7 @@ export class GameScene extends Phaser.Scene {
       portalRungAt(this.dev.portalRung ?? this.profile.portalRung),
       (result, journey) => {
         if (journey) this.travelThrough(journey);
-        else this.setMessage(this.words.spellFades);
+        else this.showFaded(UiAsset.RunePortal);
         this.notePortalCast(result);
       },
     );
@@ -3195,7 +3225,7 @@ export class GameScene extends Phaser.Scene {
     this.refreshVisibleChunks(feet);
     this.player.setPosition(feet.x, feet.y).setScale(1).setAlpha(1);
     this.markPlaceReached();
-    this.setMessage(this.words.portalArrived(this.words.placeName(journey.place)));
+    // Arriving somewhere else is what arriving somewhere else looks like.
   }
 
   /** Pulled off their feet and into the hole, shrinking as they go. */
@@ -3249,7 +3279,6 @@ export class GameScene extends Phaser.Scene {
           this.portalGuard = null;
           this.closePortal();
           this.travelling = false;
-          this.setMessage(this.words.portalArrived(this.words.placeName(journey.place)));
         });
       },
     });
@@ -3417,18 +3446,18 @@ export class GameScene extends Phaser.Scene {
     if (this.modalOpen) return;
     this.spellTray?.setOpen(false);
     if (!this.knowsHourglass) {
-      this.setMessage(this.words.hourglassUntaught);
+      this.showRefusalOnPlayer(UiAsset.RuneHourglass);
       return;
     }
     const away = this.awayFrom;
     if (away === null) {
-      this.setMessage(this.words.hourglassNoTime);
+      this.showRefusalOnPlayer(UiAsset.RuneHourglass);
       return;
     }
     const rung = clockRungAt(this.dev.clockRung ?? this.profile.clockRung);
     const problem = hourglassFor(away, Date.now(), rung);
     if (!worthCasting(problem)) {
-      this.setMessage(this.words.hourglassNoTime);
+      this.showRefusalOnPlayer(UiAsset.RuneHourglass);
       return;
     }
     // Nothing planted is not a question worth asking. The child would read
@@ -3436,16 +3465,15 @@ export class GameScene extends Phaser.Scene {
     // the hours would be spent, because a cast that landed is a cast. Better
     // to keep them and say what is missing.
     if (!this.anythingWaiting) {
-      this.setMessage(this.words.hourglassNothingGrowing);
+      this.showRefusalOnPlayer(UiAsset.SeedPouch);
       return;
     }
     this.joystick?.release();
-    this.setMessage("");
     this.clockPopup?.open(problem, (result) => {
       if (result.solved) {
         this.awayFrom = null;
         this.ripenNearest(problem.hours);
-      } else this.setMessage(this.words.spellFades);
+      } else this.showFaded(UiAsset.RuneHourglass);
       this.noteClockCast(result);
     });
   }
@@ -3472,7 +3500,8 @@ export class GameScene extends Phaser.Scene {
       .sort((a, b) => a.far - b.far)
       .slice(0, count);
     for (const at of waiting) this.growCropAt(at.col, at.row);
-    this.setMessage(this.words.hourglassGrew(waiting.length));
+    // No count. Every one of them plays its growing animation, which is the
+    // same number said in the only place a child is looking.
   }
 
   /** Let the clock spell's own ladder see how a cast went. */
@@ -3558,11 +3587,10 @@ export class GameScene extends Phaser.Scene {
     }
     const { col, row } = target.tile;
     this.joystick?.release();
-    this.setMessage("");
     const rung = rungAt(this.profile.rung);
     this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, (result) => {
       if (result.solved) this.clearAt(col, row);
-      else this.setMessage(this.words.spellFades);
+      else this.showFaded(UiAsset.RuneMinus, { col, row });
       this.noteCast(result);
     });
   }
@@ -3586,7 +3614,8 @@ export class GameScene extends Phaser.Scene {
     this.despawnSceneryIn(key);
     this.spawnSceneryIn(key);
     this.playEffect(EffectType.Minus, col, row);
-    this.setMessage(this.words.cleared);
+    // The minus effect has already played on the square, and what stood
+    // there is gone from it. Both say "cleared" better than the word does.
   }
 
   /**
@@ -3730,6 +3759,97 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * The rune that says a spell is armed and waiting.
+   *
+   * Over her head and pulsing, for as long as the array spell is expecting a
+   * corner. It follows her, because she can walk about while she decides —
+   * and a mark that stayed where the spell was cast would be a mark about a
+   * square she is no longer near.
+   */
+  private raiseArmedRune(): void {
+    this.armedRune?.destroy();
+    const rune = this.world(
+      this.add
+        .image(0, 0, uiTextureKey(UiAsset.RuneTimes))
+        .setDisplaySize(RESULT_ICON, RESULT_ICON),
+    );
+    this.armedRune = rune;
+    this.tweens.add({
+      targets: rune,
+      alpha: { from: 1, to: 0.4 },
+      duration: ARMED_PULSE_MS,
+      yoyo: true,
+      repeat: -1,
+    });
+  }
+
+  /** Keep it over her head, wherever she has walked to. */
+  private placeArmedRune(): void {
+    const rune = this.armedRune;
+    if (!rune) return;
+    rune.setPosition(this.player.x, this.player.y - TILE_SIZE - RESULT_ICON / 2);
+    rune.setDepth(this.player.depth + 1);
+  }
+
+  /**
+   * A spell just earned: its rune, rising bright over her head.
+   *
+   * The same picture the spellbook has been showing dimmed since the day she
+   * started, arriving. Nothing else in the game needs saying at that moment
+   * — she taps the book and the rune she has been looking at is lit.
+   */
+  private showEarned(rune: string): void {
+    const mark = this.world(
+      this.add
+        .image(this.player.x, this.player.y - TILE_SIZE, uiTextureKey(rune))
+        .setDisplaySize(RESULT_ICON, RESULT_ICON)
+        .setDepth(this.player.depth + 1),
+    );
+    this.tweens.add({
+      targets: mark,
+      y: mark.y - RESULT_RISE * 1.5,
+      scale: mark.scale * 1.6,
+      alpha: 0,
+      duration: EARNED_MS,
+      ease: "Quad.easeOut",
+      onComplete: () => mark.destroy(),
+    });
+  }
+
+  /**
+   * A cast that was abandoned: the spell's own rune, dimming away.
+   *
+   * Not a cross. Nothing was refused — she opened the parchment and closed
+   * it, and a cross would say the game had stopped her. A rune that shrinks
+   * and goes out says the spell was there and is not any more, which is what
+   * happened.
+   *
+   * Where the cast was aimed if it was aimed anywhere, and over her head if
+   * it was not: the portal and the hourglass are cast on the world rather
+   * than on a square.
+   */
+  private showFaded(rune: string, at?: GridPoint): void {
+    const where = at
+      ? { x: this.toFeet(at.col, at.row).x, y: this.toFeet(at.col, at.row).y - TILE_SIZE / 2 }
+      : { x: this.player.x, y: this.player.y - TILE_SIZE - RESULT_ICON / 2 };
+    const mark = this.world(
+      this.add
+        .image(where.x, where.y, uiTextureKey(rune))
+        .setDisplaySize(RESULT_ICON, RESULT_ICON)
+        .setAlpha(0.85)
+        .setDepth(where.y + 1),
+    );
+    this.tweens.add({
+      targets: mark,
+      alpha: 0,
+      scale: mark.scale * 0.6,
+      duration: RESULT_MS,
+      ease: "Quad.easeIn",
+      onComplete: () => mark.destroy(),
+    });
+  }
+
+  /**
    * Chevrons from her feet to the square she could not reach.
    *
    * Every other refusal is answered by doing something different; this one is
@@ -3850,7 +3970,9 @@ export class GameScene extends Phaser.Scene {
       // next to her, and refusing that would be a rule with no reason behind
       // it that the player could see.
       if (stepsToSpeak(this.session.tile, at()) > 1) {
-        this.setMessage(this.words.tooFarToSpeak);
+        const there = at();
+        this.markRefusal(there.col, there.row);
+        this.markTooFar(there.col, there.row);
         return;
       }
       talk();
@@ -3894,7 +4016,8 @@ export class GameScene extends Phaser.Scene {
         Number.POSITIVE_INFINITY,
       );
       if (near > 1) {
-        this.setMessage(this.words.tooFarFromLandmark);
+        this.markRefusal(object.col, object.row);
+        this.markTooFar(object.col, object.row);
         return;
       }
       talk();
@@ -3922,10 +4045,8 @@ export class GameScene extends Phaser.Scene {
     this.joystick?.release();
     this.closeTrays();
     this.rememberIntroSeen();
-    this.setMessage(this.words.postmanGreeting);
-    this.introPanel?.open_(() => {
-      this.setMessage("");
-    });
+    // No greeting. The panel he opens is the greeting.
+    this.introPanel?.open_(() => {});
   }
 
   /**
@@ -3976,11 +4097,9 @@ export class GameScene extends Phaser.Scene {
       this.saveProfileChange({ learned });
       this.spellTray?.refresh();
     }
-    this.setMessage(first ? this.words.portalTaught : this.words.geometerGreeting);
+    if (first) this.showEarned(UiAsset.RunePortal);
     this.geometryPanel?.setRung(portalRungAt(this.dev.portalRung ?? this.profile.portalRung));
-    this.geometryPanel?.open_(() => {
-      this.setMessage("");
-    });
+    this.geometryPanel?.open_(() => {});
   }
 
   /**
@@ -3998,11 +4117,10 @@ export class GameScene extends Phaser.Scene {
       this.openGroveLesson();
       return;
     }
-    this.setMessage(
-      landmark === LandmarkType.Lighthouse
-        ? this.words.lighthouseGreeting
-        : this.words.clockTowerGreeting,
-    );
+    // Nothing to say and nothing to do. A lighthouse and a clock tower are
+    // there to be seen from across the world, and touching one is how a
+    // child finds out that they are the sort of thing you cannot go inside.
+    this.markRefusal(this.session.tile.col, this.session.tile.row);
   }
 
   /**
@@ -4026,32 +4144,38 @@ export class GameScene extends Phaser.Scene {
     const observatory = this.observatory;
     if (!observatory) return;
     const lit = lampsLit(this.worldGrid, observatory);
-    const dark = observatory.posts.length - lit;
-    if (dark === 0) {
+    if (lit >= observatory.posts.length) {
       const learned = learnSpell(this.profile.learned, Spell.Hourglass);
-      const first = learned !== this.profile.learned;
-      if (first) {
+      if (learned !== this.profile.learned) {
         this.saveProfileChange({ learned });
         this.spellTray?.refresh();
+        this.showEarned(UiAsset.RuneHourglass);
       }
-      this.setMessage(first ? this.words.hourglassTaught : this.words.astronomerGreeting);
-      return;
+    } else {
+      // Topped up to the posts a lamp could go on, never beyond them.
+      // Against the dark ones instead, a post with a fence on it would be a
+      // post she could never light and a lamp handed over on every visit for
+      // ever. A post that is blocked simply is not offered, and the row on
+      // the parchment says so by staying dim.
+      const free = postsFree(this.worldGrid, observatory);
+      const short = Math.max(0, free - this.inventory.count(FixtureType.Lamp));
+      if (short > 0) {
+        this.inventory.add(FixtureType.Lamp, short);
+        this.refreshCarried();
+      }
     }
-    // Topped up to the posts a lamp could go on, never beyond them. Against
-    // the dark ones instead, a post with a fence on it would be a post she
-    // could never light and a lamp handed over on every visit for ever.
-    const free = postsFree(this.worldGrid, observatory);
-    if (free === 0) {
-      this.setMessage(this.words.astronomerBlocked);
-      return;
-    }
-    const held = this.inventory.count(FixtureType.Lamp);
-    const short = Math.max(0, free - held);
-    if (short > 0) {
-      this.inventory.add(FixtureType.Lamp, short);
-      this.refreshCarried();
-    }
-    this.setMessage(this.words.astronomerAsks(dark, short));
+    // The errand itself, drawn: five posts with the lit ones lit, and the
+    // rune underneath, dim until it is hers. What she used to say in a line
+    // of small type is a row a child can count.
+    this.taskPanel?.show(
+      {
+        token: itemIcon(FixtureType.Lamp),
+        needed: observatory.posts.length,
+        done: lit,
+        reward: UiAsset.RuneHourglass,
+      },
+      () => {},
+    );
   }
 
   /**
@@ -4092,25 +4216,21 @@ export class GameScene extends Phaser.Scene {
     // still asking for used to go there too — behind the panel this call then
     // opened over it, in the smallest type the game has — and is now the
     // panel's own first page, where it is read rather than missed.
-    if (first) this.setMessage(this.words.arrayTaught);
+    if (first) this.showEarned(UiAsset.RuneTimes);
     this.grovePanel?.setRung(arrayRungAt(this.dev.arrayRung ?? this.profile.arrayRung));
     this.grovePanel?.setTask(progress, {
       rows: this.grove.bed.height,
       columns: this.grove.bed.width,
     });
-    this.grovePanel?.open_(() => {
-      this.setMessage("");
-    });
+    this.grovePanel?.open_(() => {});
   }
 
   private openLesson(): void {
     if (this.modalOpen) return;
     this.joystick?.release();
     this.closeTrays();
-    this.setMessage(this.words.teacherGreeting);
-    this.lessonPanel?.open_(() => {
-      this.setMessage("");
-    });
+    // No greeting: her lesson opens over the top of it.
+    this.lessonPanel?.open_(() => {});
   }
 
   private openShop(): void {
@@ -4126,7 +4246,6 @@ export class GameScene extends Phaser.Scene {
     this.shopPanel.open_(
       () => {
         this.refreshCarried();
-        this.setMessage("");
       },
       // The bar stays on screen beside the panel, so a sale has to reach it
       // as it happens rather than when the shop closes — otherwise the
@@ -4345,7 +4464,6 @@ export class GameScene extends Phaser.Scene {
     // The line on screen was written in the old language by whatever the
     // player last did; it would otherwise sit there until they did something
     // else. Clearing it is honest — re-translating a past event is not.
-    this.setMessage("");
   }
 
   private trays(): Record<string, IconTray | undefined> {
@@ -4678,6 +4796,36 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * A cloud with nothing in it, for a beat, over an animal that was tapped
+   * while it had nothing to ask for.
+   *
+   * Built by hand rather than through `showThought`, because that one owns
+   * the animal's own bubble and this is a moment rather than a mood: it must
+   * not survive the tap, and it must not overwrite what the animal is
+   * actually thinking if it starts thinking something.
+   */
+  private puffEmptyThought(animal: AnimalRuntime): void {
+    if (animal.bubble) return;
+    const cloud = this.world(
+      this.add
+        .image(
+          animal.sprite.x - BUBBLE_W / 2,
+          animal.sprite.y - animal.sprite.displayHeight - BUBBLE_LIFT,
+          uiTextureKey(UiAsset.ThoughtBubble),
+        )
+        .setOrigin(0, 1)
+        .setDepth(animal.sprite.depth + 0.5),
+    );
+    this.tweens.add({
+      targets: cloud,
+      alpha: 0,
+      duration: RESULT_MS,
+      ease: "Quad.easeIn",
+      onComplete: () => cloud.destroy(),
+    });
+  }
+
+  /**
    * Move an animal on to what it is thinking about next.
    *
    * Asking runs out into silence and silence runs out into asking, on rolls
@@ -4783,21 +4931,24 @@ export class GameScene extends Phaser.Scene {
     // puzzle with no visible cause.
     if (this.session.indoors) return;
     if (stepsToSpeak(this.session.tile, { col: animal.col, row: animal.row }) > 1) {
-      this.setMessage(this.words.animalTooFar(animal.kind));
+      this.markRefusal(animal.col, animal.row);
+      this.markTooFar(animal.col, animal.row);
       return;
     }
     if (animal.mood !== AnimalMood.Asking) {
-      // Two silences, and a child can tell them apart from the outside: one
-      // has just been fed and the other simply is not hungry.
-      const justFed = this.time.now - animal.fedAt < ANIMAL_FED_QUIET_MS;
-      this.setMessage(
-        justFed ? this.words.animalFull(animal.kind) : this.words.animalNotHungry(animal.kind),
-      );
+      // An empty cloud: it is thinking about nothing, which is exactly why
+      // there was no bubble over it to begin with. Silence on a tap reads as
+      // the game having missed the tap; an empty thought reads as an animal
+      // with nothing on its mind, which is the true answer either way — a
+      // full one and a not-hungry one both come to *not now*.
+      this.puffEmptyThought(animal);
       return;
     }
     const wants = animal.craves;
     if (this.inventory.count(wants) <= 0) {
-      this.setMessage(this.words.animalAsks(animal.kind, wants));
+      // What she has none of, over her head. The bubble over the animal is
+      // already saying which crop; this says the basket is empty of it.
+      this.showRefusalOnPlayer(cropIcon(wants));
       return;
     }
     this.inventory.remove(wants, 1);
@@ -4807,7 +4958,7 @@ export class GameScene extends Phaser.Scene {
     this.showThought(animal);
     this.refreshCarried();
     this.playGesture(PLANT); // she bends to hand it over, same as planting
-    this.setMessage(this.words.animalFed(animal.kind, wants));
+    // The smile in its bubble says the rest.
   }
 
   private spawnPlacedObjects(objects: readonly PlacedObject[]): void {
@@ -5034,10 +5185,21 @@ export class GameScene extends Phaser.Scene {
       // The map opens the map; the chart says what it is. A chart of the
       // night that opened a chart would want a second panel to put in it,
       // and what the dome has to say fits in a line.
+      // The map opens the map. The chart is a picture and nothing else, so
+      // tapping it holds the picture up — which is the whole of what a
+      // sentence describing it was ever for.
       if (hanging === UiAsset.MapWall) this.openMap();
-      else this.setMessage(this.words.starChartRead);
+      else this.showPicture(UiAsset.StarChart);
     });
     this.wallMap = sprite;
+  }
+
+  /** A picture on a wall, held up close. */
+  private showPicture(asset: string): void {
+    if (this.modalOpen) return;
+    this.joystick?.release();
+    this.closeTrays();
+    this.picturePanel?.show(asset, () => {});
   }
 
   /** The map, opened. Nothing is refused indoors here — it is on a wall. */
@@ -5045,7 +5207,7 @@ export class GameScene extends Phaser.Scene {
     if (this.modalOpen) return;
     this.joystick?.release();
     this.closeTrays();
-    this.mapPanel?.open_(() => this.setMessage(""));
+    this.mapPanel?.open_(() => {});
   }
 
   /**
@@ -5230,7 +5392,6 @@ export class GameScene extends Phaser.Scene {
     // longer tracking would walk off the edge of the screen.
     this.cameras.main.startFollow(this.player);
     this.placePlayer(interior.returnTo.col, interior.returnTo.row, Facing.Down);
-    this.setMessage("");
     this.refreshVisibleChunks();
   }
 
@@ -5586,10 +5747,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** The one line of HUD text left: whatever just happened. */
-  private setMessage(text: string): void {
-    this.messageText.setText(text);
-    this.layoutHud();
-  }
 
   /**
    * Whether anything is covering the world.
@@ -5628,6 +5785,8 @@ export class GameScene extends Phaser.Scene {
       this.lessonPanel?.isOpen === true ||
       this.introPanel?.isOpen === true ||
       this.mapPanel?.isOpen === true ||
+      this.picturePanel?.isOpen === true ||
+      this.taskPanel?.isOpen === true ||
       this.portalPanel?.isOpen === true ||
       this.geometryPanel?.isOpen === true ||
       // Mid-crossing: a step from a tile they are no longer standing on.

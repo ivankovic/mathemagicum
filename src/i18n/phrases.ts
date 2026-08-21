@@ -61,30 +61,11 @@ export interface Phrases {
 
   // --- gardening -----------------------------------------------------------
 
-  nothingGrowsIndoors: string;
-
   // --- things she puts down ------------------------------------------------
-
-  putDown: (fixture: FixtureType) => string;
 
   // --- the world -----------------------------------------------------------
 
-  spellFades: string;
   cleared: string;
-  tooFarToSpeak: string;
-  /**
-   * The same, for something rooted to the spot rather than somebody standing.
-   *
-   * One line for every landmark rather than one each. It said "walk up to
-   * the tree first" while there was only a tree, and went on saying it at
-   * the town clock — a message naming the wrong object is worse than a
-   * general one, because a child reads it and looks for a tree.
-   */
-  tooFarFromLandmark: string;
-  cannotWalkThere: string;
-  /** The other two landmarks, which teach nothing yet but are not silent. */
-  lighthouseGreeting: string;
-  clockTowerGreeting: string;
 
   // --- the title card ------------------------------------------------------
 
@@ -104,12 +85,6 @@ export interface Phrases {
 
   // --- the geometry teacher, in the tower ----------------------------------
 
-  /** Said when he is tapped, before the parchment opens. */
-  geometerGreeting: string;
-  /** Tapping the portal rune before anybody has taught it. */
-  portalUntaught: string;
-  /** Said once, the first time the geometer explains it. */
-  portalTaught: string;
   geometryLessonTitle: string;
   geometryRune: string;
   /** One mark is this many paces, and you are nought. */
@@ -156,15 +131,9 @@ export interface Phrases {
    * the answer.
    */
   portalHintCrow: (acrossMarks: number, downMarks: number, squares: number) => string;
-  /** Said on the other side. */
-  portalArrived: (place: string) => string;
 
   // --- the great tree, in the enchanted forest ------------------------------
 
-  /** Tapping the array rune before the tree has taught it. */
-  arrayUntaught: string;
-  /** Said once, when the tree's grove is finally full. */
-  arrayTaught: string;
   /**
    * What the tree is waiting for, as it stands.
    *
@@ -185,21 +154,6 @@ export interface Phrases {
    * what it is for, which is the half a child cannot work out for themselves.
    */
   groveBargain: string;
-  /** What an animal is hoping for, when you have not got it. */
-  animalAsks: (kind: AnimalKind, wants: PlantType) => string;
-  /** Handing it over. */
-  animalFed: (kind: AnimalKind, wants: PlantType) => string;
-  /**
-   * It has had something already.
-   *
-   * Says that it will be hungry again, because being fed is not written down
-   * anywhere — a child who fed four chickens and came back to four bubbles
-   * would otherwise read it as the game having lost their afternoon.
-   */
-  animalFull: (kind: AnimalKind) => string;
-  /** It is not asking, and it has not just been fed either. */
-  animalNotHungry: (kind: AnimalKind) => string;
-  animalTooFar: (kind: AnimalKind) => string;
   groveLessonTitle: string;
   /** One idea per page, in the order the tree shows them. */
   groveRune: string;
@@ -211,18 +165,8 @@ export interface Phrases {
 
   /** `4 x 6`, over the array. */
   arrayTitle: (rows: number, columns: number) => string;
-  /** Said when the rune is tapped: mark out the ground you mean. */
-  arrayMarkOut: string;
-  /** Both corners on one square. One square is not a multiplication. */
-  arrayTooSmall: string;
-  /** A patch with nothing in it any of the three actions could touch. */
-  arrayNothingToDo: string;
-  /** Both corners set: now pick what to do with what you marked. */
-  arrayChooseAction: string;
   /** A button on the little menu over a marked patch, and its tally. */
   patchAction: (action: string, count: number) => string;
-  /** What happened, once the patch has been cast on. */
-  patchDone: (action: string, count: number) => string;
   /** The question under it. */
   arrayAsk: string;
   /** The help that arrives after a wrong answer: count along, row by row. */
@@ -239,31 +183,8 @@ export interface Phrases {
   /** The help, once the sweep has been drawn: count on from here. */
   hourglassCountOn: (hours: number) => string;
   hourglassSolved: (hours: number) => string;
-  /** Nothing to claim: the glass reads the same hour it did. */
-  hourglassNoTime: string;
-  /** Hours passed, but there is nothing in the ground for them to fall on. */
-  hourglassNothingGrowing: string;
-  /** Tapping the rune before the astronomer has taught it. */
-  hourglassUntaught: string;
-  /** Said once, when the last lamp on the climb is lit. */
-  hourglassTaught: string;
-  /** What she says when the way is already lit and the spell already given. */
-  astronomerGreeting: string;
-  /** How many posts are still dark, and how many lamps she has just handed over. */
-  astronomerAsks: (dark: number, given: number) => string;
-  /** Every remaining post has something standing on it. */
-  astronomerBlocked: string;
-  /** The chart of the night on the dome's wall, when it is tapped. */
-  starChartRead: string;
-  /** What grew while they were away. */
-  hourglassGrew: (count: number) => string;
 
   // --- the purse -----------------------------------------------------------
-
-  /** What one kind of coin in the purse comes to, when its button is tapped. */
-  purseTier: (count: number, amount: string) => string;
-  /** Nothing in it at all. */
-  purseEmpty: string;
 
   // --- options -------------------------------------------------------------
 
@@ -298,8 +219,6 @@ export interface Phrases {
   deleteAreYouSure: (name: string) => string;
   deleteYes: string;
   deleteNo: string;
-  /** Said once, on the first frame, when a world had to be rebuilt. */
-  worldRebuilt: string;
   /**
    * Over the row of sample sums.
    *
@@ -345,16 +264,12 @@ export interface Phrases {
 
   // --- the postal worker's welcome ------------------------------------------
 
-  /** What he says as he walks up, before the parchment opens. */
-  postmanGreeting: string;
   introTitle: string;
   /** One page of the welcome. The beat names are IntroBeat's. */
   intro: (beat: string) => string;
 
   // --- the teacher's lesson ------------------------------------------------
 
-  /** What she says when tapped, before the parchment opens. */
-  teacherGreeting: string;
   lessonTitle: string;
   /** Beat one: the spellbook and the rune, which are drawn beside this. */
   lessonRune: string;

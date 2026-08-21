@@ -185,17 +185,7 @@ export const DE: Phrases = {
     return `${count} ${count === 1 ? name.bare : name.plural}`;
   },
 
-  nothingGrowsIndoors: "Drinnen wächst nichts",
-
-  putDown: (fixture) => cap(`${FIXTURES[fixture]?.indefinite} hingestellt — zum Aufheben antippen`),
-
   cleared: "Der Weg ist frei.",
-  spellFades: "Der Zauber verklingt ungesprochen",
-  tooFarToSpeak: "Zu weit weg — geh erst zu ihr",
-  tooFarFromLandmark: "Zu weit weg — geh erst ganz nah heran",
-  cannotWalkThere: "Da geht es nicht weiter",
-  lighthouseGreeting: "Oben dreht sich das Licht, und das Meer reicht weiter, als du sehen kannst",
-  clockTowerGreeting: "Über dir tickt die Uhr und teilt die Stunde ein",
 
   titleTagline: "Ein Garten, und das Rechnen, das ihn wachsen lässt",
   titleLoading: "wird geladen…",
@@ -205,9 +195,6 @@ export const DE: Phrases = {
   mapYouAreHere: "Du bist der helle Punkt.",
   placeName: (place) => PLACE_NAMES[place] ?? place,
 
-  geometerGreeting: "Der Geometer blickt von seinem Tisch auf.",
-  portalUntaught: "Diesen hat dir noch niemand beigebracht. Im Turm kennt ihn jemand.",
-  portalTaught: "Der Geometer bringt dir den Portalzauber bei.",
   geometryLessonTitle: "Die Welt vermessen",
   geometryRune:
     "Der Zirkel in deinem Zauberbuch öffnet eine Karte. Wähle einen Ort, an dem du schon warst, sage wie weit er weg ist, und das Portal bringt dich hin.",
@@ -234,10 +221,7 @@ export const DE: Phrases = {
     `${acrossMarks} nach ${across}, dann ${downMarks} nach ${down}.`,
   portalHintCrow: (acrossMarks, downMarks, squares) =>
     `${acrossMarks}×${acrossMarks} + ${downMarks}×${downMarks} = ${squares}. Die Luftlinie mal sich selbst ergibt ${squares}.`,
-  portalArrived: (place) => `Das Portal setzt dich bei ${place} ab.`,
 
-  arrayUntaught: "Den hast du dir noch nicht verdient. Im alten Wald wartet etwas auf dich.",
-  arrayTaught: "Dein Hain ist voll. Der große Baum bringt dir den Feld-Zauber bei.",
   groveAsks: ({ task, standing, ripe, squares }) =>
     task === "overgrown"
       ? `Das Gehölz hat mein Beet überwuchert. Nimm die ${standing} weg, die noch stehen.`
@@ -246,20 +230,6 @@ export const DE: Phrases = {
         : `Füll mein Beet: ${ripe} von ${squares} Kästchen sind reif.`,
   groveTaskTitle: "Das Beet des Baums",
   groveBargain: "Tu das, und die sechs Punkte gehören dir.",
-  // Tier und Futter stehen beide im Nominativ — den Akkusativ mit bestimmtem
-  // Artikel („den Weizen") kennt `Noun` nicht, und ein Satz, der ihn braucht,
-  // wäre ein Satz, der für ein Geschlecht falsch ist.
-  animalAsks: (kind, wants) =>
-    // „nichts davon" statt „keine": Weizen ist ein Stoffname, und „keine
-    // Weizen" wäre für genau eine der Feldfrüchte falsch.
-    cap(
-      `${ANIMALS[kind]?.definite} hätte gern ${PLANTS[wants]?.plural} — du hast nichts davon dabei`,
-    ),
-  animalFed: (kind, wants) =>
-    cap(`${ANIMALS[kind]?.definite} ist zufrieden — ${PLANTS[wants]?.definite} ist weg`),
-  animalFull: (kind) => cap(`${ANIMALS[kind]?.definite} ist satt — aber nicht für lange`),
-  animalNotHungry: (kind) => cap(`${ANIMALS[kind]?.definite} hat gerade keinen Hunger`),
-  animalTooFar: (kind) => cap(`${ANIMALS[kind]?.definite} ist zu weit weg — geh näher heran`),
   groveLessonTitle: "Reihen und Spalten",
   groveRune:
     "Die sechs Punkte in deinem Zauberbuch bepflanzen ein ganzes Beet auf einmal. Sag, wie viele Setzlinge hineinpassen, dann kommen sie alle zusammen in die Erde.",
@@ -271,20 +241,8 @@ export const DE: Phrases = {
     `Jetzt dreh das Beet um: ${columns} Reihen zu ${rows}. Immer noch ${total}. ${rows} × ${columns} und ${columns} × ${rows} sind dasselbe Beet von zwei Seiten — du musst also nur das halbe Einmaleins lernen.`,
 
   arrayTitle: (rows, columns) => `${rows} × ${columns}`,
-  arrayMarkOut: "Steck das Feld ab: tipp auf eine Ecke, dann auf die andere.",
-  arrayTooSmall: "Ein einzelnes Kästchen ist kein Feld — tipp auf eine zweite Ecke.",
-  arrayNothingToDo: "In dem Feld gibt es nichts zu pflanzen, wachsen zu lassen oder zu räumen.",
-  arrayChooseAction: "Jetzt wähl, was damit geschehen soll.",
   patchAction: (action) =>
     action === "plant" ? "bepflanzen" : action === "grow" ? "wachsen lassen" : "räumen",
-  patchDone: (action, count) =>
-    count === 0
-      ? "Da war nichts."
-      : action === "plant"
-        ? `${count} Setzlinge auf einmal.`
-        : action === "grow"
-          ? `${count} davon sind auf einmal gewachsen.`
-          : `${count} Kästchen auf einmal geräumt.`,
   arrayAsk: "Wie viele sind es im ganzen Beet?",
   arrayHintRows: (columns, counted) =>
     `Zähl in ${columns}er-Schritten: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
@@ -295,28 +253,6 @@ export const DE: Phrases = {
   hourglassBack: "du bist zurück",
   hourglassCountOn: (hours) => `Zähl im Kreis weiter: ${hours}, und weiter…`,
   hourglassSolved: (hours) => `${hours} Stunden. Das Glas dreht sich.`,
-  hourglassNoTime: "Das Glas zeigt dieselbe Stunde wie zuvor. Komm später wieder.",
-  hourglassNothingGrowing: "Zeit ist vergangen, aber nichts von dir wächst. Pflanz zuerst etwas.",
-  hourglassUntaught:
-    "Den hast du dir noch nicht verdient. Oben im Gebirge hütet jemand die Stunden.",
-  hourglassTaught: "Der Weg ist erleuchtet. Die Astronomin lehrt dich das Stundenglas.",
-  astronomerGreeting: "Die Astronomin blickt vom Okular auf.",
-  astronomerAsks: (dark, given) => {
-    const left = dark === 1 ? "Eine Laterne fehlt" : `${dark} Laternen fehlen`;
-    const posts = dark === 1 ? "den leeren Pfosten" : "die leeren Pfosten";
-    if (given <= 0) return `${left} noch am Weg.`;
-    const here = given === 1 ? "Hier ist eine" : `Hier sind ${given}`;
-    return `${left} noch am Weg. ${here} — stell sie auf ${posts}.`;
-  },
-  astronomerBlocked: "Auf den Pfosten steht schon etwas. Räum sie zuerst frei.",
-  starChartRead: "Eine Karte der Nacht, mit dem Großen Wagen eingezeichnet.",
-  hourglassGrew: (count) =>
-    count === 1
-      ? "Eines ist gewachsen, während du fort warst."
-      : `${count} sind gewachsen, während du fort warst.`,
-
-  purseTier: (count, amount) => (count > 0 ? `${count} Münzen — ${amount}` : "davon keine"),
-  purseEmpty: "Dein Geldbeutel ist leer",
 
   optionsButton: "Optionen",
   optionsTitle: "Optionen",
@@ -338,7 +274,6 @@ export const DE: Phrases = {
   deleteAreYouSure: (name) => `${name} entfernen — mit allem, was ${name} angebaut hat?`,
   deleteYes: "Ja, entfernen",
   deleteNo: "Nein, behalten",
-  worldRebuilt: "Die Welt wurde neu gebaut. Deine Münzen und dein Korb gehören weiter dir.",
   sumsHeading: "Deine Aufgaben",
 
   storeTitle: (money) => `Dorfladen — ${money}`,
@@ -370,11 +305,9 @@ export const DE: Phrases = {
   verdictWasRight: (owed) => `Es stimmte doch: ${owed}. Sie zählt es noch einmal vor.`,
   verdictLookAgain: (paid, owed) => `Schau noch einmal — das waren ${paid}, nicht ${owed}.`,
 
-  postmanGreeting: "Der Postbote kommt herüber — er hat etwas für dich.",
   introTitle: "Willkommen im Dorf",
   intro: (beat) => INTRO_DE[beat] ?? "",
 
-  teacherGreeting: "Die Lehrerin schaut von ihrem Pult auf.",
   lessonTitle: "Der Additionszauber",
   lessonRune:
     "Öffne dein Zauberbuch und tipp auf die +-Rune. Was vor dir steht, wächst einen Schritt — aber nur, wenn du die Aufgabe lösen kannst.",

@@ -136,17 +136,7 @@ export const EN: Phrases = {
     return `${count} ${count === 1 ? name.bare : name.plural}`;
   },
 
-  nothingGrowsIndoors: "Nothing grows indoors",
-
-  putDown: (fixture) => `Put down ${FIXTURES[fixture]?.indefinite} — tap it to pick it up again`,
-
   cleared: "The way is clear.",
-  spellFades: "The spell fades unspoken",
-  tooFarToSpeak: "Too far away — step up to her first",
-  tooFarFromLandmark: "Too far away — walk right up to it first",
-  cannotWalkThere: "Can't walk there",
-  lighthouseGreeting: "The lamp turns overhead, and the sea goes on out of sight",
-  clockTowerGreeting: "The clock ticks on above you, dividing the hour up",
 
   titleTagline: "A garden, and the sums that grow it",
   titleLoading: "loading…",
@@ -156,9 +146,6 @@ export const EN: Phrases = {
   mapYouAreHere: "You are the pale mark.",
   placeName: (place) => PLACE_NAMES[place] ?? place,
 
-  geometerGreeting: "The geometer looks up from his table.",
-  portalUntaught: "You have not been taught this one. Someone in the tower knows it.",
-  portalTaught: "The geometer teaches you the portal spell.",
   geometryLessonTitle: "Measuring the world",
   geometryRune:
     "The dividers in your spellbook open a map. Pick a place you have been, say how far away it is, and the portal takes you there.",
@@ -185,10 +172,7 @@ export const EN: Phrases = {
     `${acrossMarks} ${across}, then ${downMarks} ${down}.`,
   portalHintCrow: (acrossMarks, downMarks, squares) =>
     `${acrossMarks}×${acrossMarks} + ${downMarks}×${downMarks} = ${squares}. The crow's flight times itself makes ${squares}.`,
-  portalArrived: (place) => `The portal sets you down at ${place}.`,
 
-  arrayUntaught: "You have not earned this one yet. Something in the old wood is waiting on you.",
-  arrayTaught: "Your grove is full. The great tree teaches you the array spell.",
   groveAsks: ({ task, standing, ripe, squares }) =>
     task === "overgrown"
       ? `The wood has closed over my bed. Take away the ${standing} that still stand.`
@@ -197,15 +181,6 @@ export const EN: Phrases = {
         : `Fill my bed: ${ripe} of ${squares} squares are ripe.`,
   groveTaskTitle: "The tree's bed",
   groveBargain: "Do that and the six dots are yours.",
-  // The plural and the definite, never "a": one of the crops is wheat, and
-  // "a wheat" is the sort of thing only a template writes.
-  animalAsks: (kind, wants) =>
-    `The ${ANIMALS[kind]?.bare} is hoping for ${PLANTS[wants]?.plural} — you have none`,
-  animalFed: (kind, wants) =>
-    `The ${ANIMALS[kind]?.bare} is happy — the ${PLANTS[wants]?.bare} is gone`,
-  animalFull: (kind) => `The ${ANIMALS[kind]?.bare} has had enough — but not for long`,
-  animalNotHungry: (kind) => `The ${ANIMALS[kind]?.bare} isn't hungry just now`,
-  animalTooFar: (kind) => `The ${ANIMALS[kind]?.bare} is too far away — step up to it first`,
   groveLessonTitle: "Rows and columns",
   groveRune:
     "The six dots in your spellbook plant a whole patch at once. Say how many seedlings it will hold, and they all go in together.",
@@ -217,20 +192,8 @@ export const EN: Phrases = {
     `Now turn the patch on its side: ${columns} rows of ${rows}. Still ${total}. ${rows} × ${columns} and ${columns} × ${rows} are the same patch seen two ways, so you only ever have to learn half the table.`,
 
   arrayTitle: (rows, columns) => `${rows} × ${columns}`,
-  arrayMarkOut: "Mark out the ground: tap one corner, then the other.",
-  arrayTooSmall: "One square on its own is not a patch — tap a second corner.",
-  arrayNothingToDo: "Nothing in that patch to plant, grow or clear.",
-  arrayChooseAction: "Now choose what to do with it.",
   patchAction: (action) =>
     action === "plant" ? "plant it" : action === "grow" ? "grow it" : "clear it",
-  patchDone: (action, count) =>
-    count === 0
-      ? "Nothing there to touch."
-      : action === "plant"
-        ? `${count} seedlings, all at once.`
-        : action === "grow"
-          ? `${count} of them grew at once.`
-          : `${count} squares cleared at once.`,
   arrayAsk: "How many in the whole patch?",
   arrayHintRows: (columns, counted) =>
     `Count along by ${columns}: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
@@ -241,28 +204,6 @@ export const EN: Phrases = {
   hourglassBack: "you are back",
   hourglassCountOn: (hours) => `Count round the dial: ${hours}, and keep going…`,
   hourglassSolved: (hours) => `${hours} hours. The glass turns.`,
-  hourglassNoTime: "The glass reads the same hour it did. Come back later.",
-  hourglassNothingGrowing: "Time passed, but nothing of yours is growing. Plant something first.",
-  hourglassUntaught:
-    "You have not earned this one yet. Somebody up in the mountains keeps the hours.",
-  hourglassTaught: "The way is lit. The astronomer teaches you the hourglass.",
-  astronomerGreeting: "The astronomer looks up from the eyepiece.",
-  astronomerAsks: (dark, given) => {
-    const left = dark === 1 ? "One lamp" : `${dark} lamps`;
-    const posts = dark === 1 ? "the empty post" : "the empty posts";
-    if (given <= 0) return `${left} still to set on the path.`;
-    const here = given === 1 ? "Here is one" : `Here are ${given}`;
-    return `${left} still to set on the path. ${here} — put ${given === 1 ? "it" : "them"} on ${posts}.`;
-  },
-  astronomerBlocked: "Something is standing where a lamp should go. Clear the posts first.",
-  starChartRead: "A chart of the night, with the plough drawn out on it.",
-  hourglassGrew: (count) =>
-    count === 1
-      ? "One thing grew while you were away."
-      : `${count} things grew while you were away.`,
-
-  purseTier: (count, amount) => (count > 0 ? `${count} coins — ${amount}` : "none of those"),
-  purseEmpty: "Your purse is empty",
 
   optionsButton: "options",
   optionsTitle: "Options",
@@ -284,7 +225,6 @@ export const EN: Phrases = {
   deleteAreYouSure: (name) => `Remove ${name}, and everything ${name} has grown?`,
   deleteYes: "Yes, remove",
   deleteNo: "No, keep",
-  worldRebuilt: "The world was rebuilt, but your coins and your basket are still yours.",
   sumsHeading: "Your sums",
 
   storeTitle: (money) => `Village Store — ${money}`,
@@ -316,11 +256,9 @@ export const EN: Phrases = {
   verdictWasRight: (owed) => `It was right, in fact: ${owed}. She counts it again for you.`,
   verdictLookAgain: (paid, owed) => `Have another look — that was ${paid}, not ${owed}.`,
 
-  postmanGreeting: "The postal worker jogs over with something for you.",
   introTitle: "Welcome to the village",
   intro: (beat) => INTRO_EN[beat] ?? "",
 
-  teacherGreeting: "The teacher looks up from her desk.",
   lessonTitle: "The addition spell",
   lessonRune:
     "Open your spellbook and tap the + rune. Whatever you are facing grows one step — but only if you can do the sum it asks you.",
