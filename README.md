@@ -254,7 +254,11 @@ bun run build     # production build to dist/
 
 Pushing to `main` publishes the game to GitHub Pages
 (`.github/workflows/pages.yml`). The workflow turns Pages on the first time
-it runs, so there is no repository setting to remember.
+it runs, so there is no repository setting to remember. The one thing it
+cannot do for itself is make the repository eligible: on GitHub Free, Pages
+only publishes from a **public** repository, and a private one needs a paid
+plan. Either way the source is readable — the licence already says so — so
+this is a billing question rather than a licensing one.
 
 `dist/` is host-agnostic and is meant to stay that way. `vite.config.ts`
 builds with a **relative** base and `BootScene` prefixes every runtime asset
