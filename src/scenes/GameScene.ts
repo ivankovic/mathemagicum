@@ -1144,13 +1144,17 @@ export class GameScene extends Phaser.Scene {
     // drawn as a sprite of its own, and one that exists only in the grid is
     // a carrot every rule agrees is there and nobody can see.
     for (const [col, row, crop] of this.grid.listCrops()) this.spawnCropSprite(col, row, crop);
-    this.villageNpcs = world.village.npcs;
+    // Everybody in the world, not only the village's. The city and the
+    // harbour keep their own lists and this is where the three meet: the
+    // spawner sorts the indoor ones from the outdoor ones by itself, and
+    // `homeBuildingId` is what puts a shopkeeper behind the right counter.
+    this.villageNpcs = [...world.village.npcs, ...world.city.npcs, ...(world.harbour?.npcs ?? [])];
     this.spawnAnimals(
       world.village.well,
       world.village.buildings,
       createRng(this.seed ^ 0x0a11_4a15),
     );
-    this.spawnNpcs(world.village.npcs, world.anchors.village);
+    this.spawnNpcs(this.villageNpcs, world.anchors.village);
 
     // The marker the array spell draws on the ground. In the world rather
     // than on the screen — it is over a patch of earth, and it has to slide
@@ -5144,39 +5148,42 @@ export class GameScene extends Phaser.Scene {
   private spawnAttendant(buildingId: string, sidecar: InteriorSidecar): void {
     const lone = LONE_ATTENDANTS[buildingId];
     const spec = lone
-      ? { id: lone }
+      ? { id: lone, role: undefined }
       : this.villageNpcs.find((npc) => npc.indoors && npc.homeBuildingId === buildingId);
     if (!spec) return;
+    // What they *are*, which their id may not be: the city's four shops each
+    // hold a shopkeeper, and every id in the world has to be its own.
+    const part = spec.role ?? spec.id;
     const cell = interiorAttendantCell(sidecar);
     if (!cell) throw new Error(`${sidecar.room} has nowhere for ${spec.id} to stand`);
 
     const feet = this.toFeet(cell.col, cell.row);
     const sprite = this.world(
       this.add
-        .sprite(feet.x, feet.y, characterSheetKey(characterFor(spec.id, 0)))
+        .sprite(feet.x, feet.y, characterSheetKey(characterFor(part, 0)))
         .setOrigin(0.5, 1)
         .setDepth(feet.y)
-        .play(characterAnimKey(characterFor(spec.id, 0), IDLE, Facing.Down)),
+        .play(characterAnimKey(characterFor(part, 0), IDLE, Facing.Down)),
     );
-    if (spec.id === SHOPKEEPER_ID)
+    if (part === SHOPKEEPER_ID)
       this.watchAttendant(
         sprite,
         () => cell,
         () => this.openShop(),
       );
-    if (spec.id === TEACHER_ID)
+    if (part === TEACHER_ID)
       this.watchAttendant(
         sprite,
         () => cell,
         () => this.openLesson(),
       );
-    if (spec.id === GEOMETER_ID)
+    if (part === GEOMETER_ID)
       this.watchAttendant(
         sprite,
         () => cell,
         () => this.openGeometryLesson(),
       );
-    if (spec.id === ASTRONOMER_ID)
+    if (part === ASTRONOMER_ID)
       this.watchAttendant(
         sprite,
         () => cell,
@@ -5487,7 +5494,7 @@ export class GameScene extends Phaser.Scene {
       .map((spec) => {
         const isPostalWorker = spec.id === "postal-worker";
         const wanderCenter = isPostalWorker ? villageCenter : spec.home;
-        const character = characterFor(spec.id, genericIndex);
+        const character = characterFor(spec.role ?? spec.id, genericIndex);
         if (character.startsWith("villager-")) genericIndex++;
         const feet = this.toFeet(spec.home.col, spec.home.row);
         const sprite = this.world(

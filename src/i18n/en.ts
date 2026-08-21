@@ -230,7 +230,10 @@ export const EN: Phrases = {
   resetKeepsPlayers:
     "Start a new world? The players stay. Everything they have earned starts again.",
 
-  storeTitle: (money) => `Village Store — ${money}`,
+  // Not "Village Store" any more: there are shops in the city and on the
+  // quay, and a counter in a harbour warehouse announcing a village is a
+  // sign for the wrong building.
+  storeTitle: (money) => `Shop — ${money}`,
   storeFooter: "She buys crops, and sells things to put in your garden.",
   sheBuys: "She buys",
   sheSells: "She sells",

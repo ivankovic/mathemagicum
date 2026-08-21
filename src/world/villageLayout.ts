@@ -156,6 +156,18 @@ const BUILDINGS: readonly BuildingSpec[] = [
 
 export interface VillageNpcSpec {
   id: string;
+  /**
+   * Which of the named parts this person plays, when their id cannot be it.
+   *
+   * The village has one shopkeeper and she is called `shopkeeper`, which is
+   * both her name and her job. The city has four shops and the harbour has
+   * one, and every id in the world has to be unique — so those five are
+   * `city-shopkeeper-3` and so on, and this says what they *are*. It decides
+   * which sheet they are drawn with and which panel they open.
+   *
+   * Absent for anybody whose id is already their part.
+   */
+  role?: string;
   homeBuildingId: string;
   home: GridPoint;
   /**

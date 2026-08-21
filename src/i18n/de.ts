@@ -279,7 +279,7 @@ export const DE: Phrases = {
   resetKeepsPlayers:
     "Eine neue Welt beginnen? Die Spieler bleiben. Alles, was sie erreicht haben, fängt von vorn an.",
 
-  storeTitle: (money) => `Dorfladen — ${money}`,
+  storeTitle: (money) => `Laden — ${money}`,
   storeFooter: "Sie kauft deine Ernte und verkauft Sachen für den Garten.",
   sheBuys: "Sie kauft",
   sheSells: "Sie verkauft",

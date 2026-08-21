@@ -10,6 +10,7 @@ import type { PlacedObject } from "./objects";
 import { type Rng, randInt } from "./rng";
 import { TerrainType } from "./terrain";
 import type { GridPoint } from "./topdown";
+import type { VillageNpcSpec } from "./villageLayout";
 
 /**
  * The big city: streets and blocks, laid out on a grid.
@@ -31,6 +32,27 @@ import type { GridPoint } from "./topdown";
  * the same stone the village square is, which is the one piece of built
  * ground the world already has.
  */
+
+/**
+ * How many people are out on the streets.
+ *
+ * Eight, against the village's four and its twenty-four buildings. Not one
+ * per house: a city where everybody is outdoors at once is a parade, and the
+ * point of the number is that a child turning a corner meets somebody rather
+ * than that the census adds up.
+ */
+const TOWNSFOLK = 8;
+/**
+ * How many shops a city has, whatever the dice say.
+ *
+ * A playtest asked for shops in the city and the harbour, and "one block in
+ * five, at random" answers that on most seeds and on some seeds not at all.
+ * Five is enough that a child walking a lap meets one and few enough that
+ * the place is still somewhere people live.
+ */
+const CITY_SHOPS = 5;
+/** What the person behind a city counter is, whatever their id says. */
+const SHOPKEEPER_ROLE = "shopkeeper";
 
 /** How far inside the box the ring road runs, and how wide it is. */
 const RING_INSET = 1;
@@ -68,6 +90,18 @@ export interface CityLayout {
   /** Every block between the streets, in reading order. */
   readonly blocks: readonly CityBlock[];
   readonly buildings: readonly PlacedObject[];
+  /**
+   * The people: townsfolk on the streets, and a shopkeeper in every shop.
+   *
+   * A playtest put it plainly — *the city has no people*. Twenty-four
+   * buildings and nobody on the street is a model of a city rather than one,
+   * and four shops nobody is standing in are four rooms with a door.
+   *
+   * The same shape as the village's, because they are the same problem: a
+   * person who walks a short circuit near where they belong, or one who
+   * waits inside a room to be spoken to.
+   */
+  readonly npcs: readonly VillageNpcSpec[];
   readonly placed: readonly PlacedObject[];
   /** The paved square at the middle, and the tower that stands on it. */
   readonly plaza: CityBlock;
@@ -308,25 +342,6 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
 
   const buildings: PlacedObject[] = [];
   const placed: PlacedObject[] = [];
-  // Drawn rather than dealt round in order. A fixed cycle over a grid of
-  // blocks lands the same role on the same relative position in every rank,
-  // which is a pattern the eye finds immediately — the first pass came out
-  // as a column of warehouses down the middle of the city.
-  //
-  // Mostly townhouses: a city is people living in it, and a row of nothing
-  // but warehouses reads as a depot. The cottage is deliberately absent —
-  // it is the village's house, and a city that borrowed it would be a
-  // village with more of them. So is the post office: there is one of those
-  // in the world, it is where the map on the wall hangs, and a city with
-  // four of them would be four more maps and three more reasons not to
-  // bother climbing the village's tower.
-  const ROLES: readonly BuildingRole[] = [
-    "townhouse",
-    "townhouse",
-    "townhouse",
-    "store",
-    "townhouse",
-  ];
   // What the clock tower's art covers, which is more than what it stands on:
   // five tiles above the two, so the block behind it is drawn over entirely.
   // A playtest called that "buildings behind the clocktower are blocked".
@@ -349,10 +364,33 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
     block.row < shadow.row + shadow.height &&
     shadow.row < block.row + block.height;
 
+  // Which blocks get a shop, drawn without replacement.
+  //
+  // It used to be a die roll per block — a one-in-five chance of a store —
+  // which mostly came out at five or six shops and sometimes came out at
+  // *none*. A city with no shop in it fails the thing the shops were asked
+  // for, and it fails it on a seed nobody can predict, which is the worst
+  // way for something to be missing.
+  //
+  // Drawn rather than dealt round in order, though, because that was the
+  // other failure: a fixed cycle over a grid of blocks lands the same role
+  // on the same relative position in every rank, and the first pass came
+  // out as a column of warehouses down the middle of the city.
+  //
+  // Everything else is a townhouse. A city is people living in it, and a row
+  // of nothing but warehouses reads as a depot. The cottage is deliberately
+  // absent — it is the village's house, and a city that borrowed it would be
+  // a village with more of them. So is the post office: there is one of
+  // those in the world, it is where the map on the wall hangs, and a city
+  // with four would be three more reasons not to climb the village's tower.
+  const shopBlocks = new Set<number>();
+  const buildable = blocks.filter((block) => block !== plaza && !hidden(block));
+  while (shopBlocks.size < Math.min(CITY_SHOPS, buildable.length)) {
+    shopBlocks.add(randInt(rng, 0, buildable.length - 1));
+  }
   let n = 0;
-  for (const block of blocks) {
-    if (block === plaza || hidden(block)) continue;
-    const role = ROLES[randInt(rng, 0, ROLES.length - 1)] as BuildingRole;
+  for (const [at, block] of buildable.entries()) {
+    const role: BuildingRole = shopBlocks.has(at) ? "store" : "townhouse";
     const { width, height } = footprintFor(role);
     if (width > block.width || height > block.height) {
       n++;
@@ -418,5 +456,59 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
   pave(grid, gate.col, gate.row, TerrainType.Cobble);
 
   if (clockTower) placed.push(clockTower);
-  return { blocks, buildings, placed, plaza, clockTower, plazaCell, doorstep, wall };
+
+  // --- the people ---------------------------------------------------------
+
+  const npcs: VillageNpcSpec[] = [];
+  // One behind every counter. The city builds shops already; what it has
+  // never had is anybody in them, so walking into one got a room and a
+  // silence.
+  for (const shop of buildings.filter((building) => building.type === "store")) {
+    npcs.push({
+      id: `${shop.id}-keeper`,
+      role: SHOPKEEPER_ROLE,
+      homeBuildingId: shop.id,
+      home: { col: shop.col + Math.floor(shop.width / 2), row: shop.row + shop.height },
+      indoors: true,
+    });
+  }
+  // And some out on the streets. Spread along the ring road rather than
+  // scattered at random: the ring is the one run of ground the layout knows
+  // is walkable end to end, and people you meet while walking round a city
+  // are people on a street rather than people standing in a yard.
+  // Spaced along the cells of the ring that are clear, rather than along the
+  // ring and then dropped where they are not — the lamps stand on it, and
+  // sampling first put a person on a lamp post and then dropped them.
+  const ring = ringWalk(box).filter((at) => grid.isPassable(at.col, at.row));
+  for (let n = 0; n < TOWNSFOLK && ring.length > 0; n++) {
+    const at = ring[Math.floor((n * ring.length) / TOWNSFOLK)] as GridPoint;
+    npcs.push({
+      id: `city-townsfolk-${n}`,
+      homeBuildingId: "",
+      home: { col: at.col, row: at.row },
+      indoors: false,
+    });
+  }
+
+  return { blocks, buildings, placed, plaza, clockTower, plazaCell, doorstep, wall, npcs };
+}
+
+/**
+ * The ring road, as a loop of cells.
+ *
+ * Walked once round rather than sampled, so the people spaced along it are
+ * spaced along the *road* — a city's crowd belongs on its streets, and a
+ * random cell inside the walls is as likely to be somebody's doorstep.
+ */
+function ringWalk(box: AreaPlacement): GridPoint[] {
+  const left = box.col + RING_INSET;
+  const right = box.col + box.width - RING_INSET - 1;
+  const top = box.row + RING_INSET;
+  const bottom = box.row + box.height - RING_INSET - 1;
+  const loop: GridPoint[] = [];
+  for (let col = left; col <= right; col++) loop.push({ col, row: top });
+  for (let row = top + 1; row <= bottom; row++) loop.push({ col: right, row });
+  for (let col = right - 1; col >= left; col--) loop.push({ col, row: bottom });
+  for (let row = bottom - 1; row > top; row--) loop.push({ col: left, row });
+  return loop;
 }

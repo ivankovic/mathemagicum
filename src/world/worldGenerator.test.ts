@@ -111,6 +111,7 @@ function assertYouCanGetIntoTheSettlements(
   expect(isReachable(reachable, grid, world.city.plazaCell)).toBe(true);
   expect(world.city.clockTower?.type).toBe(LandmarkType.ClockTower);
   assertNothingHidesBehindTheClock(world.city);
+  assertSomebodyLivesThere(world);
 
   const harbour = world.harbour;
   if (!harbour) return;
@@ -240,6 +241,47 @@ function assertTheWallIsAWall(
         at: `${col},${row}`,
         ground: TerrainType.Cobble,
       });
+    }
+  }
+}
+
+/**
+ * The city and the harbour have people in them, and shops with somebody in.
+ *
+ * A playtest said it plainly — *the city has no people*, and *the harbour and
+ * city should have shops*. Twenty-four buildings and nobody on the street is
+ * a model of a city; a shop with nobody behind the counter is a room with a
+ * door.
+ *
+ * Two properties rather than a count. Every outdoor person stands somewhere
+ * that can be walked on, or they are a villager inside a lamp post; and
+ * every id in the world is its own, or the second shopkeeper overwrites the
+ * first in every map the scene keeps them in.
+ */
+function assertSomebodyLivesThere(world: ReturnType<typeof generateWorld>): void {
+  const everybody = [...world.village.npcs, ...world.city.npcs, ...(world.harbour?.npcs ?? [])];
+  const ids = everybody.map((npc) => npc.id);
+  expect(new Set(ids).size).toBe(ids.length);
+
+  // The city always has shops, whatever the dice say. It used to be a roll
+  // per block, which came out at none often enough to matter — and a city
+  // with no shop fails the thing the shops were asked for, on a seed nobody
+  // could predict.
+  expect(world.city.buildings.filter((b) => b.type === "store").length).toBeGreaterThan(0);
+
+  for (const place of [world.city.npcs, world.harbour?.npcs ?? []]) {
+    expect(place.some((npc) => !npc.indoors)).toBe(true);
+    for (const npc of place) {
+      if (npc.indoors) continue;
+      const standable = world.grid.isPassable(npc.home.col, npc.home.row);
+      expect({ npc: npc.id, standable }).toEqual({ npc: npc.id, standable: true });
+    }
+  }
+  // Every shop has exactly one keeper, and every keeper a shop.
+  for (const buildings of [world.city.buildings, world.harbour?.buildings ?? []]) {
+    for (const shop of buildings.filter((building) => building.type === "store")) {
+      const keepers = everybody.filter((npc) => npc.homeBuildingId === shop.id);
+      expect({ shop: shop.id, keepers: keepers.length }).toEqual({ shop: shop.id, keepers: 1 });
     }
   }
 }

@@ -768,7 +768,7 @@ already. What has to be decided is what happens to *facing*: it is currently
 the whole of how the game knows which square an action is about, and there is
 art for four of them.
 
-## 3. The city has no people — **open**
+## 3. The city has no people — **fixed**
 
 **Reported:** the city has no people!
 
@@ -777,13 +777,40 @@ harbour, the city and the observatory have exactly one attendant between
 them, and she is indoors. Twenty-four buildings and nobody on the street is
 not a city, it is a model of one.
 
-## 4. The harbour and the city should have shops — **open**
+**Fixed: the city and the harbour keep their own lists of people**, in the
+same shape the village uses, and the scene puts all three together. Eight
+townsfolk on the city's ring road and four along the harbour's working
+front — spaced along the cells of those runs that are *clear*, rather than
+spaced along the run and then dropped where they are not, which is what put
+one person in a harbour whenever the sample landed on a bollard.
+
+Eight rather than one per house: a city where everybody is outdoors at once
+is a parade, and the point of the number is that a child turning a corner
+meets somebody rather than that the census adds up.
+
+## 4. The harbour and the city should have shops — **fixed**
 
 **Reported:** the harbour and city should have shops.
 
 There is one shop in the world and it is in the village. The city already
 builds `store` buildings — a fifth of its blocks — but they are scenery with
 a door: walking in gets a room and nobody in it.
+
+**Fixed: every shop in the world has somebody behind the counter.** A
+`role` on an NPC says what they *are* when their id cannot — the village has
+one shopkeeper and she is called `shopkeeper`, and the city has five whose
+ids have to be their own — and it decides both which sheet they are drawn
+with and which panel they open.
+
+**The city's shops stopped being a die roll.** One block in five, drawn per
+block, mostly came out at five or six and *sometimes came out at none*: a
+city with no shop fails the thing the shops were asked for, on a seed nobody
+could predict. Five blocks are now drawn without replacement, which keeps
+the scatter that stops a fixed cycle laying a column of warehouses down the
+middle of the city.
+
+The shop's title also stopped saying "Village Store", which is a sign for
+the wrong building when the counter is in a harbour warehouse.
 
 ## 5. Buildings behind the clock tower are blocked — **fixed**
 
@@ -824,7 +851,8 @@ announcing — the parchment closing is the whole of it.
 
 ## Where this stands
 
-**Fixed:** 1, 5 and 6. **Open:** 2, 3 and 4.
+**Fixed:** 1, 3, 4, 5 and 6. **Open:** 2 — spell targeting, which is the
+one that changes a rule the whole game is built on rather than adding to it.
 
 Three of the six were not what they looked like from the outside — the
 rotation was two bugs, the blocked buildings were not blocked, and the

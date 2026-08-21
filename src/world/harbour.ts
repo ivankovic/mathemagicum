@@ -10,6 +10,7 @@ import type { PlacedObject } from "./objects";
 import type { Rng } from "./rng";
 import { TerrainType } from "./terrain";
 import type { GridPoint } from "./topdown";
+import type { VillageNpcSpec } from "./villageLayout";
 
 /**
  * The harbour: everything strung along a waterfront, facing the sea.
@@ -35,6 +36,15 @@ import type { GridPoint } from "./topdown";
 
 /** How far inland the working front is paved. */
 const QUAY_DEPTH = 3;
+/**
+ * How many people are out on the working front.
+ *
+ * Fewer than the city's eight: a harbour is three buildings and a quay, and
+ * the same crowd there would be a queue.
+ */
+const QUAYSIDE_FOLK = 4;
+/** What the person behind a harbour counter is, whatever their id says. */
+const SHOPKEEPER_ROLE = "shopkeeper";
 /** How far out a pier reaches, and how many the front carries. */
 const PIER_REACH = 7;
 const PIERS = 3;
@@ -60,6 +70,14 @@ export interface HarbourLayout {
   readonly piers: readonly (readonly GridPoint[])[];
   readonly buildings: readonly PlacedObject[];
   readonly placed: readonly PlacedObject[];
+  /**
+   * The people: a few along the working front, and one behind each counter.
+   *
+   * The same complaint the city drew — a place with buildings and nobody in
+   * it is a model of a place. A harbour's crowd belongs on the quay, which is
+   * also the one run of ground here the layout knows is walkable end to end.
+   */
+  readonly npcs: readonly VillageNpcSpec[];
   /**
    * The lighthouse, standing on the headland at one end of the shore.
    *
@@ -620,11 +638,40 @@ export function layoutHarbour(grid: WorldGrid, box: AreaPlacement, rng: Rng): Ha
 
   if (lighthouse) placed.push(lighthouse);
   if (moored) placed.push(moored.ship);
+
+  const npcs: VillageNpcSpec[] = [];
+  for (const shop of buildings.filter((building) => building.type === "store")) {
+    npcs.push({
+      id: `${shop.id}-keeper`,
+      role: SHOPKEEPER_ROLE,
+      homeBuildingId: shop.id,
+      home: { col: shop.col + Math.floor(shop.width / 2), row: shop.row + shop.height },
+      indoors: true,
+    });
+  }
+  // Spaced along the cells of the front that are actually clear, rather than
+  // along the front and then dropped where they are not: a quay has stalls
+  // and bollards on it, and sampling first meant a harbour with one person
+  // in it whenever the sample happened to land on them.
+  const standing = quay.filter(
+    (at) => grid.isPassable(at.col, at.row) && !grid.isBridged(at.col, at.row),
+  );
+  for (let n = 0; n < QUAYSIDE_FOLK && standing.length > 0; n++) {
+    const at = standing[Math.floor((n * standing.length) / QUAYSIDE_FOLK)] as GridPoint;
+    npcs.push({
+      id: `harbour-folk-${n}`,
+      homeBuildingId: "",
+      home: { col: at.col, row: at.row },
+      indoors: false,
+    });
+  }
+
   return {
     quay,
     piers,
     buildings,
     placed,
+    npcs,
     lighthouse,
     ship: moored?.ship ?? null,
     gangway: moored?.gangway ?? [],
