@@ -355,10 +355,15 @@ export class GameSession {
    * this before opening the parchment, and applies the result only if the
    * player solves it. Both halves name the same tile, which is what stops a
    * cast landing somewhere other than where it was aimed.
+   *
+   * `at` is the square the child tapped after lighting the rune. Passed
+   * rather than aimed, because a spell asks *where* once and the answer is
+   * about that cast only — leaving it in `aim` would send the next seed she
+   * plants to the tile she last cast on.
    */
-  checkGrowth(): CropResult {
+  checkGrowth(at?: GridPoint): CropResult {
     if (this.indoors) return { ok: false, outcome: Outcome.Indoors };
-    const { col, row } = this.targetTile();
+    const { col, row } = at ?? this.targetTile();
     if (!this.grid.inBounds(col, row)) {
       return { ok: false, outcome: Outcome.FacingNothing };
     }
@@ -382,13 +387,13 @@ export class GameSession {
    * unmade it would be a spell that could undo an afternoon's shopping by
    * being cast at the wrong tile. A building is not even a candidate.
    *
-   * The tile in front, like planting and growing, and for the same reason:
-   * three gardening actions that targeted different tiles would mean facing
-   * one way to plant and another to clear.
+   * `at` is the square the child tapped after lighting the rune, as in
+   * `checkGrowth`. Without one it falls back to the tile in front, which is
+   * what every hand action still uses.
    */
-  checkClearing(): ActionResult {
+  checkClearing(at?: GridPoint): ActionResult {
     if (this.indoors) return { ok: false, outcome: Outcome.NothingThere };
-    const { col, row } = this.targetTile();
+    const { col, row } = at ?? this.targetTile();
     if (!this.grid.inBounds(col, row)) return { ok: false, outcome: Outcome.NothingThere };
     const object = this.grid.getObjectAt(col, row);
     if (!object) return { ok: false, outcome: Outcome.NothingThere, tile: { col, row } };

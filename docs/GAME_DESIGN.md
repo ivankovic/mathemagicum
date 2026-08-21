@@ -85,15 +85,33 @@ themes map onto specific areas.
 
 Spells are reached through a **spellbook** button, which opens a tray of
 runes; seeds through a **seed pouch** button beside it, which opens a tray
-of crops. Both are the same widget and behave identically: tap the
-container to see what is inside, tap one of those to plant or cast it
-straight away, on the tile the player is facing. Neither container is
-marked with any one of its contents — a plus on the book or a carrot on
-the pouch would be wrong the moment there are two of either.
+of crops. Both are the same widget: tap the container to see what is
+inside, tap one of the things inside to use it. Neither container is marked
+with any one of its contents — a plus on the book or a carrot on the pouch
+would be wrong the moment there are two of either.
 
-Nothing selects-then-confirms. A two-step action on a phone is two chances
-to lose the tray to a stray tap, and it asks the player to read a caption
-to find out what they are about to do.
+**A seed goes down where she stands. A spell asks where it lands.** That is
+the one place the two trays part company, and it is the difference between
+a hand and a spell. Pressing a seed plants it on the square she is pointing
+at, or the one she faces — near enough that she could have reached down and
+done it. Tapping a rune only *arms* it: the rune rises over her head and
+pulses, the ground it can be sent to is ruled off round her seven squares by
+seven, and the next tap on the world says where. Tapping the lit rune again
+puts it out.
+
+A spell is a question in two parts — *which spell*, and *on what* — and for
+a long time the game only asked the first, answering the second with
+whichever square she happened to be facing. Lining a character up with a
+square is a thing an adult does without noticing and a six-year-old cannot
+do at all. It was tried the other way round first, tapping the ground to
+point and then the rune, and that is the same two parts asked in the order
+where the child has to commit to a place before she has chosen a thing.
+
+**Nothing else selects-then-confirms.** A two-step action on a phone is two
+chances to lose the tray to a stray tap, and it asks the player to read a
+caption to find out what they are about to do. The spells earn their second
+step by having something to ask that only the child can answer, and they ask
+it in pictures: a lit rune and a ruled square, no words at all.
 
 **There is no caption any more.** The screen used to carry a status line
 above the message line — the key hints, "you are carrying three carrots", the
@@ -105,7 +123,7 @@ and it says what just happened.
 
 #### The addition spell — growth (implemented)
 
-**Action:** face a crop you have planted and cast it. One successful
+**Action:** tap the rune, then tap a crop you have planted. One successful
 cast moves the crop one growth stage: seedling → growing → mature. That
 mapping is the theme rule above applied literally — the spell that adds is
 the one that makes things grow, so planting drops a *seedling* and growth
@@ -147,7 +165,7 @@ distribution.
 
 #### The subtraction spell — clearing (implemented)
 
-**Action:** face something in the way and cast it. One successful cast takes
+**Action:** tap the rune, then tap something in the way. One successful cast takes
 it out of the world. That is the theme rule read backwards — the spell that
 subtracts is the one that removes — and it is the same rule the growth spell
 follows in being the one that adds.

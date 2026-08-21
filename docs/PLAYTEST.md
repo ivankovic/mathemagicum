@@ -793,6 +793,15 @@ square makes that square the patch's first corner, so the second tap finishes
 the rectangle. That is what the pointing was for — she has already said
 where, and asking again would be asking twice.
 
+> **This answer was wrong, and the correction is in the round below**
+> (2026-08-21, second round). The intended design was the other order — tap
+> the rune, *then* tap the square it lands on — and what was built here asks
+> the child to say where before she has decided what. It was also unreachable
+> in play: on a tablet every press belongs to the joystick, and a crop
+> swallows the taps aimed at it. Left in place rather than rewritten, because
+> a playtest record that quietly edits its own wrong answers is a record of
+> nothing.
+
 ## 3. The city has no people — **fixed**
 
 **Reported:** the city has no people!
@@ -950,3 +959,97 @@ The lesson is the one about mirrors. Every list in this game that the
 generator and the game both hold has to be checked from both ends, because
 a one-way check passes exactly when the half you did not write is the half
 that is wrong.
+
+---
+
+## 2. Spell targeting was built backwards — **fixed**
+
+**Reported:** *"Wait what? The idea was that after clicking on the rune, the
+player taps the tile the rune applies to."*
+
+Correct, and what shipped was the reverse: tap a square to point at it, then
+tap a rune. Two things are wrong with that order and a third with what it was
+built on.
+
+**It asks the questions in the wrong order.** A spell is a question in two
+parts — *which spell*, and *on what*. Pointing first asks a child to say
+where before she has decided what, which is the one order in which the answer
+cannot be reasoned about.
+
+**It never worked on a tablet.** The pointing lived in `handleTileClick`,
+which is reached from exactly one branch:
+
+```ts
+if (this.joystick) this.joystick.begin(pointer);
+else this.handleTileClick(pointer.worldX, pointer.worldY);
+```
+
+With a touch device there *is* a joystick, so every press became a step of
+the stick and `handleTileClick` was never called at all. The whole feature
+was mouse-only, on a game played on tablets.
+
+**And it never worked on a crop.** Crop sprites are interactive, ripe or not,
+and their handler refuses at more than one square away:
+
+```ts
+if (steps > 1) { this.markRefusal(col, row); this.markTooFar(col, row); return; }
+```
+
+So a tap on a crop two squares off — which is the only kind of square the
+growth spell has ever cared about — drew a refusal cross and never reached
+the aiming code beneath it. Pointing worked on bare ground and on nothing
+else.
+
+Three failures, and the middle one means no child in the playtest could have
+used the feature at all. The report was not a change of mind; it was a report
+that targeting did not work.
+
+**Fixed: the rune is lit first and the ground named second.** Tapping a rune
+now *arms* it — the rune rises over her head and pulses, and the ground she
+may send it to is ruled off round her, seven squares by seven. The next tap
+on the world is the answer, and the parchment opens on that square. Tapping
+the lit rune again puts it out, and nothing is drawn when it does, because a
+rune moving over the player is what *earning* one looks like.
+
+The array spell has worked exactly this way since the day it was written.
+This is that pattern for the other two, not a new one — `armSpell` sits
+beside `castArraySpell` and borrows its rune, its pulse and its rule that
+re-tapping cancels.
+
+**A tap outside the ring leaves the rune lit.** It draws the too-far cross
+and waits. A near miss has not chosen anything, and a spell that gave up on
+one would be a spell a child had to aim twice.
+
+**The square is passed, not aimed.** `checkGrowth(at)` and `checkClearing(at)`
+take the tile the tap named. Leaving it behind in `aim` would point the next
+seed she plants at the square she last cast on — a carrot appearing three
+squares away for no reason she can see. There is a test that says so.
+
+**Everything that answers a tap now stands aside while a spell is waiting.**
+That guard was written out by hand at five call sites and the animals were
+missed, so it is one named thing now — `pointerIsSpokenFor`. A chicken fed
+instead of a tree cleared is the spell silently not firing.
+
+**Pointing stays for hands.** Planting, picking and putting down still use
+the aimed-or-facing square. A seed is not a rune, and the mouse route that
+sets an aim is untouched.
+
+**Checked on a tablet, because that is where it was broken.** An iPad user
+agent, so the joystick exists; a crop planted and then walked away from,
+three squares off. Tapping it with nothing armed opens nothing, as it should.
+Tapping the plus rune raises it and rules the ring. Tapping the same crop
+then opens the parchment. Re-tapping the rune puts it out; a tap eight
+squares away leaves it lit; the minus rune arms the same way. No console
+errors.
+
+---
+
+## Where this stands
+
+**Fixed.**
+
+The lesson is about what a passing test is worth. The first attempt had unit
+tests, and they all passed, and the feature could not be reached by a finger
+on a tablet or by a tap on a crop. Nothing that only exercises the rules layer
+can see either of those. An interaction change has to be driven through the
+thing a child actually touches.

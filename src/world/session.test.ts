@@ -564,3 +564,68 @@ describe("pointing at a square", () => {
     expect(s.aimed).toEqual({ col: 6, row: 6 });
   });
 });
+
+/**
+ * A spell asks *where* once, and the answer is about that cast only.
+ *
+ * The rune is lit first and the ground named second, so the scene has a
+ * square in hand before either spell is checked. It passes it rather than
+ * aiming with it, and these are the two halves of why: the cast has to land
+ * where the tap said, and nothing afterwards may still be pointing there.
+ */
+describe("a spell told where to land", () => {
+  const garden = () =>
+    new GameSession({
+      grid: WorldGrid.empty(12, 12, TerrainType.Dirt),
+      start: { col: 5, row: 5 },
+      facing: Facing.Down,
+    });
+
+  test("checks the square it was given, not the one in front", () => {
+    const s = garden();
+    s.aimAt({ col: 8, row: 8 });
+    expect(s.plant(PlantType.Carrot).ok).toBe(true);
+    // Facing (5,6) and pointing at (8,8); the cast was told (8,8).
+    const target = s.checkGrowth({ col: 8, row: 8 });
+    expect(target.ok).toBe(true);
+    expect(target.tile).toEqual({ col: 8, row: 8 });
+  });
+
+  test("and refuses a square that has nothing on it, whatever she faces", () => {
+    const s = garden();
+    expect(s.plant(PlantType.Carrot).ok).toBe(true); // grows at (5,6)
+    expect(s.checkGrowth({ col: 3, row: 3 }).outcome).toBe(Outcome.FacingNothing);
+  });
+
+  test("the clearing spell takes one the same way", () => {
+    const s = garden();
+    s.grid.placeObject({
+      id: "tree-7-4",
+      type: sceneryType("woodland"),
+      col: 7,
+      row: 4,
+      width: 1,
+      height: 1,
+      blocksMovement: true,
+      anchorCol: 7,
+      anchorRow: 4,
+    });
+    const target = s.checkClearing({ col: 7, row: 4 });
+    expect(target.ok).toBe(true);
+    expect(target.tile).toEqual({ col: 7, row: 4 });
+  });
+
+  /**
+   * The reason it is a parameter and not an aim. If a cast left the square
+   * behind in `aim`, the next seed she pressed would be planted on it —
+   * which is a carrot appearing three squares away for no reason she can
+   * see.
+   */
+  test("leaves nothing pointing at it afterwards", () => {
+    const s = garden();
+    expect(s.plant(PlantType.Carrot).ok).toBe(true);
+    s.checkGrowth({ col: 8, row: 8 });
+    expect(s.aimed).toBeNull();
+    expect(s.targetTile()).toEqual({ col: 5, row: 6 });
+  });
+});

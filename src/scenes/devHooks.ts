@@ -270,6 +270,15 @@ export interface DevHandle {
   /** Screen positions of the named buttons, so scripts stop guessing them. */
   readonly ui: () => Record<string, { x: number; y: number }>;
   /**
+   * The spell whose rune is lit and waiting for a square, or null.
+   *
+   * A rune that is waiting looks like a rune that is pulsing, and a script
+   * cannot see a tween. Without this the only way to ask whether arming
+   * worked is to tap the ground and see whether a parchment opens — which
+   * cannot tell "the rune went out" from "the tap missed".
+   */
+  readonly armed: () => string | null;
+  /**
    * The door tile of each building, by id.
    *
    * The world half of the same problem `ui` solves. Walking to a building

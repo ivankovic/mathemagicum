@@ -243,6 +243,7 @@ import {
 } from "../world/scenery";
 import { type Patch, patchBetween, patchCells, patchIsCastable } from "../world/selection";
 import {
+  AIM_REACH,
   type ActionResult,
   GameSession,
   Outcome,
@@ -857,9 +858,22 @@ export class GameScene extends Phaser.Scene {
   private marking: { from: GridPoint | null; patch: Patch | null } | null = null;
   private patchInk?: Phaser.GameObjects.Graphics;
   private socketInk?: Phaser.GameObjects.Graphics;
-  /** The rune hanging over her head while the array spell waits for a tap. */
+  /**
+   * The spell whose rune is lit and waiting to be told where to land.
+   *
+   * A spell is a question in two parts — *which spell* and *on what* — and
+   * the rune is only the first half. Tapping it arms; the next tap on the
+   * ground answers the second half and the parchment opens. Null means no
+   * spell is waiting, which is most of the time.
+   *
+   * Only the two spells that land on a square are ever held here. The
+   * portal and the hourglass do not take one, and the array spell has three
+   * states of its own and keeps them in `marking`.
+   */
+  private armed: Spell | null = null;
+  /** The rune hanging over her head while a spell waits for a tap. */
   private armedRune?: Phaser.GameObjects.Image;
-  /** The outline round the square she is pointing at. */
+  /** The square she is pointing at, and the ground an armed spell may reach. */
   private aimInk?: Phaser.GameObjects.Graphics;
   /** Everything `ui()` has claimed, so a tap can be told from a world tap. */
   private readonly uiObjects = new WeakSet<Phaser.GameObjects.GameObject>();
@@ -1343,6 +1357,7 @@ export class GameScene extends Phaser.Scene {
     exposeForTests({
       session: this.session,
       ui: () => this.uiPositions(),
+      armed: () => this.armed,
       doors: () =>
         Object.fromEntries(this.buildings.map((b) => [b.id, { col: b.doorCol, row: b.doorRow }])),
       screenOf: (col, row) => this.screenOf(col, row),
@@ -1519,6 +1534,16 @@ export class GameScene extends Phaser.Scene {
         this.markPatchAt(pointer.worldX, pointer.worldY);
         return;
       }
+      // A lit rune owns the pointer for exactly the same reasons, and this
+      // is the branch that makes the whole thing work on a tablet: below,
+      // touch gives every press to the joystick and never reaches
+      // `handleTileClick` at all. Checked before the world under the pointer
+      // so a crop or a tree — which is to say, the only squares either of
+      // these two spells is ever aimed at — cannot swallow the answer.
+      if (this.armed && !this.tappedTheInterface(over)) {
+        this.castArmedAt(pointer.worldX, pointer.worldY);
+        return;
+      }
       if (over.length > 0) return; // a UI button handles its own pointerdown
       // Touch steers with the floating joystick; a mouse walks to the tile it
       // clicked. Deliberately not both on touch: a press cannot be a stick
@@ -1550,6 +1575,9 @@ export class GameScene extends Phaser.Scene {
       // their feet. Freezing a village for a screenshot should not stop time.
       this.updateAnimals(this.time.now);
       this.placeArmedRune();
+      // The reach is drawn round wherever she is standing now, so it follows
+      // her while she walks about choosing — the same reason the rune does.
+      if (this.armed) this.paintAim();
       this.checkAim();
     }
     // The tint still applies indoors: it is the time of day, not the weather
@@ -1663,6 +1691,19 @@ export class GameScene extends Phaser.Scene {
    * a second way of saying which is which would be a second thing to keep
    * true.
    */
+  /**
+   * Whether a spell is already waiting for the next tap on the world.
+   *
+   * Every sprite that answers a tap has to stand aside while one is: a crop
+   * is the square the growth spell wants, a tree is the square the clearing
+   * spell wants, and a sprite that harvested or was fed instead would be the
+   * spell silently not firing. Named once rather than repeated, because it
+   * was repeated at five call sites and the animals were missed.
+   */
+  private get pointerIsSpokenFor(): boolean {
+    return this.marking !== null || this.armed !== null;
+  }
+
   private tappedTheInterface(over: readonly unknown[]): boolean {
     return over.some((object) => this.uiObjects.has(object as Phaser.GameObjects.GameObject));
   }
@@ -2885,13 +2926,24 @@ export class GameScene extends Phaser.Scene {
    * step onto it to tend it.
    */
   private castGrowthSpell(): void {
+    this.armSpell(Spell.Growth, UiAsset.RuneAdd);
+  }
+
+  /**
+   * And the cast itself, once the ground has been named.
+   *
+   * `at` is the square she tapped. It is passed down rather than left in
+   * `aim`, because this answer is about this cast: an aim that outlived the
+   * parchment would send the next seed she plants to the tile she last cast
+   * on.
+   */
+  private growthCastAt(at: GridPoint): void {
     // The one guard here that is not merely defensive: the spellbook button
     // sits inside the popup's own rectangle on a phone, and a rune tapped
     // through it would restart the cast half way through the problem.
     if (this.modalOpen) return;
-    this.spellTray?.setOpen(false);
 
-    const target = this.session.checkGrowth();
+    const target = this.session.checkGrowth(at);
     if (!target.ok || !target.tile) {
       this.report(target);
       return;
@@ -2948,8 +3000,78 @@ export class GameScene extends Phaser.Scene {
     // The rune hangs over her head for as long as the spell is armed. It is
     // the whole of "mark out the ground": a spell that is waiting for a tap
     // and says nothing is a spell that looks like it did not fire.
-    this.raiseArmedRune();
+    this.raiseArmedRune(UiAsset.RuneTimes);
     this.paintPatch();
+  }
+
+  /**
+   * Light a rune and wait to be told where it lands.
+   *
+   * A spell is a question in two parts — *which spell*, and *on what* — and
+   * for a long time this game only ever asked the first. The second was
+   * answered for the child by whichever square she happened to be facing,
+   * which is a thing an adult lines up without noticing and a playtest put
+   * as *spell targeting is hard*.
+   *
+   * The first attempt at that had it backwards: tap a square to point at it,
+   * then tap a rune. Wrong way round twice over. It asks the child to say
+   * where before she has decided what, and — because a tap is the joystick
+   * on a phone, and because a crop swallows the taps aimed at it — it was
+   * unreachable on a tablet and unreachable on any crop, which is every
+   * square the growth spell has ever cared about.
+   *
+   * So the rune goes first and the ground second, which is the order the
+   * question is actually asked in. The array spell has worked this way from
+   * the day it was written; this is that pattern for the other two.
+   *
+   * Tapping the lit rune again puts it out. Nothing is drawn when it does —
+   * a rune moving over the player is what *earning* one looks like.
+   */
+  private armSpell(spell: Spell, rune: string): void {
+    if (this.modalOpen) return;
+    this.spellTray?.setOpen(false);
+    // One spell waiting at a time. Arming the minus while the array is out
+    // for a corner would leave two things wanting the same tap.
+    this.stopMarking();
+    const same = this.armed === spell;
+    this.disarm();
+    if (same) return;
+    this.armed = spell;
+    // A stick still held when the rune lights never sends its release, and
+    // she walks on while the ground she is choosing from slides away.
+    this.joystick?.release();
+    this.raiseArmedRune(rune);
+    this.paintAim();
+  }
+
+  /** Put the rune out, whether it was cast or given up on. */
+  private disarm(): void {
+    if (!this.armed) return;
+    this.armed = null;
+    this.armedRune?.destroy();
+    this.armedRune = undefined;
+    this.paintAim();
+  }
+
+  /**
+   * A tap on the world while a rune is lit: this square, this cast.
+   *
+   * Out of reach leaves the rune lit rather than spending it. A finger that
+   * lands a square wide of the ring has not chosen anything, and a spell
+   * that gave up at the first near miss would be a spell a child had to aim
+   * twice.
+   */
+  private castArmedAt(worldX: number, worldY: number): void {
+    const spell = this.armed;
+    if (!spell) return;
+    const at = this.toGrid(worldX, worldY);
+    if (!withinReach(this.session.tile, at)) {
+      this.markTooFar(at.col, at.row);
+      return;
+    }
+    this.disarm();
+    if (spell === Spell.Growth) this.growthCastAt(at);
+    else this.clearingCastAt(at);
   }
 
   /** Put the marker away, whatever state it was in. */
@@ -3039,11 +3161,37 @@ export class GameScene extends Phaser.Scene {
     const ink = this.aimInk;
     if (!ink) return;
     ink.clear();
+    if (this.armed) this.paintReach(ink);
     const at = this.session.aimed;
     if (!at) return;
     const corner = this.toFeet(at.col, at.row);
     ink.lineStyle(2, PATCH_EDGE, 1);
     ink.strokeRect(corner.x - TILE_SIZE / 2, corner.y - TILE_SIZE, TILE_SIZE, TILE_SIZE);
+  }
+
+  /**
+   * The ground a lit rune can be sent to, ruled off on the grass.
+   *
+   * A rune that waits and shows nothing is a rune that looks like it did not
+   * fire, and one that shows only itself asks a question without saying what
+   * the answers are. This is the answer sheet: a square of squares round
+   * her, and every one of them is a tap she may make.
+   *
+   * `withinReach` measures the longest side rather than the sum of both, so
+   * the shape is a square and not a diamond — the corners are as close as
+   * the edges, and drawing a diamond would rule out taps the spell accepts.
+   *
+   * Faint, and under everything. It is the floor of the picture, not part of
+   * it: what she is looking at is the tree or the crop standing on it.
+   */
+  private paintReach(ink: Phaser.GameObjects.Graphics): void {
+    const here = this.session.tile;
+    const corner = this.toFeet(here.col - AIM_REACH, here.row - AIM_REACH);
+    const side = (AIM_REACH * 2 + 1) * TILE_SIZE;
+    ink.fillStyle(PATCH_EDGE, 0.12);
+    ink.fillRect(corner.x - TILE_SIZE / 2, corner.y - TILE_SIZE, side, side);
+    ink.lineStyle(2, PATCH_EDGE, 0.7);
+    ink.strokeRect(corner.x - TILE_SIZE / 2, corner.y - TILE_SIZE, side, side);
   }
 
   /**
@@ -3701,10 +3849,14 @@ export class GameScene extends Phaser.Scene {
    * shopping from one mis-aimed cast. `checkClearing` says so in words.
    */
   private castClearingSpell(): void {
-    if (this.modalOpen) return;
-    this.spellTray?.setOpen(false);
+    this.armSpell(Spell.Clearing, UiAsset.RuneMinus);
+  }
 
-    const target = this.session.checkClearing();
+  /** And the cast, on the square the tap named. See `growthCastAt`. */
+  private clearingCastAt(at: GridPoint): void {
+    if (this.modalOpen) return;
+
+    const target = this.session.checkClearing(at);
     if (!target.ok || !target.tile) {
       this.report(target);
       return;
@@ -3898,17 +4050,15 @@ export class GameScene extends Phaser.Scene {
   /**
    * The rune that says a spell is armed and waiting.
    *
-   * Over her head and pulsing, for as long as the array spell is expecting a
-   * corner. It follows her, because she can walk about while she decides —
+   * Over her head and pulsing, for as long as a spell is expecting a square.
+   * It follows her, because she can walk about while she decides —
    * and a mark that stayed where the spell was cast would be a mark about a
    * square she is no longer near.
    */
-  private raiseArmedRune(): void {
+  private raiseArmedRune(rune_: string): void {
     this.armedRune?.destroy();
     const rune = this.world(
-      this.add
-        .image(0, 0, uiTextureKey(UiAsset.RuneTimes))
-        .setDisplaySize(RESULT_ICON, RESULT_ICON),
+      this.add.image(0, 0, uiTextureKey(rune_)).setDisplaySize(RESULT_ICON, RESULT_ICON),
     );
     this.armedRune = rune;
     this.tweens.add({
@@ -4077,7 +4227,7 @@ export class GameScene extends Phaser.Scene {
       Phaser.Geom.Rectangle.Contains,
     );
     sprite.on("pointerdown", () => {
-      if (this.marking) return;
+      if (this.pointerIsSpokenFor) return;
       // Within one step in *any* direction, diagonals included — unlike
       // harvesting, which measures orthogonally because it acts on the tile
       // the player faces and there is no diagonal facing to turn to. Talking
@@ -4121,7 +4271,7 @@ export class GameScene extends Phaser.Scene {
       Phaser.Geom.Rectangle.Contains,
     );
     sprite.on("pointerdown", () => {
-      if (this.marking) return;
+      if (this.pointerIsSpokenFor) return;
       const near = sidecar.blocked_cells_relative_to_anchor.reduce(
         (best, [row, col]) =>
           Math.min(
@@ -4722,7 +4872,7 @@ export class GameScene extends Phaser.Scene {
       Phaser.Geom.Rectangle.Contains,
     );
     sprite.on("pointerdown", () => {
-      if (this.marking) return;
+      if (this.pointerIsSpokenFor) return;
       this.takeFixture(fixture, col, row);
     });
   }
@@ -4854,7 +5004,7 @@ export class GameScene extends Phaser.Scene {
       Phaser.Geom.Rectangle.Contains,
     );
     sprite.on("pointerdown", () => {
-      if (this.marking) return;
+      if (this.pointerIsSpokenFor) return;
       this.handleCropTap(col, row);
     });
   }
@@ -4951,7 +5101,10 @@ export class GameScene extends Phaser.Scene {
         fedAt: 0,
       };
       sprite.setInteractive({ useHandCursor: true });
-      sprite.on("pointerdown", () => this.feedAnimal(animal));
+      sprite.on("pointerdown", () => {
+        if (this.pointerIsSpokenFor) return;
+        this.feedAnimal(animal);
+      });
       this.animals.push(animal);
       this.showThought(animal);
     }
@@ -5366,7 +5519,7 @@ export class GameScene extends Phaser.Scene {
       Phaser.Geom.Rectangle.Contains,
     );
     sprite.on("pointerdown", () => {
-      if (this.marking) return;
+      if (this.pointerIsSpokenFor) return;
       // The map opens the map; the chart says what it is. A chart of the
       // night that opened a chart would want a second panel to put in it,
       // and what the dome has to say fits in a line.
