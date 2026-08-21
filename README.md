@@ -253,12 +253,14 @@ bun run build     # production build to dist/
 ## Deploying
 
 Pushing to `main` publishes the game to GitHub Pages
-(`.github/workflows/pages.yml`). The workflow turns Pages on the first time
-it runs, so there is no repository setting to remember. The one thing it
-cannot do for itself is make the repository eligible: on GitHub Free, Pages
-only publishes from a **public** repository, and a private one needs a paid
-plan. Either way the source is readable — the licence already says so — so
-this is a billing question rather than a licensing one.
+(`.github/workflows/pages.yml`).
+
+Two things have to be true of the repository itself, and neither can be done
+from a workflow. Pages must be switched on with its source set to **GitHub
+Actions**, under Settings → Pages — `configure-pages` can create the site
+via the API, but only with `administration: write`, which is not a
+permission `GITHUB_TOKEN` can be granted at any setting. And on GitHub Free,
+Pages publishes from a **public** repository only.
 
 `dist/` is host-agnostic and is meant to stay that way. `vite.config.ts`
 builds with a **relative** base and `BootScene` prefixes every runtime asset

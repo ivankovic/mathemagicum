@@ -37,6 +37,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Before the build, not after it. Nothing here needs the repository,
+      # and if Pages is switched off this is the step that says so — failing
+      # in ten seconds rather than after a two-minute build.
+      #
+      # No `enablement: true`. It asks the API to create the Pages site,
+      # which needs `administration: write`, and that is not one of the
+      # permissions GITHUB_TOKEN can be granted at any setting — so it fails
+      # with "Resource not accessible by integration" whatever you write
+      # above. Turning Pages on is a one-time click in Settings -> Pages,
+      # source "GitHub Actions"; only a personal access token could do it
+      # from here, and a stored admin credential is a bad trade for one
+      # click.
+      - uses: actions/configure-pages@v5
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -46,14 +60,6 @@ jobs:
 
       - name: Build
         run: bun run build
-
-      # `enablement: true` turns Pages on the first time this runs, so the
-      # repository setting is not a manual step somebody has to be told
-      # about — without it the first run dies at "Get Pages site failed",
-      # which reads like a broken workflow rather than an unflipped switch.
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       # No .nojekyll: deploy-pages serves the artifact as it is, and nothing
       # in dist starts with an underscore anyway.
