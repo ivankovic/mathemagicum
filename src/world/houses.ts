@@ -84,6 +84,41 @@ export function houseLook(buildingId: string, seed: number, options: number): nu
 export const PLAYER_HOUSE_ID = "player-house";
 
 /**
+ * How late into dusk a house lights its windows: 0 at the first hint of it,
+ * up to `LIGHTING_SPREAD` of the way through.
+ *
+ * Nobody in a village lights a lamp at the same second as their neighbour,
+ * and a whole square of windows coming on together reads as a switch being
+ * thrown rather than as evening. Stable per house per world, from the same
+ * hash `houseLook` uses and for the same reason: it has to give the same
+ * answer on every load.
+ *
+ * Bounded rather than merely offset. Every window is fully lit by the time
+ * the night is at its darkest — a house still dark at midnight would read
+ * as the lighting not working rather than as somebody having an early night.
+ */
+export const LIGHTING_SPREAD = 0.45;
+
+export function lightingDelay(buildingId: string, seed: number): number {
+  let hash = (seed >>> 0) ^ 0x85eb_ca6b;
+  for (let at = 0; at < buildingId.length; at++) {
+    hash = Math.imul(hash ^ buildingId.charCodeAt(at), 0x0100_0193) >>> 0;
+  }
+  return ((hash % 1000) / 1000) * LIGHTING_SPREAD;
+}
+
+/**
+ * How brightly this house's windows burn, given how dark it is.
+ *
+ * Zero until its own moment in the dusk, then up to one, and one for every
+ * house once night is fully down. See `lightingDelay`.
+ */
+export function windowBrightness(darkness: number, delay: number): number {
+  if (darkness <= delay) return 0;
+  return Math.min(1, (darkness - delay) / (1 - delay));
+}
+
+/**
  * The one building shape that varies.
  *
  * Only houses. The generator's own note says roofs carry the saturation and

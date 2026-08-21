@@ -1535,6 +1535,26 @@ them against each other in both directions — a fireplace with one frame is a
 fire that does not burn, and eight frames with no fireplace is something
 moving that the game cannot find to light.
 
+**And the village lights up from the inside.** A house with a fire in it has
+lit windows after dark — the same warm colour as the hearth, because it is
+the same fire. What decides whether a building lights is whether the room
+behind its door has a fireplace, which keeps the barn dark, keeps the shops
+dark, and cannot fall out of step with the hearths because it is the same
+question asked once.
+
+Not all at once. Each house has its own moment in the dusk, stable per world
+from a hash of its name — a square of windows coming on together reads as a
+switch being thrown rather than as evening. Bounded, though: everybody is
+burning by the time the night is at its darkest, because a house still dark
+at midnight reads as the lighting being broken rather than as an early night.
+
+Where the panes are is shipped by the generator, like everything else about
+this art. The halo is sized off the pane rather than picked: the first one
+was half again as wide, which looks right on a cottage with two windows
+either side of a door and wrong on a townhouse, where four go up the front
+fifteen pixels apart and the glows ran together into a single white shaft. A
+house should read as *windows*.
+
 The lights are drawn *additively over* the tint rather than erased out of it.
 Erasing is what it wants to mean, and a render texture can do exactly that —
 which is how it was written first, and it went wrong in a way worth

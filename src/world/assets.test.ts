@@ -10,7 +10,7 @@ import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
 import { EFFECT_TYPES, effectAnimKey, effectSidecarKey } from "./effects";
 import { FIXTURE_TYPES, fixtureFor } from "./fixtures";
 import { buildInteriorGrid, interiorAttendantCell, interiorDoor } from "./interiors";
-import { INTERIOR_ROOMS, interiorFor } from "./interiors";
+import { INTERIOR_ROOMS, hearthCell, interiorFor } from "./interiors";
 import { LANDMARK_OVERHANG, LANDMARK_TYPES, landmarkFor } from "./landmarks";
 import { PLANT_STAGES, PLANT_TYPES } from "./plants";
 import { SCENERY_KINDS, sceneryKind } from "./scenery";
@@ -678,6 +678,51 @@ describe("the shipped scenery", () => {
       expect(sheet.rows).toBe(sidecar.instances);
       for (const range of Object.values(sidecar.animations)) {
         expect(range.start % sheet.columns).toBe(0);
+      }
+    }
+  });
+});
+
+describe("the windows the game lights after dark", () => {
+  /**
+   * A house lights up because there is a fire in it, so the two facts have
+   * to be shipped together: window rects on the building, a fireplace in the
+   * room behind its door. Either one alone is a house that cannot light —
+   * panes with nothing behind them, or a hearth nobody outside can see.
+   */
+  test("every building the village places says where its windows are", () => {
+    for (const sprite of BUILDING_SPRITES) {
+      const sidecar = readJson<BuildingSidecar>("buildings", `${sprite}.json`);
+      expect({ sprite, said: Array.isArray(sidecar.window_rects_px) }).toEqual({
+        sprite,
+        said: true,
+      });
+    }
+  });
+
+  test("and the houses people live in have some", () => {
+    for (const sprite of BUILDING_SPRITES) {
+      const room = readJson<InteriorSidecar>("interiors", `${interiorFor(sprite)}.json`);
+      if (!hearthCell(room)) continue;
+      const sidecar = readJson<BuildingSidecar>("buildings", `${sprite}.json`);
+      expect({ sprite, windows: (sidecar.window_rects_px ?? []).length > 0 }).toEqual({
+        sprite,
+        windows: true,
+      });
+    }
+  });
+
+  // Inside the frame, which is the space they are measured in. A rect that
+  // ran off the sheet would put firelight on the grass beside the house.
+  test("and every one of them is inside the sprite", () => {
+    for (const sprite of BUILDING_SPRITES) {
+      const sidecar = readJson<BuildingSidecar>("buildings", `${sprite}.json`);
+      const { width, height } = sidecar.sprite_size_px;
+      for (const [x, y, w, h] of sidecar.window_rects_px ?? []) {
+        expect({ sprite, fits: x >= 0 && y >= 0 && x + w <= width && y + h <= height }).toEqual({
+          sprite,
+          fits: true,
+        });
       }
     }
   });

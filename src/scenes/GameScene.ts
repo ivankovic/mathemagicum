@@ -194,7 +194,16 @@ import {
 } from "../world/fixtures";
 import type { WorldGrid } from "../world/grid";
 import type { HarbourLayout } from "../world/harbour";
-import { FABRIC_SLOTS, ROOF_SLOTS, type Ramp, houseLook, rampOf, varies } from "../world/houses";
+import {
+  FABRIC_SLOTS,
+  ROOF_SLOTS,
+  type Ramp,
+  houseLook,
+  lightingDelay,
+  rampOf,
+  varies,
+  windowBrightness,
+} from "../world/houses";
 import {
   INTERIOR_ROOMS,
   buildInteriorGrid,
@@ -412,6 +421,25 @@ const PORTAL_SPARKS = 6;
 // it. 2 keeps roughly the framing the old 800x600 canvas gave on a desktop
 // while doubling how big a character reads on a phone.
 const CAMERA_ZOOM = 2;
+
+/**
+ * A lit window, seen from the road.
+ *
+ * Sized off the pane rather than picked: a window is nine pixels square, and
+ * this is a halo about as wide again around it. The first try was half again
+ * as big, which is fine on a cottage — two windows either side of a door,
+ * far apart — and wrong on a townhouse, where four of them go up the front
+ * fifteen pixels apart and the glows ran together into one white column. A
+ * house should read as *windows*, not as a lit shaft.
+ *
+ * The colour is the hearth's, because it is the same fire: a house lights up
+ * from the inside, which is why only the houses with a fireplace light at
+ * all.
+ */
+const WINDOW_PANE_PX = 9;
+const WINDOW_LIGHT_RADIUS = WINDOW_PANE_PX * CAMERA_ZOOM;
+const WINDOW_GLOW_COLOR = 0xffb257;
+const WINDOW_GLOW_ALPHA = 0.78;
 const HUD_MARGIN = 8;
 const CHUNK_VIEW_MARGIN = 1;
 // Generous cache so panning back and forth doesn't constantly re-render —
@@ -739,6 +767,17 @@ interface BuildingRuntime {
   // it is to look at.
   entrance: Entrance;
   door: DoorState;
+  /**
+   * The middle of each window in world pixels, and the halo over it.
+   *
+   * Empty for everything that is not somebody's home. A window is only lit
+   * because there is a fire behind it, so what decides this is whether the
+   * room on the other side has a hearth — which keeps the barn dark and the
+   * observatory darker, and needs no second list to fall out of step.
+   */
+  windows: readonly { at: { x: number; y: number }; glow: Phaser.GameObjects.Image }[];
+  /** How late in the dusk this house lights up. See `lightingDelay`. */
+  lightsAt: number;
 }
 
 // The room the player is currently standing in, or null outdoors. Interiors
@@ -1887,6 +1926,7 @@ export class GameScene extends Phaser.Scene {
         .setAlpha(strength * LAMP_GLOW_ALPHA);
     }
     this.paintHearth(strength);
+    this.paintWindows(strength);
   }
 
   /**
@@ -1920,6 +1960,89 @@ export class GameScene extends Phaser.Scene {
       .setPosition(at.x, at.y - TILE_SIZE)
       .setDisplaySize(HEARTH_LIGHT_RADIUS * 2, HEARTH_LIGHT_RADIUS * 2)
       .setAlpha(strength * HEARTH_GLOW_ALPHA * flicker);
+  }
+
+  /**
+   * The lights in a house's windows, made once and kept.
+   *
+   * Buildings are spawned when the world is and never taken down again —
+   * they are not chunked the way the scenery is — so these are made here and
+   * there is nothing to tear down. The pane positions come out of the
+   * sidecar: the generator drew the windows and is the only thing that knows
+   * where they went, and a light nearly on a pane reads as a lamp shining at
+   * a wall.
+   *
+   * **Only where somebody lives.** What decides it is whether the room
+   * behind the door has a fireplace, which is the same question `lightHearth`
+   * asks and therefore cannot fall out of step with it. That is also the
+   * better reason: a window is lit because there is a fire behind it. The
+   * barn stays dark, and so does the observatory, which would be a poor
+   * place to have the lights on.
+   */
+  private windowsOf(
+    sprite: BuildingSprite,
+    sidecar: BuildingSidecar,
+    origin: { x: number; y: number },
+  ): BuildingRuntime["windows"] {
+    const rects = sidecar.window_rects_px ?? [];
+    if (rects.length === 0) return [];
+    const room = this.interiorSidecars.get(interiorFor(sprite));
+    if (!room || !hearthCell(room)) return [];
+    return rects.map(([x, y, width, height]) => ({
+      at: {
+        x: this.originX + origin.x + x + width / 2,
+        y: this.originY + origin.y + y + height / 2,
+      },
+      glow: this.ui(
+        this.add
+          .image(0, 0, LIGHT_TEXTURE)
+          .setOrigin(0.5)
+          .setScrollFactor(0)
+          .setDepth(NIGHT_TINT_DEPTH + 1)
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setTint(WINDOW_GLOW_COLOR)
+          .setVisible(false),
+      ),
+    }));
+  }
+
+  /**
+   * Light the village's windows as the evening comes on.
+   *
+   * Not all at once. Each house has its own moment in the dusk, stable per
+   * world — a square of windows coming on together reads as a switch being
+   * thrown rather than as evening — and every one of them is burning by the
+   * time the night is fully down.
+   *
+   * Off-screen ones are hidden rather than placed: the glow does not scroll,
+   * so a house behind the camera would otherwise put its light wherever its
+   * world position happened to project to.
+   */
+  private paintWindows(darkness: number): void {
+    const { width, height } = this.scale;
+    const indoors = this.interior !== null;
+    for (const building of this.buildings) {
+      if (building.windows.length === 0) continue;
+      const lit = indoors ? 0 : windowBrightness(darkness, building.lightsAt);
+      for (const { at, glow } of building.windows) {
+        if (lit <= 0) {
+          glow.setVisible(false);
+          continue;
+        }
+        const on = this.screenOfPoint(at.x, at.y);
+        const near =
+          on.x > -WINDOW_LIGHT_RADIUS &&
+          on.y > -WINDOW_LIGHT_RADIUS &&
+          on.x < width + WINDOW_LIGHT_RADIUS &&
+          on.y < height + WINDOW_LIGHT_RADIUS;
+        glow.setVisible(near);
+        if (!near) continue;
+        glow
+          .setPosition(on.x, on.y)
+          .setDisplaySize(WINDOW_LIGHT_RADIUS * 2, WINDOW_LIGHT_RADIUS * 2)
+          .setAlpha(lit * WINDOW_GLOW_ALPHA);
+      }
+    }
   }
 
   /** Light the fire in a room that has one. Nothing at all in a barn. */
@@ -5426,6 +5549,8 @@ export class GameScene extends Phaser.Scene {
         doorRow: door.row,
         entrance: entranceFor(door, object.col, sidecar.footprint_tiles.width),
         door: DoorState.Closed,
+        windows: this.windowsOf(sprite, sidecar, origin),
+        lightsAt: lightingDelay(object.id, this.seed),
       });
     }
   }

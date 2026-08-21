@@ -95,6 +95,18 @@ export interface BuildingSidecar extends SpriteSidecar {
   /** The roofs a house may wear instead of the one it shipped in. */
   roof_options?: readonly (readonly (readonly [number, number, number])[])[];
   building: string;
+  /**
+   * Every window on the front, as `[x, y, width, height]` in frame pixels.
+   *
+   * Shipped for the same reason `window_columns` is on a room: the generator
+   * draws them and nothing else is in a position to know where they went. A
+   * light that is nearly on a pane reads as a lamp shining at a wall.
+   *
+   * Empty for the two buildings that draw themselves — a hull and a dome
+   * have glass in them, but a porthole and a telescope lens are not windows
+   * anybody lights.
+   */
+  window_rects_px?: readonly (readonly [number, number, number, number])[];
   door_cell_relative_to_anchor: readonly [number, number];
   // One frame range per door position, keyed `door_{state}`. The door is
   // state rather than a transition that plays, so each range is its own

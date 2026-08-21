@@ -8,12 +8,15 @@ import { packRgb } from "../render/recolour";
 import type { Rgb } from "../render/recolour";
 import {
   FABRIC_SLOTS,
+  LIGHTING_SPREAD,
   PLAYER_HOUSE_ID,
   ROOF_SLOTS,
   VARYING_SPRITES,
   houseLook,
+  lightingDelay,
   rampOf,
   varies,
+  windowBrightness,
 } from "./houses";
 
 const SPRITE = cottageSprite as unknown as {
@@ -168,5 +171,44 @@ describe("which buildings vary at all", () => {
   // twenty townhouses in the city.
   test("the shapes that vary are the ones there are many of", () => {
     expect([...VARYING_SPRITES].sort()).toEqual(["cottage", "townhouse"]);
+  });
+});
+
+describe("lighting up at dusk", () => {
+  /**
+   * The guarantee that keeps a late house from reading as a broken one.
+   * Whoever lights last, everybody is lit by the time it is properly dark.
+   */
+  test("every house is burning once the night is fully down", () => {
+    for (const id of ["player-house", "villager-house-1", "city-townhouse-17", "x"]) {
+      expect(windowBrightness(1, lightingDelay(id, 4242))).toBe(1);
+    }
+  });
+
+  test("and none of them before the light starts going", () => {
+    expect(windowBrightness(0, 0)).toBe(0);
+    expect(windowBrightness(0, 0.3)).toBe(0);
+  });
+
+  // The whole point: not all at once. A square of windows coming on together
+  // reads as a switch being thrown rather than as evening.
+  test("they do not all light at the same moment", () => {
+    const ids = Array.from({ length: 20 }, (_, n) => `city-townhouse-${n}`);
+    const delays = new Set(ids.map((id) => lightingDelay(id, 4242)));
+    expect(delays.size).toBeGreaterThan(5);
+  });
+
+  test("nobody waits longer than the spread", () => {
+    for (let n = 0; n < 200; n++) {
+      const delay = lightingDelay(`house-${n}`, 7);
+      expect(delay).toBeGreaterThanOrEqual(0);
+      expect(delay).toBeLessThan(LIGHTING_SPREAD);
+    }
+  });
+
+  // Same house, same world, same evening — every time it is loaded.
+  test("a house lights at the same moment every time the world is opened", () => {
+    expect(lightingDelay("villager-house-2", 99)).toBe(lightingDelay("villager-house-2", 99));
+    expect(lightingDelay("villager-house-2", 99)).not.toBe(lightingDelay("villager-house-2", 100));
   });
 });
