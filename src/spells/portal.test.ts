@@ -382,7 +382,11 @@ describe("in a world the generator actually made", () => {
         }
       }
     }
-  });
+    // Five whole worlds, and generating one is most of a second. It sat just
+    // under the default limit and tipped over it whenever the machine was
+    // busy, which is a flake rather than a failure — the coverage is worth
+    // more than the default.
+  }, 20_000);
 
   // The portal has to put you where the map said it would.
   test("it sets you down in the middle of the place it named", () => {

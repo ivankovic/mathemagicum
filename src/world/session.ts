@@ -30,15 +30,68 @@ import type { GridPoint } from "./topdown";
  * milliseconds, and the scene is left holding only the things a headless test
  * could never have checked anyway.
  *
- * Every action returns what happened *and what to say about it*. The message
- * is part of the rule rather than a decoration the caller adds: a refusal the
- * player cannot see reads as the game having missed the input, and putting
- * the wording next to the condition is what stops the two drifting apart.
+ * Every action returns what happened *and why*, as a value rather than as a
+ * sentence. It used to return the sentence: a refusal the player cannot see
+ * reads as the game having missed the input, and keeping the wording next to
+ * the condition was what stopped the two drifting apart.
+ *
+ * The reason it is a value now is that **the game no longer says anything in
+ * words**. A line of small type along the top of the screen is unreadable to
+ * the child it is for — their eyes are on the square they just tried to
+ * plant, and the youngest of them cannot read at all — so every refusal and
+ * every result is drawn where it happened instead. A picture cannot be
+ * looked up in a phrase book, so the rule has to name what went wrong rather
+ * than how to phrase it.
+ *
+ * It also means the rules no longer know what language the game is in, which
+ * they never had any business knowing.
  */
+
+/**
+ * Why an action was refused, or what it did.
+ *
+ * One name per condition, and every condition has one: the scene turns these
+ * into marks on the world, and a condition that shared a name with another
+ * would be two different problems drawn the same way.
+ */
+export const Outcome = {
+  // --- refusals -----------------------------------------------------------
+  /** Nothing grows indoors, and nothing is put down in here either. */
+  Indoors: "indoors",
+  /** The square is taken: a wall, a tree, a fence, the edge of the world. */
+  NoRoom: "no-room",
+  /** The square is fine but the crop will not grow on that ground. */
+  WrongGround: "wrong-ground",
+  /** Something is already planted there. */
+  AlreadyPlanted: "already-planted",
+  /** It is already as grown as it gets. */
+  AlreadyGrown: "already-grown",
+  /** There is nothing on that square to pick, clear or take back. */
+  NothingThere: "nothing-there",
+  /** That square holds something the player is not allowed to remove. */
+  NotYours: "not-yours",
+  /** The basket, pouch or crate is empty of the thing being asked for. */
+  NoneLeft: "none-left",
+  /** It is out of reach: one step, and this is more. */
+  TooFar: "too-far",
+  /** She is not facing anything that could be grown. */
+  FacingNothing: "facing-nothing",
+
+  // --- things that happened ------------------------------------------------
+  Planted: "planted",
+  Grew: "grew",
+  Picked: "picked",
+  PutDown: "put-down",
+  PickedUp: "picked-up",
+  Cleared: "cleared",
+} as const;
+
+export type Outcome = (typeof Outcome)[keyof typeof Outcome];
 
 export interface ActionResult {
   readonly ok: boolean;
-  readonly message: string;
+  /** What happened, or why it did not. */
+  readonly outcome: Outcome;
   /**
    * The tile acted on — or, when the action was refused, the tile it was
    * refused *about*.
@@ -100,15 +153,6 @@ export function stepsToSpeak(a: GridPoint, b: GridPoint): number {
 
 export class GameSession {
   readonly grid: WorldGrid;
-  /**
-   * The words every refusal and every result is written in.
-   *
-   * Held rather than reached for, and swappable, because the player can
-   * change language mid-game: the session keeps the rules, and the rules
-   * decide what to say about themselves — a message written by the renderer
-   * instead would have to repeat the condition that produced it.
-   */
-  private words: Phrases;
   readonly inventory = new Inventory();
   readonly purse = new Purse();
   /**
@@ -128,21 +172,15 @@ export class GameSession {
    *
    * The scene owns the mode itself — swapping grids, layers and the camera —
    * but the *rule* that nothing may be gardened in there lives with the other
-   * rules, so every refusal message sits next to the condition that produces
-   * it rather than half here and half in a renderer.
+   * rules, so every refusal sits next to the condition that produces it
+   * rather than half here and half in a renderer.
    */
   indoors = false;
 
   constructor(options: SessionOptions) {
     this.grid = options.grid;
-    this.words = options.phrases ?? EN;
     this.position = { col: options.start.col, row: options.start.row };
     this.heading = options.facing ?? ("down" as Facing);
-  }
-
-  /** Say everything from here on in another language. */
-  setPhrases(phrases: Phrases): void {
-    this.words = phrases;
   }
 
   get col(): number {
@@ -193,28 +231,28 @@ export class GameSession {
   // --- gardening ----------------------------------------------------------
 
   plant(plant: PlantType): PlantResult {
-    if (this.indoors) return { ok: false, message: this.words.nothingGrowsIndoors };
+    if (this.indoors) return { ok: false, outcome: Outcome.Indoors };
     const { col, row } = this.facingTile();
     // The tile underfoot was passable by definition; the one ahead is not.
     // Checked before anything reads the terrain there, because both the
     // world's edge and a tile occupied by a tree are reachable states and
     // `getTerrain` throws off the edge of the grid.
     if (!this.grid.isPassable(col, row)) {
-      return { ok: false, message: this.words.noRoomToPlant, tile: { col, row } };
+      return { ok: false, outcome: Outcome.NoRoom, tile: { col, row } };
     }
     if (this.grid.getPlant(col, row) !== null) {
-      return { ok: false, message: this.words.alreadyPlanted, tile: { col, row } };
+      return { ok: false, outcome: Outcome.AlreadyPlanted, tile: { col, row } };
     }
     if (!this.grid.plant(col, row, plant)) {
       return {
         ok: false,
-        message: this.words.wrongGround(plant, this.grid.getTerrain(col, row)),
+        outcome: Outcome.WrongGround,
         tile: { col, row },
       };
     }
     return {
       ok: true,
-      message: this.words.planted(plant),
+      outcome: Outcome.Planted,
       tile: { col, row },
       plant,
     };
@@ -269,21 +307,21 @@ export class GameSession {
    * cast landing somewhere other than where it was aimed.
    */
   checkGrowth(): CropResult {
-    if (this.indoors) return { ok: false, message: this.words.nothingGrowsIndoors };
+    if (this.indoors) return { ok: false, outcome: Outcome.Indoors };
     const { col, row } = this.facingTile();
     if (!this.grid.inBounds(col, row)) {
-      return { ok: false, message: this.words.faceToGrow };
+      return { ok: false, outcome: Outcome.FacingNothing };
     }
     const crop = this.grid.getCrop(col, row);
-    if (!crop) return { ok: false, message: this.words.faceToGrow, tile: { col, row } };
+    if (!crop) return { ok: false, outcome: Outcome.FacingNothing, tile: { col, row } };
     if (crop.stage === PlantStage.Mature) {
       return {
         ok: false,
-        message: this.words.alreadyGrown(crop.plant),
+        outcome: Outcome.AlreadyGrown,
         tile: { col, row },
       };
     }
-    return { ok: true, message: "", tile: { col, row }, crop };
+    return { ok: true, outcome: Outcome.Grew, tile: { col, row }, crop };
   }
 
   /**
@@ -299,15 +337,15 @@ export class GameSession {
    * one way to plant and another to clear.
    */
   checkClearing(): ActionResult {
-    if (this.indoors) return { ok: false, message: this.words.nothingToClear };
+    if (this.indoors) return { ok: false, outcome: Outcome.NothingThere };
     const { col, row } = this.facingTile();
-    if (!this.grid.inBounds(col, row)) return { ok: false, message: this.words.nothingToClear };
+    if (!this.grid.inBounds(col, row)) return { ok: false, outcome: Outcome.NothingThere };
     const object = this.grid.getObjectAt(col, row);
-    if (!object) return { ok: false, message: this.words.nothingToClear, tile: { col, row } };
+    if (!object) return { ok: false, outcome: Outcome.NothingThere, tile: { col, row } };
     if (sceneryKind(object.type) === null) {
-      return { ok: false, message: this.words.willNotClear, tile: { col, row } };
+      return { ok: false, outcome: Outcome.NotYours, tile: { col, row } };
     }
-    return { ok: true, message: "", tile: { col, row } };
+    return { ok: true, outcome: Outcome.Cleared, tile: { col, row } };
   }
 
   /** Take it away. Gives back what stood there, so the scene can unmake it. */
@@ -318,12 +356,12 @@ export class GameSession {
   }
 
   growAt(col: number, row: number): CropResult {
-    if (!this.grid.inBounds(col, row)) return { ok: false, message: "" };
+    if (!this.grid.inBounds(col, row)) return { ok: false, outcome: Outcome.NothingThere };
     const grown = this.grid.growCrop(col, row);
-    if (!grown) return { ok: false, message: "" };
+    if (!grown) return { ok: false, outcome: Outcome.NothingThere };
     return {
       ok: true,
-      message: this.words.grownTo(grown.plant, grown.stage),
+      outcome: Outcome.Grew,
       tile: { col, row },
       crop: grown,
     };
@@ -337,14 +375,14 @@ export class GameSession {
    * two rules for one verb.
    */
   harvest(): CropResult {
-    if (this.indoors) return { ok: false, message: this.words.nothingGrowsIndoors };
+    if (this.indoors) return { ok: false, outcome: Outcome.Indoors };
     const ahead = this.facingTile();
     const picked = this.pickAt(ahead) ?? this.pickAt(this.tile);
     if (picked) {
       const held = this.inventory.add(picked.crop.plant, HARVEST_YIELD);
       return {
         ok: true,
-        message: this.words.picked(picked.crop.plant, held),
+        outcome: Outcome.Picked,
         tile: picked.tile,
         crop: picked.crop,
       };
@@ -356,7 +394,9 @@ export class GameSession {
       this.grid.getCrop(this.col, this.row);
     return {
       ok: false,
-      message: crop ? this.words.notRipe(crop.plant) : this.words.faceToPick,
+      // Not ripe yet, or nothing there at all: from the outside both are
+      // "this square has nothing for you", and the square shows which.
+      outcome: crop ? Outcome.AlreadyPlanted : Outcome.NothingThere,
       tile: ahead,
     };
   }
@@ -378,21 +418,21 @@ export class GameSession {
    * fence that boxed her in is adjacent by definition.
    */
   place(fixture: FixtureType): PlaceResult {
-    if (this.indoors) return { ok: false, message: this.words.notInHere };
-    if (!isPlaceable(fixture)) return { ok: false, message: this.words.notYours(fixture) };
+    if (this.indoors) return { ok: false, outcome: Outcome.Indoors };
+    if (!isPlaceable(fixture)) return { ok: false, outcome: Outcome.NotYours };
     if (this.inventory.count(fixture) <= 0) {
-      return { ok: false, message: this.words.noneLeft(fixture) };
+      return { ok: false, outcome: Outcome.NoneLeft };
     }
     const { col, row } = this.facingTile();
     // Generation-time placement could assume it owned the map; this cannot,
     // so the tile has to be checked for everything already on it.
     if (!this.grid.isPassable(col, row)) {
-      return { ok: false, message: this.words.noRoomThere, tile: { col, row } };
+      return { ok: false, outcome: Outcome.NoRoom, tile: { col, row } };
     }
     if (this.grid.getCrop(col, row)) {
-      return { ok: false, message: this.words.somethingGrowing, tile: { col, row } };
+      return { ok: false, outcome: Outcome.AlreadyPlanted, tile: { col, row } };
     }
-    if (!this.inventory.remove(fixture, 1)) return { ok: false, message: "" };
+    if (!this.inventory.remove(fixture, 1)) return { ok: false, outcome: Outcome.NoneLeft };
 
     const object: PlacedObject = {
       id: `${fixture}-${col}-${row}`,
@@ -408,7 +448,7 @@ export class GameSession {
     this.grid.placeObject(object);
     return {
       ok: true,
-      message: this.words.putDown(fixture),
+      outcome: Outcome.PutDown,
       tile: { col, row },
       fixture,
       object,
@@ -417,15 +457,15 @@ export class GameSession {
 
   /** Take a placed fixture back, if it is within one step. */
   takeBack(fixture: FixtureType, col: number, row: number): PlaceResult {
-    if (this.indoors) return { ok: false, message: this.words.notInHere };
+    if (this.indoors) return { ok: false, outcome: Outcome.Indoors };
     if (stepsBetween(this.tile, { col, row }) > 1) {
-      return { ok: false, message: this.words.tooFarToReach, tile: { col, row } };
+      return { ok: false, outcome: Outcome.TooFar, tile: { col, row } };
     }
-    if (!this.grid.removeObjectAt(col, row)) return { ok: false, message: "" };
+    if (!this.grid.removeObjectAt(col, row)) return { ok: false, outcome: Outcome.NothingThere };
     const held = this.inventory.add(fixture, 1);
     return {
       ok: true,
-      message: this.words.pickedUp(fixture, held),
+      outcome: Outcome.PickedUp,
       tile: { col, row },
       fixture,
     };

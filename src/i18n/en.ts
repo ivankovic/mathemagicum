@@ -127,7 +127,6 @@ function item(item: ItemType): Noun {
 export const EN: Phrases = {
   plant: (plant) => PLANTS[plant] ?? noun(plant),
   fixture: (fixture) => FIXTURES[fixture] ?? noun(fixture),
-  animal: (kind) => ANIMALS[kind] ?? noun(kind),
   item,
   stage: (stage) => STAGES[stage] ?? stage,
   terrain: (terrain) => TERRAIN[terrain] ?? terrain,
@@ -138,40 +137,16 @@ export const EN: Phrases = {
   },
 
   nothingGrowsIndoors: "Nothing grows indoors",
-  noRoomToPlant: "There's no room to plant there",
-  alreadyPlanted: "Something is already planted there",
-  wrongGround: (plant, terrain) => `${PLANTS[plant]?.bare} can't grow on ${TERRAIN[terrain]}`,
-  planted: (plant) =>
-    `Planted ${PLANTS[plant]?.indefinite} seedling — cast the plus rune to grow it`,
-  faceToGrow: "Face something you planted to grow it",
-  alreadyGrown: (plant) => `This ${PLANTS[plant]?.bare} is already fully grown`,
-  grownTo: (plant, stage) => `Your ${PLANTS[plant]?.bare} is now ${STAGES[stage]}`,
-  picked: (plant, held) =>
-    `Picked ${PLANTS[plant]?.indefinite} — you have ${EN.count(plant, held)}`,
-  notRipe: (plant) => `This ${PLANTS[plant]?.bare} is not ready — grow it with the plus rune`,
-  faceToPick: "Face something you planted to pick it",
 
-  notInHere: "Not in here",
-  notYours: (fixture) => `A ${FIXTURES[fixture]?.bare} is not yours to move`,
-  noneLeft: (fixture) => `You have ${FIXTURES[fixture]?.none} — buy one at the store`,
-  noRoomThere: "There's no room there",
-  somethingGrowing: "Something is growing there",
   putDown: (fixture) => `Put down ${FIXTURES[fixture]?.indefinite} — tap it to pick it up again`,
-  tooFarToReach: "Too far away — step up to it first",
-  pickedUp: (fixture, held) =>
-    `Picked up ${FIXTURES[fixture]?.indefinite} — you have ${EN.count(fixture, held)}`,
 
-  nothingToClear: "Face something in the way first.",
-  willNotClear: "That is yours. The spell only takes what the ground grew.",
   cleared: "The way is clear.",
   spellFades: "The spell fades unspoken",
   tooFarToSpeak: "Too far away — step up to her first",
   tooFarFromLandmark: "Too far away — walk right up to it first",
   cannotWalkThere: "Can't walk there",
-  greatTreeGreeting: "The great tree stirs, and its lights lean towards you",
   lighthouseGreeting: "The lamp turns overhead, and the sea goes on out of sight",
   clockTowerGreeting: "The clock ticks on above you, dividing the hour up",
-  entered: (room) => `Entered the ${ROOMS[room] ?? room}. Step back out through the door.`,
 
   titleTagline: "A garden, and the sums that grow it",
   titleLoading: "loading…",
@@ -257,11 +232,8 @@ export const EN: Phrases = {
           ? `${count} of them grew at once.`
           : `${count} squares cleared at once.`,
   arrayAsk: "How many in the whole patch?",
-  noRoomForArray: (rows, columns) =>
-    `The spell needs clear ground ${columns} across and ${rows} down, starting where you are facing.`,
   arrayHintRows: (columns, counted) =>
     `Count along by ${columns}: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
-  arrayPlanted: (plant, count) => `${count} ${plant} seedlings, in rows.`,
 
   hourglassTitle: "The hourglass",
   hourglassAsk: "How many hours were you away?",

@@ -176,7 +176,6 @@ function item(item: ItemType): Noun {
 export const DE: Phrases = {
   plant: (plant) => PLANTS[plant] ?? item(plant),
   fixture: (fixture) => FIXTURES[fixture] ?? item(fixture),
-  animal: (kind) => ANIMALS[kind] ?? item(kind as never),
   item,
   stage: (stage) => STAGES[stage] ?? stage,
   terrain: (terrain) => TERRAIN[terrain] ?? terrain,
@@ -187,41 +186,16 @@ export const DE: Phrases = {
   },
 
   nothingGrowsIndoors: "Drinnen wächst nichts",
-  noRoomToPlant: "Da ist kein Platz zum Pflanzen",
-  alreadyPlanted: "Da wächst schon etwas",
-  wrongGround: (plant, terrain) =>
-    cap(`${PLANTS[plant]?.definite} wächst nicht auf ${TERRAIN[terrain]}`),
-  planted: (plant) =>
-    cap(`${PLANTS[plant]?.indefinite} gepflanzt — sprich die Plus-Rune zum Wachsen`),
-  faceToGrow: "Stell dich vor etwas Gepflanztes, um es wachsen zu lassen",
-  alreadyGrown: (plant) => cap(`${PLANTS[plant]?.definite} ist schon voll gewachsen`),
-  grownTo: (plant, stage) => cap(`${PLANTS[plant]?.definite} ist jetzt ${STAGES[stage]}`),
-  picked: (plant, held) =>
-    cap(`${PLANTS[plant]?.indefinite} gepflückt — du hast ${DE.count(plant, held)}`),
-  notRipe: (plant) => cap(`${PLANTS[plant]?.definite} ist noch nicht reif — nutze die Plus-Rune`),
-  faceToPick: "Stell dich vor etwas Gepflanztes, um es zu pflücken",
 
-  notInHere: "Hier drinnen nicht",
-  notYours: (fixture) => cap(`${FIXTURES[fixture]?.indefinite} kannst du nicht mitnehmen`),
-  noneLeft: (fixture) => `Du hast ${FIXTURES[fixture]?.none} — kauf einen im Laden`,
-  noRoomThere: "Da ist kein Platz",
-  somethingGrowing: "Da wächst etwas",
   putDown: (fixture) => cap(`${FIXTURES[fixture]?.indefinite} hingestellt — zum Aufheben antippen`),
-  tooFarToReach: "Zu weit weg — geh erst hin",
-  pickedUp: (fixture, held) =>
-    cap(`${FIXTURES[fixture]?.indefinite} aufgehoben — du hast ${DE.count(fixture, held)}`),
 
-  nothingToClear: "Stell dich zuerst vor etwas im Weg.",
-  willNotClear: "Das gehört dir. Der Zauber nimmt nur, was der Boden wachsen ließ.",
   cleared: "Der Weg ist frei.",
   spellFades: "Der Zauber verklingt ungesprochen",
   tooFarToSpeak: "Zu weit weg — geh erst zu ihr",
   tooFarFromLandmark: "Zu weit weg — geh erst ganz nah heran",
   cannotWalkThere: "Da geht es nicht weiter",
-  greatTreeGreeting: "Der große Baum regt sich, und seine Lichter neigen sich dir zu",
   lighthouseGreeting: "Oben dreht sich das Licht, und das Meer reicht weiter, als du sehen kannst",
   clockTowerGreeting: "Über dir tickt die Uhr und teilt die Stunde ein",
-  entered: (room) => `Du bist ${IN_ROOM[room] ?? room}. Durch die Tür geht es wieder hinaus.`,
 
   titleTagline: "Ein Garten, und das Rechnen, das ihn wachsen lässt",
   titleLoading: "wird geladen…",
@@ -312,11 +286,8 @@ export const DE: Phrases = {
           ? `${count} davon sind auf einmal gewachsen.`
           : `${count} Kästchen auf einmal geräumt.`,
   arrayAsk: "Wie viele sind es im ganzen Beet?",
-  noRoomForArray: (rows, columns) =>
-    `Der Zauber braucht freien Boden, ${columns} breit und ${rows} tief, von dem Feld aus, vor dem du stehst.`,
   arrayHintRows: (columns, counted) =>
     `Zähl in ${columns}er-Schritten: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
-  arrayPlanted: (plant, count) => `${count} ${plant}-Setzlinge, in Reihen.`,
 
   hourglassTitle: "Das Stundenglas",
   hourglassAsk: "Wie viele Stunden warst du fort?",

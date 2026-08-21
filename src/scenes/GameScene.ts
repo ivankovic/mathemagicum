@@ -227,7 +227,7 @@ import {
   scenerySidecarKey,
 } from "../world/scenery";
 import { type Patch, patchBetween, patchCells, patchIsCastable } from "../world/selection";
-import { type ActionResult, GameSession, stepsToSpeak } from "../world/session";
+import { type ActionResult, GameSession, Outcome, stepsToSpeak } from "../world/session";
 import type { Purse } from "../world/shop";
 import {
   type BuildingSidecar,
@@ -295,6 +295,19 @@ const AUTOSAVE_MS = 4000;
 const REFUSAL_COLOR = 0xd8342a;
 /** Long enough to be seen by somebody looking a beat late, short enough not to linger. */
 const REFUSAL_MS = 420;
+/**
+ * How a result is shown: the thing that changed, rising off its square.
+ *
+ * Sixteen pixels because it is a picture of a thing rather than a button —
+ * the same size the animals think in, so a child meets one size of "here is
+ * a thing" and not two.
+ */
+const RESULT_ICON = 22;
+const RESULT_RISE = 22;
+const RESULT_MS = 700;
+/** The trail that says *too far*: this many dots between her and the square. */
+const TOO_FAR_STEPS = 4;
+const TOO_FAR_DOT = 2.5;
 const MOVE_DURATION_MS = 160;
 // Depth is a pixel y now (see topdown.ts's depthFor), not the tile-unit
 // col + row the isometric projection sorted on — so it runs to the world's
@@ -1171,7 +1184,6 @@ export class GameScene extends Phaser.Scene {
       },
     );
     this.words = phrasesFor(this.settings.language);
-    this.session.setPhrases(this.words);
     // Written once already, before there was a language to write it in.
 
     this.spellPopup = new SpellPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
@@ -2653,7 +2665,10 @@ export class GameScene extends Phaser.Scene {
       items: PLANT_TYPES.map((plant) => ({
         texture: uiTextureKey(cropIcon(plant)),
         count: () => this.inventory.count(plant),
-        act: () => this.setMessage(this.words.count(plant, this.inventory.count(plant))),
+        // Nothing. The count badge on the button *is* the answer, and it is
+        // already on screen — a tap that repeated it in a line of small type
+        // was answering a question the picture had answered first.
+        act: () => {},
       })),
       // Crops only, not `inventory.total`: the bag holds bought fixtures too
       // now, and a basket badge that counted those would say she is carrying
@@ -3613,9 +3628,135 @@ export class GameScene extends Phaser.Scene {
    * to do this — the one that forgets is the one a child stands in front of,
    * pressing a button that appears to do nothing.
    */
-  private report(result: ActionResult): void {
-    this.setMessage(result.message);
-    if (!result.ok && result.tile) this.markRefusal(result.tile.col, result.tile.row);
+  /**
+   * Show what an action did, or why it did not, without a word.
+   *
+   * **The mark goes where the child has to act.** That is the whole rule,
+   * and it decides between the three places anything can be drawn:
+   *
+   * - a square is in the way, taken, bare or not yours → on that square;
+   * - the basket is empty, or she is standing in the wrong kind of place →
+   *   over her own head, because moving her is what fixes it;
+   * - something happened → over the square it happened to.
+   *
+   * A refusal about a square is a cross on the square. A refusal about what
+   * she is carrying is the thing she has none of, crossed out, over her. A
+   * result is the thing that changed, rising off its square.
+   *
+   * `icon` is what the action was about — a crop or a fixture — and is the
+   * caller's to supply, because only the caller knows whether `place` was
+   * asked for a fence or a lamp.
+   */
+  private report(result: ActionResult, icon?: string): void {
+    if (result.ok) {
+      if (icon && result.tile) this.showResult(icon, result.tile.col, result.tile.row);
+      return;
+    }
+    if (result.outcome === Outcome.NoneLeft || result.outcome === Outcome.Indoors) {
+      this.showRefusalOnPlayer(result.outcome === Outcome.NoneLeft ? icon : undefined);
+      return;
+    }
+    const tile = result.tile;
+    if (!tile) return;
+    this.markRefusal(tile.col, tile.row);
+    // Out of reach is the one refusal that is not about the square itself:
+    // the square is fine and she is not near it. So the cross is joined by a
+    // trail of chevrons back to her feet, which says *this far* in the one
+    // direction a child can act on.
+    if (result.outcome === Outcome.TooFar) this.markTooFar(tile.col, tile.row);
+  }
+
+  /**
+   * The thing that just changed, rising off the square it changed on.
+   *
+   * Rising rather than sitting still, and fading as it goes: a picture that
+   * stayed would be a thing on the ground, and there is already a crop
+   * there. A picture that moves is an event.
+   */
+  private showResult(icon: string, col: number, row: number): void {
+    const feet = this.toFeet(col, row);
+    const mark = this.world(
+      this.add
+        .image(feet.x, feet.y - TILE_SIZE / 2, uiTextureKey(icon))
+        .setDisplaySize(RESULT_ICON, RESULT_ICON)
+        .setDepth(feet.y + 1),
+    );
+    this.tweens.add({
+      targets: mark,
+      y: mark.y - RESULT_RISE,
+      alpha: 0,
+      duration: RESULT_MS,
+      ease: "Quad.easeIn",
+      onComplete: () => mark.destroy(),
+    });
+  }
+
+  /**
+   * A refusal that is about her rather than about a square.
+   *
+   * Over her own head, because that is where the thing she is short of is —
+   * in her hands. With an icon it says *you have none of these*; without one
+   * it says *not here*, which is what standing indoors with a trowel means.
+   */
+  private showRefusalOnPlayer(icon?: string): void {
+    const x = this.player.x;
+    // Just clear of her hat rather than as high as the sprite is tall: a mark
+    // floating a body's length above her head reads as belonging to the sky.
+    const y = this.player.y - TILE_SIZE - RESULT_ICON / 2;
+    const parts: Phaser.GameObjects.GameObject[] = [];
+    const mark = this.add.graphics();
+    const half = RESULT_ICON * 0.5;
+    if (icon) {
+      parts.push(this.add.image(0, 0, uiTextureKey(icon)).setDisplaySize(RESULT_ICON, RESULT_ICON));
+      // One bar, not a cross. A cross over a picture hides the picture, and
+      // the picture is the half that says *which* thing she has none of.
+      mark.lineStyle(3, REFUSAL_COLOR, 1);
+      mark.lineBetween(-half, half, half, -half);
+    } else {
+      mark.lineStyle(3, REFUSAL_COLOR, 1);
+      mark.lineBetween(-half, -half, half, half);
+      mark.lineBetween(half, -half, -half, half);
+    }
+    parts.push(mark);
+    const shown = this.world(this.add.container(x, y, parts).setDepth(this.player.depth + 1));
+    this.tweens.add({
+      targets: shown,
+      y: y - RESULT_RISE / 2,
+      alpha: 0,
+      duration: REFUSAL_MS,
+      ease: "Quad.easeIn",
+      onComplete: () => shown.destroy(),
+    });
+  }
+
+  /**
+   * Chevrons from her feet to the square she could not reach.
+   *
+   * Every other refusal is answered by doing something different; this one is
+   * answered by *walking*, and a cross alone does not say that. A short trail
+   * pointing the way does, in the one language a child who cannot read still
+   * has.
+   */
+  private markTooFar(col: number, row: number): void {
+    const to = this.toFeet(col, row);
+    const from = { x: this.player.x, y: this.player.y };
+    const trail = this.world(this.add.graphics().setDepth(to.y + 1));
+    trail.fillStyle(REFUSAL_COLOR, 1);
+    for (let step = 1; step <= TOO_FAR_STEPS; step++) {
+      const along = step / (TOO_FAR_STEPS + 1);
+      trail.fillCircle(
+        from.x + (to.x - from.x) * along,
+        from.y - TILE_SIZE / 2 + (to.y - from.y) * along,
+        TOO_FAR_DOT,
+      );
+    }
+    this.tweens.add({
+      targets: trail,
+      alpha: 0,
+      duration: REFUSAL_MS,
+      ease: "Quad.easeIn",
+      onComplete: () => trail.destroy(),
+    });
   }
 
   /**
@@ -3668,7 +3809,6 @@ export class GameScene extends Phaser.Scene {
     this.cropSprites
       .get(tileKey(col, row))
       ?.play(plantAnimKey(result.crop.plant, result.crop.stage));
-    this.setMessage(result.message);
   }
 
   // --- The store ----------------------------------------------------------
@@ -4194,7 +4334,6 @@ export class GameScene extends Phaser.Scene {
     this.saveProfileChange({ language: next.language });
     writeSettings(browserStore(), next);
     this.words = phrasesFor(next.language);
-    this.session.setPhrases(this.words);
     this.spellPopup?.setPhrases(this.words);
     this.optionsPanel?.setPhrases(this.words);
     this.lessonPanel?.setPhrases(this.words);
@@ -4264,7 +4403,7 @@ export class GameScene extends Phaser.Scene {
   private placeFixture(fixture: FixtureType): void {
     if (this.modalOpen) return;
     const result = this.session.place(fixture);
-    this.report(result);
+    this.report(result, itemIcon(fixture));
     if (!result.ok || !result.tile || !result.object) return;
 
     const { col, row } = result.tile;
@@ -4310,7 +4449,7 @@ export class GameScene extends Phaser.Scene {
   private takeFixture(fixture: FixtureType, col: number, row: number): void {
     if (this.modalOpen) return;
     const result = this.session.takeBack(fixture, col, row);
-    this.report(result);
+    this.report(result, itemIcon(fixture));
     if (!result.ok) return;
     const key = tileKey(col, row);
     this.placedFixtures.get(key)?.destroy();
@@ -4334,7 +4473,7 @@ export class GameScene extends Phaser.Scene {
   private tryHarvest(): void {
     if (this.modalOpen) return;
     const result = this.session.harvest();
-    this.report(result);
+    this.report(result, result.crop ? cropIcon(result.crop.plant) : undefined);
     if (!result.ok || !result.tile) return;
 
     // The sprite has to go *and* leave the registry: a stale entry would have
@@ -4366,7 +4505,8 @@ export class GameScene extends Phaser.Scene {
     const dRow = row - this.playerRow;
     const steps = Math.abs(dCol) + Math.abs(dRow);
     if (steps > 1) {
-      this.setMessage(this.words.tooFarToReach);
+      this.markRefusal(col, row);
+      this.markTooFar(col, row);
       return;
     }
     if (steps === 1) this.session.turnToward(dCol, dRow);
@@ -4379,7 +4519,7 @@ export class GameScene extends Phaser.Scene {
     if (!plant) return;
 
     const result = this.session.plant(plant);
-    this.report(result);
+    this.report(result, cropIcon(plant));
     if (!result.ok || !result.tile) return;
 
     const { col, row } = result.tile;
@@ -4441,12 +4581,14 @@ export class GameScene extends Phaser.Scene {
   private handleTileClick(screenX: number, screenY: number): void {
     const target = this.toGrid(screenX, screenY);
     if (!this.grid.isPassable(target.col, target.row)) {
-      this.setMessage("Can't walk there");
+      this.markRefusal(target.col, target.row);
       return;
     }
     const path = findPath(this.grid, { col: this.playerCol, row: this.playerRow }, target);
     if (!path) {
-      this.setMessage("Can't walk there");
+      // Walkable ground with no way to it. The cross goes on the square she
+      // pointed at, which is the one she is looking at.
+      this.markRefusal(target.col, target.row);
       return;
     }
     this.path = path;
@@ -5038,7 +5180,6 @@ export class GameScene extends Phaser.Scene {
     // where they were standing outside.
     const { cols, rows } = sidecar.size_cells;
     this.frameRoom(cols * TILE_SIZE, this.originY + rows * TILE_SIZE);
-    this.setMessage(this.words.entered(room));
   }
 
   /**

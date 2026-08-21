@@ -50,8 +50,6 @@ export interface Phrases {
   // --- names ---------------------------------------------------------------
 
   plant: (plant: PlantType) => Noun;
-  /** A chicken, a duck, a cat or a rabbit, in the forms a sentence needs. */
-  animal: (kind: AnimalKind) => Noun;
   fixture: (fixture: FixtureType) => Noun;
   item: (item: ItemType) => Noun;
   stage: (stage: PlantStage) => string;
@@ -64,35 +62,14 @@ export interface Phrases {
   // --- gardening -----------------------------------------------------------
 
   nothingGrowsIndoors: string;
-  noRoomToPlant: string;
-  alreadyPlanted: string;
-  wrongGround: (plant: PlantType, terrain: TerrainType) => string;
-  planted: (plant: PlantType) => string;
-  faceToGrow: string;
-  alreadyGrown: (plant: PlantType) => string;
-  grownTo: (plant: PlantType, stage: PlantStage) => string;
-  picked: (plant: PlantType, held: number) => string;
-  notRipe: (plant: PlantType) => string;
-  faceToPick: string;
 
   // --- things she puts down ------------------------------------------------
 
-  notInHere: string;
-  notYours: (fixture: FixtureType) => string;
-  noneLeft: (fixture: FixtureType) => string;
-  noRoomThere: string;
-  somethingGrowing: string;
   putDown: (fixture: FixtureType) => string;
-  tooFarToReach: string;
-  pickedUp: (fixture: FixtureType, held: number) => string;
 
   // --- the world -----------------------------------------------------------
 
   spellFades: string;
-  /** Nothing in front of you for the clearing spell to take. */
-  nothingToClear: string;
-  /** Something there, but not something the spell will unmake. */
-  willNotClear: string;
   cleared: string;
   tooFarToSpeak: string;
   /**
@@ -105,12 +82,9 @@ export interface Phrases {
    */
   tooFarFromLandmark: string;
   cannotWalkThere: string;
-  /** What the great tree says when it is touched. */
-  greatTreeGreeting: string;
   /** The other two landmarks, which teach nothing yet but are not silent. */
   lighthouseGreeting: string;
   clockTowerGreeting: string;
-  entered: (room: string) => string;
 
   // --- the title card ------------------------------------------------------
 
@@ -251,12 +225,8 @@ export interface Phrases {
   patchDone: (action: string, count: number) => string;
   /** The question under it. */
   arrayAsk: string;
-  /** No patch of clear ground that shape, from the tile she is facing. */
-  noRoomForArray: (rows: number, columns: number) => string;
   /** The help that arrives after a wrong answer: count along, row by row. */
   arrayHintRows: (columns: number, counted: number) => string;
-  /** What was planted, once the spell lands. */
-  arrayPlanted: (plant: string, count: number) => string;
 
   // --- the hourglass spell -------------------------------------------------
 

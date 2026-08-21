@@ -32,38 +32,17 @@ function sample(p: Phrases): Record<string, string> {
     stage: p.stage(PlantStage.Mature),
     terrain: p.terrain("grass"),
     room: p.room("barn"),
-    animal: p.animal(AnimalKind.Chicken).bare,
     count: p.count(carrot, 3),
 
     nothingGrowsIndoors: p.nothingGrowsIndoors,
-    noRoomToPlant: p.noRoomToPlant,
-    alreadyPlanted: p.alreadyPlanted,
-    wrongGround: p.wrongGround(carrot, "sand"),
-    planted: p.planted(carrot),
-    faceToGrow: p.faceToGrow,
-    alreadyGrown: p.alreadyGrown(carrot),
-    grownTo: p.grownTo(carrot, PlantStage.Mature),
-    picked: p.picked(carrot, 3),
-    notRipe: p.notRipe(carrot),
-    faceToPick: p.faceToPick,
 
-    notInHere: p.notInHere,
-    notYours: p.notYours(FixtureType.Well),
-    noneLeft: p.noneLeft(fence),
-    noRoomThere: p.noRoomThere,
-    somethingGrowing: p.somethingGrowing,
     putDown: p.putDown(fence),
-    tooFarToReach: p.tooFarToReach,
-    pickedUp: p.pickedUp(fence, 2),
 
     spellFades: p.spellFades,
-    nothingToClear: p.nothingToClear,
-    willNotClear: p.willNotClear,
     cleared: p.cleared,
     tooFarToSpeak: p.tooFarToSpeak,
     tooFarFromLandmark: p.tooFarFromLandmark,
     cannotWalkThere: p.cannotWalkThere,
-    greatTreeGreeting: p.greatTreeGreeting,
     lighthouseGreeting: p.lighthouseGreeting,
     clockTowerGreeting: p.clockTowerGreeting,
     arrayUntaught: p.arrayUntaught,
@@ -89,10 +68,7 @@ function sample(p: Phrases): Record<string, string> {
     patchAction: p.patchAction("plant", 6),
     patchDone: p.patchDone("grow", 6),
     arrayAsk: p.arrayAsk,
-    noRoomForArray: p.noRoomForArray(4, 6),
     arrayHintRows: p.arrayHintRows(6, 2),
-    arrayPlanted: p.arrayPlanted("carrot", 24),
-    entered: p.entered("barn"),
 
     titleTagline: p.titleTagline,
     titleLoading: p.titleLoading,
@@ -238,9 +214,6 @@ describe("every room the game can put you in has a name in every language", () =
           expect({ room, translated: name !== EN.room(room) }).toEqual({ room, translated: true });
         }
       });
-      test(`${language} can say you walked into the ${room}`, () => {
-        expect(words.entered(room)).toContain(words.room(room));
-      });
     }
   }
 });
@@ -355,29 +328,31 @@ describe("German grammar", () => {
 
   // German capitalises the first word of a sentence like every language, and
   // the noun forms are stored lowercase for the middle of one.
+  //
+  // There are fewer of these to check than there were, and that is the point
+  // of the change that removed them: the game no longer *says* that a carrot
+  // was planted, it draws a carrot rising off the square it was planted on.
+  // What is left is what a picture cannot carry.
   test("a sentence that opens with a noun opens with a capital", () => {
     for (const line of [
-      DE.planted(PlantType.Carrot),
-      DE.picked(PlantType.Carrot, 1),
       DE.putDown(FixtureType.Fence),
-      DE.pickedUp(FixtureType.Fence, 1),
-      DE.notRipe(PlantType.Carrot),
+      DE.animalFed(AnimalKind.Rabbit, PlantType.Carrot),
+      DE.animalAsks(AnimalKind.Chicken, PlantType.Wheat),
     ]) {
       expect(line[0]).toBe(line[0]?.toUpperCase() as string);
     }
   });
 
   test("sentences read as German, not as English word order", () => {
-    expect(DE.planted(PlantType.Cactus)).toContain("Einen Kaktus gepflanzt");
-    expect(DE.noneLeft(FixtureType.Fence)).toContain("keinen Zaun");
-    expect(DE.entered("barn")).toContain("in der Scheune");
+    expect(DE.putDown(FixtureType.Fence)).toContain("Einen Zaun hingestellt");
+    expect(DE.fixture(FixtureType.Fence).none).toBe("keinen Zaun");
   });
 
-  // Every placeable thing turns up in "put down a …" and "you have no …".
+  // Every placeable thing turns up in "put down a …".
   test("everything the shop sells has both forms", () => {
     for (const fixture of PLACEABLE_FIXTURES) {
       expect(DE.putDown(fixture)).not.toContain("undefined");
-      expect(DE.noneLeft(fixture)).not.toContain("undefined");
+      expect(DE.fixture(fixture).none).not.toContain("undefined");
     }
   });
 });

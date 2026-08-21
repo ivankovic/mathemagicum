@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { EN } from "../i18n/en";
 import { Facing } from "./characters";
 import { FixtureType } from "./fixtures";
 import { WorldGrid } from "./grid";
 import { PlantStage, PlantType } from "./plants";
 import { sceneryType } from "./scenery";
-import { GameSession, stepsBetween, stepsToSpeak } from "./session";
+import { GameSession, Outcome, stepsBetween, stepsToSpeak } from "./session";
 import { CROP_PRICE, priceOf } from "./shop";
 import { TerrainType } from "./terrain";
 
@@ -63,7 +62,7 @@ describe("planting", () => {
     const s = session(field(TerrainType.Sand));
     const result = s.plant(PlantType.Sunflower);
     expect(result.ok).toBe(false);
-    expect(result.message).toContain("sand");
+    expect(result.outcome).toBe(Outcome.WrongGround);
     expect(s.grid.getCrop(2, 3)).toBe(null);
   });
 
@@ -86,14 +85,14 @@ describe("planting", () => {
   test("refuses a tile that already has something growing", () => {
     const s = session();
     s.plant(PlantType.Carrot);
-    expect(s.plant(PlantType.Carrot).message).toContain("already planted");
+    expect(s.plant(PlantType.Carrot).outcome).toBe(Outcome.AlreadyPlanted);
   });
 
   test("refuses indoors", () => {
     const s = session();
     s.indoors = true;
     expect(s.plant(PlantType.Carrot).ok).toBe(false);
-    expect(s.plant(PlantType.Carrot).message).toBe("Nothing grows indoors");
+    expect(s.plant(PlantType.Carrot).outcome).toBe(Outcome.Indoors);
   });
 });
 
@@ -126,7 +125,7 @@ describe("growing", () => {
     growAhead(s);
     const target = s.checkGrowth();
     expect(target.ok).toBe(false);
-    expect(target.message).toContain("already fully grown");
+    expect(target.outcome).toBe(Outcome.AlreadyGrown);
   });
 
   test("refuses bare ground", () => {
@@ -137,7 +136,7 @@ describe("growing", () => {
     const s = session();
     s.plant(PlantType.Carrot);
     s.indoors = true;
-    expect(s.checkGrowth().message).toBe("Nothing grows indoors");
+    expect(s.checkGrowth().outcome).toBe(Outcome.Indoors);
   });
 });
 
@@ -180,12 +179,12 @@ describe("harvesting", () => {
     s.plant(PlantType.Carrot);
     const result = s.harvest();
     expect(result.ok).toBe(false);
-    expect(result.message).toContain("not ready");
+    expect(result.outcome).toBe(Outcome.AlreadyPlanted);
     expect(s.grid.getCrop(2, 3)).not.toBe(null);
   });
 
   test("refuses bare ground", () => {
-    expect(session().harvest().message).toContain("Face something you planted");
+    expect(session().harvest().outcome).toBe(Outcome.NothingThere);
   });
 
   test("a picked tile can be planted again", () => {
@@ -221,14 +220,14 @@ describe("putting things down", () => {
   test("refuses a tile that already has something on it", () => {
     const s = stocked();
     s.place(FixtureType.Fence);
-    expect(s.place(FixtureType.Fence).message).toContain("no room");
+    expect(s.place(FixtureType.Fence).outcome).toBe(Outcome.NoRoom);
     expect(s.inventory.count(FixtureType.Fence)).toBe(1);
   });
 
   test("refuses a tile with a crop growing on it", () => {
     const s = stocked();
     s.plant(PlantType.Carrot);
-    expect(s.place(FixtureType.Fence).message).toContain("growing");
+    expect(s.place(FixtureType.Fence).outcome).toBe(Outcome.AlreadyPlanted);
   });
 
   // The well is placed by world generation and is not hers to move.
@@ -251,7 +250,7 @@ describe("putting things down", () => {
     const s = stocked();
     s.place(FixtureType.Fence);
     s.setPosition(0, 0);
-    expect(s.takeBack(FixtureType.Fence, 2, 3).message).toContain("Too far");
+    expect(s.takeBack(FixtureType.Fence, 2, 3).outcome).toBe(Outcome.TooFar);
     expect(s.grid.isPassable(2, 3)).toBe(false);
   });
 
@@ -454,7 +453,7 @@ describe("clearing what is in the way", () => {
   test("bare ground has nothing to take", () => {
     const target = session().checkClearing();
     expect(target.ok).toBe(false);
-    expect(target.message).toBe(EN.nothingToClear);
+    expect(target.outcome).toBe(Outcome.NothingThere);
   });
 
   // A fence you bought is yours, and a spell that unmade it would undo an
@@ -475,7 +474,7 @@ describe("clearing what is in the way", () => {
     const game = session(grid);
     expect(game.checkClearing()).toEqual({
       ok: false,
-      message: EN.willNotClear,
+      outcome: Outcome.NotYours,
       tile: { col: 2, row: 3 },
     });
     // And asking it to anyway changes nothing.
@@ -499,6 +498,6 @@ describe("clearing what is in the way", () => {
     tree(grid, 2, 3);
     const game = session(grid);
     game.indoors = true;
-    expect(game.checkClearing()).toEqual({ ok: false, message: EN.nothingToClear });
+    expect(game.checkClearing()).toEqual({ ok: false, outcome: Outcome.NothingThere });
   });
 });
