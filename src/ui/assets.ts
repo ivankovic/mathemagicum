@@ -69,6 +69,9 @@ export const UiAsset = {
   MarkQuestion: "mark-question",
   /** And what goes in it for a moment after it has been fed. */
   MarkGlad: "mark-glad",
+  /** The two halves of *are you sure*, for the one thing that asks twice. */
+  MarkYes: "mark-yes",
+  MarkNo: "mark-no",
 } as const;
 
 export type UiAsset = (typeof UiAsset)[keyof typeof UiAsset];

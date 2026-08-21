@@ -24,6 +24,7 @@ import {
   canAddProfile,
   createProfile,
   findProfile,
+  freshStart,
   isUsableName,
   readProfile,
   replaceProfile,
@@ -717,6 +718,56 @@ describe("the device's world number", () => {
   test("rubbish in storage is replaced rather than played", () => {
     const store = memory({ [WORLD_SEED_KEY]: "not a number" });
     expect(deviceSeed(store, 0.42)).toBeGreaterThan(0);
+  });
+
+  /**
+   * A new world starts everybody from scratch.
+   *
+   * Keeping the spells was tried and reversed: a new world with the array
+   * spell already in it is not a new world — the great tree has nothing left
+   * to ask, and the first afternoon of the game cannot happen twice on one
+   * device.
+   *
+   * What survives is who the child *is*, not what they did. The band is on
+   * that side of the line: nothing about a fresh village makes a six-year-old
+   * ready for three-digit sums.
+   */
+  test("a new world starts everybody again, but nobody has to be made twice", () => {
+    const played = {
+      ...createProfile(
+        [],
+        { name: "Mia", avatar: DEFAULT_AVATAR, language: Language.German, band: 0 },
+        1000,
+      ),
+      introSeen: true,
+      rung: HARDEST_RUNG,
+      portalRung: 7,
+      arrayRung: HARDEST_ARRAY_RUNG,
+      clockRung: 4,
+      reached: ["village", "harbour", "observatory"],
+      learned: [Spell.Portal, Spell.Array, Spell.Hourglass],
+      carried: null,
+    };
+    const again = freshStart(played);
+
+    // Who they are.
+    expect({ id: again.id, name: again.name, language: again.language, band: again.band }).toEqual({
+      id: played.id,
+      name: played.name,
+      language: played.language,
+      band: played.band,
+    });
+    expect(again.avatar).toEqual(played.avatar);
+
+    // What they did.
+    expect(knowsSpell(again.learned, Spell.Portal)).toBe(false);
+    expect(knowsSpell(again.learned, Spell.Array)).toBe(false);
+    expect(again.reached).toEqual(["village"]);
+    expect(again.rung).toBe(bandAt(played.band).from);
+    expect(again.portalRung).toBe(bandAt(played.band).from);
+    expect(again.carried).toBeNull();
+    // And the postman walks them through it again, because it is again.
+    expect(again.introSeen).toBe(false);
   });
 
   // Throwing the seed away without the difference beside it would lay one

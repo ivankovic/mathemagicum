@@ -232,6 +232,42 @@ export function createProfile(
 }
 
 /**
+ * The same child, at the start of a new world.
+ *
+ * Everything they *are* survives — their name, their face, the language they
+ * read and the band somebody picked for them. Everything they *earned*
+ * starts again: the spells, the ladders, the places they have walked to and
+ * whatever was in their pockets.
+ *
+ * That split is the whole of it, and it is a decision rather than a
+ * consequence. Keeping the spells was tried first, on the argument that
+ * thirty problems for the array spell should not be taken back by an adult
+ * tapping a button on the options screen. The answer is that a new world
+ * with the spells already in it is not a new world: the great tree has
+ * nothing left to ask, the geometer is a man in a tower, and the first
+ * afternoon of the game — which is the best afternoon it has — cannot
+ * happen twice on one device.
+ *
+ * The band stays because it is a fact about the child rather than about the
+ * world. Nothing in a fresh village makes a six-year-old ready for
+ * three-digit sums.
+ */
+export function freshStart(profile: Profile): Profile {
+  const band = bandAt(profile.band);
+  return {
+    ...profile,
+    introSeen: false,
+    rung: band.from,
+    portalRung: band.from,
+    arrayRung: arrayRungInBand(band, band.from),
+    clockRung: clockRungInBand(band, band.from),
+    reached: [HOME_PLACE],
+    learned: [],
+    carried: null,
+  };
+}
+
+/**
  * A usable rung on the array ladder, which is shorter than the other two.
  *
  * Clamped against its own end rather than against the addition ladder's:

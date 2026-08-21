@@ -15,7 +15,7 @@ import type { Phrases } from "../i18n/phrases";
 import { VirtualJoystick } from "../input/VirtualJoystick";
 import { type Rgb, rampPlan } from "../render/recolour";
 import { repaintedSheet } from "../render/sheetTexture";
-import { type Profile, createProfile } from "../save/profiles";
+import { type Profile, createProfile, freshStart } from "../save/profiles";
 import {
   type WorldBaseline,
   restorePlayer,
@@ -25,8 +25,8 @@ import {
   snapshotPlayer,
   worldBaseline,
 } from "../save/snapshot";
-import { LoadOutcome, loadWorld, saveProfile, writeWorld } from "../save/store";
-import { deviceSeed } from "../save/world";
+import { LoadOutcome, loadWorld, readProfiles, saveProfile, writeWorld } from "../save/store";
+import { deviceSeed, forgetWorld } from "../save/world";
 import {
   Language,
   type Settings,
@@ -914,6 +914,13 @@ export class GameScene extends Phaser.Scene {
   private seedPouchKey!: Phaser.Input.Keyboard.Key;
   private harvestKey!: Phaser.Input.Keyboard.Key;
 
+  /**
+   * Whether the world has been thrown away and the page is on its way out.
+   *
+   * Read by `autosave`, which is the one thing that could undo a reset.
+   */
+  private worldForgotten = false;
+
   private mobileControls = false;
   private joystick?: VirtualJoystick;
   private path: GridPoint[] = [];
@@ -1267,6 +1274,7 @@ export class GameScene extends Phaser.Scene {
       (object) => this.ui(object),
     );
     this.optionsPanel.onChange = (next) => this.applySettings(next);
+    this.optionsPanel.onResetWorld = () => this.resetWorld();
     this.optionsPanel.onBandChange = (band) => this.applyBand(band);
     this.optionsPanel.setBand(this.profile.band);
     this.applyCropPrice();
@@ -4278,6 +4286,7 @@ export class GameScene extends Phaser.Scene {
     for (const [index, at] of (this.patchMenu?.buttonPositions() ?? []).entries()) {
       positions[`patch.${index}`] = at;
     }
+    if (this.optionsPanel?.isOpen) Object.assign(positions, this.optionsPanel.buttonPositions());
     return positions;
   }
 
@@ -4386,6 +4395,13 @@ export class GameScene extends Phaser.Scene {
    * not rewrite the same bytes into storage every few seconds.
    */
   private autosave(): void {
+    // A world that has just been thrown away must not be written back. Four
+    // things call this — the timer, `visibilitychange`, `pagehide` and the
+    // scene's own shutdown — and the reload that follows a reset fires at
+    // least two of them, so the guard belongs here rather than at any of the
+    // call sites. Without it the reset deletes the world and the page saves
+    // it again on its way out, under the new seed.
+    if (this.worldForgotten) return;
     const store = browserStore();
     // The ground, which everybody shares.
     const snapshot = snapshotGame(this.worldGrid, this.baseline, this.seed, Date.now());
@@ -4404,6 +4420,37 @@ export class GameScene extends Phaser.Scene {
     if (this.anonymous) return;
     const outdoorAt = this.interior ? this.interior.returnTo : this.session.tile;
     this.saveProfileChange({ carried: snapshotPlayer(this.session, outdoorAt) });
+  }
+
+  /**
+   * Throw this world away and start another.
+   *
+   * The seed and the difference beside it go together: deleting the seed and
+   * keeping the snapshot would lay one child's fences over a coastline that
+   * has moved.
+   *
+   * **The children are kept; what they earned is not.** Their names, their
+   * faces and the band somebody picked for them survive, and everything else
+   * starts again — see `freshStart`. A new world with the spells already in
+   * it is not a new world: the great tree has nothing left to ask, and the
+   * first afternoon of this game, which is the best afternoon it has, cannot
+   * happen twice on one device.
+   *
+   * Reloading rather than rebuilding the scene in place. A reset is rare, it
+   * is asked for by an adult, and a page that starts again from nothing
+   * cannot leave a stale sprite or a dangling timer behind — which a scene
+   * restart, with this many pools and panels, very well might.
+   */
+  private resetWorld(): void {
+    // Before anything else: nothing may write a world or a profile from here
+    // on, or the reload will save the old one back on its way out.
+    this.worldForgotten = true;
+    const store = browserStore();
+    // Every child on the device, not only the one holding it: the world is
+    // shared, so a fresh one is fresh for all of them or for none.
+    for (const profile of readProfiles(store)) saveProfile(store, freshStart(profile));
+    forgetWorld(store);
+    globalThis.location.reload();
   }
 
   /**

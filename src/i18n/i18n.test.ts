@@ -124,6 +124,8 @@ function sample(p: Phrases): Record<string, string> {
     deleteYes: p.deleteYes,
     deleteNo: p.deleteNo,
     sumsHeading: p.sumsHeading,
+    worldHeading: p.worldHeading,
+    resetKeepsPlayers: p.resetKeepsPlayers,
 
     geometryLessonTitle: p.geometryLessonTitle,
     geometryRune: p.geometryRune,

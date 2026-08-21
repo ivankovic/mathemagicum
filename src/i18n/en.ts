@@ -226,6 +226,9 @@ export const EN: Phrases = {
   deleteYes: "Yes, remove",
   deleteNo: "No, keep",
   sumsHeading: "Your sums",
+  worldHeading: "This world",
+  resetKeepsPlayers:
+    "Start a new world? The players stay. Everything they have earned starts again.",
 
   storeTitle: (money) => `Village Store — ${money}`,
   storeFooter: "She buys crops, and sells things to put in your garden.",

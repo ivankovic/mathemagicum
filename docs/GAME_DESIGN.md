@@ -924,6 +924,44 @@ has always had, and no villager is ever given it. Their home is the one
 building they need to find from a distance without thinking, and a house that
 changed colour between worlds would be a landmark that is not one.
 
+### Starting a new world
+
+**One button on the options screen, and it asks twice.** The row shows the
+map — which is already what "the world" looks like in this game, hanging on
+the tower wall and ruled across by the portal spell. Tapping it turns the row
+into the same map with a tick and a cross beside it. Nothing happens until
+one of those is pressed, and closing the panel forgets the question.
+
+**It is the one place left in the game that spends a sentence.** Everything
+else says what it has to say in pictures, and that rule holds because the
+audience includes children who cannot read. This screen does not: the options
+are for an adult, and an adult shown a wordless tick and cross over a picture
+of the world has no way to tell "a new village" from "delete my children".
+A picture cannot say *this but not that*.
+
+**The children survive; what they earned does not.** Names, faces, the
+language they read and the band somebody picked for them all stay. Spells,
+ladders, places walked to, purse, basket and the tutorial all start again.
+
+Keeping the spells was the first answer and it was wrong. A new world with
+the array spell already in it is not a new world: the great tree has nothing
+left to ask, the geometer is a man in a tower, and the first afternoon of the
+game — which is the best afternoon it has — cannot happen twice on one
+device. The band is on the other side of the line because it is a fact about
+the child rather than about the world: nothing in a fresh village makes a
+six-year-old ready for three-digit sums.
+
+**It resets every child on the device, not the one holding it.** The world is
+shared, so a fresh one is fresh for all of them or for none.
+
+**The page reloads rather than the scene restarting.** A reset is rare and
+asked for by an adult, and a page that starts from nothing cannot leave a
+stale sprite or a dangling timer behind — which a scene restart, with this
+many pools and panels, very well might. The one hazard is that four things
+call `autosave` (a timer, `visibilitychange`, `pagehide`, and the scene's own
+shutdown) and a reload fires at least two of them; the guard against writing
+the dead world back sits inside `autosave` rather than at any call site.
+
 ### Nothing is said in words
 
 **The status line is gone.** There was one line of small type along the top of

@@ -10,7 +10,7 @@ import { BANDS, DEFAULT_BAND, sampleProblem } from "../spells/difficulty";
 import { createRng } from "../world/rng";
 import { CROP_PRICE } from "../world/shop";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
-import type { UiIndex } from "./assets";
+import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
 
 /**
  * The options: which language the game is read in.
@@ -27,12 +27,20 @@ import type { UiIndex } from "./assets";
  * Every change applies at once and is saved at once. There is no OK button:
  * an options screen with one asks the player to remember a second step in
  * order for the first to count.
+ *
+ * **Except one.** Throwing the world away is the single thing on this screen
+ * that cannot be undone by tapping the other button, so it asks twice: the
+ * row turns into the same map with a tick and a cross beside it, and nothing
+ * happens until one of those is pressed. It is also the one place left in
+ * the game that spends a sentence — see `resetHint`. This screen is aimed at
+ * an adult, and an adult about to be shown a wordless tick and cross will
+ * assume the worst about what is being deleted.
  */
 
 const PANEL_MAX_W = 420;
-const PANEL_MAX_H = 300;
+const PANEL_MAX_H = 344;
 const PANEL_MIN_W = 280;
-const PANEL_MIN_H = 220;
+const PANEL_MIN_H = 290;
 
 const INK = "#4a3422";
 const INK_DIM = "#8a6a48";
@@ -48,6 +56,8 @@ const BUTTON_H = 32;
 const BUTTON_GAP = 6;
 /** A heading and the row of buttons under it, plus air before the next one. */
 const ROW_HEIGHT = SMALL_SIZE + 8 + BUTTON_H + 18;
+/** How big the map and the two answers are drawn on their buttons. */
+const ICON = 22;
 
 interface Choice {
   readonly box: Phaser.GameObjects.Rectangle;
@@ -77,8 +87,24 @@ export class OptionsPanel {
    */
   private readonly bandChoices: Choice[] = [];
   private readonly closeButton: Choice;
+  /** The world row: the map, and the tick and cross it turns into. */
+  private readonly resetButton: Choice;
+  private readonly yesButton: Choice;
+  private readonly noButton: Choice;
+  private readonly resetHint: Phaser.GameObjects.Text;
+  private readonly icons: Phaser.GameObjects.Image[] = [];
+
+  /**
+   * Somebody asked for a new world, twice.
+   *
+   * The panel does not do it: it has no business knowing what a world is or
+   * where one is kept. It knows how to ask.
+   */
+  onResetWorld?: () => void;
 
   private open = false;
+  /** Whether the world row has been tapped once and is asking. */
+  private asking = false;
   private onClose: (() => void) | null = null;
   private keyHandler: ((event: KeyboardEvent) => void) | null = null;
 
@@ -124,6 +150,21 @@ export class OptionsPanel {
         this.choice(`${sample.start} + ${sample.addend}`, () => this.chooseBand(index)),
       );
     }
+    this.resetButton = this.iconChoice(UiAsset.MapWall, () => {
+      this.asking = true;
+      this.render();
+    });
+    this.yesButton = this.iconChoice(UiAsset.MarkYes, () => {
+      this.asking = false;
+      this.onResetWorld?.();
+    });
+    this.noButton = this.iconChoice(UiAsset.MarkNo, () => {
+      this.asking = false;
+      this.render();
+    });
+    this.resetHint = this.own(
+      this.text("", SMALL_SIZE, INK_DIM).setOrigin(0.5, 0).setAlign("center"),
+    );
     this.closeButton = this.choice("x", () => this.close());
 
     for (const part of this.parts) {
@@ -137,11 +178,46 @@ export class OptionsPanel {
   }
 
   private allChoices(): Choice[] {
-    return [...this.languageChoices, ...this.bandChoices, this.closeButton];
+    return [
+      ...this.languageChoices,
+      ...this.bandChoices,
+      this.resetButton,
+      this.yesButton,
+      this.noButton,
+      this.closeButton,
+    ];
+  }
+
+  /** A button with a picture on it rather than a word. */
+  private iconChoice(asset: string, onTap: () => void): Choice {
+    const choice = this.choice("", onTap);
+    const icon = this.own(
+      this.scene.add.image(0, 0, uiTextureKey(asset)).setDisplaySize(ICON, ICON),
+    );
+    this.icons.push(icon);
+    this.iconOf.set(choice.box, icon);
+    return choice;
   }
 
   get isOpen(): boolean {
     return this.open;
+  }
+
+  /**
+   * Where the world row's buttons are, for a script to press.
+   *
+   * The one control in the game that cannot be undone is also the one whose
+   * position moves with the panel's height — and a browser check that
+   * hard-codes a coordinate for it silently stops pressing it the day the
+   * layout changes, which reads exactly like a reset that quietly stopped
+   * working. Asked for rather than computed, so it cannot drift.
+   */
+  buttonPositions(): Record<string, { x: number; y: number }> {
+    return {
+      reset: { x: this.resetButton.box.x, y: this.resetButton.box.y },
+      resetYes: { x: this.yesButton.box.x, y: this.yesButton.box.y },
+      resetNo: { x: this.noButton.box.x, y: this.noButton.box.y },
+    };
   }
 
   open_(onClose: () => void): void {
@@ -158,6 +234,10 @@ export class OptionsPanel {
   }
 
   close(): void {
+    // Never still asking when it opens again. A confirm that survived being
+    // dismissed would be a confirm that answered a question nobody had just
+    // asked.
+    this.asking = false;
     if (this.keyHandler) {
       this.scene.input.keyboard?.off("keydown", this.keyHandler);
       this.keyHandler = null;
@@ -254,6 +334,48 @@ export class OptionsPanel {
       .setText(this.words.cropSellsFor(CURRENCY.format(this.cropPrice)))
       .setPosition(rect.centreX, rect.top + rect.height - PAD)
       .setVisible(true);
+
+    this.worldRow(rect, rect.top + PAD + TITLE_SIZE + 18 + ROW_HEIGHT * 2);
+  }
+
+  /**
+   * The world, and the one button that throws it away.
+   *
+   * Two states in one row. Untapped it is a map, on its own, off to the left
+   * like every other row's first button — a thing you have to mean to press.
+   * Tapped, the map stays put and a tick and a cross appear beside it, with
+   * a line under them saying what survives. Nothing happens in between.
+   *
+   * The map is the picture because the map is already what "the world" looks
+   * like in this game: it is what hangs on the tower wall and what the portal
+   * spell rules a ruler across.
+   */
+  private worldRow(rect: { left: number; width: number; centreX: number }, top: number): void {
+    const label = this.headings[2];
+    label
+      ?.setText(this.words.worldHeading)
+      .setPosition(rect.left + PAD, top)
+      .setVisible(true);
+
+    const y = top + SMALL_SIZE + 8 + BUTTON_H / 2;
+    const width = (rect.width - PAD * 2 - BUTTON_GAP * 2) / 3;
+    this.place(this.resetButton, rect.left + PAD + width / 2, y, width, BUTTON_H);
+    this.resetButton.box.setStrokeStyle(2, this.asking ? CHOSEN_HEX : INK_HEX);
+    this.show(this.resetButton);
+    if (!this.asking) return;
+
+    this.place(this.yesButton, rect.left + PAD + width * 1.5 + BUTTON_GAP, y, width, BUTTON_H);
+    this.place(this.noButton, rect.left + PAD + width * 2.5 + BUTTON_GAP * 2, y, width, BUTTON_H);
+    this.show(this.yesButton);
+    this.show(this.noButton);
+    // The one sentence left on any screen in the game, and it is here because
+    // this screen is for an adult: somebody shown a wordless tick and cross
+    // over a picture of the world will assume it deletes the children too.
+    this.resetHint
+      .setText(this.words.resetKeepsPlayers)
+      .setWordWrapWidth(rect.width - PAD * 2)
+      .setPosition(rect.centreX, y + BUTTON_H / 2 + 6)
+      .setVisible(true);
   }
 
   private row<T>(
@@ -297,14 +419,18 @@ export class OptionsPanel {
     return { box, label };
   }
 
+  private readonly iconOf = new Map<Phaser.GameObjects.Rectangle, Phaser.GameObjects.Image>();
+
   private place(choice: Choice, x: number, y: number, width: number, height: number): void {
     choice.box.setSize(width, height).setPosition(x, y);
     choice.label.setPosition(x, y);
+    this.iconOf.get(choice.box)?.setPosition(x, y);
   }
 
   private show(choice: Choice): void {
     choice.box.setVisible(true);
     choice.label.setVisible(true);
+    this.iconOf.get(choice.box)?.setVisible(true);
   }
 
   private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
