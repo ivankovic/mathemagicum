@@ -90,7 +90,9 @@ const ROW_GAP = 26;
 const BODY_CELL = 46;
 const NAME_HEIGHT = 62;
 const SUMS_HEIGHT = 32;
-/** Kept clear at the bottom for the two buttons. */
+const LANGUAGE_HEIGHT = 30;
+const BUTTON_HEIGHT = 34;
+/** Air under the last row, so nothing sits against the bottom edge. */
 const FOOTER_ROOM = 64;
 
 type Mode = "list" | "make" | "remove";
@@ -322,8 +324,8 @@ export class PlayersScene extends Phaser.Scene {
       AVATAR_COLOURS.length * (SWATCH + ROW_GAP) +
       (BODY_CELL + ROW_GAP) +
       (SUMS_HEIGHT + ROW_GAP) +
-      30 +
-      ROW_GAP;
+      (LANGUAGE_HEIGHT + ROW_GAP) +
+      BUTTON_HEIGHT;
     const room = height - y - NAME_HEIGHT - rows - FOOTER_ROOM;
     const tall = this.bodySheet(this.draft.body)?.frame_height ?? 48;
     const scale = Math.max(1, Math.min(3, Math.floor(room / tall)));
@@ -353,13 +355,26 @@ export class PlayersScene extends Phaser.Scene {
     // asking a German-reading child to find it in an options panel written
     // in English is asking them to read English first.
     this.languageRow(middle, y);
+    y += LANGUAGE_HEIGHT + ROW_GAP;
 
-    this.button(this.words.startPlaying, middle + 74, height - 34, () => this.finishMaking());
-    if (this.profiles.length > 0) {
+    // Directly under the last thing chosen, not pinned to the bottom of the
+    // screen. Pinned, it sat a hand's width below the language row on a
+    // desktop window with a band of empty ground between them, so the button
+    // that finishes the form did not look like part of the form.
+    const footer = y + BUTTON_HEIGHT / 2;
+    // Alone in the middle when it is the only button there. It used to sit
+    // off to the right whether or not anything sat beside it, which nobody
+    // saw while it was pinned to the bottom of the screen and everybody sees
+    // now that it is the last thing in the form.
+    const pair = this.profiles.length > 0;
+    this.button(this.words.startPlaying, pair ? middle + 74 : middle, footer, () =>
+      this.finishMaking(),
+    );
+    if (pair) {
       this.button(
         this.words.neverMind,
         middle - 74,
-        height - 34,
+        footer,
         () => {
           this.mode = "list";
           this.hideNameBox();
@@ -472,7 +487,7 @@ export class PlayersScene extends Phaser.Scene {
       const chosen = this.draftLanguage === language;
       const face = this.own(
         this.add
-          .rectangle(x, y, cell, 30, TILE_FACE)
+          .rectangle(x, y, cell, LANGUAGE_HEIGHT, TILE_FACE)
           .setOrigin(0, 0)
           .setStrokeStyle(chosen ? 3 : 1, chosen ? TILE_HOT : TILE_EDGE)
           .setInteractive({ useHandCursor: true }),
@@ -485,7 +500,7 @@ export class PlayersScene extends Phaser.Scene {
       this.own(
         this.text(LANGUAGE_NAMES[language], LABEL_SIZE, chosen ? INK : INK_DIM)
           .setOrigin(0.5)
-          .setPosition(x + cell / 2, y + 15),
+          .setPosition(x + cell / 2, y + LANGUAGE_HEIGHT / 2),
       );
     });
   }
@@ -708,7 +723,7 @@ export class PlayersScene extends Phaser.Scene {
     // the other.
     const box = this.own(
       this.add
-        .rectangle(x, y, text.width + 28, 34, TILE_FACE)
+        .rectangle(x, y, text.width + 28, BUTTON_HEIGHT, TILE_FACE)
         .setStrokeStyle(2, edge)
         .setDepth(depth)
         .setInteractive({ useHandCursor: true }),
