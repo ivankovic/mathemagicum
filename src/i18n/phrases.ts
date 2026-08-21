@@ -244,9 +244,9 @@ export interface Phrases {
   /** A row on her side of the counter: what it is and what it costs. */
   stockRow: (fixture: FixtureType, price: string) => string;
   /** A row on the player's side: how many she has and what each fetches. */
-  cropRow: (plant: PlantType, held: number, price: string) => string;
+  cropRow: (item: ItemType, held: number, price: string) => string;
   buyTitle: (fixture: FixtureType, count: number, price: string) => string;
-  sellTitle: (plant: PlantType, count: number, price: string) => string;
+  sellTitle: (item: ItemType, count: number, price: string) => string;
   onTheCounter: (total: string) => string;
   moreToGo: (amount: string) => string;
   tooMuch: (amount: string) => string;

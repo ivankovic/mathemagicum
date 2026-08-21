@@ -207,7 +207,7 @@ import {
   roomCameraBounds,
   wallHangingCell,
 } from "../world/interiors";
-import type { Inventory } from "../world/inventory";
+import type { Inventory, ItemType } from "../world/inventory";
 import {
   LANDMARK_TYPES,
   LandmarkType,
@@ -217,6 +217,7 @@ import {
   landmarkSidecarKey,
 } from "../world/landmarks";
 import { hasStep } from "../world/levels";
+import { MATERIAL_TYPES, materialIcon, yieldOf } from "../world/materials";
 import type { PlacedObject } from "../world/objects";
 import { LAMP_POSTS, type Observatory, lampsLit, postsFree } from "../world/observatory";
 import { findPath } from "../world/pathfinding";
@@ -327,6 +328,14 @@ const RESULT_MS = 700;
 /** The trail that says *too far*: this many dots between her and the square. */
 const TOO_FAR_STEPS = 4;
 const TOO_FAR_DOT = 2.5;
+/**
+ * How far apart the logs come up out of a cleared tree.
+ *
+ * One after another rather than all at once: three icons on top of each
+ * other is one icon, and the count is the thing worth seeing — it is the
+ * first time in this game that *which* thing you cleared has mattered.
+ */
+const MATERIAL_STAGGER_MS = 130;
 /** How slowly the armed rune breathes. */
 const ARMED_PULSE_MS = 520;
 /** How long a newly earned rune hangs in the air. Longer: it is a moment. */
@@ -2745,20 +2754,30 @@ export class GameScene extends Phaser.Scene {
     // it. Tapping an item states how many of it she has rather than doing
     // anything: there is nothing to spend produce on yet, and a button that
     // silently did nothing would be worse than one that answers.
+    // Crops and what the world gave up: both are things she comes back with
+    // and both are things the store buys, which is the whole of what the
+    // basket is for.
+    const gathered: readonly { item: ItemType; icon: string }[] = [
+      ...PLANT_TYPES.map((plant) => ({ item: plant as ItemType, icon: cropIcon(plant) })),
+      ...MATERIAL_TYPES.map((material) => ({
+        item: material as ItemType,
+        icon: materialIcon(material),
+      })),
+    ];
     this.basketTray = new IconTray(this, {
       texture: uiTextureKey(UiAsset.Basket),
-      items: PLANT_TYPES.map((plant) => ({
-        texture: uiTextureKey(cropIcon(plant)),
-        count: () => this.inventory.count(plant),
+      items: gathered.map(({ item, icon }) => ({
+        texture: uiTextureKey(icon),
+        count: () => this.inventory.count(item),
         // Nothing. The count badge on the button *is* the answer, and it is
         // already on screen — a tap that repeated it in a line of small type
         // was answering a question the picture had answered first.
         act: () => {},
       })),
-      // Crops only, not `inventory.total`: the bag holds bought fixtures too
-      // now, and a basket badge that counted those would say she is carrying
-      // three carrots when she is carrying a carrot and two fence panels.
-      count: () => PLANT_TYPES.reduce((sum, plant) => sum + this.inventory.count(plant), 0),
+      // What she gathered, not `inventory.total`: the bag holds bought
+      // fixtures too, and a basket badge that counted those would say she is
+      // carrying three carrots when she is carrying a carrot and two fences.
+      count: () => gathered.reduce((sum, { item }) => sum + this.inventory.count(item), 0),
       size,
       right: edge + (size + 10) * 2,
       bottom,
@@ -3717,6 +3736,20 @@ export class GameScene extends Phaser.Scene {
     this.despawnSceneryIn(key);
     this.spawnSceneryIn(key);
     this.playEffect(EffectType.Minus, col, row);
+    // What it was made of, into the basket. The spell used to give nothing,
+    // which made it the one loop in the game with no reward at the end.
+    const paid = yieldOf(sceneryKind(object.type));
+    if (paid) {
+      this.inventory.add(paid.material, paid.count);
+      this.refreshCarried();
+      // One icon per thing gained, rising off the square it came from, so a
+      // child can *count* what a conifer was worth rather than be told.
+      for (let n = 0; n < paid.count; n++) {
+        this.time.delayedCall(n * MATERIAL_STAGGER_MS, () =>
+          this.showResult(materialIcon(paid.material), col, row),
+        );
+      }
+    }
     // The minus effect has already played on the square, and what stood
     // there is gone from it. Both say "cleared" better than the word does.
   }

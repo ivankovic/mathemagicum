@@ -24,8 +24,24 @@ import {
   tenderTotal,
 } from "../shop/tender";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
-import type { Inventory } from "../world/inventory";
-import { PLANT_TYPES, type PlantType } from "../world/plants";
+import type { Inventory, ItemType } from "../world/inventory";
+import { MATERIAL_TYPES, materialIcon } from "../world/materials";
+import { PLANT_TYPES } from "../world/plants";
+
+/**
+ * Everything the store buys, in the order it is listed.
+ *
+ * Crops first because they are what a garden makes; the cleared materials
+ * after, because they are what the world gives up and a child meets them
+ * second.
+ */
+const SOLD: readonly { item: ItemType; icon: string }[] = [
+  ...PLANT_TYPES.map((plant) => ({ item: plant as ItemType, icon: cropIcon(plant) })),
+  ...MATERIAL_TYPES.map((material) => ({
+    item: material as ItemType,
+    icon: materialIcon(material),
+  })),
+];
 import type { Rng } from "../world/rng";
 import { CROP_PRICE, MAX_TRADE, type Purse, priceOf, sellPriceOf } from "../world/shop";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
@@ -118,7 +134,7 @@ export class ShopPanel {
   private open = false;
   private mode: Mode = "menu";
   private chosenFixture: FixtureType | null = null;
-  private chosenCrop: PlantType | null = null;
+  private chosenCrop: ItemType | null = null;
   private quantity = 1;
   private tender: Tender | null = null;
   private offer: Offer | null = null;
@@ -152,8 +168,11 @@ export class ShopPanel {
       this.headings.push(this.own(this.text("", SMALL_SIZE, INK_DIM).setOrigin(0, 0)));
     }
 
-    for (const plant of PLANT_TYPES) {
-      this.sellRows.push(this.button(uiTextureKey(cropIcon(plant)), () => this.startSell(plant)));
+    // Everything she comes back with, crops and cleared materials alike:
+    // both are hers, both are the store's price, and a wood pile she could
+    // not sell would be a thing the world gave her for nothing.
+    for (const { item, icon } of SOLD) {
+      this.sellRows.push(this.button(uiTextureKey(icon), () => this.startSell(item)));
     }
     for (const fixture of PLACEABLE_FIXTURES) {
       this.buyRows.push(this.button(uiTextureKey(itemIcon(fixture)), () => this.startBuy(fixture)));
@@ -305,7 +324,7 @@ export class ShopPanel {
     this.render();
   }
 
-  private startSell(plant: PlantType): void {
+  private startSell(plant: ItemType): void {
     if (this.inventory.count(plant) <= 0) return;
     this.mode = "sell";
     this.chosenCrop = plant;
@@ -418,7 +437,7 @@ export class ShopPanel {
 
   /** Set by the scene: what to do once a trade has actually been agreed. */
   onBuy: ((fixture: FixtureType, count: number, paid: number) => void) | null = null;
-  onSell: ((plant: PlantType, count: number, earned: number) => void) | null = null;
+  onSell: ((item: ItemType, count: number, earned: number) => void) | null = null;
 
   // --- drawing --------------------------------------------------------------
 
@@ -455,10 +474,10 @@ export class ShopPanel {
     sellHeading.setText(this.words.sheBuys).setVisible(true).setPosition(leftX, headingY);
     buyHeading.setText(this.words.sheSells).setVisible(true).setPosition(rightX, headingY);
 
-    for (const [index, plant] of PLANT_TYPES.entries()) {
+    for (const [index, { item }] of SOLD.entries()) {
       const row = this.sellRows[index];
       if (!row) continue;
-      const held = this.inventory.count(plant);
+      const held = this.inventory.count(item);
       this.place(
         row,
         leftX + columnW / 2,
@@ -467,7 +486,7 @@ export class ShopPanel {
         ROW_H,
       );
       row.label.setText(
-        this.words.cropRow(plant, held, CURRENCY.format(sellPriceOf(plant, this.cropPrice))),
+        this.words.cropRow(item, held, CURRENCY.format(sellPriceOf(item, this.cropPrice))),
       );
       row.label.setColor(held > 0 ? INK : INK_DIM);
       row.icon?.setAlpha(held > 0 ? 1 : 0.35);
@@ -508,7 +527,7 @@ export class ShopPanel {
     this.title.setText(
       buying
         ? this.words.buyTitle(this.chosenFixture as FixtureType, this.quantity, money)
-        : this.words.sellTitle(this.chosenCrop as PlantType, this.quantity, money),
+        : this.words.sellTitle(this.chosenCrop as ItemType, this.quantity, money),
     );
     // German says the same thing in more letters, and the close button is in
     // the top right: a title sized for English ran underneath it.

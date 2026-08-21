@@ -1026,6 +1026,58 @@ stay, and no amount of drawing replaces them. They are the subject. What the
 rule is about is *prose*: the sentences that told a child what had happened
 and what to do next.
 
+### What the world gives up
+
+**The clearing spell used to give nothing.** A child solved a subtraction
+problem, a tree came out of the ground, and that was the whole of it — which
+made it the one loop in the game with no reward at the end, and the reason
+this document kept having to explain why anybody would cast it.
+
+A tree is **wood** now and a rock is **stone**, and both are worth what a
+crop is at the store.
+
+**That is generous, and it is pedagogy rather than economy.** A crop takes
+three actions — plant, grow, grow — for one crop; clearing takes one cast for
+two or three logs. Subtraction is the spell this game under-uses, and paying
+for it is the plainest way to have it practised. It cannot be farmed either:
+nothing regrows, so a child who clears everything within reach is a child
+back in the garden. The resource limits itself.
+
+**How much depends on what.** A conifer is three, a deciduous tree two, a
+dead tree one; a rock spire three, a boulder two, an outcrop one. That is the
+first time in this game that *which* thing you clear has mattered — a small
+table a child can learn and then plan around, which is the whole of what a
+resource is for. Things that grew give wood; things that did not give stone,
+because a boulder paying in logs is a rule a child could only learn by being
+surprised by it.
+
+**Each one comes up out of the ground separately**, a beat apart, so the
+count is something to watch rather than something to be told. Three icons on
+top of each other is one icon.
+
+### Things to buy
+
+**Seven, where there were three.** The fence, the table and the lamp are
+joined by a gate, a bench, a scarecrow and a flowerpot.
+
+**The gate was world generation's** — a gate in a crate is a gateway to
+nowhere standing in a field. That held while a fence was the only thing a
+garden could be built out of; the moment a child can fence a plot, the way in
+is the piece they are missing.
+
+**The other three do nothing, and that is what they are for.** The children
+asked to be able to add to the place they live, and a garden somebody has put
+a bench in is theirs in a way a garden with a fence round it is not. They are
+priced under the lamp for the same reason: what they buy is a place that
+looks like somebody's, and a child should be able to have one before they
+have saved for a fortnight.
+
+Each is told from the others by shape before colour, which is the rule the
+whole art follows. The bench is the table's parallelogram with a back. The
+scarecrow is the only *cross* in the set and the only one that sways. The
+flowerpot is the only round thing and the only one in its own palette — in
+the timber browns it is a small barrel.
+
 ### The animals
 
 **Creatures to see, and now to feed.** Chickens, ducks, cats and rabbits,

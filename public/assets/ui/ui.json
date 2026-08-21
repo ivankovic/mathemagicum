@@ -102,6 +102,11 @@
       "width": 32,
       "height": 32
     },
+    "item-gate": {
+      "file": "item_gate.png",
+      "width": 32,
+      "height": 32
+    },
     "item-table": {
       "file": "item_table.png",
       "width": 32,
@@ -109,6 +114,21 @@
     },
     "item-lamp": {
       "file": "item_lamp.png",
+      "width": 32,
+      "height": 32
+    },
+    "item-bench": {
+      "file": "item_bench.png",
+      "width": 32,
+      "height": 32
+    },
+    "item-scarecrow": {
+      "file": "item_scarecrow.png",
+      "width": 32,
+      "height": 32
+    },
+    "item-flowerpot": {
+      "file": "item_flowerpot.png",
       "width": 32,
       "height": 32
     },
@@ -124,6 +144,16 @@
     },
     "coin-gold": {
       "file": "coin_gold.png",
+      "width": 32,
+      "height": 32
+    },
+    "material-wood": {
+      "file": "material_wood.png",
+      "width": 32,
+      "height": 32
+    },
+    "material-stone": {
+      "file": "material_stone.png",
       "width": 32,
       "height": 32
     },

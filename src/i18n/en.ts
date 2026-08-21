@@ -4,6 +4,7 @@
 import { AnimalKind } from "../world/animals";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
+import { MaterialType } from "../world/materials";
 import { PlantStage, PlantType } from "../world/plants";
 import { TerrainType } from "../world/terrain";
 import type { Noun, Phrases } from "./phrases";
@@ -50,6 +51,9 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Fence]: noun("fence"),
   [FixtureType.Table]: noun("table"),
   [FixtureType.Lamp]: noun("lamp"),
+  [FixtureType.Bench]: noun("bench", "benches"),
+  [FixtureType.Scarecrow]: noun("scarecrow"),
+  [FixtureType.Flowerpot]: noun("flowerpot"),
   [FixtureType.Gate]: noun("gate"),
   [FixtureType.FenceSide]: noun("fence"),
   [FixtureType.GateSide]: noun("gate"),
@@ -120,8 +124,31 @@ const INTRO_EN: Record<string, string> = {
   map: "There is a map of the whole world on the wall in the tower. Tap it any time you want to see where you are — and the geometer under it will teach you a spell for getting about.",
 };
 
+const MATERIALS: Record<MaterialType, Noun> = {
+  // Mass nouns, both of them: you come back with wood, not with a wood.
+  [MaterialType.Wood]: {
+    bare: "wood",
+    indefinite: "wood",
+    definite: "the wood",
+    none: "no wood",
+    plural: "wood",
+  },
+  [MaterialType.Stone]: {
+    bare: "stone",
+    indefinite: "stone",
+    definite: "the stone",
+    none: "no stone",
+    plural: "stone",
+  },
+};
+
 function item(item: ItemType): Noun {
-  return PLANTS[item as PlantType] ?? FIXTURES[item as FixtureType] ?? noun(item);
+  return (
+    PLANTS[item as PlantType] ??
+    FIXTURES[item as FixtureType] ??
+    MATERIALS[item as MaterialType] ??
+    noun(item)
+  );
 }
 
 export const EN: Phrases = {
@@ -239,9 +266,9 @@ export const EN: Phrases = {
   sheBuys: "She buys",
   sheSells: "She sells",
   stockRow: (fixture, price) => `${FIXTURES[fixture]?.bare}\n${price}`,
-  cropRow: (plant, held, price) => `${held} x ${PLANTS[plant]?.bare}\n${price} each`,
+  cropRow: (item, held, price) => `${held} x ${EN.item(item).bare}\n${price} each`,
   buyTitle: (fixture, count, price) => `${count} x ${FIXTURES[fixture]?.bare} — pay ${price}`,
-  sellTitle: (plant, count, price) => `${count} x ${PLANTS[plant]?.bare} — she owes ${price}`,
+  sellTitle: (item, count, price) => `${count} x ${EN.item(item).bare} — she owes ${price}`,
   onTheCounter: (total) => `on the counter: ${total}`,
   moreToGo: (amount) => `${amount} more to go.`,
   tooMuch: (amount) => `${amount} too much.`,

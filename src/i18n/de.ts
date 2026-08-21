@@ -4,6 +4,7 @@
 import { AnimalKind } from "../world/animals";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
+import { MaterialType } from "../world/materials";
 import { PlantStage, PlantType } from "../world/plants";
 import { TerrainType } from "../world/terrain";
 import type { Noun, Phrases } from "./phrases";
@@ -71,6 +72,9 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Fence]: noun({ bare: "Zaun", gender: "m", plural: "Zäune" }),
   [FixtureType.Table]: noun({ bare: "Tisch", gender: "m", plural: "Tische" }),
   [FixtureType.Lamp]: noun({ bare: "Laterne", gender: "f", plural: "Laternen" }),
+  [FixtureType.Bench]: noun({ bare: "Bank", gender: "f", plural: "Bänke" }),
+  [FixtureType.Scarecrow]: noun({ bare: "Vogelscheuche", gender: "f", plural: "Vogelscheuchen" }),
+  [FixtureType.Flowerpot]: noun({ bare: "Blumentopf", gender: "m", plural: "Blumentöpfe" }),
   [FixtureType.Gate]: noun({ bare: "Tor", gender: "n", plural: "Tore" }),
   [FixtureType.FenceSide]: noun({ bare: "Zaun", gender: "m", plural: "Zäune" }),
   [FixtureType.GateSide]: noun({ bare: "Tor", gender: "n", plural: "Tore" }),
@@ -165,10 +169,17 @@ function cap(line: string): string {
 
 const FALLBACK = { gender: "f", plural: "" } as const;
 
+const MATERIALS: Record<MaterialType, Noun> = {
+  // Stoffnamen: man bringt Holz mit, nicht ein Holz.
+  [MaterialType.Wood]: noun({ bare: "Holz", gender: "n", plural: "Holz" }),
+  [MaterialType.Stone]: noun({ bare: "Stein", gender: "m", plural: "Steine" }),
+};
+
 function item(item: ItemType): Noun {
   return (
     PLANTS[item as PlantType] ??
     FIXTURES[item as FixtureType] ??
+    MATERIALS[item as MaterialType] ??
     noun({ bare: item, ...FALLBACK, plural: item })
   );
 }
@@ -285,9 +296,9 @@ export const DE: Phrases = {
   sheBuys: "Sie kauft",
   sheSells: "Sie verkauft",
   stockRow: (fixture, price) => `${FIXTURES[fixture]?.bare}\n${price}`,
-  cropRow: (plant, held, price) => `${held} x ${PLANTS[plant]?.bare}\n${price} je`,
+  cropRow: (item, held, price) => `${held} x ${DE.item(item).bare}\n${price} je`,
   buyTitle: (fixture, count, price) => `${count} x ${FIXTURES[fixture]?.bare} — zahle ${price}`,
-  sellTitle: (plant, count, price) => `${count} x ${PLANTS[plant]?.bare} — sie zahlt ${price}`,
+  sellTitle: (item, count, price) => `${count} x ${DE.item(item).bare} — sie zahlt ${price}`,
   onTheCounter: (total) => `auf dem Tresen: ${total}`,
   moreToGo: (amount) => `Es fehlen noch ${amount}.`,
   tooMuch: (amount) => `${amount} zu viel.`,

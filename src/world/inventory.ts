@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { type FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
+import { MATERIAL_TYPES, type MaterialType } from "./materials";
 import { PLANT_TYPES, type PlantType } from "./plants";
 
 /**
@@ -20,15 +21,21 @@ import { PLANT_TYPES, type PlantType } from "./plants";
  * number under the player's thumb. Watching for that from in here would mean
  * this class knowing about the interface, which is the wrong way round.
  *
- * Items are crops she has picked and fixtures she has bought. `ItemType` was
- * a separate name from `PlantType` from the start so the first non-crop item
- * would not have to be pretended into the plant list, which is exactly what
- * the village store turned out to sell.
+ * Items are three things now: crops she has picked, fixtures she has bought,
+ * and the wood and stone the world gave up when she cleared it. `ItemType`
+ * was a separate name from `PlantType` from the start so the first non-crop
+ * item would not have to be pretended into the plant list — which is exactly
+ * what the village store turned out to sell, and then what the clearing
+ * spell turned out to pay.
  */
 
-export type ItemType = PlantType | FixtureType;
+export type ItemType = PlantType | FixtureType | MaterialType;
 
-export const ITEM_TYPES: readonly ItemType[] = [...PLANT_TYPES, ...PLACEABLE_FIXTURES];
+export const ITEM_TYPES: readonly ItemType[] = [
+  ...PLANT_TYPES,
+  ...PLACEABLE_FIXTURES,
+  ...MATERIAL_TYPES,
+];
 
 export class Inventory {
   // Sparse: a player carrying two kinds of thing has two entries, not one

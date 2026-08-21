@@ -9,6 +9,12 @@ export const FixtureType = {
   Fence: "fence",
   Table: "table",
   Lamp: "lamp",
+  /** A garden bench: the table with a back, which is what tells them apart. */
+  Bench: "bench",
+  /** The only cross in the set, and the only one that sways. */
+  Scarecrow: "scarecrow",
+  /** The only round one, and the only one in its own colours. */
+  Flowerpot: "flowerpot",
   // World generation's, like the well: it stands in the fence around each
   // village garden, and it is drawn open because it is the one cell of that
   // fence the player can walk through.
@@ -87,8 +93,19 @@ export const FIXTURE_TYPES: readonly FixtureType[] = Object.values(FixtureType);
  */
 export const PLACEABLE_FIXTURES: readonly FixtureType[] = [
   FixtureType.Fence,
+  // The gate was world generation's alone, on the argument that a gate in a
+  // crate is a gateway to nowhere standing in a field. That held while a
+  // fence was the only thing a garden could be built out of; the moment a
+  // child can fence a plot, the way in is the piece they are missing.
+  FixtureType.Gate,
   FixtureType.Table,
   FixtureType.Lamp,
+  // Three that do nothing, which is what they are for. The children asked to
+  // be able to add to the place they live, and a garden somebody has put a
+  // bench in is theirs in a way a garden with a fence round it is not.
+  FixtureType.Bench,
+  FixtureType.Scarecrow,
+  FixtureType.Flowerpot,
 ];
 
 export function isPlaceable(fixture: FixtureType): boolean {

@@ -3,6 +3,7 @@
 
 import { type FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import type { Inventory, ItemType } from "./inventory";
+import { MATERIAL_TYPES, type MaterialType } from "./materials";
 import { PLANT_TYPES, type PlantType } from "./plants";
 
 /**
@@ -68,7 +69,10 @@ export const MAX_TRADE = 10;
 /** What the store stocks, priced in crops. */
 const COST_IN_CROPS: Record<FixtureType, number> = {
   well: Number.POSITIVE_INFINITY, // not for sale; the village has the one
-  gate: Number.POSITIVE_INFINITY, // nor is this: it belongs to a garden wall
+  // The gate used to be world generation's alone. It is a player's now: a
+  // child who can fence a plot needs the way in, and a fenced garden with no
+  // gate is a child walled out of their own carrots.
+  gate: 3,
   "fence-side": Number.POSITIVE_INFINITY, // the same fence, the world's copy
   "gate-side": Number.POSITIVE_INFINITY, // and the gate that stands in it
   glowcap: Number.POSITIVE_INFINITY, // the forest's, and it would not glow anywhere else
@@ -84,6 +88,12 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
   fence: 2,
   table: 5,
   lamp: 8,
+  // The three that do nothing. Priced under the lamp, because what they buy
+  // is a garden that looks like somebody's rather than a light to work by —
+  // and a child should be able to have one before they have saved for weeks.
+  bench: 4,
+  scarecrow: 3,
+  flowerpot: 2,
 };
 
 export const SHOP_STOCK: readonly FixtureType[] = PLACEABLE_FIXTURES;
@@ -101,10 +111,23 @@ export function priceOf(fixture: FixtureType, cropPrice: CropPrice = CROP_PRICE)
  * name is one import away from being mistaken for the built-in.
  */
 export function sellPriceOf(item: ItemType, cropPrice: CropPrice = CROP_PRICE): number {
-  return (PLANT_TYPES as readonly string[]).includes(item) ? cropPrice : 0;
+  const sold =
+    (PLANT_TYPES as readonly string[]).includes(item) ||
+    (MATERIAL_TYPES as readonly string[]).includes(item);
+  return sold ? cropPrice : 0;
 }
 
-export function isSellable(item: ItemType): item is PlantType {
+/**
+ * Whether the store wants it.
+ *
+ * Crops and materials, at the same price. Wood being worth what a carrot is
+ * looks generous beside the work — three actions for a crop against one cast
+ * for two logs — and it is generous on purpose: subtraction is the spell this
+ * game under-uses, and paying for it is the plainest way to have it
+ * practised. It cannot be farmed either. Nothing regrows, so a child who
+ * clears everything within reach is a child back in the garden.
+ */
+export function isSellable(item: ItemType): item is PlantType | MaterialType {
   return sellPriceOf(item) > 0;
 }
 
