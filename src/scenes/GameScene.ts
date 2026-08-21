@@ -441,7 +441,34 @@ const WINDOW_LIGHT_RADIUS = WINDOW_PANE_PX * CAMERA_ZOOM;
 const WINDOW_GLOW_COLOR = 0xffb257;
 const WINDOW_GLOW_ALPHA = 0.78;
 const HUD_MARGIN = 8;
+/**
+ * How far past the screen the *ground* is kept drawn.
+ *
+ * A ring of chunks in every direction, so walking to the edge of the view
+ * finds terrain already there rather than a chunk being redrawn under the
+ * player's feet.
+ */
 const CHUNK_VIEW_MARGIN = 1;
+/**
+ * And how far past it the *trees* are, which is not at all.
+ *
+ * These were one number for a long time and it was the wrong shape. A
+ * chunk's ground is a single texture — cheap to hold, expensive to redraw —
+ * so a ring of them is worth having. A chunk's trees are hundreds of live
+ * sprites, and a ring of chunks at a desktop's screen size is several times
+ * more of them than are on screen: eight and a half thousand standing in a
+ * village where a couple of thousand can be seen. Nothing is gained by
+ * having a tree ready off screen; a tree costs nothing to make.
+ */
+const SCENERY_VIEW_MARGIN = 0;
+/**
+ * How far outside the view a tree is still drawn, in world pixels.
+ *
+ * Two tiles. A conifer is drawn several tiles taller than the square it
+ * stands on, and what is tested is the square — so a tree whose feet are
+ * just off the top of the screen still has its head on it.
+ */
+const SCENERY_CULL_MARGIN = TILE_SIZE * 2;
 // Generous cache so panning back and forth doesn't constantly re-render —
 // well above what's ever simultaneously visible on screen.
 const CHUNK_CACHE_LIMIT = 60;
@@ -1428,6 +1455,16 @@ export class GameScene extends Phaser.Scene {
       session: this.session,
       ui: () => this.uiPositions(),
       armed: () => this.armed,
+      stats: () => ({
+        fps: Math.round(this.game.loop.actualFps),
+        frames: this.frameCounter,
+        renderer: this.game.renderer.type === Phaser.WEBGL ? "webgl" : "canvas",
+        objects: this.children.list.length,
+        // Everything Phaser calls preUpdate on every frame, which is where a
+        // wood of animating trees is actually paid for.
+        updating: this.sys.updateList.length,
+        view: { width: this.scale.width, height: this.scale.height },
+      }),
       hearth: () => {
         const glow = this.hearthGlow;
         const at = this.hearth;
@@ -1650,6 +1687,7 @@ export class GameScene extends Phaser.Scene {
       // animals, so with that seam set their hunger clocks stopped as well as
       // their feet. Freezing a village for a screenshot should not stop time.
       this.updateAnimals(this.time.now);
+      this.cullScenery();
       this.placeArmedRune();
       // The reach is drawn round wherever she is standing now, so it follows
       // her while she walks about choosing — the same reason the rune does.
@@ -1898,7 +1936,10 @@ export class GameScene extends Phaser.Scene {
    */
   private paintNight(nightAlpha: number, dusk: number): void {
     const alpha = Math.max(nightAlpha, GROVE_DUSK_ALPHA * dusk);
-    this.nightOverlay?.setFillStyle(mixTint(dusk), alpha);
+    // Hidden rather than merely transparent. A rectangle at alpha zero is
+    // still a screen-sized quad handed to the renderer every frame, and by
+    // day there are two thirds of a day's worth of them.
+    this.nightOverlay?.setFillStyle(mixTint(dusk), alpha).setVisible(alpha > 0);
     const strength = alpha / MAX_NIGHT_ALPHA;
     const player = this.playerGlow;
     player?.setVisible(alpha > 0);
@@ -2546,18 +2587,26 @@ export class GameScene extends Phaser.Scene {
     ];
     const cols = corners.map((c) => c.col);
     const rows = corners.map((c) => c.row);
+    const tiles = {
+      minCol: Math.min(...cols),
+      maxCol: Math.max(...cols),
+      minRow: Math.min(...rows),
+      maxRow: Math.max(...rows),
+    };
     const visible = chunksCoveringTileRange(
-      {
-        minCol: Math.min(...cols),
-        maxCol: Math.max(...cols),
-        minRow: Math.min(...rows),
-        maxRow: Math.max(...rows),
-      },
+      tiles,
       this.grid.width,
       this.grid.height,
       CHUNK_VIEW_MARGIN,
     );
     const visibleKeys = new Set(visible.map(chunkKey));
+    // The same sum again with no ring round it: what the screen actually
+    // covers. See SCENERY_VIEW_MARGIN.
+    const onScreen = new Set(
+      chunksCoveringTileRange(tiles, this.grid.width, this.grid.height, SCENERY_VIEW_MARGIN).map(
+        chunkKey,
+      ),
+    );
 
     for (const chunk of visible) {
       const key = chunkKey(chunk);
@@ -2568,7 +2617,7 @@ export class GameScene extends Phaser.Scene {
       } else {
         this.activateChunk(chunk);
       }
-      this.spawnSceneryIn(key);
+      if (onScreen.has(key)) this.spawnSceneryIn(key);
     }
 
     for (const [key, entry] of this.activeChunks) {
@@ -2583,7 +2632,7 @@ export class GameScene extends Phaser.Scene {
     // expensive to keep — sixty chunks of *those* came to ten thousand
     // sprites after a few portal jumps, none of them on screen.
     for (const key of [...this.liveScenery.keys()]) {
-      if (!visibleKeys.has(key)) this.despawnSceneryIn(key);
+      if (!onScreen.has(key)) this.despawnSceneryIn(key);
     }
     this.evictColdChunks(visibleKeys);
   }
@@ -2729,6 +2778,52 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Put a chunk's trees and rocks on screen, if they are not already. */
+  /**
+   * Show the trees that are on screen and hide the rest.
+   *
+   * Phaser does not cull a plain display list. `willRender` asks whether an
+   * object is visible and whether this camera is allowed to see it, and
+   * nothing asks whether it is *anywhere near* the camera — so every sprite
+   * on the list is transformed and written into the vertex buffer whether it
+   * lands on the screen or a chunk away from it.
+   *
+   * Scenery is spawned a chunk at a time and a chunk is thirty-two tiles
+   * square, so a screen forty tiles wide overlaps six of them: on a desktop
+   * this was submitting the better part of two thousand quads to draw a few
+   * dozen trees. A comparison against the view costs a subtraction each; the
+   * quad it saves costs a great deal more.
+   *
+   * Generous by a tile on every side, because a tree is drawn taller than
+   * the square it stands on and its feet are what is being tested.
+   */
+  private cullScenery(): void {
+    const view = this.cameras.main.worldView;
+    const left = view.x - SCENERY_CULL_MARGIN;
+    const top = view.y - SCENERY_CULL_MARGIN;
+    const right = view.x + view.width + SCENERY_CULL_MARGIN;
+    const bottom = view.y + view.height + SCENERY_CULL_MARGIN;
+    for (const [key, sprites] of this.liveScenery) {
+      const bucket = this.sceneryByChunk.get(key);
+      if (!bucket) continue;
+      for (let at = 0; at < sprites.length; at++) {
+        const sprite = sprites[at];
+        const object = bucket[at];
+        if (!sprite || !object) continue;
+        const feet = this.toFeet(object.col, object.row);
+        const seen = feet.x >= left && feet.x <= right && feet.y >= top && feet.y <= bottom;
+        if (seen === sprite.visible) continue;
+        sprite.setVisible(seen);
+        // And stop it swaying while nobody is looking. A hidden sprite is
+        // still on the update list and still runs its animation forward every
+        // frame; paused, that call turns round at the door. Only on the
+        // change, because pausing something already paused is the same work
+        // this is trying to avoid.
+        if (seen) sprite.anims.resume();
+        else sprite.anims.pause();
+      }
+    }
+  }
+
   private spawnSceneryIn(key: string): void {
     if (this.liveScenery.has(key)) return;
     const objects = this.sceneryByChunk.get(key);

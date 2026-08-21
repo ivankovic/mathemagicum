@@ -1563,6 +1563,41 @@ blank within seconds and night simply stopped happening as the player walked.
 Warm light added to a cold sheet reads the same to the eye and cannot get out
 of step with itself.
 
+### Drawing a wood without drawing every tree
+
+**A desktop at full screen was slow, and it was not the pixels.** Measured
+rather than guessed at, on the same village at the same size: the frame was
+being handed **seven thousand quads** to draw a few dozen visible trees.
+
+Two things were wrong, and neither was the art.
+
+**The terrain and the trees shared a margin.** Chunks were kept a ring deep
+in every direction, which is right for ground — one texture per chunk, cheap
+to hold and expensive to redraw — and wrong for trees, which are hundreds of
+live sprites per chunk and cost nothing to make. The ring is now the ground's
+alone.
+
+**And nothing culled them.** Phaser does not cull a plain display list:
+`willRender` asks whether an object is visible and whether the camera is
+allowed to see it, and never whether it is anywhere near the screen. So every
+tree in every spawned chunk was transformed and written into the vertex
+buffer each frame, on screen or a chunk away. A chunk is thirty-two tiles and
+a desktop screen is forty across, so six chunks overlap the view to show one
+screenful.
+
+Both together: **7,081 quads a frame down to 764**, and the live sprite count
+from 6,405 to 1,862. The picture is unchanged — checked by rendering the
+densest wood in the world twice, with the culling on and off, and diffing:
+zero differing pixels.
+
+Hidden trees also stop swaying, which takes them out of the animation work
+without taking them off the list. Only on the change, because pausing
+something already paused is the work this is avoiding.
+
+The night sheet is hidden rather than left at alpha zero, for the same
+reason: a transparent screen-sized rectangle is still a screen-sized
+rectangle to a renderer, and two thirds of every day is daytime.
+
 ### The village square
 
 **It is paved.** Cobbles, not dirt: the square is where the village gathers,

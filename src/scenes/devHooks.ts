@@ -288,6 +288,23 @@ export interface DevHandle {
    */
   readonly hearth: () => { col: number; row: number; alpha: number } | null;
   /**
+   * What the scene is costing right now.
+   *
+   * A frame rate a script can read, and the two numbers that explain it: how
+   * many objects are on the display list, and how many of those are alive
+   * only because a chunk of woodland is on screen. "It felt laggy" is not
+   * something anybody can act on; "seven thousand sprites" is.
+   */
+  readonly stats: () => {
+    fps: number;
+    /** Frames this scene has drawn, so a script can divide by it exactly. */
+    frames: number;
+    renderer: string;
+    objects: number;
+    updating: number;
+    view: { width: number; height: number };
+  };
+  /**
    * The door tile of each building, by id.
    *
    * The world half of the same problem `ui` solves. Walking to a building
