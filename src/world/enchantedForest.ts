@@ -361,18 +361,38 @@ export interface GroveProgress {
   /** Squares of the bed holding a ripe crop, and how many there are in all. */
   readonly ripe: number;
   readonly squares: number;
+  /**
+   * *Which* squares, as indices into the beds read in order.
+   *
+   * Counts alone were enough while the panel drew a picture of a bed rather
+   * than a picture of *this* bed: it spread the wood across the squares by
+   * an arithmetic stride, so the thickets on the parchment stood nowhere
+   * near the thickets on the ground. A child holding the two side by side
+   * could not use one to find the other, which is the only thing that
+   * picture is for.
+   */
+  readonly standingAt: readonly number[];
+  readonly ripeAt: readonly number[];
 }
 
 export function groveProgress(grid: WorldGrid, grove: Grove): GroveProgress {
   const standing = grove.thicket.filter((at) => grid.getObjectAt(at.col, at.row) !== null).length;
   const cells = grove.beds.flatMap((bed) => patchCells(bed));
+  const indexOf = new Map(cells.map((at, index) => [`${at.col},${at.row}`, index]));
+  const standingAt = grove.thicket
+    .filter((at) => grid.getObjectAt(at.col, at.row) !== null)
+    .map((at) => indexOf.get(`${at.col},${at.row}`))
+    .filter((index): index is number => index !== undefined);
   // Sunflowers, and only sunflowers. The tree asks for a particular thing
   // rather than for anything ripe, which is what makes the errand an errand:
   // sixteen squares of whatever was to hand is a bed filled by accident.
-  const ripe = cells.filter((at) => {
-    const crop = grid.getCrop(at.col, at.row);
-    return crop?.stage === PlantStage.Mature && crop.plant === GROVE_CROP;
-  }).length;
+  const ripeAt = cells
+    .map((at, index) => {
+      const crop = grid.getCrop(at.col, at.row);
+      return crop?.stage === PlantStage.Mature && crop.plant === GROVE_CROP ? index : -1;
+    })
+    .filter((index) => index >= 0);
+  const ripe = ripeAt.length;
   const squares = cells.length;
   const task =
     standing > 0
@@ -382,5 +402,5 @@ export function groveProgress(grid: WorldGrid, grove: Grove): GroveProgress {
         : ripe > 0 || cells.some((at) => grid.getCrop(at.col, at.row) !== null)
           ? GroveTask.Growing
           : GroveTask.Bare;
-  return { task, standing, ripe, squares };
+  return { task, standing, ripe, squares, standingAt, ripeAt };
 }

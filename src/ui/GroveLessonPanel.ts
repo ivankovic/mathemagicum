@@ -42,8 +42,6 @@ const BED_CELL = 26;
 const BED_GAP = 3;
 /** Between one bed and the next, where the trellis runs on the ground. */
 const BED_PLOT_GAP = 12;
-/** Coprime with the twelve squares of the bed, so the wood does not clump. */
-const THICKET_STRIDE = 5;
 
 const SMALL_SIZE = 12;
 // The biggest patch the ladder can set is ten rows deep, so ten labels are
@@ -200,11 +198,14 @@ export class GroveLessonPanel extends PagedPanel<GroveBeat> {
       };
     };
 
+    // Which squares, not how many. The picture is a map of *this* bed, and a
+    // child holds it up against the ground to see which square to go to.
+    const ripe = new Set(progress.ripeAt);
     for (let n = 0; n < beds * cellsPerBed; n++) {
       const { x, y } = cellAt(n);
       this.ink.fillStyle(EARTH_HEX, 1);
       this.ink.fillRect(x, y, BED_CELL, BED_CELL);
-      if (n < progress.ripe) {
+      if (ripe.has(n)) {
         this.ink.fillStyle(RIPE_HEX, 1);
         this.ink.fillCircle(x + BED_CELL / 2, y + BED_CELL / 2, BED_CELL / 2 - 5);
       }
@@ -218,16 +219,16 @@ export class GroveLessonPanel extends PagedPanel<GroveBeat> {
       this.ink.strokeRect(x - 3, y - 3, bedW + 6, bedH + 6);
     }
 
-    // The wood, laid across the bed rather than beside it, one thicket to a
-    // square. Stepped by five rather than by one: five and twelve share no
-    // factor, so six thickets land on six squares spread over the bed
-    // instead of filling the first six in a block — which would read as a
-    // bed half planted rather than as a bed with wood standing on it.
+    // The wood, on the squares it is actually standing on.
+    //
+    // It used to be spread across the bed by an arithmetic stride — six
+    // thickets on six squares chosen to look scattered — which drew a
+    // plausible bed rather than this one. Held up against the ground the two
+    // did not agree, and agreeing is the only thing this picture is for.
     if (progress.task === GroveTask.Overgrown) {
-      const cells = Math.max(1, beds * cellsPerBed);
       this.ink.fillStyle(THICKET_HEX, 0.92);
-      for (let n = 0; n < progress.standing; n++) {
-        const { x, y } = cellAt((n * THICKET_STRIDE) % cells);
+      for (const n of progress.standingAt) {
+        const { x, y } = cellAt(n);
         this.ink.fillCircle(x + BED_CELL / 2, y + BED_CELL / 2, BED_CELL / 2 - 3);
       }
     }

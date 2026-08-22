@@ -234,6 +234,51 @@ describe("what the great tree asks for", () => {
     expect(lights).toBeGreaterThanOrEqual(8);
   });
 
+  /**
+   * The picture the tree holds up has to be a picture of *this* bed.
+   *
+   * It was not: the panel spread the wood across the squares by an
+   * arithmetic stride, so the thickets on the parchment stood nowhere near
+   * the thickets on the ground. A child holding the two side by side could
+   * not use one to find the other, which is the only thing it is for.
+   */
+  test("says which squares the wood is on, not only how many", () => {
+    const { grid, grove } = grown();
+    const cells = grove.beds.flatMap((bed) => patchCells(bed));
+    const progress = groveProgress(grid, grove);
+    expect(progress.standingAt.length).toBe(progress.standing);
+    for (const index of progress.standingAt) {
+      const at = cells[index];
+      if (!at) throw new Error(`index ${index} is off the end of the beds`);
+      expect(grid.getObjectAt(at.col, at.row)).not.toBeNull();
+    }
+    // And it shrinks as the wood comes away, cell by cell.
+    const [first] = grove.thicket;
+    if (!first) throw new Error("no thicket");
+    grid.removeObjectAt(first.col, first.row);
+    const after = groveProgress(grid, grove);
+    expect(after.standingAt.length).toBe(progress.standing - 1);
+    const gone = cells.findIndex((at) => at.col === first.col && at.row === first.row);
+    expect(after.standingAt).not.toContain(gone);
+  });
+
+  test("and which squares are ripe, not only how many", () => {
+    const { grid, grove } = grown();
+    for (const at of grove.thicket) grid.removeObjectAt(at.col, at.row);
+    const cells = grove.beds.flatMap((bed) => patchCells(bed));
+    // The last square of the last bed, which a count alone would draw as the
+    // first square of the first.
+    const last = cells[cells.length - 1];
+    if (!last) throw new Error("no cells");
+    grid.plant(last.col, last.row, GROVE_CROP);
+    while (grid.getCrop(last.col, last.row)?.stage !== PlantStage.Mature) {
+      if (!grid.growCrop(last.col, last.row)) break;
+    }
+    const progress = groveProgress(grid, grove);
+    expect(progress.ripe).toBe(1);
+    expect(progress.ripeAt).toEqual([cells.length - 1]);
+  });
+
   test("the trellis runs between the beds as well as around them", () => {
     const { grove } = grown();
     const vine = new Set(grove.trellis.map((at) => `${at.col},${at.row}`));
