@@ -89,6 +89,7 @@ import {
 } from "../spells/portalTravel";
 import { Spell, knowsSpell, learnSpell } from "../spells/spellbook";
 import { makeSubtractionProblem } from "../spells/subtraction";
+import { AboutPanel } from "../ui/AboutPanel";
 import { ArrayPopup } from "../ui/ArrayPopup";
 import { ClockPopup } from "../ui/ClockPopup";
 import { GeometryLessonPanel } from "../ui/GeometryLessonPanel";
@@ -943,6 +944,13 @@ export class GameScene extends Phaser.Scene {
    */
   private words: Phrases = EN;
   private optionsPanel?: OptionsPanel;
+  /**
+   * Who made this and what it costs, opened from the options.
+   *
+   * Its own panel rather than a row in that one: what it has to say is a
+   * paragraph, and the options screen is a grid of buttons.
+   */
+  private aboutPanel?: AboutPanel;
   private lessonPanel?: LessonPanel;
   private introPanel?: IntroPanel;
   private mapPanel?: MapPanel;
@@ -1469,6 +1477,12 @@ export class GameScene extends Phaser.Scene {
     this.optionsPanel.onChange = (next) => this.applySettings(next);
     this.optionsPanel.onOpenGame = (id) => this.openAnotherGame(id);
     this.optionsPanel.onDeleteGame = (id) => this.throwGameAway(id);
+    this.aboutPanel = new AboutPanel(this, uiIndex, MODAL_DEPTH + 2, this.words, (object) =>
+      this.ui(object),
+    );
+    // Over the options rather than instead of them: it was opened from there
+    // and closing it should put you back where you were.
+    this.optionsPanel.onAbout = () => this.aboutPanel?.show(() => {});
     this.optionsPanel.onBandChange = (band) => this.applyBand(band);
     this.optionsPanel.setBand(this.profile.band);
     this.optionsPanel.setGames(listGames(browserStore()), playingId(browserStore()));
@@ -1648,6 +1662,7 @@ export class GameScene extends Phaser.Scene {
       this.portalPanel?.destroy();
       this.shopPanel.destroy();
       this.optionsPanel?.destroy();
+      this.aboutPanel?.destroy();
       this.lessonPanel?.destroy();
       this.introPanel?.destroy();
       this.mapPanel?.destroy();
@@ -1881,6 +1896,7 @@ export class GameScene extends Phaser.Scene {
     this.geometryPanel?.layout();
     this.shopPanel?.layout();
     this.optionsPanel?.layout();
+    this.aboutPanel?.layout();
     this.lessonPanel?.layout();
     this.introPanel?.layout();
     this.mapPanel?.layout();
@@ -5147,7 +5163,6 @@ export class GameScene extends Phaser.Scene {
     // out what the counter shows and the session charges the purse, and two
     // copies of one price is two things that can disagree.
     this.shopPanel?.bindCropPrice(() => this.session.cropPrice);
-    this.optionsPanel?.setCropPrice(price);
   }
 
   /**
@@ -5172,6 +5187,7 @@ export class GameScene extends Phaser.Scene {
     this.words = phrasesFor(next.language);
     this.spellPopup?.setPhrases(this.words);
     this.optionsPanel?.setPhrases(this.words);
+    this.aboutPanel?.setPhrases(this.words);
     this.lessonPanel?.setPhrases(this.words);
     this.introPanel?.setPhrases(this.words);
     this.mapPanel?.setPhrases(this.words);
@@ -6542,6 +6558,7 @@ export class GameScene extends Phaser.Scene {
       this.spellPopup?.isOpen === true ||
       this.shopPanel?.isOpen === true ||
       this.optionsPanel?.isOpen === true ||
+      this.aboutPanel?.isOpen === true ||
       this.lessonPanel?.isOpen === true ||
       this.introPanel?.isOpen === true ||
       this.mapPanel?.isOpen === true ||

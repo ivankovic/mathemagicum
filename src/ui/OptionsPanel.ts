@@ -6,11 +6,9 @@ import type { Phrases } from "../i18n/phrases";
 import type { GameEntry } from "../save/games";
 import { MAX_GAMES } from "../save/games";
 import { LANGUAGES, LANGUAGE_NAMES, type Settings } from "../settings";
-import { CURRENCY } from "../shop/currency";
 import { makeAdditionProblem } from "../spells/addition";
 import { BANDS, DEFAULT_BAND, sampleProblem } from "../spells/difficulty";
 import { createRng } from "../world/rng";
-import { CROP_PRICE } from "../world/shop";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
 
@@ -24,7 +22,10 @@ import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
  *
  * There was a money row here too, while the game offered real currencies. It
  * offers one invented money now and there is nothing left to choose — see
- * src/shop/currency.ts for why.
+ * src/shop/currency.ts for why. The line that stated what a crop sells for
+ * has gone the same way: it was a fact about invented money that nobody was
+ * going to have a question about, and the space is an **About** button now,
+ * which answers the one an adult opening this screen actually has.
  *
  * Every change applies at once and is saved at once. There is no OK button:
  * an options screen with one asks the player to remember a second step in
@@ -80,7 +81,7 @@ export class OptionsPanel {
   private readonly parts: PanelPart[] = [];
   private readonly title: Phaser.GameObjects.Text;
   private readonly headings: Phaser.GameObjects.Text[] = [];
-  private readonly example: Phaser.GameObjects.Text;
+  private readonly aboutButton: Choice;
   private readonly languageChoices: Choice[] = [];
   /**
    * Which sums this child gets, shown as four sample sums.
@@ -111,6 +112,13 @@ export class OptionsPanel {
   onOpenGame?: (id: string | null) => void;
   /** Throw one away, twice-asked. */
   onDeleteGame?: (id: string | null) => void;
+  /**
+   * Show who made this and what it costs.
+   *
+   * Asked for rather than done here, like everything else on this panel: it
+   * has no business knowing what a sponsorship is.
+   */
+  onAbout?: () => void;
 
   private games: readonly GameEntry[] = [];
   private playing: string | null = null;
@@ -173,7 +181,7 @@ export class OptionsPanel {
     for (let i = 0; i < 3; i++) {
       this.headings.push(this.own(this.text("", SMALL_SIZE, INK_DIM).setOrigin(0, 0)));
     }
-    this.example = this.own(this.text("", SMALL_SIZE, INK_DIM).setOrigin(0.5, 1));
+    this.aboutButton = this.choice("", () => this.onAbout?.());
 
     for (const language of LANGUAGES) {
       this.languageChoices.push(
@@ -255,6 +263,7 @@ export class OptionsPanel {
    */
   buttonPositions(): Record<string, { x: number; y: number }> {
     const at: Record<string, { x: number; y: number }> = {
+      about: { x: this.aboutButton.box.x, y: this.aboutButton.box.y },
       newGame: { x: this.newButton.box.x, y: this.newButton.box.y },
       deleteYes: { x: this.yesButton.box.x, y: this.yesButton.box.y },
       deleteNo: { x: this.noButton.box.x, y: this.noButton.box.y },
@@ -305,15 +314,7 @@ export class OptionsPanel {
     if (this.open) this.render();
   }
 
-  /** Say everything from here on in another language. */
-  /** What a crop fetches for this child — see src/spells/difficulty.ts. */
-  private cropPrice = CROP_PRICE;
   private band = DEFAULT_BAND;
-
-  setCropPrice(price: number): void {
-    this.cropPrice = price;
-    if (this.isOpen) this.render();
-  }
 
   setPhrases(words: Phrases): void {
     this.words = words;
@@ -372,13 +373,19 @@ export class OptionsPanel {
       this.band,
     );
 
-    // The money, stated rather than chosen: it follows the sums above, and
-    // it is the one number on this screen a player might have a question
-    // about — a price answers it better than a name would.
-    this.example
-      .setText(this.words.cropSellsFor(CURRENCY.format(this.cropPrice)))
-      .setPosition(rect.centreX, rect.top + rect.height - PAD)
-      .setVisible(true);
+    // Where the price of a crop used to be stated. That was a fact about
+    // this game's own invented money and nobody was ever going to have a
+    // question about it; who made the thing, and whether they want paying,
+    // is the question an adult opening this screen actually has.
+    this.place(
+      this.aboutButton,
+      rect.centreX,
+      rect.top + rect.height - PAD - BUTTON_H / 2,
+      Math.min(200, rect.width - PAD * 2),
+      BUTTON_H,
+    );
+    this.aboutButton.label.setText(this.words.aboutButton);
+    this.show(this.aboutButton);
 
     this.worldRow(rect, rect.top + PAD + TITLE_SIZE + 18 + ROW_HEIGHT * 2);
   }

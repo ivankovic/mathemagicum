@@ -240,7 +240,16 @@ export const EN: Phrases = {
   optionsButton: "options",
   optionsTitle: "Options",
   languageHeading: "Language",
-  cropSellsFor: (price) => `A crop sells for ${price}`,
+
+  aboutButton: "About",
+  aboutTitle: "About",
+  madeBy: "Made by Marko Ivankovic",
+  copyright: "\u00a9 2026 Marko Ivankovic",
+  licenceLine: "Code: PolyForm Noncommercial 1.0.0\nArt: CC BY-NC-ND 4.0",
+  sponsorNote:
+    "This game is completely free. It will always remain free. If you would like to support the development, you can do so using GitHub Sponsorships. If you are a student, single parent or not in a good financial situation, please do NOT spend any money on this game. Only support the game if you are using your school or other organizations money, or are financially comfortable.",
+  sourceLink: "Source on GitHub",
+  sponsorLink: "GitHub Sponsors",
 
   playersTitle: "Who is playing?",
   newPlayer: "New player",

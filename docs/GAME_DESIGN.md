@@ -1286,6 +1286,33 @@ step for the first one to count. The device remembers only which language the
 last player used, so tomorrow's who's-playing screen is written in the
 language of this house rather than of this browser.
 
+### About, and the one thing it asks for
+
+The options carry an **About** button. It opens the only screen in the game
+that is a wall of text, and it earns it: the audience is whoever is paying
+for the tablet rather than the child holding it, and what it has to say — a
+name, a licence, and a request *not* to spend money — cannot be said in
+pictures. Everywhere else the rule is that no sentence goes unaccompanied;
+here the sentences are the point.
+
+It stands where a line saying what a crop sells for used to. That was a fact
+about this game's own invented money that nobody was ever going to have a
+question about; who made the thing, and whether they want paying, is the
+question an adult opening that screen actually has.
+
+**What it asks for is mostly that you do not.** The paragraph says the game
+is free and always will be, points at GitHub Sponsors, and then asks
+students, single parents and anybody not comfortably off to spend nothing on
+it — support it only out of a school's or an organisation's money, or from
+comfort. That order is the argument: it is free, and *then* here is how to
+give. Reversed, the first thing a parent reads is a request. There is a test
+on the order, on the capitals in *do NOT*, and on the two links belonging to
+the same account — a typo in one of those would send somebody's money to a
+stranger with a similar name.
+
+The two buttons are the only thing in the game that leaves it, which is why
+they live here and nowhere near a screen a child plays on.
+
 **The whole game is translated, not just the menus.** Every line the player
 reads comes from a phrase book (`src/i18n/`), one per language, and the
 interface is what stops a half-translation shipping: a language that forgets

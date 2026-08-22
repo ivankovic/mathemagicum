@@ -191,7 +191,31 @@ export interface Phrases {
   optionsButton: string;
   optionsTitle: string;
   languageHeading: string;
-  cropSellsFor: (price: string) => string;
+
+  // --- about ---------------------------------------------------------------
+  //
+  // The one screen in this game that is a wall of text, and it earns it: it
+  // is addressed to whoever is paying for the tablet rather than to the child
+  // holding it, and what it has to say cannot be said in pictures.
+
+  /** Opens it, from the options. */
+  aboutButton: string;
+  aboutTitle: string;
+  /** Who wrote it, and the notice the licence asks to travel with it. */
+  madeBy: string;
+  copyright: string;
+  licenceLine: string;
+  /**
+   * What is asked of anybody thinking of paying, which is mostly *do not*.
+   *
+   * Written by the author and reproduced as given. It is the closest thing
+   * this game has to a position, and paraphrasing it — in either language —
+   * would be editing somebody's ethics for them.
+   */
+  sponsorNote: string;
+  /** The two ways out to the web. */
+  sourceLink: string;
+  sponsorLink: string;
 
   // --- who is playing ------------------------------------------------------
 

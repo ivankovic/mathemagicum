@@ -66,7 +66,15 @@ function sample(p: Phrases): Record<string, string> {
     optionsButton: p.optionsButton,
     optionsTitle: p.optionsTitle,
     languageHeading: p.languageHeading,
-    cropSellsFor: p.cropSellsFor("2,50 kn"),
+
+    aboutButton: p.aboutButton,
+    aboutTitle: p.aboutTitle,
+    madeBy: p.madeBy,
+    copyright: p.copyright,
+    licenceLine: p.licenceLine,
+    sponsorNote: p.sponsorNote,
+    sourceLink: p.sourceLink,
+    sponsorLink: p.sponsorLink,
 
     storeTitle: p.storeTitle("50,00 kn"),
     storeFooter: p.storeFooter,
@@ -217,7 +225,18 @@ describe("every language says everything", () => {
     // name is.
     // `arrayTitle` is `4 × 6` in both, because a multiplication sign is not
     // a word in either language.
-    const shared = ["sumQuestion", "lessonExample", "portalTitle", "arrayTitle"];
+    //
+    // `copyright` is a name and a year, and `sponsorLink` is what GitHub
+    // calls its own product. Translating either would be inventing a German
+    // spelling for somebody's name or for a trademark.
+    const shared = [
+      "sumQuestion",
+      "lessonExample",
+      "portalTitle",
+      "arrayTitle",
+      "copyright",
+      "sponsorLink",
+    ];
     for (const [key, line] of Object.entries(de)) {
       if (shared.includes(key)) continue;
       expect(`${key}: ${line}`).not.toBe(`${key}: ${en[key]}`);

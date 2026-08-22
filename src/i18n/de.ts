@@ -270,7 +270,18 @@ export const DE: Phrases = {
   optionsButton: "Optionen",
   optionsTitle: "Optionen",
   languageHeading: "Sprache",
-  cropSellsFor: (price) => `Eine Ernte bringt ${price}`,
+
+  aboutButton: "\u00dcber",
+  aboutTitle: "\u00dcber dieses Spiel",
+  madeBy: "Von Marko Ivankovic",
+  copyright: "\u00a9 2026 Marko Ivankovic",
+  licenceLine: "Code: PolyForm Noncommercial 1.0.0\nGrafik: CC BY-NC-ND 4.0",
+  // Per Sie, wo der Rest des Spiels duzt: dieser Absatz spricht nicht das
+  // Kind an, sondern wer f\u00fcr das Ger\u00e4t bezahlt.
+  sponsorNote:
+    "Dieses Spiel ist v\u00f6llig kostenlos. Es wird immer kostenlos bleiben. Wenn Sie die Entwicklung unterst\u00fctzen m\u00f6chten, k\u00f6nnen Sie das \u00fcber GitHub Sponsorships tun. Wenn Sie studieren, alleinerziehend sind oder sich nicht in einer guten finanziellen Lage befinden, geben Sie f\u00fcr dieses Spiel bitte KEIN Geld aus. Unterst\u00fctzen Sie das Spiel nur, wenn Sie Mittel Ihrer Schule oder einer anderen Organisation verwenden oder finanziell gut gestellt sind.",
+  sourceLink: "Quellcode auf GitHub",
+  sponsorLink: "GitHub Sponsors",
 
   playersTitle: "Wer spielt?",
   newPlayer: "Neu",
