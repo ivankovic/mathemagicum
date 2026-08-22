@@ -138,25 +138,6 @@ const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
     few: "svjetlarke",
     many: "svjetlarki",
   },
-  [FixtureType.ForestVine]: { one: "vriježa", acc: "vriježu", few: "vriježe", many: "vriježa" },
-  [FixtureType.ForestVineSide]: {
-    one: "vriježa",
-    acc: "vriježu",
-    few: "vriježe",
-    many: "vriježa",
-  },
-  [FixtureType.ForestVineCorner]: {
-    one: "vriježa",
-    acc: "vriježu",
-    few: "vriježe",
-    many: "vriježa",
-  },
-  [FixtureType.ForestVineCornerUp]: {
-    one: "vriježa",
-    acc: "vriježu",
-    few: "vriježe",
-    many: "vriježa",
-  },
   [FixtureType.Stall]: { one: "tezga", acc: "tezgu", few: "tezge", many: "tezgi" },
   // World generation's, and never counted, so the adjective is left in the
   // form it takes when the thing is simply named.

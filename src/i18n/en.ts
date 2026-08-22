@@ -63,11 +63,6 @@ const FIXTURES: Record<FixtureType, Noun> = {
   // about the picture.
   [FixtureType.GateSideLower]: noun("gate"),
   [FixtureType.Glowcap]: noun("glowcap"),
-  [FixtureType.ForestVine]: noun("vine"),
-  // Still a vine. Which way it runs is a fact about the picture.
-  [FixtureType.ForestVineSide]: noun("vine"),
-  [FixtureType.ForestVineCorner]: noun("vine"),
-  [FixtureType.ForestVineCornerUp]: noun("vine"),
   [FixtureType.Stall]: noun("market stall", "market stalls"),
   [FixtureType.CityWall]: noun("city wall", "city walls"),
   [FixtureType.CityWallSide]: noun("city wall", "city walls"),

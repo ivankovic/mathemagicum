@@ -176,7 +176,7 @@ describe("what the great tree asks for", () => {
     expect(progress.task).toBe(GroveTask.Growing);
   });
 
-  test("the beds are grass with a trellis round them, not a hole in the clearing", () => {
+  test("the beds are grass with their corners marked, not a hole in the clearing", () => {
     const { grid, grove } = grown();
     for (const at of grove.beds.flatMap((bed) => patchCells(bed))) {
       // Grass, because bare earth in a clearing read as a hole in it.
@@ -184,158 +184,46 @@ describe("what the great tree asks for", () => {
       // Under the thicket for now, but the ground itself will take a crop.
       expect(grid.canPlant(at.col, at.row, GROVE_CROP)).toBe(true);
     }
-    expect(grove.trellis.length).toBeGreaterThan(0);
-    // Any of the four pieces: the creeper is directional, so a border is
-    // runs and corners rather than one tile repeated.
-    const vines: readonly string[] = [
-      FixtureType.ForestVine,
-      FixtureType.ForestVineSide,
-      FixtureType.ForestVineCorner,
-      FixtureType.ForestVineCornerUp,
-    ];
-    for (const at of grove.trellis) {
-      const vine = grid.getObjectAt(at.col, at.row);
-      expect({ at: `${at.col},${at.row}`, vine: vines.includes(vine?.type ?? "") }).toEqual({
-        at: `${at.col},${at.row}`,
-        vine: true,
-      });
-      // Walked over, not round: a border you cannot cross is a wall, and the
-      // beds inside it have to be reachable.
+    expect(grove.markers.length).toBe(grove.beds.length * 4);
+    for (const at of grove.markers) {
+      expect(grid.getObjectAt(at.col, at.row)?.type).toBe(FixtureType.Glowcap);
+      // Walked past, not walked round: a marker you cannot cross would be a
+      // fence post, and the bed inside four of them has to be reachable.
       expect(grid.isPassable(at.col, at.row)).toBe(true);
     }
   });
 
   /**
-   * One at each corner, with the tree in the middle of them.
+   * Four points at the corners of a small square say *square* with no line
+   * at all, which is the geometry doing the work instead of the art.
    *
-   * A single block of four beds was the first attempt and it sat down and to
-   * the left of the trunk, which reads as a plot somebody put beside the
-   * tree rather than as the tree's own.
+   * Three attempts at a border came off badly — a lattice of diamonds, a
+   * ring of stars, a thin dark frame with specks on it — and the fault was
+   * never the drawing: a border on grass has to be a line, and a line at
+   * this scale is either loud enough to read as a fence or quiet enough to
+   * read as wire, with very little in between.
    */
-  test("there is a bed at each corner around the tree", () => {
+  test("every bed is marked at each of its four corners", () => {
     const { grove } = grown();
-    const middle = { col: grove.tree.col + 1, row: grove.tree.row + 1 };
-    const corners = new Set(
-      grove.beds.map(
-        (bed) => `${Math.sign(bed.col - middle.col)},${Math.sign(bed.row - middle.row)}`,
-      ),
-    );
-    expect(corners).toEqual(new Set(["-1,-1", "1,-1", "-1,1", "1,1"]));
-  });
-
-  // The ring of lights stands between the trunk and the beds, and the way in
-  // is below the trunk. A block that reached either would have `pull` take
-  // it away to make room, which is a light or a doorstep quietly deleted.
-  test("no bed stands on the ring of lights or on the way in", () => {
-    const { grid, grove } = grown();
-    const cells = new Set(
-      [...grove.beds.flatMap((bed) => patchCells(bed)), ...grove.trellis].map(
-        (at) => `${at.col},${at.row}`,
-      ),
-    );
-    expect(cells.has(`${grove.doorstep.col},${grove.doorstep.row}`)).toBe(false);
-    const lights = grid
-      .listObjects()
-      .filter((object) => object.type === FixtureType.Glowcap).length;
-    // Eight round the trunk plus the ones scattered through the wood; the
-    // number is not the point, that none of the eight was eaten is.
-    expect(lights).toBeGreaterThanOrEqual(8);
-  });
-
-  /**
-   * The picture the tree holds up has to be a picture of *this* bed.
-   *
-   * It was not: the panel spread the wood across the squares by an
-   * arithmetic stride, so the thickets on the parchment stood nowhere near
-   * the thickets on the ground. A child holding the two side by side could
-   * not use one to find the other, which is the only thing it is for.
-   */
-  test("says which squares the wood is on, not only how many", () => {
-    const { grid, grove } = grown();
-    const cells = grove.beds.flatMap((bed) => patchCells(bed));
-    const progress = groveProgress(grid, grove);
-    expect(progress.standingAt.length).toBe(progress.standing);
-    for (const index of progress.standingAt) {
-      const at = cells[index];
-      if (!at) throw new Error(`index ${index} is off the end of the beds`);
-      expect(grid.getObjectAt(at.col, at.row)).not.toBeNull();
-    }
-    // And it shrinks as the wood comes away, cell by cell.
-    const [first] = grove.thicket;
-    if (!first) throw new Error("no thicket");
-    grid.removeObjectAt(first.col, first.row);
-    const after = groveProgress(grid, grove);
-    expect(after.standingAt.length).toBe(progress.standing - 1);
-    const gone = cells.findIndex((at) => at.col === first.col && at.row === first.row);
-    expect(after.standingAt).not.toContain(gone);
-  });
-
-  test("and which squares are ripe, not only how many", () => {
-    const { grid, grove } = grown();
-    for (const at of grove.thicket) grid.removeObjectAt(at.col, at.row);
-    const cells = grove.beds.flatMap((bed) => patchCells(bed));
-    // The last square of the last bed, which a count alone would draw as the
-    // first square of the first.
-    const last = cells[cells.length - 1];
-    if (!last) throw new Error("no cells");
-    grid.plant(last.col, last.row, GROVE_CROP);
-    while (grid.getCrop(last.col, last.row)?.stage !== PlantStage.Mature) {
-      if (!grid.growCrop(last.col, last.row)) break;
-    }
-    const progress = groveProgress(grid, grove);
-    expect(progress.ripe).toBe(1);
-    expect(progress.ripeAt).toEqual([cells.length - 1]);
-  });
-
-  /**
-   * Corners at the corners and runs along the sides.
-   *
-   * The creeper is directional — a stem with leaves off it has to know which
-   * way it is going — so a border laid with one tile repeated is a border
-   * with four broken corners, which is what the undirected one had instead
-   * of corners at all.
-   */
-  test("each bed's border turns at its corners and runs along its sides", () => {
-    const { grid, grove } = grown();
+    const marked = new Set(grove.markers.map((at) => `${at.col},${at.row}`));
     for (const bed of grove.beds) {
-      const at = (col: number, row: number) => grid.getObjectAt(col, row)?.type;
-      const left = bed.col - 1;
-      const right = bed.col + bed.width;
-      const top = bed.row - 1;
-      const bottom = bed.row + bed.height;
-      expect(at(left, top)).toBe(FixtureType.ForestVineCorner);
-      expect(at(right, top)).toBe(FixtureType.ForestVineCorner);
-      expect(at(left, bottom)).toBe(FixtureType.ForestVineCornerUp);
-      expect(at(right, bottom)).toBe(FixtureType.ForestVineCornerUp);
-      for (let col = bed.col; col < right; col++) {
-        expect(at(col, top)).toBe(FixtureType.ForestVine);
-        expect(at(col, bottom)).toBe(FixtureType.ForestVine);
+      for (const at of [
+        { col: bed.col - 1, row: bed.row - 1 },
+        { col: bed.col + bed.width, row: bed.row - 1 },
+        { col: bed.col - 1, row: bed.row + bed.height },
+        { col: bed.col + bed.width, row: bed.row + bed.height },
+      ]) {
+        expect({ at: `${at.col},${at.row}`, marked: marked.has(`${at.col},${at.row}`) }).toEqual({
+          at: `${at.col},${at.row}`,
+          marked: true,
+        });
       }
-      for (let row = bed.row; row < bottom; row++) {
-        expect(at(left, row)).toBe(FixtureType.ForestVineSide);
-        expect(at(right, row)).toBe(FixtureType.ForestVineSide);
-      }
-      // The drawn corner comes in from its right, so the left-hand pair are
-      // the mirror. Two unmirrored corners would both turn the same way.
-      expect(grid.getObjectAt(left, top)?.flip).toBe(true);
-      expect(grid.getObjectAt(right, top)?.flip).toBe(false);
     }
-  });
-
-  test("the trellis runs between the beds as well as around them", () => {
-    const { grove } = grown();
-    const vine = new Set(grove.trellis.map((at) => `${at.col},${at.row}`));
-    // Every bed is ringed on all four sides by something that is not another
-    // bed — which is what makes four squares read as four rather than as one
-    // block of sixteen.
+    // And nowhere along the sides: a marker between two corners is a border
+    // again, which is the thing that did not work.
     for (const bed of grove.beds) {
       for (let col = bed.col; col < bed.col + bed.width; col++) {
-        expect(vine.has(`${col},${bed.row - 1}`)).toBe(true);
-        expect(vine.has(`${col},${bed.row + bed.height}`)).toBe(true);
-      }
-      for (let row = bed.row; row < bed.row + bed.height; row++) {
-        expect(vine.has(`${bed.col - 1},${row}`)).toBe(true);
-        expect(vine.has(`${bed.col + bed.width},${row}`)).toBe(true);
+        expect(marked.has(`${col},${bed.row - 1}`)).toBe(false);
       }
     }
   });

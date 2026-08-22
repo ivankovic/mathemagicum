@@ -421,9 +421,24 @@ That is not a gate bolted onto a spell, it *is* the lesson. A child who has
 filled four two-by-two beds by hand knows in their hands why `2 × 2` four
 times over is worth one cast.
 
-**The beds are grass with a vine round them**, not bare earth. Earth in a
-clearing read as a hole in the grass rather than as somebody's plot; a
-trellis says *plot* without taking the grass away.
+**The beds are grass with their corners marked**, not bare earth and not
+bordered. Earth in a clearing read as a hole in the grass rather than as
+somebody's plot — and three attempts at a border round each bed came off
+badly, a lattice of diamonds, a ring of stars, a thin dark frame with specks
+on it. The fault was never the drawing. A border on grass has to be a *line*,
+and a line at this scale is either loud enough to read as a fence or quiet
+enough to read as wire, with very little in between.
+
+Four points at the corners of a small square say *square* with no line at
+all, which is the geometry doing the work instead of the art. The glowcap was
+already there to do it: it is the forest's own signal, it lights the ground it
+stands on after dark, and it needed no new pixel drawn.
+
+The ring of eight lights that used to stand round the trunk went with the
+change. Its job was to make the clearing read as *kept* rather than as a gap
+in the trees, and sixteen lights at the corners of four beds do that better —
+they say kept *and* say what for. Two rings of lights round one tree said
+neither: the beds' corners were lost among lights that meant nothing.
 
 **One at each corner around the tree**, each a two-by-two inside its own ring
 of vine. The first attempt was a single seven-by-seven block holding all four,

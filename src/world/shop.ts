@@ -78,10 +78,6 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
   "gate-side": Number.POSITIVE_INFINITY, // and the gate that stands in it
   "gate-side-lower": Number.POSITIVE_INFINITY, // and its other end
   glowcap: Number.POSITIVE_INFINITY, // the forest's, and it would not glow anywhere else
-  "forest-vine": Number.POSITIVE_INFINITY, // the forest's own growth, and the tree's border
-  "forest-vine-side": Number.POSITIVE_INFINITY,
-  "forest-vine-corner": Number.POSITIVE_INFINITY,
-  "forest-vine-corner-up": Number.POSITIVE_INFINITY,
   stall: Number.POSITIVE_INFINITY, // the market's, and it belongs to the market
   // The city's ring wall and the way through it. Not for sale for the reason
   // the well is not: it is a piece of a place rather than a thing somebody

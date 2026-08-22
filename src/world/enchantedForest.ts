@@ -40,8 +40,6 @@ import type { GridPoint } from "./topdown";
  */
 const CLEARING_RADIUS = 9;
 /** The ring of mushrooms about the tree, and how many stand in it. */
-const RING_RADIUS = 4;
-const RING_LIGHTS = 8;
 /** Mushrooms scattered through the wood beyond the ring. */
 const SCATTERED_LIGHTS = 14;
 
@@ -68,9 +66,9 @@ const TRELLIS = BED_SIDE + 2;
 /**
  * How far out along each axis the near corner of a block sits.
  *
- * Beyond the ring of lights, which stands at RING_RADIUS and has its
- * diagonals a pixel inside that — so at four the corners would be sitting on
- * them, and `pull` would take four of the eight lights away to make room.
+ * Far enough that the trunk is clear of them and the doorstep below it is
+ * not underneath one — and far enough apart that four lights read as the
+ * corners of a square rather than as a cluster.
  */
 const BED_REACH = 4;
 /** How much wood has closed over it, in cells. */
@@ -119,8 +117,14 @@ export interface Grove {
    * grass away.
    */
   readonly beds: readonly Patch[];
-  /** The cells of the trellis, so a test can find it and the save can keep it. */
-  readonly trellis: readonly GridPoint[];
+  /**
+   * The cells that mark the beds out: four to a bed, one at each corner.
+   *
+   * Points rather than a border. Three attempts at a line round a bed came
+   * off badly, and the fault was the shape of the problem rather than the
+   * drawing — four corners say *square* with no line at all.
+   */
+  readonly markers: readonly GridPoint[];
   /**
    * The wood that has closed over the bed, which has to come away first.
    *
@@ -202,15 +206,12 @@ export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove 
     }
   }
 
-  // The ring: eight lights at the compass points of a square about the tree,
-  // which at this radius reads as a circle and never as a grid.
-  for (let n = 0; n < RING_LIGHTS; n++) {
-    const angle = (n / RING_LIGHTS) * Math.PI * 2;
-    const col = middle.col + Math.round(Math.cos(angle) * RING_RADIUS);
-    const row = middle.row + Math.round(Math.sin(angle) * RING_RADIUS);
-    const light = put(grid, FixtureType.Glowcap, col, row, 1, false);
-    if (light) placed.push(light);
-  }
+  // There was a ring of eight lights round the trunk here, and it went when
+  // the beds got theirs. Its job was to make the clearing read as *kept*
+  // rather than as a gap in the trees, and sixteen lights standing at the
+  // corners of four beds do that better — they say kept *and* say what for.
+  // Two rings of lights round one tree said neither: the beds' corners were
+  // lost among lights that meant nothing.
 
   // The wood. Thick, and thickest at the edges of the box — walking in
   // should feel like the trees opening out rather than like arriving at a
@@ -270,7 +271,7 @@ export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove 
   // lights round the trunk and the doorstep below it are never underneath
   // one.
   const beds: Patch[] = [];
-  const trellis: GridPoint[] = [];
+  const markers: GridPoint[] = [];
   for (const downward of [-1, 1]) {
     for (const rightward of [-1, 1]) {
       // The block's near corner is BED_REACH out along both axes, so the four
@@ -290,38 +291,35 @@ export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove 
         height: BED_SIDE,
       };
       beds.push(bed);
-      const inTheBed = new Set(patchCells(bed).map((at) => `${at.col},${at.row}`));
-      const lastCol = block.col + block.width - 1;
-      const lastRow = block.row + block.height - 1;
+      // Cleared first, so nothing is standing where the bed goes.
       for (const at of patchCells(block)) {
         if (!grid.inBounds(at.col, at.row)) continue;
         pull(at.col, at.row);
-        if (inTheBed.has(`${at.col},${at.row}`)) continue;
-        // Which piece of creeper this cell is. The vine is directional — a
-        // stem with leaves off it has to know which way it is going — so a
-        // border is four runs and four corners, and the two right-hand
-        // corners are the two left-hand ones mirrored.
-        const onLeft = at.col === block.col;
-        const onRight = at.col === lastCol;
-        const onTop = at.row === block.row;
-        const onBottom = at.row === lastRow;
-        const corner = (onLeft || onRight) && (onTop || onBottom);
-        const type = corner
-          ? onTop
-            ? FixtureType.ForestVineCorner
-            : FixtureType.ForestVineCornerUp
-          : onLeft || onRight
-            ? FixtureType.ForestVineSide
-            : FixtureType.ForestVine;
-        // Walked over, not walked round. A border you cannot cross is a
-        // wall, and the bed inside it has to be reachable.
-        const vine = put(grid, type, at.col, at.row, 1, false);
-        if (!vine) continue;
-        // The drawn corner comes in from its right, so the left-hand ones
-        // are the mirror — the same rule the fence's side runs follow.
-        vine.flip = corner && onLeft;
-        trellis.push(at);
-        placed.push(vine);
+      }
+      // And marked at its four corners rather than bordered.
+      //
+      // Three attempts at a border came off badly — a lattice of diamonds, a
+      // ring of stars, a thin dark frame with specks on it — and the fault
+      // was never the drawing. A border on grass has to be a *line*, and a
+      // line at this scale is either loud enough to read as a fence or quiet
+      // enough to read as wire; there is very little in between.
+      //
+      // Four points at the corners of a small square say *square* with no
+      // line at all, which is the geometry doing the work instead of the
+      // art. And the glowcap is already here: it is the forest's own signal,
+      // it lights the ground it stands on after dark, and it needed no new
+      // pixel drawn for it.
+      for (const at of [
+        { col: bed.col - 1, row: bed.row - 1 },
+        { col: bed.col + bed.width, row: bed.row - 1 },
+        { col: bed.col - 1, row: bed.row + bed.height },
+        { col: bed.col + bed.width, row: bed.row + bed.height },
+      ]) {
+        if (!grid.inBounds(at.col, at.row)) continue;
+        const mark = put(grid, FixtureType.Glowcap, at.col, at.row, 1, false);
+        if (!mark) continue;
+        markers.push(at);
+        placed.push(mark);
       }
     }
   }
@@ -346,7 +344,7 @@ export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove 
     placed.push(scrub);
   }
 
-  return { tree, doorstep, beds, trellis, thicket, placed };
+  return { tree, doorstep, beds, markers, thicket, placed };
 }
 
 /**
