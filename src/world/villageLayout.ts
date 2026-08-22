@@ -316,6 +316,61 @@ export function gardenGate(ring: readonly GridPoint[], towards: GridPoint): Grid
 }
 
 /**
+ * How wide the way in is, in tiles.
+ *
+ * Three, and it was one. A single cell is a target a six-year-old has to aim
+ * at: they walk along the fence, arrive next to the gap rather than at it,
+ * and press toward a fence panel that looks no different from the way
+ * through. The same complaint the buildings' doorways answered with
+ * `ENTRANCE_REACH`, and the same answer — except that a doorway can be three
+ * cells wide to walk into while staying one cell wide to look at, and a hole
+ * in a fence cannot. So the hole is really three wide.
+ */
+export const GARDEN_ENTRANCE_WIDTH = 3;
+
+/**
+ * The run of ring cells that is the way in: a gate, a gap, a gate.
+ *
+ * Centred on `gardenGate` and lying along its edge, shifted along if that
+ * would put an end on a corner. The middle cell has nothing placed on it at
+ * all — the two gates are its posts, and what stands between them is the
+ * gateway.
+ *
+ * All three are walked through, not only the middle. Two gateposts round a
+ * one-tile gap would be the same target it was before with more timber round
+ * it.
+ */
+export function gardenEntrance(
+  ring: readonly GridPoint[],
+  towards: GridPoint,
+): readonly GridPoint[] {
+  const middle = gardenGate(ring, towards);
+  const cols = ring.map((cell) => cell.col);
+  const rows = ring.map((cell) => cell.row);
+  const left = Math.min(...cols);
+  const right = Math.max(...cols);
+  const top = Math.min(...rows);
+  const bottom = Math.max(...rows);
+  const isCorner = (cell: GridPoint) =>
+    (cell.col === left || cell.col === right) && (cell.row === top || cell.row === bottom);
+  // Which of the four runs it is on. A cell can only be on one, because the
+  // ones that are on two are the corners and `gardenGate` never returns one.
+  const across = middle.row === top || middle.row === bottom;
+  const edge = ring
+    .filter(
+      (cell) => !isCorner(cell) && (across ? cell.row === middle.row : cell.col === middle.col),
+    )
+    .sort((a, b) => (across ? a.col - b.col : a.row - b.row));
+  // Short edges cannot happen with the gardens the village lays out, but a
+  // spec somebody shrinks should give a narrower way in rather than reach
+  // past the end of its own fence.
+  if (edge.length <= GARDEN_ENTRANCE_WIDTH) return edge;
+  const at = edge.findIndex((cell) => cell.col === middle.col && cell.row === middle.row);
+  const start = Math.min(Math.max(at - 1, 0), edge.length - GARDEN_ENTRANCE_WIDTH);
+  return edge.slice(start, start + GARDEN_ENTRANCE_WIDTH);
+}
+
+/**
  * Four lamp posts, one at each corner of the square.
  *
  * The village had no light of its own: night fell and the only thing lit was
@@ -486,30 +541,46 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
       );
 
       const ring = gardenFenceRing(gardenTopLeft, spec.garden.width, spec.garden.height);
-      const gate = gardenGate(ring, center);
+      const entrance = gardenEntrance(ring, center);
+      const gate = entrance[Math.floor(entrance.length / 2)] ?? gardenGate(ring, center);
       const left = gardenTopLeft.col - 1;
       const right = gardenTopLeft.col + spec.garden.width;
-      // A way up to it: the gate faces the square, and what lies between is
-      // whatever the world put there.
+      const bottomRow = gardenTopLeft.row + spec.garden.height;
+      const topRow = gardenTopLeft.row - 1;
+      // A way up to it: the entrance faces the square, and what lies between
+      // is whatever the world put there. Carved to the middle of the way in,
+      // which is the cell with nothing on it.
       carvePath(grid, gate, buildingCenter);
       for (const cell of ring) {
-        const isGate = cell.col === gate.col && cell.row === gate.row;
+        const inEntrance = entrance.some((at) => at.col === cell.col && at.row === cell.row);
+        // The middle of the way in carries nothing at all. The two gates
+        // either side of it are its posts, and a third gate between them
+        // would be a gate in a gateway.
+        if (inEntrance && cell.col === gate.col && cell.row === gate.row) continue;
+        const isGate = inEntrance;
         // The sides run away from the camera and the top and bottom run
         // across it, which is two different pictures of the same fence. The
         // corners belong to the top and bottom, because that is the run whose
         // posts the sides line up under.
-        const onSide =
-          (cell.col === left || cell.col === right) &&
-          cell.row !== gardenTopLeft.row - 1 &&
-          cell.row !== gardenTopLeft.row + spec.garden.height;
+        const onSideRun = (col: number, row: number) =>
+          (col === left || col === right) && row !== topRow && row !== bottomRow;
+        const onSide = onSideRun(cell.col, cell.row);
         // The two the side runs come *down* into, which are the only cells
         // where the join does not draw itself. A side run overhangs the cell
         // above it and lands on that panel's post, so the top corners need
         // nothing; below one there is nothing to overhang with, and the
         // panel's post starts a third of a tile down. See `FenceCorner`.
+        //
+        // Only where something is actually standing above it, which is not
+        // every bottom corner any more: the way in is three cells wide and
+        // its middle is empty, so a corner under that gap would carry its
+        // post up to meet nothing. A gate on a side run counts — its own art
+        // runs to the bottom of its cell for exactly this reason.
         const bottomCorner =
-          cell.row === gardenTopLeft.row + spec.garden.height &&
-          (cell.col === left || cell.col === right);
+          cell.row === bottomRow &&
+          (cell.col === left || cell.col === right) &&
+          onSideRun(cell.col, cell.row - 1) &&
+          !(cell.col === gate.col && cell.row - 1 === gate.row);
         const type = isGate
           ? onSide
             ? FixtureType.GateSide
@@ -536,7 +607,15 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
           // garden instead of into it. A bottom corner mirrors for the same
           // reason: its tall post has to stand under the run above it, and on
           // the right that run is against the cell's other edge.
-          flip: (onSide || bottomCorner) && cell.col === right,
+          //
+          // And the far gate of a way in that runs across the camera, so the
+          // pair open away from each other: the leaf is hinged on the left
+          // of its cell, and two unmirrored gates would both fold the same
+          // way, which reads as one gate drawn twice rather than as a gap
+          // with a gate at each side of it.
+          flip:
+            ((onSide || bottomCorner) && cell.col === right) ||
+            (isGate && !onSide && cell.col > gate.col),
         });
       }
       // Standing in their own beds, inside their own fence: the first thing

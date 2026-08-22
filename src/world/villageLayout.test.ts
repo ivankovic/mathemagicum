@@ -8,7 +8,9 @@ import { FixtureType } from "./fixtures";
 import { WorldGrid } from "./grid";
 import { TerrainType } from "./terrain";
 import {
+  GARDEN_ENTRANCE_WIDTH,
   VILLAGE_SIZE,
+  gardenEntrance,
   gardenFenceRing,
   gardenGate,
   layoutVillage,
@@ -194,10 +196,11 @@ describe("layoutVillage", () => {
     expect(playerSpawn.row).toBeLessThan(center.row);
     expect(Math.abs(playerSpawn.col - (playerHouse.col + playerHouse.width / 2))).toBeLessThan(3);
 
-    // And fenced in, with exactly one way out.
+    // And fenced in, with exactly one way out — which is three cells wide
+    // now, and made of two gates with a gap between them.
     const fenced = ringAround(grid, playerSpawn);
     expect(fenced.fences).toBeGreaterThan(0);
-    expect(fenced.gates).toBe(1);
+    expect(fenced.gates).toBe(2);
   });
 });
 
@@ -291,23 +294,29 @@ describe("garden fences", () => {
     const { grid, village } = villageGrid();
     layoutVillage(grid, village);
     const corners = grid.listObjects().filter((object) => object.type === FixtureType.FenceCorner);
-    // Two per garden, four gardens — unless a gate has taken one, which it
-    // never does: the gate is never a corner.
-    expect(corners.length).toBe(8);
+    // Up to two per garden over four gardens, and fewer when the gap in a
+    // way in falls directly above one — then there is nothing for its post
+    // to meet and it goes back to being a plain panel.
+    expect(corners.length).toBeGreaterThan(0);
+    expect(corners.length).toBeLessThanOrEqual(8);
   });
 
   test("and each of them has a side run standing directly above it", () => {
     const { grid, village } = villageGrid();
     layoutVillage(grid, village);
+    // A gate on a side run counts: its art runs to the bottom of its cell
+    // for exactly this reason, so the corner's post lands on timber.
+    const sideRun: readonly string[] = [FixtureType.FenceSide, FixtureType.GateSide];
     for (const corner of grid.listObjects()) {
       if (corner.type !== FixtureType.FenceCorner) continue;
       const above = grid.getObjectAt(corner.col, corner.row - 1);
       // The whole reason this piece exists. A corner with nothing above it
-      // would be a post carried up to meet nothing.
-      expect({ at: `${corner.col},${corner.row}`, above: above?.type }).toEqual({
+      // would be a post carried up to meet nothing — which is a real case
+      // now that the way in is three cells wide and its middle is empty.
+      expect({
         at: `${corner.col},${corner.row}`,
-        above: FixtureType.FenceSide,
-      });
+        meets: sideRun.includes(above?.type ?? ""),
+      }).toEqual({ at: `${corner.col},${corner.row}`, meets: true });
     }
   });
 
@@ -340,6 +349,96 @@ describe("garden fences", () => {
     }
   });
 
+  /**
+   * The reported fault: the way in was a single cell, which is a target a
+   * six-year-old has to aim at. They walk along the fence, arrive beside the
+   * gap rather than at it, and press into a panel that looks no different
+   * from the way through.
+   */
+  describe("a way in three cells wide", () => {
+    const ring = () => gardenFenceRing({ col: 10, row: 20 }, 7, 5);
+
+    test("is three cells, in a line, and none of them a corner", () => {
+      const at = ring();
+      for (const towards of [
+        { col: 13, row: 60 },
+        { col: 13, row: 0 },
+        { col: 0, row: 22 },
+        { col: 60, row: 22 },
+        { col: 0, row: 0 },
+        { col: 60, row: 60 },
+      ]) {
+        const entrance = gardenEntrance(at, towards);
+        expect(entrance.length).toBe(GARDEN_ENTRANCE_WIDTH);
+        const corners = new Set(["9,19", "17,19", "9,25", "17,25"]);
+        for (const cell of entrance) {
+          expect(at).toContainEqual(cell);
+          expect(corners.has(`${cell.col},${cell.row}`)).toBe(false);
+        }
+        // In a line, and consecutive: a way in with a fence panel in the
+        // middle of it is two ways in a tile apart.
+        const across = entrance[0]?.row === entrance[1]?.row;
+        const along = entrance.map((cell) => (across ? cell.col : cell.row));
+        expect(new Set(entrance.map((cell) => (across ? cell.row : cell.col))).size).toBe(1);
+        expect(Math.max(...along) - Math.min(...along)).toBe(GARDEN_ENTRANCE_WIDTH - 1);
+      }
+    });
+
+    test("is centred on the cell the old single gate would have been", () => {
+      const at = ring();
+      const towards = { col: 13, row: 60 };
+      expect(gardenEntrance(at, towards)[1]).toEqual(gardenGate(at, towards));
+    });
+
+    // A garden nobody has shrunk yet, but a spec that shrank one should give
+    // a narrower way in rather than reach past the end of its own fence.
+    test("and never runs off the end of its edge", () => {
+      const narrow = gardenFenceRing({ col: 10, row: 20 }, 2, 2);
+      for (const cell of gardenEntrance(narrow, { col: 11, row: 60 })) {
+        expect(narrow).toContainEqual(cell);
+      }
+    });
+
+    test("every cell of it is walked through, not only the middle", () => {
+      const { grid, village } = villageGrid();
+      layoutVillage(grid, village);
+      const gateTypes: readonly string[] = [FixtureType.Gate, FixtureType.GateSide];
+      const gates = grid.listObjects().filter((object) => gateTypes.includes(object.type));
+      expect(gates.length).toBeGreaterThan(0);
+      for (const gate of gates) {
+        // The gates themselves, and the gap each pair stands either side of.
+        // Two gateposts round a one-tile hole would be the same target it
+        // was before with more timber round it.
+        expect(grid.isPassable(gate.col, gate.row)).toBe(true);
+      }
+    });
+
+    test("and its middle carries nothing at all", () => {
+      const { grid, village } = villageGrid();
+      layoutVillage(grid, village);
+      const gateTypes: readonly string[] = [FixtureType.Gate, FixtureType.GateSide];
+      const gates = grid.listObjects().filter((object) => gateTypes.includes(object.type));
+      // Each pair faces its twin two cells away with an empty cell between.
+      for (const gate of gates) {
+        const twin = gates.find(
+          (other) =>
+            other !== gate && Math.abs(other.col - gate.col) + Math.abs(other.row - gate.row) === 2,
+        );
+        expect({ at: `${gate.col},${gate.row}`, paired: Boolean(twin) }).toEqual({
+          at: `${gate.col},${gate.row}`,
+          paired: true,
+        });
+        if (!twin) continue;
+        const middle = {
+          col: (gate.col + twin.col) / 2,
+          row: (gate.row + twin.row) / 2,
+        };
+        expect(grid.getObjectAt(middle.col, middle.row)).toBeNull();
+        expect(grid.isPassable(middle.col, middle.row)).toBe(true);
+      }
+    });
+  });
+
   test("every garden in the village is fenced with exactly one gate", () => {
     const { grid, village } = villageGrid();
     layoutVillage(grid, village);
@@ -355,8 +454,8 @@ describe("garden fences", () => {
       FixtureType.FenceCorner,
     ];
     const fences = objects.filter((object) => fenceTypes.includes(object.type));
-    // Three villager gardens and the player's.
-    expect(gates.length).toBe(4);
+    // Three villager gardens and the player's, two gates to a way in.
+    expect(gates.length).toBe(4 * 2);
     expect(fences.length).toBeGreaterThan(gates.length * 4);
     for (const gate of gates) expect(gate.blocksMovement).toBe(false);
     for (const fence of fences) expect(fence.blocksMovement).toBe(true);
@@ -373,10 +472,13 @@ describe("garden fences", () => {
     const objects = grid.listObjects();
     const gateTypes: readonly string[] = [FixtureType.Gate, FixtureType.GateSide];
     for (const gate of objects.filter((object) => gateTypes.includes(object.type))) {
-      const above = grid.getObjectAt(gate.col, gate.row - 1);
-      const below = grid.getObjectAt(gate.col, gate.row + 1);
-      const inSideRun =
-        above?.type === FixtureType.FenceSide || below?.type === FixtureType.FenceSide;
+      // Two cells out, not one: the cell touching a gate is as likely to be
+      // the gap in the middle of the way in, or the other gate, as it is to
+      // be the run this is asking about.
+      const sideRun: readonly string[] = [FixtureType.FenceSide, FixtureType.GateSide];
+      const inSideRun = [-2, -1, 1, 2].some((step) =>
+        sideRun.includes(grid.getObjectAt(gate.col, gate.row + step)?.type ?? ""),
+      );
       const at = { col: gate.col, row: gate.row };
       expect({ ...at, type: gate.type }).toEqual({
         ...at,
@@ -426,15 +528,44 @@ describe("getting out of your own garden", () => {
     expect(isReachable(reachable, grid, { col: well.col, row: well.row + 1 })).toBe(true);
   });
 
-  // Bricking a gate up would be silent otherwise: the ring would still look
-  // like a fence, and the plot would simply have no way in.
-  test("a gate that blocked would fail this", () => {
+  /**
+   * Bricking the way in up would be silent otherwise: the ring would still
+   * look like a fence, and the plot would simply have no way out of it.
+   *
+   * The whole way in, not only its gates. It is three cells wide and the
+   * middle one carries nothing, so blocking the timber alone leaves a hole —
+   * which is the point of the change and would make this test pass while
+   * proving nothing.
+   */
+  test("a way in that blocked would fail this", () => {
     const { grid, village } = villageGrid();
     const { playerSpawn, playerDoorstep } = layoutVillage(grid, village);
-    for (const object of grid.listObjects()) {
-      if (object.type !== FixtureType.Gate) continue;
-      grid.removeObjectAt(object.col, object.row);
-      grid.placeObject({ ...object, blocksMovement: true });
+    const gates = grid
+      .listObjects()
+      .filter((object) => object.type === FixtureType.Gate || object.type === FixtureType.GateSide);
+    for (const gate of gates) {
+      grid.removeObjectAt(gate.col, gate.row);
+      grid.placeObject({ ...gate, blocksMovement: true });
+      // And the gap each pair stands either side of.
+      for (const step of [-1, 1]) {
+        for (const at of [
+          { col: gate.col + step, row: gate.row },
+          { col: gate.col, row: gate.row + step },
+        ]) {
+          if (grid.getObjectAt(at.col, at.row)) continue;
+          grid.placeObject({
+            id: `sealed-${at.col}-${at.row}`,
+            type: FixtureType.Fence,
+            col: at.col,
+            row: at.row,
+            width: 1,
+            height: 1,
+            blocksMovement: true,
+            anchorCol: at.col,
+            anchorRow: at.row,
+          });
+        }
+      }
     }
     const reachable = floodFillReachable(grid, playerSpawn);
     expect(isReachable(reachable, grid, playerDoorstep)).toBe(false);

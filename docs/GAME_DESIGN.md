@@ -1644,6 +1644,33 @@ The night sheet is hidden rather than left at alpha zero, for the same
 reason: a transparent screen-sized rectangle is still a screen-sized
 rectangle to a renderer, and two thirds of every day is daytime.
 
+### The way into a garden
+
+**Three cells wide, and made of two gates with a gap between them.** It was
+one cell, and one cell is a target a six-year-old has to aim at: they walk
+along the fence, arrive *beside* the way through rather than at it, and press
+into a panel that looks no different from the gap.
+
+This is the same complaint the buildings' doorways answered, and nearly the
+same answer — except that a doorway can be three cells wide to walk into
+while staying one cell wide to look at, and a hole in a fence cannot. So the
+hole is really three wide, and all three are walked through. Two gateposts
+round a one-tile gap would be the old target with more timber round it.
+
+The middle cell carries nothing at all: the two gates are its posts, and a
+third gate between them would be a gate in a gateway. The far gate is
+mirrored, so the pair fold away from each other — the leaf is hinged on the
+left of its cell, and two unmirrored gates read as one gate drawn twice
+rather than as a gap with a gate at each side.
+
+It is centred on the cell the single gate used to be — the ring cell nearest
+the square — and shifted along if that would put an end of it on a corner.
+
+**One consequence worth naming.** A bottom corner only gets the corner piece
+when something is actually standing above it, which is no longer every bottom
+corner: the gap in a way in can fall directly above one, and a post carried
+up to meet nothing is worse than the join it was drawn to close.
+
 ### The corner a fence turns
 
 A garden's fence is two pictures of one fence: a run across the camera and a
