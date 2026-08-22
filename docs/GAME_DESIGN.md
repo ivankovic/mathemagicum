@@ -1657,11 +1657,27 @@ while staying one cell wide to look at, and a hole in a fence cannot. So the
 hole is really three wide, and all three are walked through. Two gateposts
 round a one-tile gap would be the old target with more timber round it.
 
-The middle cell carries nothing at all: the two gates are its posts, and a
-third gate between them would be a gate in a gateway. The far gate is
-mirrored, so the pair fold away from each other — the leaf is hinged on the
-left of its cell, and two unmirrored gates read as one gate drawn twice
-rather than as a gap with a gate at each side.
+The middle cell carries nothing at all, and neither does anything else in the
+opening: **the gates have no posts.** They had two each, which was right
+while a way in was one cell wide — the eye read the two uprights before it
+read the absence of rails between them. Across three cells it came to four
+uprights round the opening with two of them standing *in* it, and those two
+were the first thing anybody noticed. What says gateway now is the pair of
+leaves, still fluttering; the run either side ends on its own post, as it
+always did.
+
+The far gate is mirrored, so the pair fold away from each other — the leaf is
+hinged on the left of its cell, and two unmirrored gates read as one gate
+drawn twice rather than as a gap with a gate at each side.
+
+**A run going away from the camera needs two different gates**, not one
+mirrored. The leaf hangs off the run it belongs to, and on a column that run
+is above one gate and below the other — while mirroring on this grid is left
+to right. So there is an upper gate whose leaf sits at the top of its cell,
+hard against the run coming down into it, and a lower one whose leaf sits at
+the bottom, hard against the run going on below. They are one drawing with
+the hinge row as its only argument, so the two ends of a way in cannot drift
+apart by being maintained separately.
 
 It is centred on the cell the single gate used to be — the ring cell nearest
 the square — and shifted along if that would put an end of it on a corner.

@@ -59,6 +59,9 @@ const FIXTURES: Record<FixtureType, Noun> = {
   // Still a fence. What a corner is, is a fact about the picture.
   [FixtureType.FenceCorner]: noun("fence"),
   [FixtureType.GateSide]: noun("gate"),
+  // Both ends of one way in. Still a gate; which end it is, is a fact
+  // about the picture.
+  [FixtureType.GateSideLower]: noun("gate"),
   [FixtureType.Glowcap]: noun("glowcap"),
   [FixtureType.Stall]: noun("market stall", "market stalls"),
   [FixtureType.CityWall]: noun("city wall", "city walls"),

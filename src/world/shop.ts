@@ -76,6 +76,7 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
   "fence-side": Number.POSITIVE_INFINITY, // the same fence, the world's copy
   "fence-corner": Number.POSITIVE_INFINITY, // and its corner
   "gate-side": Number.POSITIVE_INFINITY, // and the gate that stands in it
+  "gate-side-lower": Number.POSITIVE_INFINITY, // and its other end
   glowcap: Number.POSITIVE_INFINITY, // the forest's, and it would not glow anywhere else
   stall: Number.POSITIVE_INFINITY, // the market's, and it belongs to the market
   // The city's ring wall and the way through it. Not for sale for the reason

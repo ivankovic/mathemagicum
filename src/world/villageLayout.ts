@@ -583,7 +583,13 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
           !(cell.col === gate.col && cell.row - 1 === gate.row);
         const type = isGate
           ? onSide
-            ? FixtureType.GateSide
+            ? // Which end of the way in this is. The leaf hangs off the run
+              // it belongs to, and on a side run that run is above one gate
+              // and below the other — so unlike every other pair in this
+              // fence, mirroring cannot turn one into the other.
+              cell.row < gate.row
+              ? FixtureType.GateSide
+              : FixtureType.GateSideLower
             : FixtureType.Gate
           : onSide
             ? FixtureType.FenceSide

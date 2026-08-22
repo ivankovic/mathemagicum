@@ -50,6 +50,17 @@ export const FixtureType = {
    */
   GateSide: "gate-side",
   /**
+   * And the other end of one.
+   *
+   * A way in is three cells — a gate, a gap, a gate — so on a run going away
+   * from the camera one gate has the fence above it and the other below. The
+   * leaf hangs off the run it belongs to, and these cannot be one sprite
+   * mirrored: `flip` is left-to-right and what differs here is up-and-down.
+   *
+   * `GateSide` is the upper of the pair and this is the lower.
+   */
+  GateSideLower: "gate-side-lower",
+  /**
    * A market stall, and the reason the store looks like a store.
    *
    * World generation's, like the well. The store is drawn with the barn

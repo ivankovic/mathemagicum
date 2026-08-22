@@ -306,7 +306,11 @@ describe("garden fences", () => {
     layoutVillage(grid, village);
     // A gate on a side run counts: its art runs to the bottom of its cell
     // for exactly this reason, so the corner's post lands on timber.
-    const sideRun: readonly string[] = [FixtureType.FenceSide, FixtureType.GateSide];
+    const sideRun: readonly string[] = [
+      FixtureType.FenceSide,
+      FixtureType.GateSide,
+      FixtureType.GateSideLower,
+    ];
     for (const corner of grid.listObjects()) {
       if (corner.type !== FixtureType.FenceCorner) continue;
       const above = grid.getObjectAt(corner.col, corner.row - 1);
@@ -402,7 +406,11 @@ describe("garden fences", () => {
     test("every cell of it is walked through, not only the middle", () => {
       const { grid, village } = villageGrid();
       layoutVillage(grid, village);
-      const gateTypes: readonly string[] = [FixtureType.Gate, FixtureType.GateSide];
+      const gateTypes: readonly string[] = [
+        FixtureType.Gate,
+        FixtureType.GateSide,
+        FixtureType.GateSideLower,
+      ];
       const gates = grid.listObjects().filter((object) => gateTypes.includes(object.type));
       expect(gates.length).toBeGreaterThan(0);
       for (const gate of gates) {
@@ -416,7 +424,11 @@ describe("garden fences", () => {
     test("and its middle carries nothing at all", () => {
       const { grid, village } = villageGrid();
       layoutVillage(grid, village);
-      const gateTypes: readonly string[] = [FixtureType.Gate, FixtureType.GateSide];
+      const gateTypes: readonly string[] = [
+        FixtureType.Gate,
+        FixtureType.GateSide,
+        FixtureType.GateSideLower,
+      ];
       const gates = grid.listObjects().filter((object) => gateTypes.includes(object.type));
       // Each pair faces its twin two cells away with an empty cell between.
       for (const gate of gates) {
@@ -446,7 +458,11 @@ describe("garden fences", () => {
     // Either kind: a gate on a side run is drawn for a run that goes away
     // from the camera, and half of them land on one — the gate goes on the
     // ring cell nearest the square, and two of the four sides run that way.
-    const gateTypes: readonly string[] = [FixtureType.Gate, FixtureType.GateSide];
+    const gateTypes: readonly string[] = [
+      FixtureType.Gate,
+      FixtureType.GateSide,
+      FixtureType.GateSideLower,
+    ];
     const gates = objects.filter((object) => gateTypes.includes(object.type));
     const fenceTypes: readonly string[] = [
       FixtureType.Fence,
@@ -470,20 +486,61 @@ describe("garden fences", () => {
     const { grid, village } = villageGrid();
     layoutVillage(grid, village);
     const objects = grid.listObjects();
-    const gateTypes: readonly string[] = [FixtureType.Gate, FixtureType.GateSide];
+    const gateTypes: readonly string[] = [
+      FixtureType.Gate,
+      FixtureType.GateSide,
+      FixtureType.GateSideLower,
+    ];
     for (const gate of objects.filter((object) => gateTypes.includes(object.type))) {
       // Two cells out, not one: the cell touching a gate is as likely to be
       // the gap in the middle of the way in, or the other gate, as it is to
       // be the run this is asking about.
-      const sideRun: readonly string[] = [FixtureType.FenceSide, FixtureType.GateSide];
+      const sideRun: readonly string[] = [
+        FixtureType.FenceSide,
+        FixtureType.GateSide,
+        FixtureType.GateSideLower,
+      ];
       const inSideRun = [-2, -1, 1, 2].some((step) =>
         sideRun.includes(grid.getObjectAt(gate.col, gate.row + step)?.type ?? ""),
       );
       const at = { col: gate.col, row: gate.row };
-      expect({ ...at, type: gate.type }).toEqual({
-        ...at,
-        type: inSideRun ? FixtureType.GateSide : FixtureType.Gate,
+      // Which of the two ends of a side run it is, is the next test's
+      // business; this one only asks that a gate in a column is drawn for a
+      // column and not with the across-the-camera panel.
+      const drawnSideways =
+        gate.type === FixtureType.GateSide || gate.type === FixtureType.GateSideLower;
+      expect({ ...at, sideways: drawnSideways }).toEqual({ ...at, sideways: inSideRun });
+    }
+  });
+
+  /**
+   * And which end. The leaf hangs off the run it belongs to, and on a side
+   * run that run is above one gate and below the other — so unlike every
+   * other pair in this fence, mirroring cannot turn one into the other.
+   */
+  test("the upper gate of a side run is the upper one, and the lower the lower", () => {
+    const { grid, village } = villageGrid();
+    layoutVillage(grid, village);
+    const sideGates = grid
+      .listObjects()
+      .filter(
+        (object) =>
+          object.type === FixtureType.GateSide || object.type === FixtureType.GateSideLower,
+      );
+    expect(sideGates.length).toBeGreaterThan(0);
+    for (const gate of sideGates) {
+      const twin = sideGates.find(
+        (other) => other !== gate && other.col === gate.col && Math.abs(other.row - gate.row) === 2,
+      );
+      expect({ at: `${gate.col},${gate.row}`, paired: Boolean(twin) }).toEqual({
+        at: `${gate.col},${gate.row}`,
+        paired: true,
       });
+      if (!twin) continue;
+      const upper = gate.row < twin.row ? gate : twin;
+      const lower = gate.row < twin.row ? twin : gate;
+      expect(upper.type).toBe(FixtureType.GateSide);
+      expect(lower.type).toBe(FixtureType.GateSideLower);
     }
   });
 
@@ -493,7 +550,9 @@ describe("garden fences", () => {
     const { grid, village } = villageGrid();
     layoutVillage(grid, village);
     for (const object of grid.listObjects()) {
-      if (object.type !== FixtureType.GateSide) continue;
+      if (object.type !== FixtureType.GateSide && object.type !== FixtureType.GateSideLower) {
+        continue;
+      }
       const neighbour = [-1, 1]
         .map((step) => grid.getObjectAt(object.col, object.row + step))
         .find((other) => other?.type === FixtureType.FenceSide);
@@ -540,9 +599,7 @@ describe("getting out of your own garden", () => {
   test("a way in that blocked would fail this", () => {
     const { grid, village } = villageGrid();
     const { playerSpawn, playerDoorstep } = layoutVillage(grid, village);
-    const gates = grid
-      .listObjects()
-      .filter((object) => object.type === FixtureType.Gate || object.type === FixtureType.GateSide);
+    const gates = grid.listObjects().filter((object) => WAY_IN.includes(object.type));
     for (const gate of gates) {
       grid.removeObjectAt(gate.col, gate.row);
       grid.placeObject({ ...gate, blocksMovement: true });
@@ -571,6 +628,13 @@ describe("getting out of your own garden", () => {
     expect(isReachable(reachable, grid, playerDoorstep)).toBe(false);
   });
 });
+
+/** Every piece a way in is made of, across the camera and away from it. */
+const WAY_IN: readonly string[] = [
+  FixtureType.Gate,
+  FixtureType.GateSide,
+  FixtureType.GateSideLower,
+];
 
 const RING_TYPES: readonly FixtureType[] = [
   FixtureType.Fence,
