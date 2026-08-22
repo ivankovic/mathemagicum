@@ -97,6 +97,16 @@
       "width": 16,
       "height": 16
     },
+    "flag-en": {
+      "file": "flag_en.png",
+      "width": 33,
+      "height": 21
+    },
+    "flag-de": {
+      "file": "flag_de.png",
+      "width": 33,
+      "height": 21
+    },
     "item-fence": {
       "file": "item_fence.png",
       "width": 32,

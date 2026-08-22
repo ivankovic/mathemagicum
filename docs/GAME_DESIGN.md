@@ -1313,6 +1313,20 @@ stranger with a similar name.
 The two buttons are the only thing in the game that leaves it, which is why
 they live here and nowhere near a screen a child plays on.
 
+**The chooser has flags on it.** It is the one screen a child is asked to use
+before they can read the screen it is on — it is written in whatever language
+the last person to play chose, so a German-reading child meets it in English —
+and "English" and "Deutsch" are two words in two alphabets a five-year-old may
+know neither of. A flag is the one picture that means a language to somebody
+who cannot read its name. The name stays beside it, for everybody else and for
+anyone who reads a flag as a country rather than as a language.
+
+Both flags are drawn on the same rectangle, and the Union Flag is squared up
+to get there: a row of flags at their own true proportions is a row of
+different-shaped buttons, and a chooser wants its two choices to look like two
+of a kind. They are the only icons in the game drawn to their own edges — a
+flag with air round it is a picture of a flag lying on something.
+
 **The whole game is translated, not just the menus.** Every line the player
 reads comes from a phrase book (`src/i18n/`), one per language, and the
 interface is what stops a half-translation shipping: a language that forgets

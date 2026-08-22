@@ -10,7 +10,7 @@ import { makeAdditionProblem } from "../spells/addition";
 import { BANDS, DEFAULT_BAND, sampleProblem } from "../spells/difficulty";
 import { createRng } from "../world/rng";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
-import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
+import { UiAsset, type UiIndex, flagIcon, uiTextureKey } from "./assets";
 
 /**
  * The options: which language the game is read in.
@@ -65,6 +65,8 @@ const BUTTON_GAP = 6;
 const ROW_HEIGHT = SMALL_SIZE + 8 + BUTTON_H + 18;
 /** How big the map and the two answers are drawn on their buttons. */
 const ICON = 22;
+/** Between a flag and the name of the language it stands for. */
+const LABEL_GAP = 8;
 
 interface Choice {
   readonly box: Phaser.GameObjects.Rectangle;
@@ -184,8 +186,13 @@ export class OptionsPanel {
     this.aboutButton = this.choice("", () => this.onAbout?.());
 
     for (const language of LANGUAGES) {
+      // Flag *and* name. The flag is for the child who cannot read either
+      // name; the name is for everybody else, and for anyone who reads a
+      // flag as a country rather than as a language.
       this.languageChoices.push(
-        this.choice(LANGUAGE_NAMES[language], () => this.choose({ language })),
+        this.flagChoice(flagIcon(language), LANGUAGE_NAMES[language], () =>
+          this.choose({ language }),
+        ),
       );
     }
     for (const [index, band] of BANDS.entries()) {
@@ -244,7 +251,22 @@ export class OptionsPanel {
       this.scene.add.image(0, 0, uiTextureKey(asset)).setDisplaySize(ICON, ICON),
     );
     this.icons.push(icon);
-    this.iconOf.set(choice.box, icon);
+    this.iconOf.set(choice.box, { image: icon, width: ICON, beside: false });
+    return choice;
+  }
+
+  /**
+   * A button with a flag on it and a word beside the flag.
+   *
+   * At its own size rather than squared into the icon box every other
+   * picture here uses: a flag is a rectangle, and one squashed to a square
+   * is a flag drawn wrong rather than a flag drawn small.
+   */
+  private flagChoice(asset: string, text: string, onTap: () => void): Choice {
+    const choice = this.choice(text, onTap);
+    const icon = this.own(this.scene.add.image(0, 0, uiTextureKey(asset)).setOrigin(0.5));
+    this.icons.push(icon);
+    this.iconOf.set(choice.box, { image: icon, width: icon.width, beside: true });
     return choice;
   }
 
@@ -490,18 +512,32 @@ export class OptionsPanel {
     return { box, label };
   }
 
-  private readonly iconOf = new Map<Phaser.GameObjects.Rectangle, Phaser.GameObjects.Image>();
+  private readonly iconOf = new Map<
+    Phaser.GameObjects.Rectangle,
+    { image: Phaser.GameObjects.Image; width: number; beside: boolean }
+  >();
 
   private place(choice: Choice, x: number, y: number, width: number, height: number): void {
     choice.box.setSize(width, height).setPosition(x, y);
-    choice.label.setPosition(x, y);
-    this.iconOf.get(choice.box)?.setPosition(x, y);
+    const icon = this.iconOf.get(choice.box);
+    if (!icon?.beside) {
+      choice.label.setPosition(x, y);
+      icon?.image.setPosition(x, y);
+      return;
+    }
+    // Picture and word together, centred as one block rather than each in
+    // the middle of the button — two things both centred are two things on
+    // top of each other.
+    const span = icon.width + LABEL_GAP + choice.label.width;
+    const left = x - span / 2;
+    icon.image.setPosition(left + icon.width / 2, y);
+    choice.label.setPosition(left + icon.width + LABEL_GAP + choice.label.width / 2, y);
   }
 
   private show(choice: Choice): void {
     choice.box.setVisible(true);
     choice.label.setVisible(true);
-    this.iconOf.get(choice.box)?.setVisible(true);
+    this.iconOf.get(choice.box)?.image.setVisible(true);
   }
 
   private text(value: string, size: number, color: string): Phaser.GameObjects.Text {

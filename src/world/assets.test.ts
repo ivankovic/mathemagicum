@@ -4,7 +4,8 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { UI_ASSETS, UiAsset, type UiIndex, uiEntry } from "../ui/assets";
+import { LANGUAGES } from "../settings";
+import { UI_ASSETS, UiAsset, type UiIndex, flagIcon, uiEntry } from "../ui/assets";
 import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, DOOR_STATES, ROLE_SPRITES } from "./buildings";
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
 import { EFFECT_TYPES, effectAnimKey, effectSidecarKey } from "./effects";
@@ -724,6 +725,33 @@ describe("the windows the game lights after dark", () => {
           fits: true,
         });
       }
+    }
+  });
+});
+
+describe("the flags on the language chooser", () => {
+  /**
+   * The chooser is the one screen a child meets before they can read the
+   * screen it is on: it is written in whatever language the last person to
+   * play chose, so a German-reading child meets it in English. The flag is
+   * what they can act on.
+   */
+  test("every language has one, and no two share it", () => {
+    const flags = LANGUAGES.map(flagIcon);
+    expect(new Set(flags).size).toBe(LANGUAGES.length);
+    // A copied lambda in the generator's asset index would ship two buttons
+    // showing one flag, and a chooser that does not choose.
+    for (const flag of flags) expect(UI_ASSETS).toContain(flag);
+  });
+
+  // Every other icon here is square and drawn to a common box. A flag is a
+  // rectangle, and one squashed into a square is a flag drawn wrong rather
+  // than a flag drawn small.
+  test("and each is a rectangle rather than a square", () => {
+    const index = readJson<UiIndex>("ui", "ui.json");
+    for (const flag of LANGUAGES.map(flagIcon)) {
+      const entry = uiEntry(index, flag);
+      expect({ flag, wide: entry.width > entry.height }).toEqual({ flag, wide: true });
     }
   });
 });

@@ -12,6 +12,7 @@
  * that knows how big it drew something.
  */
 
+import { LANGUAGES, type Language } from "../settings";
 import { COIN_TIERS, type CoinTier } from "../shop/currency";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import { MATERIAL_TYPES, type MaterialType } from "../world/materials";
@@ -92,6 +93,22 @@ export function itemIcon(fixture: FixtureType): string {
   return `item-${fixture}`;
 }
 
+/**
+ * The flag that stands for a language.
+ *
+ * The chooser is the one screen a child meets before they can read the
+ * screen it is on: "English" and "Deutsch" are two words in two alphabets,
+ * and a five-year-old may know neither. A flag is the one picture that means
+ * a language to somebody who cannot read its name.
+ *
+ * By language code rather than by country, because that is what is being
+ * chosen. That the picture is a country's flag is a convention this game is
+ * borrowing, not a claim about who speaks what.
+ */
+export function flagIcon(language: Language): string {
+  return `flag-${language}`;
+}
+
 /** And for what the world gives up when it is cleared. */
 export function materialIcon(material: MaterialType): string {
   return `material-${material}`;
@@ -107,6 +124,7 @@ export const UI_ASSETS: readonly string[] = [
   ...PLACEABLE_FIXTURES.map(itemIcon),
   ...COIN_TIERS.map(coinIcon),
   ...MATERIAL_TYPES.map(materialIcon),
+  ...LANGUAGES.map(flagIcon),
 ];
 
 export const UI_SIDECAR_KEY = "ui-index";

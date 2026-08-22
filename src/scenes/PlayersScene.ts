@@ -38,6 +38,7 @@ import {
 import { makeAdditionProblem } from "../spells/addition";
 import { BANDS, DEFAULT_BAND, SUGGESTED_BAND, sampleProblem } from "../spells/difficulty";
 import { GAME_NAME } from "../ui/TitleCard";
+import { flagIcon, uiTextureKey } from "../ui/assets";
 import { HEADER, tileGrid } from "../ui/playersLayout";
 import {
   ALL_CHARACTERS,
@@ -91,6 +92,8 @@ const BODY_CELL = 46;
 const NAME_HEIGHT = 62;
 const SUMS_HEIGHT = 32;
 const LANGUAGE_HEIGHT = 30;
+/** Between a flag and the name of the language it stands for. */
+const FLAG_GAP = 8;
 const BUTTON_HEIGHT = 34;
 /** Air under the last row, so nothing sits against the bottom edge. */
 const FOOTER_ROOM = 64;
@@ -480,7 +483,9 @@ export class PlayersScene extends Phaser.Scene {
   }
 
   private languageRow(centreX: number, y: number): void {
-    const cell = 96;
+    // Wider than it was, because there is a flag in it now: ninety-six left
+    // the flag and the longer of the two names a pixel short of touching.
+    const cell = 124;
     const span = LANGUAGES.length * cell + (LANGUAGES.length - 1) * SWATCH_GAP;
     LANGUAGES.forEach((language, index) => {
       const x = centreX - span / 2 + index * (cell + SWATCH_GAP);
@@ -497,11 +502,28 @@ export class PlayersScene extends Phaser.Scene {
         this.words = phrasesFor(language);
         this.render();
       });
-      this.own(
-        this.text(LANGUAGE_NAMES[language], LABEL_SIZE, chosen ? INK : INK_DIM)
+      // Flag and name together, centred as one block rather than each in the
+      // middle of the tile — two things both centred are two things on top of
+      // each other.
+      //
+      // The flag is for the child who cannot read either name, which on this
+      // screen is more of them than anywhere else: it is where the language
+      // is still whatever the last person to play chose, so a German-reading
+      // child meets it in English.
+      const label = this.own(
+        this.text(LANGUAGE_NAMES[language], LABEL_SIZE, chosen ? INK : INK_DIM).setOrigin(0.5),
+      ) as Phaser.GameObjects.Text;
+      const flag = this.own(
+        this.add
+          .image(0, 0, uiTextureKey(flagIcon(language)))
           .setOrigin(0.5)
-          .setPosition(x + cell / 2, y + LANGUAGE_HEIGHT / 2),
-      );
+          .setAlpha(chosen ? 1 : 0.55),
+      ) as Phaser.GameObjects.Image;
+      const middle = y + LANGUAGE_HEIGHT / 2;
+      const block = flag.width + FLAG_GAP + label.width;
+      const left = x + cell / 2 - block / 2;
+      flag.setPosition(left + flag.width / 2, middle);
+      label.setPosition(left + flag.width + FLAG_GAP + label.width / 2, middle);
     });
   }
 
