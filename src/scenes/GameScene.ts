@@ -1499,6 +1499,7 @@ export class GameScene extends Phaser.Scene {
       session: this.session,
       ui: () => this.uiPositions(),
       armed: () => this.armed,
+      grove: () => ({ col: this.grove.doorstep.col, row: this.grove.doorstep.row }),
       stats: () => ({
         fps: Math.round(this.game.loop.actualFps),
         frames: this.frameCounter,
@@ -4903,9 +4904,12 @@ export class GameScene extends Phaser.Scene {
     // panel's own first page, where it is read rather than missed.
     if (first) this.showEarned(UiAsset.RuneTimes);
     this.grovePanel?.setRung(arrayRungAt(this.dev.arrayRung ?? this.profile.arrayRung));
+    // The shape of one bed and how many there are, which is what the panel
+    // draws: four squares of two by two rather than one block of twelve.
     this.grovePanel?.setTask(progress, {
-      rows: this.grove.bed.height,
-      columns: this.grove.bed.width,
+      rows: this.grove.beds[0]?.height ?? 2,
+      columns: this.grove.beds[0]?.width ?? 2,
+      beds: this.grove.beds.length,
     });
     this.grovePanel?.open_(() => {});
   }

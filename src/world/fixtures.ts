@@ -80,6 +80,15 @@ export const FixtureType = {
    */
   Glowcap: "glowcap",
   /**
+   * The trellis round the great tree's beds.
+   *
+   * World generation's, like the glowcap: which cells border a bed is a fact
+   * about the grove, not a decision a tap can carry. Walked over rather than
+   * round — a border you cannot cross is a wall, and the beds inside it have
+   * to be reachable.
+   */
+  ForestVine: "forest-vine",
+  /**
    * The big city's ring wall, in the same four pieces the garden fence
    * comes in: a run across the camera, a run away from it, and a gateway in
    * each.

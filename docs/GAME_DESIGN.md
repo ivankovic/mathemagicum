@@ -404,15 +404,35 @@ most of the arithmetic in the game.
 
 So the great tree sets a task, and the task is **doing the long way once**:
 
-1. **Clear the wood that has closed over its bed** — six thickets, six
+1. **Clear the wood that has closed over its beds** — six thickets, six
    subtraction problems, and the one spell the game otherwise under-uses.
-2. **Fill the bed and ripen it** — twelve squares, four by three, planted one
-   at a time and grown to ripeness. Twenty-four number lines: precisely what
-   one array cast will later replace.
+2. **Fill four beds of two by two with sunflowers and ripen them** — sixteen
+   squares, planted one at a time and grown to ripeness. Thirty-two number
+   lines: precisely what one array cast will later replace.
+
+Two by two because that is the array spell's own smallest shape, and four of
+them because four is the shape of the spell itself — the child lays out by
+hand exactly the thing they are about to be given. And **sunflowers**, not
+anything ripe: a tree that would take whatever was to hand is a tree whose
+beds get filled by accident on the way past, and the errand is the whole
+reason the spell is worth having.
 
 That is not a gate bolted onto a spell, it *is* the lesson. A child who has
-filled twelve squares by hand knows in their hands why `4 × 3` is worth
-having, and the finished bed is the same rectangle the parchment draws.
+filled four two-by-two beds by hand knows in their hands why `2 × 2` four
+times over is worth one cast.
+
+**The beds are grass with a vine round them**, not bare earth. Earth in a
+clearing read as a hole in the grass rather than as somebody's plot; a
+trellis says *plot* without taking the grass away. It is one seven-by-seven
+block — vine, bed, vine, bed, vine — so the border runs between the four
+squares as well as around them, which is what makes them read as four rather
+than as one block of sixteen. It is walked over, not walked round: a border
+you cannot cross is a wall, and the beds inside it have to be reachable.
+
+**And the clearing is always the same picture**: a ring of woodland round a
+patch of grass, made rather than inherited. It used to take the terrain of
+whatever band the box landed in, which put the great tree in a field of scrub
+as often as not.
 
 It also does not break "learning over gating", and the line is worth being
 exact about. Nothing here is locked behind **being good at arithmetic** — a

@@ -63,6 +63,7 @@ const FIXTURES: Record<FixtureType, Noun> = {
   // about the picture.
   [FixtureType.GateSideLower]: noun("gate"),
   [FixtureType.Glowcap]: noun("glowcap"),
+  [FixtureType.ForestVine]: noun("vine"),
   [FixtureType.Stall]: noun("market stall", "market stalls"),
   [FixtureType.CityWall]: noun("city wall", "city walls"),
   [FixtureType.CityWallSide]: noun("city wall", "city walls"),
@@ -207,11 +208,11 @@ export const EN: Phrases = {
 
   groveAsks: ({ task, standing, ripe, squares }) =>
     task === "overgrown"
-      ? `The wood has closed over my bed. Take away the ${standing} that still stand.`
+      ? `The wood has closed over my beds. Take away the ${standing} that still stand.`
       : task === "done"
         ? "My grove is full. Go well."
-        : `Fill my bed: ${ripe} of ${squares} squares are ripe.`,
-  groveTaskTitle: "The tree's bed",
+        : `Fill my beds with sunflowers: ${ripe} of ${squares} squares are ripe.`,
+  groveTaskTitle: "The tree's beds",
   groveBargain: "Do that and the six dots are yours.",
   groveLessonTitle: "Rows and columns",
   groveRune:

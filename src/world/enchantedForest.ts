@@ -6,7 +6,7 @@ import { FixtureType } from "./fixtures";
 import type { WorldGrid } from "./grid";
 import { LandmarkType } from "./landmarks";
 import type { PlacedObject } from "./objects";
-import { PlantStage } from "./plants";
+import { PlantStage, PlantType } from "./plants";
 import { type Rng, randInt } from "./rng";
 import { sceneryOn, sceneryType } from "./scenery";
 import { type Patch, patchCells } from "./selection";
@@ -29,7 +29,16 @@ import type { GridPoint } from "./topdown";
  */
 
 /** How far from the tree the grove is kept clear, in tiles. */
-const CLEARING_RADIUS = 5;
+/**
+ * How far the grass reaches from the tree.
+ *
+ * The clearing is *made* grass rather than left as whatever the box landed
+ * on, and everything outside it in the box is made woodland — so the grove
+ * is always the same picture: a ring of wood round a patch of grass, with
+ * the tree in the middle of it. It used to inherit the terrain under it,
+ * which on a hilly band put the great tree in a field of scrub.
+ */
+const CLEARING_RADIUS = 9;
 /** The ring of mushrooms about the tree, and how many stand in it. */
 const RING_RADIUS = 4;
 const RING_LIGHTS = 8;
@@ -37,8 +46,26 @@ const RING_LIGHTS = 8;
 const SCATTERED_LIGHTS = 14;
 
 /** The bed the tree asks to have filled: four squares by three. */
-const BED_WIDE = 4;
-const BED_DEEP = 3;
+/**
+ * The beds, and the trellis round them.
+ *
+ * Four squares of two by two, laid out two by two with vine between and
+ * around them — which is one seven-by-seven block. Two by two is the array
+ * spell's own smallest shape, and four of them is the shape of the spell
+ * itself: the child fills sixteen squares by hand and is given the rune that
+ * would have filled a whole patch in one cast.
+ *
+ * The bed used to be one four-by-three of bare earth. Earth in a clearing
+ * read as a hole in it rather than as somebody's plot, which is what the
+ * vine is for: a border says *plot* without taking the grass away.
+ */
+/** What the tree asks for, and nothing else. See `groveProgress`. */
+export const GROVE_CROP = PlantType.Sunflower;
+
+const BED_SIDE = 2;
+const BEDS_ACROSS = 2;
+/** Vine, bed, vine, bed, vine. */
+const TRELLIS = BEDS_ACROSS * BED_SIDE + BEDS_ACROSS + 1;
 /** How much wood has closed over it, in cells. */
 const THICKET = 6;
 
@@ -74,14 +101,19 @@ export interface Grove {
   /** The tile a visitor is meant to stand on to speak to it. */
   readonly doorstep: GridPoint;
   /**
-   * The bed the tree asks to have filled.
+   * The beds the tree asks to have filled: four squares of two by two.
    *
-   * Four squares by three, in the clearing beside the doorstep, carved to
-   * bare earth so it reads as somebody's plot rather than as a gap in the
-   * grass. Filling it by hand is what earns the spell that would have filled
-   * it in one cast — see `groveTask`.
+   * Two by two is the array spell's own smallest shape and four of them is
+   * the shape of the spell itself — the child fills sixteen squares by hand
+   * and is given the rune that would have filled a whole patch in one cast.
+   *
+   * Bordered with vine rather than carved to bare earth. Earth in a clearing
+   * read as a hole in the grass; a trellis says *plot* without taking the
+   * grass away.
    */
-  readonly bed: Patch;
+  readonly beds: readonly Patch[];
+  /** The cells of the trellis, so a test can find it and the save can keep it. */
+  readonly trellis: readonly GridPoint[];
   /**
    * The wood that has closed over the bed, which has to come away first.
    *
@@ -147,6 +179,22 @@ export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove 
   const distance = (col: number, row: number) =>
     Math.max(Math.abs(col - middle.col), Math.abs(row - middle.row));
 
+  // The ground, before anything is grown on it: grass inside the clearing
+  // and wood outside it, whatever the box landed on. The grove is one
+  // picture — a ring of wood round a patch of grass — and inheriting the
+  // band it was placed in put the great tree in a field of scrub as often as
+  // not.
+  for (let row = box.row; row < box.row + box.height; row++) {
+    for (let col = box.col; col < box.col + box.width; col++) {
+      if (!grid.inBounds(col, row)) continue;
+      grid.setTerrain(
+        col,
+        row,
+        distance(col, row) <= CLEARING_RADIUS ? TerrainType.Grass : TerrainType.Woodland,
+      );
+    }
+  }
+
   // The ring: eight lights at the compass points of a square about the tree,
   // which at this radius reads as a circle and never as a grid.
   for (let n = 0; n < RING_LIGHTS; n++) {
@@ -202,18 +250,37 @@ export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove 
 
   // --- what the tree asks for ---------------------------------------------
 
-  // The bed, west of the doorstep so the way in stays open, and carved to
-  // bare earth so it is plainly a plot rather than a patch of clearing.
-  const bed: Patch = {
-    col: middle.col - BED_WIDE - 1,
-    row: tree.row + 3,
-    width: BED_WIDE,
-    height: BED_DEEP,
-  };
-  for (const at of patchCells(bed)) {
+  // The trellis, west of the doorstep so the way in stays open: one
+  // seven-by-seven block of vine holding four two-by-two beds.
+  //
+  // Placed *after* everything else in the clearing so `pull` can take the
+  // trees and lights that grew where it goes — and the ring of lights round
+  // the tree keeps whichever of its eight fall outside it, which is what
+  // stops the trellis reading as a thing dropped on top of a light.
+  const block = { col: middle.col - TRELLIS - 1, row: tree.row + 3 };
+  const beds: Patch[] = [];
+  for (let down = 0; down < BEDS_ACROSS; down++) {
+    for (let across = 0; across < BEDS_ACROSS; across++) {
+      beds.push({
+        col: block.col + 1 + across * (BED_SIDE + 1),
+        row: block.row + 1 + down * (BED_SIDE + 1),
+        width: BED_SIDE,
+        height: BED_SIDE,
+      });
+    }
+  }
+  const inABed = new Set(beds.flatMap((bed) => patchCells(bed).map((at) => `${at.col},${at.row}`)));
+  const trellis: GridPoint[] = [];
+  for (const at of patchCells({ ...block, width: TRELLIS, height: TRELLIS })) {
     if (!grid.inBounds(at.col, at.row)) continue;
     pull(at.col, at.row);
-    grid.setTerrain(at.col, at.row, TerrainType.Dirt);
+    if (inABed.has(`${at.col},${at.row}`)) continue;
+    // Walked over, not walked round. A border you cannot cross is a wall,
+    // and the beds inside it have to be reachable.
+    const vine = put(grid, FixtureType.ForestVine, at.col, at.row, 1, false);
+    if (!vine) continue;
+    trellis.push(at);
+    placed.push(vine);
   }
 
   // And the wood that has closed over it. Placed *after* the bed is cleared,
@@ -221,12 +288,9 @@ export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove 
   // and marked unbreakable, so the route the world carves to the doorstep
   // cannot do the player's first task for them.
   const thicket: GridPoint[] = [];
-  const overgrown = patchCells({
-    col: bed.col - 1,
-    row: bed.row - 1,
-    width: bed.width + 2,
-    height: bed.height + 2,
-  }).filter((at) => grid.inBounds(at.col, at.row) && !grid.getObjectAt(at.col, at.row));
+  const overgrown = beds
+    .flatMap((bed) => patchCells(bed))
+    .filter((at) => grid.inBounds(at.col, at.row) && !grid.getObjectAt(at.col, at.row));
   for (let n = 0; n < THICKET && overgrown.length > 0; n++) {
     const [at] = overgrown.splice(randInt(rng, 0, overgrown.length - 1), 1);
     if (!at) break;
@@ -239,7 +303,7 @@ export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove 
     placed.push(scrub);
   }
 
-  return { tree, doorstep, bed, thicket, placed };
+  return { tree, doorstep, beds, trellis, thicket, placed };
 }
 
 /**
@@ -279,10 +343,14 @@ export interface GroveProgress {
 
 export function groveProgress(grid: WorldGrid, grove: Grove): GroveProgress {
   const standing = grove.thicket.filter((at) => grid.getObjectAt(at.col, at.row) !== null).length;
-  const cells = patchCells(grove.bed);
-  const ripe = cells.filter(
-    (at) => grid.getCrop(at.col, at.row)?.stage === PlantStage.Mature,
-  ).length;
+  const cells = grove.beds.flatMap((bed) => patchCells(bed));
+  // Sunflowers, and only sunflowers. The tree asks for a particular thing
+  // rather than for anything ripe, which is what makes the errand an errand:
+  // sixteen squares of whatever was to hand is a bed filled by accident.
+  const ripe = cells.filter((at) => {
+    const crop = grid.getCrop(at.col, at.row);
+    return crop?.stage === PlantStage.Mature && crop.plant === GROVE_CROP;
+  }).length;
   const squares = cells.length;
   const task =
     standing > 0

@@ -3,7 +3,14 @@
 
 import { describe, expect, test } from "bun:test";
 import type { AreaPlacement } from "./anchors";
-import { DUSK_FADE_TILES, GroveTask, duskOver, groveProgress, growGrove } from "./enchantedForest";
+import {
+  DUSK_FADE_TILES,
+  GROVE_CROP,
+  GroveTask,
+  duskOver,
+  groveProgress,
+  growGrove,
+} from "./enchantedForest";
 import { FixtureType } from "./fixtures";
 import { WorldGrid } from "./grid";
 import { LandmarkType } from "./landmarks";
@@ -116,17 +123,21 @@ describe("what the great tree asks for", () => {
     for (const at of grove.thicket) grid.removeObjectAt(at.col, at.row);
     const progress = groveProgress(grid, grove);
     expect(progress.task).toBe(GroveTask.Bare);
-    expect({ ripe: progress.ripe, squares: progress.squares }).toEqual({ ripe: 0, squares: 12 });
+    // Four beds of two by two. Two by two is the array spell's own smallest
+    // shape, and four of them is the shape of the spell being bargained for.
+    expect({ ripe: progress.ripe, squares: progress.squares }).toEqual({ ripe: 0, squares: 16 });
+    expect(grove.beds.length).toBe(4);
+    for (const bed of grove.beds) expect({ w: bed.width, h: bed.height }).toEqual({ w: 2, h: 2 });
   });
 
-  // Twelve squares of *ripe*, not twelve of planted. Doing it the long way
-  // is the point: it is the twenty-four number lines the spell will later
-  // skip, done once by hand.
+  // Sixteen squares of *ripe*, not sixteen of planted. Doing it the long way
+  // is the point: it is the number lines the spell will later skip, done
+  // once by hand.
   test("counts ripe squares, not planted ones, and is done at the last of them", () => {
     const { grid, grove } = grown();
     for (const at of grove.thicket) grid.removeObjectAt(at.col, at.row);
-    const cells = patchCells(grove.bed);
-    for (const at of cells) grid.plant(at.col, at.row, PlantType.Carrot);
+    const cells = grove.beds.flatMap((bed) => patchCells(bed));
+    for (const at of cells) grid.plant(at.col, at.row, GROVE_CROP);
     expect(groveProgress(grid, grove).task).toBe(GroveTask.Growing);
     expect(groveProgress(grid, grove).ripe).toBe(0);
 
@@ -143,20 +154,88 @@ describe("what the great tree asks for", () => {
     }
   });
 
-  test("the bed is bare earth, so it reads as a plot and can be planted", () => {
+  /**
+   * It asks for sunflowers, and only sunflowers.
+   *
+   * A tree that would take anything ripe is a tree whose bed gets filled by
+   * accident on the way past — and the errand is the whole reason the spell
+   * is worth having.
+   */
+  test("a bed full of the wrong crop is not a bed full", () => {
     const { grid, grove } = grown();
-    for (const at of patchCells(grove.bed)) {
-      expect(grid.getTerrain(at.col, at.row)).toBe(TerrainType.Dirt);
+    for (const at of grove.thicket) grid.removeObjectAt(at.col, at.row);
+    const cells = grove.beds.flatMap((bed) => patchCells(bed));
+    for (const at of cells) {
+      grid.plant(at.col, at.row, PlantType.Carrot);
+      while (grid.growCrop(at.col, at.row)) {
+        if (grid.getCrop(at.col, at.row)?.stage === PlantStage.Mature) break;
+      }
+    }
+    const progress = groveProgress(grid, grove);
+    expect(progress.ripe).toBe(0);
+    expect(progress.task).toBe(GroveTask.Growing);
+  });
+
+  test("the beds are grass with a trellis round them, not a hole in the clearing", () => {
+    const { grid, grove } = grown();
+    for (const at of grove.beds.flatMap((bed) => patchCells(bed))) {
+      // Grass, because bare earth in a clearing read as a hole in it.
+      expect(grid.getTerrain(at.col, at.row)).toBe(TerrainType.Grass);
       // Under the thicket for now, but the ground itself will take a crop.
-      expect(grid.canPlant(at.col, at.row, PlantType.Carrot)).toBe(true);
+      expect(grid.canPlant(at.col, at.row, GROVE_CROP)).toBe(true);
+    }
+    expect(grove.trellis.length).toBeGreaterThan(0);
+    for (const at of grove.trellis) {
+      const vine = grid.getObjectAt(at.col, at.row);
+      expect({ at: `${at.col},${at.row}`, type: vine?.type }).toEqual({
+        at: `${at.col},${at.row}`,
+        type: FixtureType.ForestVine,
+      });
+      // Walked over, not round: a border you cannot cross is a wall, and the
+      // beds inside it have to be reachable.
+      expect(grid.isPassable(at.col, at.row)).toBe(true);
+    }
+  });
+
+  test("the trellis runs between the beds as well as around them", () => {
+    const { grove } = grown();
+    const vine = new Set(grove.trellis.map((at) => `${at.col},${at.row}`));
+    // Every bed is ringed on all four sides by something that is not another
+    // bed — which is what makes four squares read as four rather than as one
+    // block of sixteen.
+    for (const bed of grove.beds) {
+      for (let col = bed.col; col < bed.col + bed.width; col++) {
+        expect(vine.has(`${col},${bed.row - 1}`)).toBe(true);
+        expect(vine.has(`${col},${bed.row + bed.height}`)).toBe(true);
+      }
+      for (let row = bed.row; row < bed.row + bed.height; row++) {
+        expect(vine.has(`${bed.col - 1},${row}`)).toBe(true);
+        expect(vine.has(`${bed.col + bed.width},${row}`)).toBe(true);
+      }
+    }
+  });
+
+  // The whole point of the change: a ring of wood round a patch of grass,
+  // whatever band the box was placed in.
+  test("the clearing is grass and the ring round it is wood", () => {
+    const { grid, grove } = grown();
+    expect(grid.getTerrain(grove.tree.col, grove.tree.row)).toBe(TerrainType.Grass);
+    for (const at of [
+      { col: BOX.col, row: BOX.row },
+      { col: BOX.col + BOX.width - 1, row: BOX.row },
+      { col: BOX.col, row: BOX.row + BOX.height - 1 },
+      { col: BOX.col + BOX.width - 1, row: BOX.row + BOX.height - 1 },
+    ]) {
+      expect(grid.getTerrain(at.col, at.row)).toBe(TerrainType.Woodland);
     }
   });
 
   // The way in has to stay open: a bed laid across the doorstep would be a
   // tree you could not walk up to until you had done what it asked.
-  test("the bed is beside the way in, not across it", () => {
+  test("the beds are beside the way in, not across it", () => {
     const { grid, grove } = grown();
-    expect(patchCells(grove.bed).some((at) => at.col === grove.doorstep.col)).toBe(false);
+    const cells = grove.beds.flatMap((bed) => patchCells(bed));
+    expect(cells.some((at) => at.col === grove.doorstep.col)).toBe(false);
     expect(grid.isPassable(grove.doorstep.col, grove.doorstep.row)).toBe(true);
   });
 });

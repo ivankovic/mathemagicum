@@ -40,6 +40,8 @@ const RIPE_HEX = 0xd2611b;
 const THICKET_HEX = 0x2f5c1c;
 const BED_CELL = 26;
 const BED_GAP = 3;
+/** Between one bed and the next, where the trellis runs on the ground. */
+const BED_PLOT_GAP = 12;
 /** Coprime with the twelve squares of the bed, so the wood does not clump. */
 const THICKET_STRIDE = 5;
 
@@ -72,7 +74,7 @@ export class GroveLessonPanel extends PagedPanel<GroveBeat> {
    */
   private progress: GroveProgress | null = null;
   /** The shape of the bed, so the picture is the bed and not a grid. */
-  private bed = { rows: 3, columns: 4 };
+  private bed = { rows: 2, columns: 2, beds: 4 };
 
   /** The running total beside each row, and the label under the patch. */
   private readonly totals: Phaser.GameObjects.Text[] = [];
@@ -103,7 +105,7 @@ export class GroveLessonPanel extends PagedPanel<GroveBeat> {
     if (this.isOpen) this.layout();
   }
 
-  setTask(progress: GroveProgress, bed: { rows: number; columns: number }): void {
+  setTask(progress: GroveProgress, bed: { rows: number; columns: number; beds: number }): void {
     this.progress = progress;
     this.bed = bed;
     if (this.isOpen) this.layout();
@@ -171,16 +173,35 @@ export class GroveLessonPanel extends PagedPanel<GroveBeat> {
   private drawBed(rect: PanelRect, top: number, bottom: number): void {
     const progress = this.progress;
     if (!progress) return;
-    const { rows, columns } = this.bed;
+    // Four beds laid out two by two, the way they are laid out on the ground
+    // — one grid of sixteen would be a picture of a different errand, and the
+    // shape of the four is the shape of the spell being bargained for.
+    const { rows, columns, beds } = this.bed;
+    const wide = Math.max(1, Math.round(Math.sqrt(beds)));
     const step = BED_CELL + BED_GAP;
-    const gridW = step * columns - BED_GAP;
-    const gridH = step * rows - BED_GAP;
+    const bedW = step * columns - BED_GAP;
+    const bedH = step * rows - BED_GAP;
+    const gridW = wide * bedW + (wide - 1) * BED_PLOT_GAP;
+    const down = Math.ceil(beds / wide);
+    const gridH = down * bedH + (down - 1) * BED_PLOT_GAP;
     const left = Math.round(rect.centreX - gridW / 2);
     const gridTop = Math.round(top + Math.max(0, (bottom - top - gridH) / 2) - 6);
+    const cellsPerBed = rows * columns;
 
-    for (let n = 0; n < rows * columns; n++) {
-      const x = left + (n % columns) * step;
-      const y = gridTop + Math.floor(n / columns) * step;
+    const cellAt = (n: number) => {
+      const bed = Math.floor(n / cellsPerBed);
+      const within = n % cellsPerBed;
+      return {
+        x: left + (bed % wide) * (bedW + BED_PLOT_GAP) + (within % columns) * step,
+        y:
+          gridTop +
+          Math.floor(bed / wide) * (bedH + BED_PLOT_GAP) +
+          Math.floor(within / columns) * step,
+      };
+    };
+
+    for (let n = 0; n < beds * cellsPerBed; n++) {
+      const { x, y } = cellAt(n);
       this.ink.fillStyle(EARTH_HEX, 1);
       this.ink.fillRect(x, y, BED_CELL, BED_CELL);
       if (n < progress.ripe) {
@@ -188,8 +209,14 @@ export class GroveLessonPanel extends PagedPanel<GroveBeat> {
         this.ink.fillCircle(x + BED_CELL / 2, y + BED_CELL / 2, BED_CELL / 2 - 5);
       }
     }
+    // A rule round each bed rather than round all four: the border on the
+    // ground is a trellis between them as much as around them.
     this.ink.lineStyle(1, RULE_HEX, 1);
-    this.ink.strokeRect(left - 4, gridTop - 4, gridW + 8, gridH + 8);
+    for (let bed = 0; bed < beds; bed++) {
+      const x = left + (bed % wide) * (bedW + BED_PLOT_GAP);
+      const y = gridTop + Math.floor(bed / wide) * (bedH + BED_PLOT_GAP);
+      this.ink.strokeRect(x - 3, y - 3, bedW + 6, bedH + 6);
+    }
 
     // The wood, laid across the bed rather than beside it, one thicket to a
     // square. Stepped by five rather than by one: five and twelve share no
@@ -197,13 +224,11 @@ export class GroveLessonPanel extends PagedPanel<GroveBeat> {
     // instead of filling the first six in a block — which would read as a
     // bed half planted rather than as a bed with wood standing on it.
     if (progress.task === GroveTask.Overgrown) {
-      const cells = Math.max(1, rows * columns);
+      const cells = Math.max(1, beds * cellsPerBed);
       this.ink.fillStyle(THICKET_HEX, 0.92);
       for (let n = 0; n < progress.standing; n++) {
-        const cell = (n * THICKET_STRIDE) % cells;
-        const x = left + (cell % columns) * step + BED_CELL / 2;
-        const y = gridTop + Math.floor(cell / columns) * step + BED_CELL / 2;
-        this.ink.fillCircle(x, y, BED_CELL / 2 - 3);
+        const { x, y } = cellAt((n * THICKET_STRIDE) % cells);
+        this.ink.fillCircle(x + BED_CELL / 2, y + BED_CELL / 2, BED_CELL / 2 - 3);
       }
     }
 

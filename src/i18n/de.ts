@@ -81,6 +81,7 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.GateSide]: noun({ bare: "Tor", gender: "n", plural: "Tore" }),
   [FixtureType.GateSideLower]: noun({ bare: "Tor", gender: "n", plural: "Tore" }),
   [FixtureType.Glowcap]: noun({ bare: "Leuchtpilz", gender: "m", plural: "Leuchtpilze" }),
+  [FixtureType.ForestVine]: noun({ bare: "Ranke", gender: "f", plural: "Ranken" }),
   [FixtureType.Stall]: noun({ bare: "Marktstand", gender: "m", plural: "Marktstände" }),
   [FixtureType.CityWall]: noun({ bare: "Stadtmauer", gender: "f", plural: "Stadtmauern" }),
   [FixtureType.CityWallSide]: noun({ bare: "Stadtmauer", gender: "f", plural: "Stadtmauern" }),
@@ -237,11 +238,11 @@ export const DE: Phrases = {
 
   groveAsks: ({ task, standing, ripe, squares }) =>
     task === "overgrown"
-      ? `Das Gehölz hat mein Beet überwuchert. Nimm die ${standing} weg, die noch stehen.`
+      ? `Das Gehölz hat meine Beete überwuchert. Nimm die ${standing} weg, die noch stehen.`
       : task === "done"
         ? "Mein Hain ist voll. Geh in Frieden."
-        : `Füll mein Beet: ${ripe} von ${squares} Kästchen sind reif.`,
-  groveTaskTitle: "Das Beet des Baums",
+        : `Füll meine Beete mit Sonnenblumen: ${ripe} von ${squares} Kästchen sind reif.`,
+  groveTaskTitle: "Die Beete des Baums",
   groveBargain: "Tu das, und die sechs Punkte gehören dir.",
   groveLessonTitle: "Reihen und Spalten",
   groveRune:

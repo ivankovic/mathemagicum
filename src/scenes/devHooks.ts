@@ -279,6 +279,14 @@ export interface DevHandle {
    */
   readonly armed: () => string | null;
   /**
+   * The great tree's doorstep, so a script can go and look at the grove.
+   *
+   * It is the one place in the world that is neither a building's door nor a
+   * village anchor, and a script that wanted to see it was reduced to
+   * guessing at the map.
+   */
+  readonly grove: () => { col: number; row: number };
+  /**
    * The fire in the room she is standing in: where it is and how brightly it
    * is throwing light, or null if there is no room, no fireplace, or no
    * night to see it against.

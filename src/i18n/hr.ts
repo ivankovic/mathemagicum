@@ -138,6 +138,7 @@ const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
     few: "svjetlarke",
     many: "svjetlarki",
   },
+  [FixtureType.ForestVine]: { one: "vriježa", acc: "vriježu", few: "vriježe", many: "vriježa" },
   [FixtureType.Stall]: { one: "tezga", acc: "tezgu", few: "tezge", many: "tezgi" },
   // World generation's, and never counted, so the adjective is left in the
   // form it takes when the thing is simply named.
@@ -323,11 +324,11 @@ export const HR: Phrases = {
 
   groveAsks: ({ task, standing, ripe, squares }) =>
     task === "overgrown"
-      ? `Šuma mi je prekrila gredicu. Ukloni ${standing} što još stoje.`
+      ? `Šuma mi je prekrila gredice. Ukloni ${standing} što još stoje.`
       : task === "done"
         ? "Moj je gaj pun. Sretno ti bilo."
-        : `Napuni mi gredicu: zrelo je ${ripe} od ${squares} polja.`,
-  groveTaskTitle: "Gredica starog drveta",
+        : `Napuni mi gredice suncokretima: zrelo je ${ripe} od ${squares} polja.`,
+  groveTaskTitle: "Gredice starog drveta",
   groveBargain: "Učini to i šest točkica su tvoje.",
   groveLessonTitle: "Redovi i stupci",
   groveRune:
