@@ -203,6 +203,8 @@ export const DE: Phrases = {
 
   titleTagline: "Ein Garten, und das Rechnen, das ihn wachsen lässt",
   titleLoading: "wird geladen…",
+  titleLoadingWhat: (done, total, what) => `lädt ${done}/${total} — ${what}`,
+  titleLoadFailed: (what) => `konnte nicht geladen werden: ${what}`,
   titlePlay: "tipp irgendwo, um zu beginnen",
 
   mapTitle: "Karte der Welt",

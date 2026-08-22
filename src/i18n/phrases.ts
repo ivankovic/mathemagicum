@@ -73,6 +73,18 @@ export interface Phrases {
   titleTagline: string;
   /** What the bar is doing. */
   titleLoading: string;
+  /**
+   * And what it is doing *now*: how far through, and the last thing to
+   * arrive.
+   *
+   * "loading…" on its own is fine right up until it stops, and then it is
+   * the least useful line on the screen — a load that has stalled looks
+   * exactly like a load that is slow. `what` is the loader's own key for a
+   * file, which is not a word in any language and is not translated.
+   */
+  titleLoadingWhat: (done: number, total: number, what: string) => string;
+  /** Something did not arrive at all. */
+  titleLoadFailed: (what: string) => string;
   /** And what to do once it has finished. */
   titlePlay: string;
 

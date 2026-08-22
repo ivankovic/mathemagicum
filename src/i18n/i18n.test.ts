@@ -51,6 +51,8 @@ function sample(p: Phrases): Record<string, string> {
 
     titleTagline: p.titleTagline,
     titleLoading: p.titleLoading,
+    titleLoadingWhat: p.titleLoadingWhat(3, 40, "terrain-atlas"),
+    titleLoadFailed: p.titleLoadFailed("assets/ui/flag_hr.png"),
     titlePlay: p.titlePlay,
 
     mapTitle: p.mapTitle,

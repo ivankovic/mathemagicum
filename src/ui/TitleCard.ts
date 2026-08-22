@@ -23,6 +23,8 @@ import type { Phrases } from "../i18n/phrases";
 const GROUND = 0x12100f;
 const INK = "#f6e8c4";
 const INK_DIM = "#a8916a";
+/** The one red in the game, and the same one a refused action is marked in. */
+const FAILED = "#d8342a";
 const BAR_TRACK = 0x3a2f22;
 const BAR_FILL = 0xc8901c;
 const BAR_EDGE = 0x6a5334;
@@ -44,6 +46,8 @@ export class TitleCard {
   private readonly title: Phaser.GameObjects.Text;
   private readonly tagline: Phaser.GameObjects.Text;
   private readonly prompt: Phaser.GameObjects.Text;
+  /** Set once something has failed to load, and never unset. */
+  private failed = false;
   private readonly bar: Phaser.GameObjects.Graphics;
 
   private progress = 0;
@@ -75,11 +79,36 @@ export class TitleCard {
     this.drawBar();
   }
 
+  /**
+   * What the loader is doing, under the bar.
+   *
+   * It said only "loading…" for a long time, which is fine right up until it
+   * stops — and then it is the least useful line on the screen. A load that
+   * has stalled looks exactly like a load that is slow, and neither the
+   * player nor anybody they report it to can tell which.
+   *
+   * Ignored once the card is ready: the prompt is the invitation to begin by
+   * then, and a late loader event overwriting it would leave the game asking
+   * to be tapped without saying so.
+   */
+  setStatus(text: string): void {
+    if (this.done) return;
+    this.prompt.setText(text);
+  }
+
+  /** Something did not arrive. Named, and in the colour of a refusal. */
+  setFailure(text: string): void {
+    this.failed = true;
+    this.prompt.setText(text).setColor(FAILED);
+  }
+
   /** Everything is loaded: swap the bar for the prompt to begin. */
   ready(): void {
     this.done = true;
     this.progress = 1;
-    this.prompt.setText(this.words.titlePlay).setColor(INK);
+    // Not over a failure: if something did not arrive, saying "tap to
+    // begin" is an invitation into a game that is missing a piece.
+    if (!this.failed) this.prompt.setText(this.words.titlePlay).setColor(INK);
     this.drawBar();
   }
 

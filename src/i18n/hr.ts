@@ -288,6 +288,8 @@ export const HR: Phrases = {
 
   titleTagline: "Vrt, i računanje koje ga uzgaja",
   titleLoading: "učitavanje…",
+  titleLoadingWhat: (done, total, what) => `učitavanje ${done}/${total} — ${what}`,
+  titleLoadFailed: (what) => `nije se moglo učitati: ${what}`,
   titlePlay: "dodirni bilo gdje za početak",
 
   mapTitle: "Karta svijeta",

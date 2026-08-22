@@ -4,7 +4,7 @@
 import Phaser from "phaser";
 import { AVATAR_CATALOGUE_KEY } from "../avatar/texture";
 import { phrasesFor } from "../i18n";
-import { browserStore, readSettings, settingsWithOverrides } from "../settings";
+import { DEFAULT_SETTINGS, browserStore, readSettings, settingsWithOverrides } from "../settings";
 import { TitleCard } from "../ui/TitleCard";
 import { UI_ASSETS, UI_SIDECAR_KEY, type UiIndex, uiEntry, uiTextureKey } from "../ui/assets";
 import { barFraction } from "../ui/loadingBar";
@@ -45,6 +45,10 @@ export function sidecarKey(sprite: BuildingSprite): string {
 // a building grows a taller roof.
 export class BootScene extends Phaser.Scene {
   private card?: TitleCard;
+  /** The book the card is written in, kept so the loader can talk too. */
+  private words = phrasesFor(DEFAULT_SETTINGS.language);
+  /** The key of the last thing to arrive, for the line under the bar. */
+  private lastFile = "";
   /**
    * How much of the bar the first pass is worth.
    *
@@ -73,7 +77,8 @@ export class BootScene extends Phaser.Scene {
     const settings = settingsWithOverrides(readSettings(browserStore(), navigator.language), {
       language: dev.language,
     });
-    this.card = new TitleCard(this, phrasesFor(settings.language));
+    this.words = phrasesFor(settings.language);
+    this.card = new TitleCard(this, this.words);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.relayout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, this.relayout, this);
@@ -86,6 +91,7 @@ export class BootScene extends Phaser.Scene {
     // pipe is the same width either way, but a queue that finishes files one
     // after another is a queue a bar can report on.
     this.load.maxParallelDownloads = 6;
+    this.watchTheLoader();
     this.trackProgress(0, BootScene.SIDECAR_SHARE);
 
     for (const sprite of BUILDING_SPRITES) {
@@ -212,8 +218,19 @@ export class BootScene extends Phaser.Scene {
       this.load.image(uiTextureKey(asset), `${this.base()}assets/ui/${entry.file}`);
     }
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
-      this.verifyFrameCounts();
-      this.verifyUiSizes(uiIndex);
+      // Inside the guard, because both of these throw by design when the art
+      // and the code disagree — and a throw here left the card sitting at
+      // "loading…" for ever, which is the same symptom as a file that never
+      // arrived and an entirely different fault.
+      try {
+        this.verifyFrameCounts();
+        this.verifyUiSizes(uiIndex);
+      } catch (wrong) {
+        this.card?.setFailure(
+          this.words.titleLoadFailed(wrong instanceof Error ? wrong.message : String(wrong)),
+        );
+        throw wrong;
+      }
       this.begin();
     });
     this.load.start();
@@ -239,6 +256,15 @@ export class BootScene extends Phaser.Scene {
         high,
       );
       this.card?.setProgress(high);
+      // What it is doing, under the bar. "loading…" on its own is fine right
+      // up until it stops, and then it is the least useful line on the
+      // screen: a load stuck at a hundred and twelve of a hundred and
+      // fourteen looks exactly like a load that is slow. The count is how
+      // many requests are outstanding and the name is the last thing that
+      // arrived, and between them they say where it stopped.
+      this.card?.setStatus(
+        this.words.titleLoadingWhat(loader.totalComplete, loader.totalToLoad, this.lastFile),
+      );
     };
     // Off first: this runs once per pass, on the same loader, and a listener
     // left over from the previous pass repaints the bar with the previous
@@ -246,6 +272,26 @@ export class BootScene extends Phaser.Scene {
     // full bar and a sixth of one.
     loader.off(Phaser.Loader.Events.PROGRESS);
     loader.on(Phaser.Loader.Events.PROGRESS, paint);
+  }
+
+  /**
+   * Name what arrives, and name what does not.
+   *
+   * Set up once on the loader rather than per pass, because the question a
+   * stuck load raises — *what was it waiting for?* — does not care which
+   * pass it stuck in.
+   */
+  private watchTheLoader(): void {
+    const loader = this.load;
+    loader.on(Phaser.Loader.Events.FILE_COMPLETE, (key: string) => {
+      this.lastFile = key;
+    });
+    loader.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: { key?: string; url?: string }) => {
+      // The URL rather than the key: a key says which texture is missing and
+      // a URL says which file to go and look for, and the second is what
+      // anybody debugging this from a screenshot actually needs.
+      this.card?.setFailure(this.words.titleLoadFailed(file.url ?? file.key ?? "?"));
+    });
   }
 
   /**
