@@ -89,6 +89,17 @@ export const FixtureType = {
    */
   ForestVine: "forest-vine",
   /**
+   * The same creeper running away from the camera, and its two corners.
+   *
+   * Directional, the way the garden fence is: a stem with leaves off it has
+   * to know which way it is going, and a border has corners. The other two
+   * corners are these mirrored — `Corner` turns down and is the top of a
+   * bed, `CornerUp` turns up and is the bottom.
+   */
+  ForestVineSide: "forest-vine-side",
+  ForestVineCorner: "forest-vine-corner",
+  ForestVineCornerUp: "forest-vine-corner-up",
+  /**
    * The big city's ring wall, in the same four pieces the garden fence
    * comes in: a run across the camera, a run away from it, and a gateway in
    * each.

@@ -291,14 +291,35 @@ export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove 
       };
       beds.push(bed);
       const inTheBed = new Set(patchCells(bed).map((at) => `${at.col},${at.row}`));
+      const lastCol = block.col + block.width - 1;
+      const lastRow = block.row + block.height - 1;
       for (const at of patchCells(block)) {
         if (!grid.inBounds(at.col, at.row)) continue;
         pull(at.col, at.row);
         if (inTheBed.has(`${at.col},${at.row}`)) continue;
+        // Which piece of creeper this cell is. The vine is directional — a
+        // stem with leaves off it has to know which way it is going — so a
+        // border is four runs and four corners, and the two right-hand
+        // corners are the two left-hand ones mirrored.
+        const onLeft = at.col === block.col;
+        const onRight = at.col === lastCol;
+        const onTop = at.row === block.row;
+        const onBottom = at.row === lastRow;
+        const corner = (onLeft || onRight) && (onTop || onBottom);
+        const type = corner
+          ? onTop
+            ? FixtureType.ForestVineCorner
+            : FixtureType.ForestVineCornerUp
+          : onLeft || onRight
+            ? FixtureType.ForestVineSide
+            : FixtureType.ForestVine;
         // Walked over, not walked round. A border you cannot cross is a
         // wall, and the bed inside it has to be reachable.
-        const vine = put(grid, FixtureType.ForestVine, at.col, at.row, 1, false);
+        const vine = put(grid, type, at.col, at.row, 1, false);
         if (!vine) continue;
+        // The drawn corner comes in from its right, so the left-hand ones
+        // are the mirror — the same rule the fence's side runs follow.
+        vine.flip = corner && onLeft;
         trellis.push(at);
         placed.push(vine);
       }

@@ -185,11 +185,19 @@ describe("what the great tree asks for", () => {
       expect(grid.canPlant(at.col, at.row, GROVE_CROP)).toBe(true);
     }
     expect(grove.trellis.length).toBeGreaterThan(0);
+    // Any of the four pieces: the creeper is directional, so a border is
+    // runs and corners rather than one tile repeated.
+    const vines: readonly string[] = [
+      FixtureType.ForestVine,
+      FixtureType.ForestVineSide,
+      FixtureType.ForestVineCorner,
+      FixtureType.ForestVineCornerUp,
+    ];
     for (const at of grove.trellis) {
       const vine = grid.getObjectAt(at.col, at.row);
-      expect({ at: `${at.col},${at.row}`, type: vine?.type }).toEqual({
+      expect({ at: `${at.col},${at.row}`, vine: vines.includes(vine?.type ?? "") }).toEqual({
         at: `${at.col},${at.row}`,
-        type: FixtureType.ForestVine,
+        vine: true,
       });
       // Walked over, not round: a border you cannot cross is a wall, and the
       // beds inside it have to be reachable.
@@ -277,6 +285,41 @@ describe("what the great tree asks for", () => {
     const progress = groveProgress(grid, grove);
     expect(progress.ripe).toBe(1);
     expect(progress.ripeAt).toEqual([cells.length - 1]);
+  });
+
+  /**
+   * Corners at the corners and runs along the sides.
+   *
+   * The creeper is directional — a stem with leaves off it has to know which
+   * way it is going — so a border laid with one tile repeated is a border
+   * with four broken corners, which is what the undirected one had instead
+   * of corners at all.
+   */
+  test("each bed's border turns at its corners and runs along its sides", () => {
+    const { grid, grove } = grown();
+    for (const bed of grove.beds) {
+      const at = (col: number, row: number) => grid.getObjectAt(col, row)?.type;
+      const left = bed.col - 1;
+      const right = bed.col + bed.width;
+      const top = bed.row - 1;
+      const bottom = bed.row + bed.height;
+      expect(at(left, top)).toBe(FixtureType.ForestVineCorner);
+      expect(at(right, top)).toBe(FixtureType.ForestVineCorner);
+      expect(at(left, bottom)).toBe(FixtureType.ForestVineCornerUp);
+      expect(at(right, bottom)).toBe(FixtureType.ForestVineCornerUp);
+      for (let col = bed.col; col < right; col++) {
+        expect(at(col, top)).toBe(FixtureType.ForestVine);
+        expect(at(col, bottom)).toBe(FixtureType.ForestVine);
+      }
+      for (let row = bed.row; row < bottom; row++) {
+        expect(at(left, row)).toBe(FixtureType.ForestVineSide);
+        expect(at(right, row)).toBe(FixtureType.ForestVineSide);
+      }
+      // The drawn corner comes in from its right, so the left-hand pair are
+      // the mirror. Two unmirrored corners would both turn the same way.
+      expect(grid.getObjectAt(left, top)?.flip).toBe(true);
+      expect(grid.getObjectAt(right, top)?.flip).toBe(false);
+    }
   });
 
   test("the trellis runs between the beds as well as around them", () => {
