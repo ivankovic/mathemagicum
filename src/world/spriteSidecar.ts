@@ -180,19 +180,20 @@ export interface InteriorSidecar {
   wall_rise_px: number;
   door_cell: readonly [number, number];
   blocked_cells: readonly (readonly [number, number])[];
-  furniture: readonly {
-    name: string;
-    cell: readonly [number, number];
-    blocks: boolean;
-    /**
-     * What kind of light this piece gives off, if it gives any.
-     *
-     * The kind rather than a colour, because how a light behaves is not only
-     * what colour it is — a fire flickers, an orb breathes, an electric lamp
-     * does neither. See `LightKind`.
-     */
-    light?: string;
-  }[];
+  furniture: readonly { name: string; cell: readonly [number, number]; blocks: boolean }[];
+  /**
+   * Everywhere the room gives off light, and what kind each is.
+   *
+   * The kind rather than a colour, because how a light behaves is not only
+   * what colour it is — a fire flickers, an orb breathes, an electric lamp
+   * does neither. See `LightKind`.
+   *
+   * Mostly nothing is drawn for these. A shop's lamps were painted on the
+   * wall once and at nine pixels they read worse than the light alone, so
+   * what is shipped is where the light *is*. The hearth is the exception and
+   * comes off the furniture, because a fire is a thing you can see.
+   */
+  lights?: readonly { kind: string; cell: readonly [number, number] }[];
   /**
    * Which columns of the north wall a window takes up.
    *

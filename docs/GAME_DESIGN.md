@@ -1535,32 +1535,33 @@ them against each other in both directions — a fireplace with one frame is a
 fire that does not burn, and eight frames with no fireplace is something
 moving that the game cannot find to light.
 
-**And every room is lit the way that room is lit.** A house has a fire; the
-store has bracket lanterns on the wall, a flame behind glass; the school has
-a tube in a metal fitting, in the chalk white, because it is the one room
-here lit to be *worked* in; and the tower has orbs floating over the floor.
+**And every room is lit the way that room is lit.** A house has a fire. The
+store has warm lamplight along the wall between the stock; the school is lit
+cold and even, because it is the one room here lit to be *worked* in; the
+tower has two pools of something blue on the flagstones. The ship's hold and
+the observatory's dome stay dark, and that is a decision rather than an
+omission — a hold has no business being lit, and the dome is the one room in
+the game meant to be dim, because it is where somebody looks at the sky from.
+
 Every store in the game is the barn's room, so that is the harbour's and the
 city's lighting as well as the village's.
 
-Three different **shapes** of light rather than one lamp in three colours.
-What tells a child that a classroom is lit differently from a shop is the
-silhouette before it is the hue — and the behaviour follows: the fire moves
-with its own flame, the lantern wavers a little, the orbs breathe slowly, and
-the electric lamp does not move at all, because nothing electric does.
+**Nothing is drawn for most of it.** The first attempt painted the fixtures:
+bracket lanterns, a tube in a metal fitting, floating orbs. At nine pixels
+they were fiddly little objects that read worse than the light did on its
+own, so they came out again and what is shipped is *where the light is*. A
+warm pool on a shop floor says "lamp" better than nine pixels of lamp do. The
+hearth is the exception, because a fire is a thing you can see, and its light
+is taken off the fireplace rather than written down beside it.
 
-The ship's hold and the observatory's dome stay dark, and that is a decision
-rather than an omission. A hold has no business being lit, and the dome is
-the one room in the game meant to be dim, because it is where somebody looks
-at the sky from.
+The differences are colour and movement: the fire moves with its own flame,
+the shop's lamplight wavers a little, the tower's breathes slowly, and the
+school's does not move at all, because nothing electric does.
 
-The generator says which piece of furniture gives light and what *kind* it
-is; this side decides what a kind looks like after dark. So a room somebody
-relights needs nothing changed here — and a kind the game has not learned is
-drawn as nothing at all rather than guessed at in some default colour.
-
-None of the three new fixtures animates. A lamp that is on is a lamp that is
-on, and moving the *glow* over an orb costs nothing and keeps three of the
-seven rooms at a single frame instead of eight nearly identical ones.
+The generator says where a light is and what *kind* it is; this side decides
+what a kind looks like after dark. So a room somebody relights needs nothing
+changed here — and a kind the game has not learned is drawn as nothing at all
+rather than guessed at in some default colour.
 
 **And the village lights up from the inside.** A house with a fire in it has
 lit windows after dark — the same warm colour as the hearth, because it is

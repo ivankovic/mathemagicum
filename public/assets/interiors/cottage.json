@@ -157,8 +157,7 @@
         2,
         1
       ],
-      "blocks": true,
-      "light": "fire"
+      "blocks": true
     },
     {
       "name": "bookshelf",
@@ -219,6 +218,15 @@
         2
       ],
       "blocks": false
+    }
+  ],
+  "lights": [
+    {
+      "kind": "fire",
+      "cell": [
+        1,
+        1
+      ]
     }
   ],
   "window_columns": [

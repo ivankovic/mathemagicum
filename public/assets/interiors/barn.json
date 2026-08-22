@@ -226,32 +226,22 @@
         1
       ],
       "blocks": true
-    },
+    }
+  ],
+  "lights": [
     {
-      "name": "walllamp",
+      "kind": "lamp",
       "cell": [
         1,
         3
-      ],
-      "footprint": [
-        1,
-        1
-      ],
-      "blocks": false,
-      "light": "lamp"
+      ]
     },
     {
-      "name": "walllamp",
+      "kind": "lamp",
       "cell": [
         1,
         5
-      ],
-      "footprint": [
-        1,
-        1
-      ],
-      "blocks": false,
-      "light": "lamp"
+      ]
     }
   ],
   "window_columns": [

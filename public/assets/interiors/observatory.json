@@ -288,6 +288,7 @@
       "blocks": true
     }
   ],
+  "lights": [],
   "window_columns": [],
   "palette": {
     "wall_dark": [

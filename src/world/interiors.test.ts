@@ -385,9 +385,9 @@ describe("what else a room is lit by", () => {
    */
   test("a light this game does not know is not drawn", () => {
     const made = room({
-      furniture: [
-        { name: "candle", cell: [2, 2], blocks: false, light: "candle" },
-        { name: "fireplace", cell: [1, 1], blocks: true, light: "fire" },
+      lights: [
+        { kind: "candle", cell: [2, 2] },
+        { kind: "fire", cell: [1, 1] },
       ],
     });
     expect(roomLights(made).map((light) => light.kind)).toEqual([LightKind.Fire]);
@@ -396,9 +396,7 @@ describe("what else a room is lit by", () => {
   // `[row, col]`, which is the sidecar's order and the wrong way round from
   // every function that takes one.
   test("cells come out the way round the rest of the game wants them", () => {
-    const made = room({
-      furniture: [{ name: "orb", cell: [5, 2], blocks: false, light: "orb" }],
-    });
+    const made = room({ lights: [{ kind: "orb", cell: [5, 2] }] });
     expect(roomLights(made)[0]?.cell).toEqual({ col: 2, row: 5 });
   });
 

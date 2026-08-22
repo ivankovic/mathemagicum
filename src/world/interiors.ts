@@ -105,9 +105,14 @@ export function lightBreath(elapsedMs: number, periodMs: number, depth: number):
  * Everything in a room that gives off light, and what kind each is.
  *
  * Read off the furniture rather than written down per room, for the reason
- * `wallHangingCell` is: where a hearth and a lamp are is a fact about the
- * picture, and a coordinate typed in here would go on being right only until
- * somebody rearranged the room.
+ * `wallHangingCell` is: where the light in a room falls is a fact the
+ * generator settles, and a coordinate typed in here would go on being right
+ * only until somebody rearranged the room.
+ *
+ * Most have nothing drawn for them. A shop's lamps were painted on the wall
+ * once and at nine pixels read worse than the light alone, so what is
+ * shipped is where the light *is*. The hearth is the exception, and the only
+ * one the generator takes off a piece of furniture.
  *
  * A kind this game does not know is dropped rather than drawn in some
  * default colour. A generator that learns to draw a candle should not have
@@ -115,12 +120,12 @@ export function lightBreath(elapsedMs: number, periodMs: number, depth: number):
  */
 export function roomLights(sidecar: InteriorSidecar): readonly RoomLight[] {
   const lights: RoomLight[] = [];
-  for (const piece of sidecar.furniture ?? []) {
-    if (!piece.light || !KINDS.has(piece.light)) continue;
+  for (const light of sidecar.lights ?? []) {
+    if (!KINDS.has(light.kind)) continue;
     // `[row, col]`, as everywhere in a sidecar.
     lights.push({
-      kind: piece.light as LightKind,
-      cell: { col: piece.cell[1], row: piece.cell[0] },
+      kind: light.kind as LightKind,
+      cell: { col: light.cell[1], row: light.cell[0] },
     });
   }
   return lights;
