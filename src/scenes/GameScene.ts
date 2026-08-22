@@ -407,6 +407,22 @@ const HEARTH_GLOW_ALPHA = 0.72;
  */
 const HEARTH_FLICKER = 0.18;
 /**
+ * The great tree, while it is still asking for something.
+ *
+ * Wide and faint: it is a canopy catching light rather than a lamp under
+ * one, so it is nearly the size of the crown and never bright enough to
+ * flatten the leaves under it. Four seconds to a breath, slower than
+ * anything else here — a fire flickers and an orb breathes, and this is a
+ * tree, and it is asking rather than burning.
+ */
+const TREE_LIGHT_RADIUS = 92;
+const TREE_GLOW_COLOR = 0xbfffdd;
+const TREE_GLOW_ALPHA = 0.34;
+const TREE_BREATH_MS = 4000;
+const TREE_BREATH = 0.55;
+/** How far above the anchor the crown is, in screen pixels. */
+const TREE_GLOW_RISE = 96;
+/**
  * The other three lights a room can have, and how each behaves.
  *
  * Radius, colour and how much it moves. A shop's lantern is a flame behind
@@ -505,7 +521,15 @@ const FIXTURE_ANIM_FPS = 5;
 const SCENERY_ANIM_FPS = 4;
 // Slower still. A crown five people tall does not move at a sapling's rate,
 // and the lights in it breathe rather than blink.
-const LANDMARK_ANIM_FPS = 3;
+/**
+ * Twice what it was, because the sheets have twice the frames.
+ *
+ * The cycle stays the length it was — a couple of seconds of sway — and each
+ * step is half the size, which is the whole of what "smoother" means here.
+ * Leaving this at three would have doubled the cycle instead and given a
+ * tree that moves like something underwater.
+ */
+const LANDMARK_ANIM_FPS = 6;
 
 /**
  * How dark the enchanted forest is at its darkest hour of the day: noon.
@@ -1137,6 +1161,19 @@ export class GameScene extends Phaser.Scene {
   private worldGrid!: WorldGrid;
   private anchors!: AnchorPlacements;
   private grove!: Grove;
+  /**
+   * The light over the great tree while it is still asking for something.
+   *
+   * The one thing in the world that says a quest is open, and it says it
+   * without a word or a mark — the tree simply breathes. It goes out the
+   * moment the last bed is filled, which is the only announcement the game
+   * makes about having finished it besides the rune.
+   *
+   * Additive over everything, unlike the night lights, because a tree that
+   * only glowed after dark would be a tree that asked for nothing all
+   * morning.
+   */
+  private treeGlow?: Phaser.GameObjects.Image;
   private city!: CityLayout;
   private observatory: Observatory | null = null;
   private harbourFront: HarbourLayout | null = null;
@@ -1477,6 +1514,8 @@ export class GameScene extends Phaser.Scene {
     this.optionsPanel.onChange = (next) => this.applySettings(next);
     this.optionsPanel.onOpenGame = (id) => this.openAnotherGame(id);
     this.optionsPanel.onDeleteGame = (id) => this.throwGameAway(id);
+    this.treeGlow = this.newGlow(TREE_GLOW_COLOR);
+    this.checkGrove();
     this.aboutPanel = new AboutPanel(this, uiIndex, MODAL_DEPTH + 2, this.words, (object) =>
       this.ui(object),
     );
@@ -2013,9 +2052,50 @@ export class GameScene extends Phaser.Scene {
         .setDisplaySize(LAMP_LIGHT_RADIUS * 2, LAMP_LIGHT_RADIUS * 2)
         .setAlpha(strength * LAMP_GLOW_ALPHA);
     }
+    this.paintTree();
     this.paintHearth(strength);
     this.paintRoomLights(strength);
     this.paintWindows(strength);
+  }
+
+  /**
+   * The great tree, breathing while it still wants something.
+   *
+   * Slower than anything else that pulses here — a fire flickers, an orb
+   * breathes at two and a half seconds, and this takes four. It is a tree,
+   * and it is asking rather than burning.
+   *
+   * Drawn over the crown rather than the trunk: the crown is the part of it
+   * anybody looks at, and a glow at the foot would light the grass instead
+   * of the tree.
+   */
+  private paintTree(): void {
+    const glow = this.treeGlow;
+    if (!glow) return;
+    if (this.interior || this.groveDone) {
+      glow.setVisible(false);
+      return;
+    }
+    const at = this.screenOf(this.grove.tree.col + 1, this.grove.tree.row);
+    glow
+      .setVisible(true)
+      .setPosition(at.x, at.y - TREE_GLOW_RISE)
+      .setDisplaySize(TREE_LIGHT_RADIUS * 2, TREE_LIGHT_RADIUS * 2)
+      .setAlpha(TREE_GLOW_ALPHA * lightBreath(this.time.now, TREE_BREATH_MS, TREE_BREATH));
+  }
+
+  /**
+   * Whether the tree has what it asked for, cached between frames.
+   *
+   * `groveProgress` walks the thicket and every square of four beds, which
+   * is nothing at all once and something to think about sixty times a
+   * second. It changes only when the player clears wood or ripens a crop, so
+   * it is recomputed when the world is touched rather than when it is drawn.
+   */
+  private groveDone = false;
+
+  private checkGrove(): void {
+    this.groveDone = groveProgress(this.worldGrid, this.grove).task === GroveTask.Done;
   }
 
   /**
@@ -4293,6 +4373,11 @@ export class GameScene extends Phaser.Scene {
 
   /** Lift what stood there out of the world, sprite and all. */
   private clearAt(col: number, row: number): void {
+    // The tree's light goes out when the last bed is filled, and clearing
+    // wood is one of the two things that can get there. Asked here rather
+    // than every frame: `groveProgress` walks the thicket and sixteen
+    // squares, which is nothing once and something sixty times a second.
+    this.time.delayedCall(0, () => this.checkGrove());
     const object = this.session.clearAt(col, row);
     if (!object) return;
     // The sprite lives in its chunk's bucket, so both have to forget it —
@@ -4604,6 +4689,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private growCropAt(col: number, row: number): void {
+    // And ripening a crop is the other. See `clearAt`.
+    this.time.delayedCall(0, () => this.checkGrove());
     const result = this.session.growAt(col, row);
     if (!result.ok || !result.crop) return;
     // The plus lands on the tile it is being added to, which is the whole of

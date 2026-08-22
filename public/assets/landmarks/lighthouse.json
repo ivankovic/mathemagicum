@@ -3,8 +3,8 @@
     "file": "lighthouse_sheet.png",
     "frame_width": 96,
     "frame_height": 240,
-    "frame_count": 8,
-    "columns": 8,
+    "frame_count": 16,
+    "columns": 16,
     "rows": 1,
     "margin": 1,
     "spacing": 2
@@ -41,12 +41,12 @@
     "width": 96,
     "height": 240
   },
-  "frame_count": 8,
+  "frame_count": 16,
   "animations": {
     "idle": {
       "start": 0,
-      "end": 7,
-      "frame_count": 8
+      "end": 15,
+      "frame_count": 16
     }
   }
 }

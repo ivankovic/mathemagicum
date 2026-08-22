@@ -1756,6 +1756,31 @@ The night sheet is hidden rather than left at alpha zero, for the same
 reason: a transparent screen-sized rectangle is still a screen-sized
 rectangle to a renderer, and two thirds of every day is daytime.
 
+### The tree that is still asking
+
+**It breathes while the errand is open.** A wide, faint light over the crown,
+four seconds to a breath — slower than anything else that pulses in this game,
+because a fire flickers and an orb breathes and this is a tree, and it is
+asking rather than burning. It goes out the moment the last bed is filled,
+which is the only announcement the game makes about having finished besides
+the rune itself.
+
+Additive over everything rather than over the night tint, unlike the lamps and
+the hearths: a tree that only glowed after dark would be a tree that asked for
+nothing all morning.
+
+Whether it is still asking is worked out when the world is *touched* — when
+wood is cleared or a crop ripens — rather than when it is drawn. Reading the
+answer walks the thicket and sixteen squares, which is nothing at all once and
+something to think about sixty times a second.
+
+**And the sway is sixteen frames now, not eight.** A landmark's cycle is a
+couple of seconds long, and eight frames over that is three or four distinct
+positions a second, which a tree the height of a house does not get away with —
+it read as a stutter rather than as wind. Everything here sways off a
+continuous curve, so more frames is a finer sample of the same motion: the same
+distance in the same time, in twice as many steps.
+
 ### The way into a garden
 
 **Three cells wide, and made of two gates with a gap between them.** It was
