@@ -423,11 +423,17 @@ times over is worth one cast.
 
 **The beds are grass with a vine round them**, not bare earth. Earth in a
 clearing read as a hole in the grass rather than as somebody's plot; a
-trellis says *plot* without taking the grass away. It is one seven-by-seven
-block — vine, bed, vine, bed, vine — so the border runs between the four
-squares as well as around them, which is what makes them read as four rather
-than as one block of sixteen. It is walked over, not walked round: a border
-you cannot cross is a wall, and the beds inside it have to be reachable.
+trellis says *plot* without taking the grass away.
+
+**One at each corner around the tree**, each a two-by-two inside its own ring
+of vine. The first attempt was a single seven-by-seven block holding all four,
+and it sat down and to the left of the trunk — which reads as a plot somebody
+put beside the tree rather than as the tree's own. Four corners puts the tree
+in the middle of what it asked for. They sit outside the ring of glowcaps, so
+neither those nor the doorstep below the trunk is ever underneath one.
+
+The vine is walked over, not walked round: a border you cannot cross is a
+wall, and the bed inside it has to be reachable.
 
 **And the clearing is always the same picture**: a ring of woodland round a
 patch of grass, made rather than inherited. It used to take the terrain of

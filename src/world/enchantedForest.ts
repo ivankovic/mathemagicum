@@ -63,9 +63,16 @@ const SCATTERED_LIGHTS = 14;
 export const GROVE_CROP = PlantType.Sunflower;
 
 const BED_SIDE = 2;
-const BEDS_ACROSS = 2;
-/** Vine, bed, vine, bed, vine. */
-const TRELLIS = BEDS_ACROSS * BED_SIDE + BEDS_ACROSS + 1;
+/** Vine, bed, vine: one bed and the border round it. */
+const TRELLIS = BED_SIDE + 2;
+/**
+ * How far out along each axis the near corner of a block sits.
+ *
+ * Beyond the ring of lights, which stands at RING_RADIUS and has its
+ * diagonals a pixel inside that — so at four the corners would be sitting on
+ * them, and `pull` would take four of the eight lights away to make room.
+ */
+const BED_REACH = 4;
 /** How much wood has closed over it, in cells. */
 const THICKET = 6;
 
@@ -250,37 +257,52 @@ export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove 
 
   // --- what the tree asks for ---------------------------------------------
 
-  // The trellis, west of the doorstep so the way in stays open: one
-  // seven-by-seven block of vine holding four two-by-two beds.
+  // The beds: four of them, one at each corner around the tree, each a
+  // two-by-two inside its own ring of vine.
+  //
+  // One seven-by-seven block down and to the left was the first attempt, and
+  // it read as a plot somebody had put beside the tree rather than as the
+  // tree's own. Four corners puts the tree in the middle of what it asked
+  // for, which is what it is.
   //
   // Placed *after* everything else in the clearing so `pull` can take the
-  // trees and lights that grew where it goes — and the ring of lights round
-  // the tree keeps whichever of its eight fall outside it, which is what
-  // stops the trellis reading as a thing dropped on top of a light.
-  const block = { col: middle.col - TRELLIS - 1, row: tree.row + 3 };
+  // trees that grew where they go — and far enough out that the ring of
+  // lights round the trunk and the doorstep below it are never underneath
+  // one.
   const beds: Patch[] = [];
-  for (let down = 0; down < BEDS_ACROSS; down++) {
-    for (let across = 0; across < BEDS_ACROSS; across++) {
-      beds.push({
-        col: block.col + 1 + across * (BED_SIDE + 1),
-        row: block.row + 1 + down * (BED_SIDE + 1),
+  const trellis: GridPoint[] = [];
+  for (const downward of [-1, 1]) {
+    for (const rightward of [-1, 1]) {
+      // The block's near corner is BED_REACH out along both axes, so the four
+      // sit at the diagonals with the tree between them and the ring of
+      // lights inside that. Far enough out that neither the lights nor the
+      // doorstep is ever underneath one.
+      const block = {
+        col: rightward < 0 ? middle.col - BED_REACH - TRELLIS + 1 : middle.col + BED_REACH,
+        row: downward < 0 ? middle.row - BED_REACH - TRELLIS + 1 : middle.row + BED_REACH,
+        width: TRELLIS,
+        height: TRELLIS,
+      };
+      const bed: Patch = {
+        col: block.col + 1,
+        row: block.row + 1,
         width: BED_SIDE,
         height: BED_SIDE,
-      });
+      };
+      beds.push(bed);
+      const inTheBed = new Set(patchCells(bed).map((at) => `${at.col},${at.row}`));
+      for (const at of patchCells(block)) {
+        if (!grid.inBounds(at.col, at.row)) continue;
+        pull(at.col, at.row);
+        if (inTheBed.has(`${at.col},${at.row}`)) continue;
+        // Walked over, not walked round. A border you cannot cross is a
+        // wall, and the bed inside it has to be reachable.
+        const vine = put(grid, FixtureType.ForestVine, at.col, at.row, 1, false);
+        if (!vine) continue;
+        trellis.push(at);
+        placed.push(vine);
+      }
     }
-  }
-  const inABed = new Set(beds.flatMap((bed) => patchCells(bed).map((at) => `${at.col},${at.row}`)));
-  const trellis: GridPoint[] = [];
-  for (const at of patchCells({ ...block, width: TRELLIS, height: TRELLIS })) {
-    if (!grid.inBounds(at.col, at.row)) continue;
-    pull(at.col, at.row);
-    if (inABed.has(`${at.col},${at.row}`)) continue;
-    // Walked over, not walked round. A border you cannot cross is a wall,
-    // and the beds inside it have to be reachable.
-    const vine = put(grid, FixtureType.ForestVine, at.col, at.row, 1, false);
-    if (!vine) continue;
-    trellis.push(at);
-    placed.push(vine);
   }
 
   // And the wood that has closed over it. Placed *after* the bed is cleared,

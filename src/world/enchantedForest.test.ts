@@ -197,6 +197,43 @@ describe("what the great tree asks for", () => {
     }
   });
 
+  /**
+   * One at each corner, with the tree in the middle of them.
+   *
+   * A single block of four beds was the first attempt and it sat down and to
+   * the left of the trunk, which reads as a plot somebody put beside the
+   * tree rather than as the tree's own.
+   */
+  test("there is a bed at each corner around the tree", () => {
+    const { grove } = grown();
+    const middle = { col: grove.tree.col + 1, row: grove.tree.row + 1 };
+    const corners = new Set(
+      grove.beds.map(
+        (bed) => `${Math.sign(bed.col - middle.col)},${Math.sign(bed.row - middle.row)}`,
+      ),
+    );
+    expect(corners).toEqual(new Set(["-1,-1", "1,-1", "-1,1", "1,1"]));
+  });
+
+  // The ring of lights stands between the trunk and the beds, and the way in
+  // is below the trunk. A block that reached either would have `pull` take
+  // it away to make room, which is a light or a doorstep quietly deleted.
+  test("no bed stands on the ring of lights or on the way in", () => {
+    const { grid, grove } = grown();
+    const cells = new Set(
+      [...grove.beds.flatMap((bed) => patchCells(bed)), ...grove.trellis].map(
+        (at) => `${at.col},${at.row}`,
+      ),
+    );
+    expect(cells.has(`${grove.doorstep.col},${grove.doorstep.row}`)).toBe(false);
+    const lights = grid
+      .listObjects()
+      .filter((object) => object.type === FixtureType.Glowcap).length;
+    // Eight round the trunk plus the ones scattered through the wood; the
+    // number is not the point, that none of the eight was eaten is.
+    expect(lights).toBeGreaterThanOrEqual(8);
+  });
+
   test("the trellis runs between the beds as well as around them", () => {
     const { grove } = grown();
     const vine = new Set(grove.trellis.map((at) => `${at.col},${at.row}`));
