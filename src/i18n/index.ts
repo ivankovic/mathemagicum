@@ -4,15 +4,18 @@
 import { Language } from "../settings";
 import { DE } from "./de";
 import { EN } from "./en";
+import { HR } from "./hr";
 import type { Phrases } from "./phrases";
 
 export type { Noun, Phrases } from "./phrases";
 export { EN } from "./en";
 export { DE } from "./de";
+export { HR } from "./hr";
 
 const BOOKS: Record<Language, Phrases> = {
   [Language.English]: EN,
   [Language.German]: DE,
+  [Language.Croatian]: HR,
 };
 
 /**

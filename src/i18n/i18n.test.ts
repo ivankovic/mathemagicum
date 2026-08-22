@@ -11,6 +11,7 @@ import { PLANT_STAGES, PLANT_TYPES, PlantStage, PlantType } from "../world/plant
 import { TERRAIN_TYPES } from "../world/terrain";
 import { DE } from "./de";
 import { EN } from "./en";
+import { HR } from "./hr";
 import { phrasesFor } from "./index";
 import type { Phrases } from "./phrases";
 
@@ -214,21 +215,22 @@ describe("every language says everything", () => {
     });
   }
 
-  // What a half-finished translation looks like: a German build with English
-  // sentences in it. Only the sum question is legitimately identical — it is
-  // digits and a plus sign, which every language here writes the same way.
-  test("German is actually German", () => {
-    const en = sample(EN);
-    const de = sample(DE);
-    // Both are numbers and a plus sign, which every language here writes the
-    // same way — and "Portal" is the same word in both, the way a currency's
-    // name is.
-    // `arrayTitle` is `4 × 6` in both, because a multiplication sign is not
-    // a word in either language.
-    //
-    // `copyright` is a name and a year, and `sponsorLink` is what GitHub
-    // calls its own product. Translating either would be inventing a German
-    // spelling for somebody's name or for a trademark.
+  /**
+   * What a half-finished translation looks like: a build in one language
+   * with another's sentences in it.
+   *
+   * Every pair rather than each against English, because the third book was
+   * begun by copying the second and the line that never got translated is
+   * exactly the one this has to catch.
+   */
+  test("no two languages say the same thing", () => {
+    // Lines that are legitimately identical everywhere. `sumQuestion` and
+    // `lessonExample` are digits and a plus sign; `arrayTitle` is a
+    // multiplication sign, which is not a word in any of these; "Portal" is
+    // the same word in all three, the way a currency's name is; `copyright`
+    // is a name and a year; and `sponsorLink` is what GitHub calls its own
+    // product. Translating any of them would be inventing a spelling for
+    // somebody's name or for a trademark.
     const shared = [
       "sumQuestion",
       "lessonExample",
@@ -237,9 +239,67 @@ describe("every language says everything", () => {
       "copyright",
       "sponsorLink",
     ];
-    for (const [key, line] of Object.entries(de)) {
-      if (shared.includes(key)) continue;
-      expect(`${key}: ${line}`).not.toBe(`${key}: ${en[key]}`);
+    const books = LANGUAGES.map((language) => [language, sample(phrasesFor(language))] as const);
+    for (const [at, [language, book]] of books.entries()) {
+      for (const [other, against] of books.slice(at + 1)) {
+        for (const [key, line] of Object.entries(book)) {
+          if (shared.includes(key)) continue;
+          expect(`${language}/${other} ${key}: ${line}`).not.toBe(
+            `${language}/${other} ${key}: ${against[key]}`,
+          );
+        }
+      }
+    }
+  });
+});
+
+/**
+ * Croatian counts in three, and the rule is on the last two digits.
+ *
+ * One carrot is `mrkva`, two are `mrkve`, five are `mrkava` — and eleven are
+ * `mrkava` as well, though eleven ends in a one. That last line is the one
+ * Slavic pluralisation usually ships without, so it has a test of its own.
+ */
+describe("counting in Croatian", () => {
+  const carrot = PlantType.Carrot;
+
+  test("one, a few, and many", () => {
+    expect(HR.count(carrot, 1)).toBe("1 mrkva");
+    expect(HR.count(carrot, 2)).toBe("2 mrkve");
+    expect(HR.count(carrot, 4)).toBe("4 mrkve");
+    expect(HR.count(carrot, 5)).toBe("5 mrkava");
+    expect(HR.count(carrot, 0)).toBe("0 mrkava");
+  });
+
+  // Eleven through fourteen end in one through four and take the many-form
+  // anyway. A rule written on the last digit gets every one of these wrong.
+  test("and the teens are many, whatever they end in", () => {
+    for (const count of [11, 12, 13, 14]) {
+      expect(HR.count(carrot, count)).toBe(`${count} mrkava`);
+    }
+  });
+
+  test("but twenty-one is one again, and twenty-two a few", () => {
+    expect(HR.count(carrot, 21)).toBe("21 mrkva");
+    expect(HR.count(carrot, 22)).toBe("22 mrkve");
+    expect(HR.count(carrot, 25)).toBe("25 mrkava");
+    expect(HR.count(carrot, 111)).toBe("111 mrkava");
+    expect(HR.count(carrot, 101)).toBe("101 mrkva");
+  });
+
+  test("every form is chosen for every number under a thousand", () => {
+    for (let count = 0; count < 1000; count++) {
+      const said = HR.count(carrot, count);
+      expect(said.startsWith(`${count} `)).toBe(true);
+      expect(["mrkva", "mrkve", "mrkava"]).toContain(said.slice(String(count).length + 1));
+    }
+  });
+
+  // A gate in Croatian is *vratnica*, not *vrata*: the second is plural-only
+  // and "1 vrata" is not a thing anybody says.
+  test("nothing in the game is a plural-only noun in the singular", () => {
+    for (const fixture of PLACEABLE_FIXTURES) {
+      expect(HR.count(fixture, 1)).not.toContain("vrata");
     }
   });
 });

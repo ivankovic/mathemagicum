@@ -23,16 +23,22 @@
 export const Language = {
   English: "en",
   German: "de",
+  Croatian: "hr",
 } as const;
 
 export type Language = (typeof Language)[keyof typeof Language];
 
-export const LANGUAGES: readonly Language[] = [Language.English, Language.German];
+export const LANGUAGES: readonly Language[] = [
+  Language.English,
+  Language.German,
+  Language.Croatian,
+];
 
 /** Every language reads its own name in itself; a menu in a language you do not read is no help. */
 export const LANGUAGE_NAMES: Record<Language, string> = {
   [Language.English]: "English",
   [Language.German]: "Deutsch",
+  [Language.Croatian]: "Hrvatski",
 };
 
 /**

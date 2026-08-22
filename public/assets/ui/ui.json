@@ -107,6 +107,11 @@
       "width": 33,
       "height": 21
     },
+    "flag-hr": {
+      "file": "flag_hr.png",
+      "width": 33,
+      "height": 21
+    },
     "item-fence": {
       "file": "item_fence.png",
       "width": 32,

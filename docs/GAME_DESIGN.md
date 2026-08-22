@@ -1327,6 +1327,22 @@ different-shaped buttons, and a chooser wants its two choices to look like two
 of a kind. They are the only icons in the game drawn to their own edges — a
 flag with air round it is a picture of a flag lying on something.
 
+**Croatian counts in three, and that is the one thing the phrase book was
+not built for.** One carrot is *mrkva*, two are *mrkve*, five are *mrkava* —
+and the rule is on the last **two** digits, so eleven through fourteen take
+the many-form despite ending in one through four. The `Noun` interface has a
+single plural slot, so the three forms live in a private table inside the
+Croatian book and its `count` reads that table directly rather than trying to
+smuggle a third form through a field meant for one. There is a test over every
+number under a thousand, and another on the teens specifically, because that
+line is what Slavic pluralisation is usually shipped without.
+
+Two smaller things Croatian forced. It has no articles, so `bare` and
+`definite` are the same word; and a gate in a fence is a *vratnica* rather
+than *vrata*, because *vrata* is plural-only and "1 vrata" is not a thing
+anybody says — a test says no placeable thing is a plural-only noun in the
+singular.
+
 **The whole game is translated, not just the menus.** Every line the player
 reads comes from a phrase book (`src/i18n/`), one per language, and the
 interface is what stops a half-translation shipping: a language that forgets

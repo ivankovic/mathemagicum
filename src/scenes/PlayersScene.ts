@@ -94,6 +94,8 @@ const SUMS_HEIGHT = 32;
 const LANGUAGE_HEIGHT = 30;
 /** Between a flag and the name of the language it stands for. */
 const FLAG_GAP = 8;
+/** Air either side of the language row, so nothing touches the screen edge. */
+const ROW_MARGIN = 12;
 const BUTTON_HEIGHT = 34;
 /** Air under the last row, so nothing sits against the bottom edge. */
 const FOOTER_ROOM = 64;
@@ -484,9 +486,26 @@ export class PlayersScene extends Phaser.Scene {
 
   private languageRow(centreX: number, y: number): void {
     // Wider than it was, because there is a flag in it now: ninety-six left
-    // the flag and the longer of the two names a pixel short of touching.
-    const cell = 124;
-    const span = LANGUAGES.length * cell + (LANGUAGES.length - 1) * SWATCH_GAP;
+    // the flag and the longest of the names a pixel short of touching. And
+    // capped to what the screen has, because a third language is a third
+    // more row and a phone does not have it — three tiles at their full
+    // width ran off both edges.
+    const room = this.scale.width - ROW_MARGIN * 2;
+    const wanted = 124;
+    const gaps = (LANGUAGES.length - 1) * SWATCH_GAP;
+    const cell = Math.min(wanted, (room - gaps) / LANGUAGES.length);
+    const span = LANGUAGES.length * cell + gaps;
+    // Measured once, before anything is drawn: the widest name plus a flag
+    // against what one tile has. See the branch below.
+    const flagWidth = this.textures
+      .get(uiTextureKey(flagIcon(LANGUAGES[0] ?? "en")))
+      .getSourceImage().width;
+    const wordless = LANGUAGES.some((language) => {
+      const measure = this.text(LANGUAGE_NAMES[language], LABEL_SIZE, INK);
+      const width = measure.width;
+      measure.destroy();
+      return flagWidth + FLAG_GAP + width > cell - FLAG_GAP;
+    });
     LANGUAGES.forEach((language, index) => {
       const x = centreX - span / 2 + index * (cell + SWATCH_GAP);
       const chosen = this.draftLanguage === language;
@@ -520,6 +539,14 @@ export class PlayersScene extends Phaser.Scene {
           .setAlpha(chosen ? 1 : 0.55),
       ) as Phaser.GameObjects.Image;
       const middle = y + LANGUAGE_HEIGHT / 2;
+      if (wordless) {
+        // The flag alone, and for every tile at once rather than only the
+        // one whose name is longest: a row where two tiles keep their word
+        // and the third loses it reads as a tile that failed.
+        label.setVisible(false);
+        flag.setPosition(x + cell / 2, middle);
+        return;
+      }
       const block = flag.width + FLAG_GAP + label.width;
       const left = x + cell / 2 - block / 2;
       flag.setPosition(left + flag.width / 2, middle);

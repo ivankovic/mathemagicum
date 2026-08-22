@@ -489,11 +489,22 @@ export class OptionsPanel {
     const y = top + SMALL_SIZE + 8;
     const count = Math.max(1, values.length);
     const width = (rect.width - PAD * 2 - BUTTON_GAP * (count - 1)) / count;
+    // One decision for the whole row, not one per button. A third language
+    // makes every button a third narrower, and the three names are not the
+    // same length — asked one at a time, the short ones keep their word and
+    // the long one loses it, which reads as a button that failed rather than
+    // as a row that chose. The flag is what works for a child who cannot
+    // read any of the names, so when the words do not all fit, none of them
+    // is shown.
+    const tight = buttons.slice(0, count).some((button) => {
+      const icon = this.iconOf.get(button.box);
+      return Boolean(icon?.beside) && this.blockWidth(button) > width - LABEL_GAP;
+    });
     for (const [i, value] of values.entries()) {
       const button = buttons[i];
       if (!button) continue;
       const x = rect.left + PAD + (width + BUTTON_GAP) * i + width / 2;
-      this.place(button, x, y + BUTTON_H / 2, width, BUTTON_H);
+      this.place(button, x, y + BUTTON_H / 2, width, BUTTON_H, tight);
       button.box.setStrokeStyle(2, value === chosen ? CHOSEN_HEX : INK_HEX);
       this.show(button);
     }
@@ -512,12 +523,28 @@ export class OptionsPanel {
     return { box, label };
   }
 
+  /** Buttons too narrow to hold their word beside their picture. */
+  private readonly wordless = new Set<Phaser.GameObjects.Rectangle>();
+
   private readonly iconOf = new Map<
     Phaser.GameObjects.Rectangle,
     { image: Phaser.GameObjects.Image; width: number; beside: boolean }
   >();
 
-  private place(choice: Choice, x: number, y: number, width: number, height: number): void {
+  /** How wide a picture-and-word button wants to be. */
+  private blockWidth(choice: Choice): number {
+    const icon = this.iconOf.get(choice.box);
+    return icon ? icon.width + LABEL_GAP + choice.label.width : choice.label.width;
+  }
+
+  private place(
+    choice: Choice,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    wordless = false,
+  ): void {
     choice.box.setSize(width, height).setPosition(x, y);
     const icon = this.iconOf.get(choice.box);
     if (!icon?.beside) {
@@ -525,18 +552,26 @@ export class OptionsPanel {
       icon?.image.setPosition(x, y);
       return;
     }
+    if (wordless) {
+      this.wordless.add(choice.box);
+      icon.image.setPosition(x, y);
+      return;
+    }
+    this.wordless.delete(choice.box);
     // Picture and word together, centred as one block rather than each in
     // the middle of the button — two things both centred are two things on
     // top of each other.
-    const span = icon.width + LABEL_GAP + choice.label.width;
-    const left = x - span / 2;
+    const left = x - this.blockWidth(choice) / 2;
     icon.image.setPosition(left + icon.width / 2, y);
     choice.label.setPosition(left + icon.width + LABEL_GAP + choice.label.width / 2, y);
   }
 
   private show(choice: Choice): void {
     choice.box.setVisible(true);
-    choice.label.setVisible(true);
+    // Except a word `place` has just decided there is no room for. `render`
+    // hides every part before laying anything out, so this cannot simply
+    // read the label's own visibility — it would be false for all of them.
+    choice.label.setVisible(!this.wordless.has(choice.box));
     this.iconOf.get(choice.box)?.image.setVisible(true);
   }
 
