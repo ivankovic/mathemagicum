@@ -77,6 +77,7 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Flowerpot]: noun({ bare: "Blumentopf", gender: "m", plural: "Blumentöpfe" }),
   [FixtureType.Gate]: noun({ bare: "Tor", gender: "n", plural: "Tore" }),
   [FixtureType.FenceSide]: noun({ bare: "Zaun", gender: "m", plural: "Zäune" }),
+  [FixtureType.FenceCorner]: noun({ bare: "Zaun", gender: "m", plural: "Zäune" }),
   [FixtureType.GateSide]: noun({ bare: "Tor", gender: "n", plural: "Tore" }),
   [FixtureType.Glowcap]: noun({ bare: "Leuchtpilz", gender: "m", plural: "Leuchtpilze" }),
   [FixtureType.Stall]: noun({ bare: "Marktstand", gender: "m", plural: "Marktstände" }),

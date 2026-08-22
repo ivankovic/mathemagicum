@@ -1644,6 +1644,30 @@ The night sheet is hidden rather than left at alpha zero, for the same
 reason: a transparent screen-sized rectangle is still a screen-sized
 rectangle to a renderer, and two thirds of every day is daytime.
 
+### The corner a fence turns
+
+A garden's fence is two pictures of one fence: a run across the camera and a
+run away from it. Where they meet is a corner, and a corner joins in one
+direction and not the other.
+
+**Above** a corner, the side run overhangs its own cell by half a tile and
+lands on the panel's post, so it continues straight down out of it and the
+join is invisible. **Below** one there is nothing to overhang with: the side
+run stops at its cell's edge and the panel's post does not begin until a
+third of the way into the next cell. Every garden had a clean break at each
+of its two bottom corners, rails and post not meeting, with dirt between.
+
+So there is a fourth piece — the same panel with its near post carried up to
+meet the run above, mirrored for the right-hand corner exactly as the side
+run is. Only the near post, and only in that piece: carrying both up on every
+panel closes the corner too, and gives a row of tall stakes over the rails
+the length of every fence in the game. That was drawn and looked at before it
+was rejected.
+
+Which cells are corners is a fact about an enclosure rather than about a
+fence, which is why this is world generation's and not something the player
+can buy. A tap cannot carry that decision.
+
 ### The village square
 
 **It is paved.** Cobbles, not dirt: the square is where the village gathers,

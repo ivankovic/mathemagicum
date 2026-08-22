@@ -498,20 +498,27 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
         // across it, which is two different pictures of the same fence. The
         // corners belong to the top and bottom, because that is the run whose
         // posts the sides line up under.
-        // Which run a cell belongs to, gate or not: the sides are the two
-        // columns, minus the corners, which belong to the top and bottom —
-        // that is the run whose posts the sides line up under.
         const onSide =
           (cell.col === left || cell.col === right) &&
           cell.row !== gardenTopLeft.row - 1 &&
           cell.row !== gardenTopLeft.row + spec.garden.height;
+        // The two the side runs come *down* into, which are the only cells
+        // where the join does not draw itself. A side run overhangs the cell
+        // above it and lands on that panel's post, so the top corners need
+        // nothing; below one there is nothing to overhang with, and the
+        // panel's post starts a third of a tile down. See `FenceCorner`.
+        const bottomCorner =
+          cell.row === gardenTopLeft.row + spec.garden.height &&
+          (cell.col === left || cell.col === right);
         const type = isGate
           ? onSide
             ? FixtureType.GateSide
             : FixtureType.Gate
           : onSide
             ? FixtureType.FenceSide
-            : FixtureType.Fence;
+            : bottomCorner
+              ? FixtureType.FenceCorner
+              : FixtureType.Fence;
         grid.placeObject({
           id: `${spec.id}-${type}-${cell.col}-${cell.row}`,
           type,
@@ -526,8 +533,10 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
           anchorRow: cell.row,
           // The right-hand side is the left-hand sprite mirrored — the gate
           // in it as much as the fence, or its leaf would swing out of the
-          // garden instead of into it.
-          flip: onSide && cell.col === right,
+          // garden instead of into it. A bottom corner mirrors for the same
+          // reason: its tall post has to stand under the run above it, and on
+          // the right that run is against the cell's other edge.
+          flip: (onSide || bottomCorner) && cell.col === right,
         });
       }
       // Standing in their own beds, inside their own fence: the first thing

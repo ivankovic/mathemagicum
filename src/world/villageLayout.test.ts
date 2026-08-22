@@ -278,6 +278,68 @@ describe("garden fences", () => {
     }
   });
 
+  /**
+   * The two cells a side run comes *down* into.
+   *
+   * A corner joins in one direction and not the other. A side run overhangs
+   * the cell above it and lands on that panel's post, so the top corners
+   * draw themselves; below one there is nothing to overhang with, and the
+   * panel's post starts a third of a tile down — which left every garden
+   * with a clean break at each of its two bottom corners.
+   */
+  test("the bottom corners are the piece that closes the join", () => {
+    const { grid, village } = villageGrid();
+    layoutVillage(grid, village);
+    const corners = grid.listObjects().filter((object) => object.type === FixtureType.FenceCorner);
+    // Two per garden, four gardens — unless a gate has taken one, which it
+    // never does: the gate is never a corner.
+    expect(corners.length).toBe(8);
+  });
+
+  test("and each of them has a side run standing directly above it", () => {
+    const { grid, village } = villageGrid();
+    layoutVillage(grid, village);
+    for (const corner of grid.listObjects()) {
+      if (corner.type !== FixtureType.FenceCorner) continue;
+      const above = grid.getObjectAt(corner.col, corner.row - 1);
+      // The whole reason this piece exists. A corner with nothing above it
+      // would be a post carried up to meet nothing.
+      expect({ at: `${corner.col},${corner.row}`, above: above?.type }).toEqual({
+        at: `${corner.col},${corner.row}`,
+        above: FixtureType.FenceSide,
+      });
+    }
+  });
+
+  test("the right-hand one is mirrored and the left-hand one is not", () => {
+    const { grid, village } = villageGrid();
+    layoutVillage(grid, village);
+    const corners = grid.listObjects().filter((object) => object.type === FixtureType.FenceCorner);
+    // Its tall post stands under the run above it, and on the right that run
+    // is against the cell's other edge — the same reason a side run flips.
+    const flipped = corners.filter((corner) => corner.flip);
+    expect(flipped.length).toBe(corners.length / 2);
+    for (const corner of corners) {
+      const above = grid.getObjectAt(corner.col, corner.row - 1);
+      expect({ at: corner.col, same: corner.flip === above?.flip }).toEqual({
+        at: corner.col,
+        same: true,
+      });
+    }
+  });
+
+  // Still a fence: it blocks, it is not for sale, and nothing about it is a
+  // gate. Cheap to state and it is the sort of thing a new variant loses.
+  test("a corner is a fence in every way but its picture", () => {
+    const { grid, village } = villageGrid();
+    layoutVillage(grid, village);
+    for (const corner of grid.listObjects()) {
+      if (corner.type !== FixtureType.FenceCorner) continue;
+      expect(corner.blocksMovement).toBe(true);
+      expect(grid.isPassable(corner.col, corner.row)).toBe(false);
+    }
+  });
+
   test("every garden in the village is fenced with exactly one gate", () => {
     const { grid, village } = villageGrid();
     layoutVillage(grid, village);
@@ -287,7 +349,11 @@ describe("garden fences", () => {
     // ring cell nearest the square, and two of the four sides run that way.
     const gateTypes: readonly string[] = [FixtureType.Gate, FixtureType.GateSide];
     const gates = objects.filter((object) => gateTypes.includes(object.type));
-    const fenceTypes: readonly string[] = [FixtureType.Fence, FixtureType.FenceSide];
+    const fenceTypes: readonly string[] = [
+      FixtureType.Fence,
+      FixtureType.FenceSide,
+      FixtureType.FenceCorner,
+    ];
     const fences = objects.filter((object) => fenceTypes.includes(object.type));
     // Three villager gardens and the player's.
     expect(gates.length).toBe(4);

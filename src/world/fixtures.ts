@@ -24,6 +24,21 @@ export const FixtureType = {
   // not a decision a single tap can carry — so this is world generation's.
   FenceSide: "fence-side",
   /**
+   * The corner a side run comes *down* into.
+   *
+   * A corner joins in one direction and not the other. Above one, the side
+   * run overhangs its cell by half a tile and lands on the panel's post, so
+   * the run continues straight down out of it. Below one there is nothing to
+   * overhang with: the side run stops at its cell's edge and the panel's
+   * post does not begin until a third of the way into the next cell, which
+   * left every garden with a clean break at each of its two bottom corners.
+   *
+   * This is the same panel with its near post carried up to meet the run
+   * above. World generation's, like the side run: which cells are corners is
+   * a fact about an enclosure rather than about a fence.
+   */
+  FenceCorner: "fence-corner",
+  /**
    * The gate that stands in one.
    *
    * Half of every garden's gate lands on a side run — the gate goes on the
