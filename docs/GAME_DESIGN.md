@@ -841,7 +841,7 @@ remember to do it too, and the one that forgets is found by a child losing an
 afternoon.
 
 **A child makes their own character.** Skin, hair and clothes from the tones
-the art was drawn with, and one of four bodies. The colours cost nothing to
+the art was drawn with, and one of six bodies. The colours cost nothing to
 offer because they are swapped into the sheet at load time: every character
 sprite is either fully transparent or one of eleven exact colours, with no
 antialiasing and no blending anywhere, so recolouring is a lookup rather than
@@ -852,9 +852,23 @@ game is allowed to tell them apart by eye.
 
 The bodies are separate sheets because a silhouette cannot be recoloured into
 existence, and silhouette is the only thing that survives sixteen pixels
-across. All four keep the wide-brimmed hat: it is what makes the player
+across. All six keep the wide-brimmed hat: it is what makes the player
 findable in a street of villagers drawn from the same palette, so it is not
-among the things a child can turn off. Nor is it a coincidence that the
+among the things a child can turn off.
+
+**Two of the six read as a boy**, and they were added because the first four
+did not. Three were a girl in a hat and the fourth was one with the hair not
+showing, which is not an option so much as the absence of the other three.
+The two new ones differ by *build* — the one axis the first four do not use
+and the only one left, because everything a person would name below the
+shoulders is under the resolution. A wider, squarer torso, and a crop that
+shows below the brim rather than a fall to the shoulders.
+
+Short hair is its own thing rather than the lack of long hair: a head with no
+hair drawn below the hat from any side is not a haircut, and an absence reads
+as the default rather than as a choice. And neither of them gets a cap, which
+is the obvious way to say boy at this size — the cap in this set is the
+postal worker's, so a capped player would be a player mistaken for him. Nor is it a coincidence that the
 default look is exactly the character the game had before anybody could
 choose — a default that was some neutral index instead would have quietly
 restyled the game's own protagonist on the way in.

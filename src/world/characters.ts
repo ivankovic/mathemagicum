@@ -11,11 +11,13 @@ export const PLAYER_CHARACTER = "player";
 /**
  * Every sheet the player can be drawn with.
  *
- * Four silhouettes: the child picks one when their profile is made, and
+ * Six silhouettes: the child picks one when their profile is made, and
  * their colours are swapped into whichever they picked at load time (see
- * src/avatar/). They differ only in hair and hem, and every one of them
- * keeps the wide-brimmed hat, which is what makes the player findable in a
- * street of villagers drawn from the same palette.
+ * src/avatar/). They differ only in hair, hem and build, and every one of
+ * them keeps the wide-brimmed hat, which is what makes the player findable
+ * in a street of villagers drawn from the same palette — and which is why
+ * the two that read as a boy do it with shoulders and a haircut rather than
+ * with a cap, since the cap in this set is the postal worker's.
  *
  * The catalogue that says which of these a chooser may offer ships beside
  * the art in `characters/avatar.json`; this list exists so the loader knows
@@ -26,6 +28,11 @@ export const PLAYER_BODIES: readonly string[] = [
   "player-bun",
   "player-trousers",
   "player-short",
+  // Two that read as a boy, differing by build. See the note above: what
+  // carries at this size is a wider, squarer torso and a crop that shows
+  // below the brim, and both of them keep the brim.
+  "player-broad",
+  "player-crop",
 ];
 
 // Generic villagers are rolled from a seed upstream, so they are numbered

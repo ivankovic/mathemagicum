@@ -3,7 +3,9 @@
     "player",
     "player-bun",
     "player-trousers",
-    "player-short"
+    "player-short",
+    "player-broad",
+    "player-crop"
   ],
   "shipped_palette": {
     "outline": [
