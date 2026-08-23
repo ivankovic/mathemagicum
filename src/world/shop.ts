@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { CURRENCY } from "../shop/currency";
+import { maxSaleCount } from "../shop/payment";
 import { type FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import type { Inventory, ItemType } from "./inventory";
 import { MATERIAL_TYPES, type MaterialType } from "./materials";
@@ -212,4 +214,43 @@ export function buyStock(
   if (!purse.spend(price)) return { ok: false, amount: 0 };
   inventory.add(fixture, count);
   return { ok: true, amount: price };
+}
+
+/**
+ * The largest number the quantity picker will go to.
+ *
+ * Not a tidiness rule. Offering a quantity somebody cannot pay for leaves a
+ * child on a screen where the coin pad refuses every coin they own, with
+ * nothing saying why — so the cap is what they can *afford*, and it is never
+ * below one, because a picker that starts at nought is a picker with nothing
+ * to press.
+ *
+ * `MAX_TRADE` on top of that, which is about the counter rather than the
+ * purse: a hundred carrots is a hundred coins to count out.
+ */
+export function mostBuyable(
+  fixture: FixtureType,
+  coins: number,
+  cropPrice: CropPrice = CROP_PRICE,
+): number {
+  const each = priceOf(fixture, cropPrice);
+  const affordable = each > 0 ? Math.floor(coins / each) : MAX_TRADE;
+  return Math.max(1, Math.min(MAX_TRADE, affordable));
+}
+
+/**
+ * And the largest she can sell: what is in the basket, capped by what the
+ * shopkeeper can actually count out of her own drawer.
+ *
+ * The second half is `maxSaleCount`'s, and it is the one that surprises: a
+ * payment she cannot make in coins is a payment that cannot happen, however
+ * many carrots are on the counter.
+ */
+export function mostSellable(
+  item: ItemType,
+  held: number,
+  cropPrice: CropPrice = CROP_PRICE,
+): number {
+  const stock = Math.max(1, Math.min(MAX_TRADE, held));
+  return maxSaleCount(CURRENCY, sellPriceOf(item, cropPrice), stock);
 }

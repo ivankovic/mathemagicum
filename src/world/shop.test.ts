@@ -3,9 +3,11 @@
 
 import { describe, expect, test } from "bun:test";
 import { CURRENCY, isPayable } from "../shop/currency";
+import { makeOffer } from "../shop/payment";
 import { FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import { Inventory } from "./inventory";
 import { PLANT_TYPES, PlantType } from "./plants";
+import { createRng } from "./rng";
 import {
   CROP_PRICE,
   MAX_TRADE,
@@ -13,6 +15,8 @@ import {
   SHOP_STOCK,
   buyStock,
   isSellable,
+  mostBuyable,
+  mostSellable,
   priceOf,
   sellCrops,
   sellPriceOf,
@@ -201,5 +205,72 @@ describe("the loop closes", () => {
     expect(buyStock(bag, purse, dearest, 1).ok).toBe(true);
     expect(purse.coins).toBe(0);
     expect(bag.count(dearest)).toBe(1);
+  });
+});
+
+describe("how many the picker will offer", () => {
+  /**
+   * The cap is what somebody can *pay for*, and this is not a tidiness rule.
+   *
+   * Offering a quantity a child cannot afford leaves them on a screen where
+   * the coin pad refuses every coin they own, with nothing on it saying why.
+   */
+  test("never more of a thing than there is money for", () => {
+    const each = priceOf(FixtureType.Fence);
+    expect(mostBuyable(FixtureType.Fence, each * 3)).toBe(3);
+    expect(mostBuyable(FixtureType.Fence, each * 3 - 1)).toBe(2);
+    expect(mostBuyable(FixtureType.Fence, 0)).toBe(1);
+  });
+
+  // A picker that starts at nought is a picker with nothing to press: the
+  // refusal belongs on the button that buys, not on the one that counts.
+  test("but never fewer than one, however empty the purse", () => {
+    for (const coins of [0, 1, 5]) {
+      expect({ coins, most: mostBuyable(FixtureType.Fence, coins) }).toEqual({
+        coins,
+        most: Math.max(1, mostBuyable(FixtureType.Fence, coins)),
+      });
+      expect(mostBuyable(FixtureType.Fence, coins)).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  // About the counter rather than the purse: a hundred carrots is a hundred
+  // coins to count out.
+  test("and never more than the counter will take", () => {
+    expect(mostBuyable(FixtureType.Fence, priceOf(FixtureType.Fence) * 1000)).toBe(MAX_TRADE);
+    expect(mostSellable(PlantType.Carrot, 1000)).toBeLessThanOrEqual(MAX_TRADE);
+  });
+
+  test("selling is capped by the basket", () => {
+    expect(mostSellable(PlantType.Carrot, 3)).toBeLessThanOrEqual(3);
+    expect(mostSellable(PlantType.Carrot, 0)).toBe(1);
+  });
+
+  /**
+   * And by what the shopkeeper can count out of her own drawer.
+   *
+   * The half that surprises: a payment she cannot make in coins is a payment
+   * that cannot happen, however many carrots are on the counter.
+   */
+  test("and by what she can actually pay in coins", () => {
+    for (const held of [1, 2, 5, 10]) {
+      const most = mostSellable(PlantType.Carrot, held);
+      expect({ held, within: most <= Math.max(1, Math.min(MAX_TRADE, held)) }).toEqual({
+        held,
+        within: true,
+      });
+      // Whatever it comes back with, she really can pay for that many.
+      expect(
+        makeOffer(CURRENCY, sellPriceOf(PlantType.Carrot) * most, createRng(1)).owed,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  // The price of a crop moves with the band. The cap has to move with it, or
+  // a child on the gentlest sums is offered quantities the purse cannot meet.
+  test("the cap follows the price a band sets", () => {
+    const cheap = mostBuyable(FixtureType.Fence, 600, 100);
+    const dear = mostBuyable(FixtureType.Fence, 600, 250);
+    expect(cheap).toBeGreaterThan(dear);
   });
 });

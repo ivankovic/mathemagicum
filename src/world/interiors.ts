@@ -3,8 +3,18 @@
 
 import type { BuildingSprite } from "./buildings";
 import { WorldGrid } from "./grid";
+import {
+  type PlanBounds,
+  type RoomPlan,
+  cellKey,
+  cellOf,
+  planBounds,
+  planOf,
+  roomCells,
+  wallCells,
+} from "./growableRoom";
 import type { PlacedObject } from "./objects";
-import type { InteriorSidecar } from "./spriteSidecar";
+import type { GrowableSidecar, InteriorSidecar } from "./spriteSidecar";
 import { TerrainType } from "./terrain";
 import type { GridPoint } from "./topdown";
 
@@ -274,4 +284,137 @@ export function roomCameraBounds(room: Extent, view: Extent): CameraBounds {
   const across = span(room.width, view.width);
   const down = span(room.height, view.height);
   return { x: across.at, y: down.at, width: across.size, height: down.size };
+}
+
+// --- the room that grows ----------------------------------------------------
+
+/** The room shipped as parts rather than as a picture. There is one. */
+export const GROWABLE_ROOM = "cottage";
+
+export function growableSidecarKey(room: string): string {
+  return `growable-sidecar-${room}`;
+}
+
+/** A sheet of the growable room: `walls`, `floor`, `window`, `door`. */
+export function growableSheetKey(room: string, sheet: string): string {
+  return `growable-${room}-${sheet}`;
+}
+
+export function growablePieceKey(room: string, piece: string): string {
+  return `growable-${room}-piece-${piece}`;
+}
+
+export function growablePieceAnimKey(room: string, piece: string): string {
+  return `growable-${room}-piece-${piece}-idle`;
+}
+
+/** The floor the shipped room starts as, in the plan's own coordinates. */
+export function startingPlan(sidecar: GrowableSidecar): RoomPlan {
+  return planOf(sidecar.start_floor.map(([row, col]) => ({ col, row })));
+}
+
+export function growableDoor(sidecar: GrowableSidecar): GridPoint {
+  const [row, col] = sidecar.door_cell;
+  return { col, row };
+}
+
+/**
+ * How much ground beyond the walls a growable room keeps on its grid.
+ *
+ * Not decoration: it is how far outward one cast can build. The grid used to
+ * be exactly the room's own bounding box, so the outermost cell anybody
+ * could *tap* was the wall itself — `tileAtWorld` answers null past the
+ * grid's edge, and a tap on nothing does nothing at all. That left the times
+ * spell indoors able to add a strip one square deep and no more, which from
+ * the inside reads as not being able to see out of your own house.
+ *
+ * Four, because a four-by-four wing in one cast is a proper room, and
+ * because every cell of the margin is blocked ground a child may aim at but
+ * never stand on — so making it larger buys nothing but blockers.
+ */
+export const PLAN_MARGIN = 4;
+
+/**
+ * The room a plan describes, as a grid to walk on.
+ *
+ * Built over the plan's bounding box rather than over a fixed size, with the
+ * offset handed back: room space is allowed to go negative — growing west
+ * takes it there on the first square — and a grid cannot. Everything the
+ * scene does with a cell goes through `origin`, and the shipped room's
+ * origin is (0, 0), so nothing about a room nobody has added to changes.
+ *
+ * Blocking, as before, is one object per wall cell, so movement and
+ * pathfinding indoors keep going through the code that is tested outdoors.
+ * The doorway is the one wall cell left open — it is how you get out.
+ */
+/**
+ * Something standing in a room, as the grid needs to hear about it.
+ *
+ * `[row, col]` and `[cols, rows]`, which is the sidecar's own axis order and
+ * not the game's — this shape exists to be handed straight to
+ * `buildPlanGrid`, so it speaks the language of the thing that produced it.
+ */
+export interface RoomBlocker {
+  readonly cell: readonly [number, number];
+  readonly footprint: readonly [number, number];
+  readonly blocks: boolean;
+}
+
+export function buildPlanGrid(
+  plan: RoomPlan,
+  door: GridPoint,
+  furniture: readonly RoomBlocker[] = [],
+  margin: number = PLAN_MARGIN,
+): { grid: WorldGrid; origin: GridPoint; extent: PlanBounds } {
+  const extent = planBounds(plan);
+  const origin = { col: extent.minCol - margin, row: extent.minRow - margin };
+  const cols = extent.cols + margin * 2;
+  const rows = extent.rows + margin * 2;
+  const grid = WorldGrid.empty(cols, rows, FLOOR);
+  const block = (col: number, row: number, id: string) => {
+    const at = { col: col - origin.col, row: row - origin.row };
+    if (at.col < 0 || at.row < 0 || at.col >= cols || at.row >= rows) return;
+    grid.placeObject({
+      id,
+      type: "interior-wall",
+      col: at.col,
+      row: at.row,
+      width: 1,
+      height: 1,
+      blocksMovement: true,
+      anchorCol: at.col,
+      anchorRow: at.row,
+    });
+  };
+  for (const key of wallCells(plan)) {
+    const { col, row } = cellOf(key);
+    if (col === door.col && row === door.row) continue;
+    block(col, row, `plan-wall-${col}-${row}`);
+  }
+  // Anything inside the bounding box that is neither floor nor wall: the
+  // hollow of a concave outline. Nothing is drawn there, so nothing may be
+  // walked there either — otherwise a bent room has a hole in its middle
+  // that a child can stand in and see the grass through.
+  // Everything on the grid that is not the room: the hollow of a bent
+  // outline, and the margin of open ground beyond the walls. Nothing is
+  // drawn on any of it and nothing may be walked on any of it — but it is
+  // *there*, so a child can aim a rectangle into it and build out.
+  const inside = roomCells(plan);
+  for (let row = origin.row; row < origin.row + rows; row++) {
+    for (let col = origin.col; col < origin.col + cols; col++) {
+      if (inside.has(cellKey(col, row))) continue;
+      block(col, row, `plan-outside-${col}-${row}`);
+    }
+  }
+  for (const piece of furniture) {
+    if (!piece.blocks) continue;
+    const [row, col] = piece.cell;
+    const [cols, rows] = piece.footprint;
+    for (let dr = 0; dr < rows; dr++) {
+      for (let dc = 0; dc < cols; dc++) {
+        block(col + dc, row + dr, `plan-piece-${col + dc}-${row + dr}`);
+      }
+    }
+  }
+  return { grid, origin, extent };
 }

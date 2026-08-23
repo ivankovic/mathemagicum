@@ -19,6 +19,7 @@ import {
   beginPortalCast,
   canTravelTo,
   insideArea,
+  journeyBetween,
   journeyTo,
   landingIn,
   markFraction,
@@ -26,9 +27,11 @@ import {
   marksAcross,
   marksOnLegs,
   placeAt,
+  portalHelp,
   portalHint,
   portalRungAt,
   portalStops,
+  readingOf,
   stonesAlong,
   submitPortal,
   typePortalDigit,
@@ -493,5 +496,98 @@ describe("in a world the generator actually made", () => {
     // And it lands in the clearing the grove keeps, not out in the wood.
     expect(Math.abs(landing.col - grove.tree.col)).toBeLessThanOrEqual(3);
     expect(Math.abs(landing.row - grove.tree.row)).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("what a mark on the ruler reads as", () => {
+  /**
+   * Two rulers wearing the same numbers.
+   *
+   * On the corner rung the page is ruled from the corner, so a mark says
+   * what it says. On every other rung it is ruled from where the traveller
+   * is standing, so a mark says how far that is — and a panel that got it
+   * the wrong way round would be a ruler that lies about a distance a child
+   * had just measured off it.
+   */
+  test("from the corner, a mark is its own number", () => {
+    const corner = PORTAL_RUNGS.find((rung) => rung.origin === "corner");
+    if (!corner) throw new Error("no rung is ruled from the corner");
+    expect(readingOf(7, 3, corner)).toBe(7);
+    expect(readingOf(0, 9, corner)).toBe(0);
+  });
+
+  test("from where she stands, a mark is how far away it is", () => {
+    const here = PORTAL_RUNGS.find((rung) => rung.origin !== "corner");
+    if (!here) throw new Error("no rung is ruled from the traveller");
+    expect(readingOf(7, 3, here)).toBe(4);
+    // Behind her counts the same as in front: a ruler has no sign on it.
+    expect(readingOf(3, 7, here)).toBe(4);
+    expect(readingOf(5, 5, here)).toBe(0);
+  });
+});
+
+describe("the help a journey gets", () => {
+  const castAt = (rung: number, missteps: number) => {
+    const journey = journeyBetween(
+      "harbour",
+      { col: 10, row: 10 },
+      { col: 210, row: 160 },
+      portalRungAt(rung),
+    );
+    let cast = beginPortalCast(journey);
+    for (let n = 0; n < missteps; n++) cast = { ...cast, missteps: cast.missteps + 1 };
+    return cast;
+  };
+
+  test("none of it until the rung's patience runs out", () => {
+    for (const [index] of PORTAL_RUNGS.entries()) {
+      expect({ index, help: portalHelp(castAt(index, 0)) }).toEqual({ index, help: null });
+    }
+  });
+
+  // Which help, not the words for it: the tier decides what a child is stuck
+  // on, and the panel decides how to say it in their language.
+  test("and every rung has a kind of help when it does", () => {
+    for (const [index] of PORTAL_RUNGS.entries()) {
+      const help = portalHelp(castAt(index, 9));
+      expect({ index, given: help !== null }).toEqual({ index, given: true });
+      expect(["count", "read", "crow", "legs"]).toContain(help?.kind as string);
+    }
+  });
+
+  /**
+   * The crow's help carries the two squares already added, because that is
+   * the step it exists for: a child who can see `4² + 3²` written out has
+   * been shown the method rather than told the answer.
+   */
+  test("the crow's help does the squaring, and gets it right", () => {
+    const crow = PORTAL_RUNGS.findIndex((rung) => rung.tier === PortalTier.Crow);
+    if (crow < 0) throw new Error("no crow rung");
+    const help = portalHelp(castAt(crow, 9));
+    expect(help?.kind).toBe("crow");
+    if (help?.kind !== "crow") return;
+    expect(help.squares).toBe(help.across ** 2 + help.down ** 2);
+    // And it is the hypotenuse the child is being asked for.
+    expect(Math.round(Math.sqrt(help.squares))).toBeGreaterThan(0);
+  });
+
+  test("the counting rung is simply told the number", () => {
+    const count = PORTAL_RUNGS.findIndex((rung) => rung.tier === PortalTier.Count);
+    if (count < 0) throw new Error("no counting rung");
+    const cast = castAt(count, 9);
+    const help = portalHelp(cast);
+    expect(help).toEqual({ kind: "count", answer: cast.journey.answer });
+  });
+
+  test("and the reading rung is pointed at the leg it was asked about", () => {
+    const read = PORTAL_RUNGS.findIndex((rung) => rung.tier === PortalTier.Read);
+    if (read < 0) throw new Error("no reading rung");
+    const cast = castAt(read, 9);
+    const help = portalHelp(cast);
+    expect(help).toEqual({
+      kind: "read",
+      towards: cast.journey.asked.towards,
+      marks: cast.journey.asked.marks,
+    });
   });
 });

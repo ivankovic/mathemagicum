@@ -293,6 +293,16 @@ export class OptionsPanel {
     for (const [n, button] of this.gameChoices.entries()) {
       at[`game.${n}`] = { x: button.box.x, y: button.box.y };
     }
+    // The band picker is the only way difficulty moves between bands now —
+    // the adaptation stops at the edges of whichever one is chosen here — so
+    // it is the control a script has to be able to reach to check that it
+    // does. Same for the language row, which was in the same position.
+    for (const [n, button] of this.bandChoices.entries()) {
+      at[`band.${n}`] = { x: button.box.x, y: button.box.y };
+    }
+    for (const [n, button] of this.languageChoices.entries()) {
+      at[`language.${n}`] = { x: button.box.x, y: button.box.y };
+    }
     return at;
   }
 

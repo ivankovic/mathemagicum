@@ -6,6 +6,7 @@ import cottageSprite from "../../public/assets/buildings/cottage.json";
 import cottageRoom from "../../public/assets/interiors/cottage.json";
 import { packRgb } from "../render/recolour";
 import type { Rgb } from "../render/recolour";
+import { MAX_PROFILES } from "../save/profiles";
 import {
   FABRIC_SLOTS,
   LIGHTING_SPREAD,
@@ -18,6 +19,8 @@ import {
   varies,
   windowBrightness,
 } from "./houses";
+import { whoLivesIn } from "./houses";
+import { HOUSE_IDS, houseIdFor, isHouseId } from "./villageLayout";
 
 const SPRITE = cottageSprite as unknown as {
   palette: Record<string, Rgb>;
@@ -210,5 +213,109 @@ describe("lighting up at dusk", () => {
   test("a house lights at the same moment every time the world is opened", () => {
     expect(lightingDelay("villager-house-2", 99)).toBe(lightingDelay("villager-house-2", 99));
     expect(lightingDelay("villager-house-2", 99)).not.toBe(lightingDelay("villager-house-2", 100));
+  });
+});
+
+describe("who lives where", () => {
+  /**
+   * The check that keeps the nameplates honest.
+   *
+   * `freeHouse` hands a new child the lowest number nobody has, and
+   * `readProfile` clamps a saved one to `MAX_PROFILES - 1`. If there were
+   * ever more profiles than houses, a real saved child would have a house
+   * number pointing at nothing — and the failure would be a blank plate on a
+   * house that is somebody's, which reads as the feature not working rather
+   * than as a village one cottage short.
+   */
+  test("there is a house for every child a device can hold", () => {
+    expect(HOUSE_IDS.length).toBe(MAX_PROFILES);
+    for (let house = 0; house < MAX_PROFILES; house++) {
+      expect({ house, id: houseIdFor(house) !== null }).toEqual({ house, id: true });
+    }
+  });
+
+  test("and nothing past the end", () => {
+    expect(houseIdFor(MAX_PROFILES)).toBeNull();
+    expect(houseIdFor(-1)).toBeNull();
+  });
+
+  // The first house is the one the game has always treated as the player's:
+  // the big garden, the spawn point, and the roof colour `houseLook` keeps
+  // back. That is a fact about the order of `BUILDINGS`, so it is worth
+  // saying out loud rather than leaving to whoever edits the array next.
+  test("house zero is the one with the garden and the spawn", () => {
+    expect(HOUSE_IDS[0]).toBe("player-house");
+  });
+
+  test("every house is a real building, and no two children share one", () => {
+    expect(new Set(HOUSE_IDS).size).toBe(HOUSE_IDS.length);
+    for (const id of HOUSE_IDS) expect(isHouseId(id)).toBe(true);
+    for (const other of ["school", "store", "post-office"]) {
+      expect({ other, house: isHouseId(other) }).toEqual({ other, house: false });
+    }
+  });
+});
+
+describe("who lives behind a door", () => {
+  const villagers = [
+    { homeBuildingId: "villager-home-2", character: "villager-1" },
+    { homeBuildingId: "post-office", character: "postal-worker" },
+  ];
+  const household = [
+    { house: 0, name: "Ada" },
+    { house: 2, name: "Bo" },
+  ];
+
+  /**
+   * Three answers, and they are not interchangeable.
+   *
+   * "Vacant" and "no plate at all" look the same from the outside and mean
+   * opposite things: one is a house waiting for somebody and gets a question
+   * mark, the other is a school and gets nothing. Collapsing them to null is
+   * what put a question mark on every villager's cottage the first time.
+   */
+  test("a villager's cottage shows the villager", () => {
+    expect(whoLivesIn("villager-home-2", villagers, household)).toEqual({
+      kind: "villager",
+      character: "villager-1",
+    });
+  });
+
+  test("a child's house shows the child", () => {
+    expect(whoLivesIn(HOUSE_IDS[0] as string, villagers, household)).toEqual({
+      kind: "child",
+      owner: { house: 0, name: "Ada" },
+    });
+    expect(whoLivesIn(HOUSE_IDS[2] as string, villagers, household)).toEqual({
+      kind: "child",
+      owner: { house: 2, name: "Bo" },
+    });
+  });
+
+  test("a house nobody has moved into is vacant, which is not the same as nothing", () => {
+    expect(whoLivesIn(HOUSE_IDS[1] as string, villagers, household)).toEqual({ kind: "vacant" });
+    expect(whoLivesIn(HOUSE_IDS[3] as string, villagers, household)).toEqual({ kind: "vacant" });
+  });
+
+  test("and a building nobody could ever live in has no answer at all", () => {
+    for (const other of ["school", "store", "post-office-nope", "well"]) {
+      expect({ other, lives: whoLivesIn(other, [], household) }).toEqual({ other, lives: null });
+    }
+  });
+
+  // The villager wins: a villager standing at the door of one of the four is
+  // a state that should not arise, and if it ever does the picture should
+  // agree with the person standing there rather than with a house number.
+  test("somebody actually living there beats a house number", () => {
+    const squatter = [{ homeBuildingId: HOUSE_IDS[0] as string, character: "villager-0" }];
+    expect(whoLivesIn(HOUSE_IDS[0] as string, squatter, household)).toEqual({
+      kind: "villager",
+      character: "villager-0",
+    });
+  });
+
+  test("an empty village houses nobody without falling over", () => {
+    expect(whoLivesIn(HOUSE_IDS[0] as string, [], [])).toEqual({ kind: "vacant" });
+    expect(whoLivesIn("anything", [], [])).toBeNull();
   });
 });

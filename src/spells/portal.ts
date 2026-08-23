@@ -538,3 +538,64 @@ export function marksOnLegs(journey: PortalJourney): {
   }
   return { across, down };
 }
+
+/**
+ * What a mark on the ruler reads as.
+ *
+ * Two different rulers wearing the same numbers. On the corner rung the page
+ * is ruled from the *corner*, so a mark says what it says; on every other
+ * rung it is ruled from where the traveller is standing, so a mark says how
+ * far that is. The distinction lives here rather than in the panel because
+ * it is a fact about the rung, and a panel that got it wrong would be a
+ * ruler that lies about a distance a child has just measured.
+ */
+export function readingOf(mark: number, origin: number, rung: PortalRung): number {
+  return rung.origin === "corner" ? mark : Math.abs(mark - origin);
+}
+
+/**
+ * The help a journey gets, once a child has earned it.
+ *
+ * Which help, not the words for it: the tier decides what a child is stuck
+ * on, and the panel decides how to say it in their language. Null until the
+ * rung's patience runs out — see `portalHint`.
+ *
+ * The crow's tier carries the two squares already added, because that is the
+ * step the help exists for: a child who can see `3² + 4²` written out has
+ * been shown the method rather than told the answer.
+ */
+export type PortalHelp =
+  | { readonly kind: "count"; readonly answer: number }
+  | { readonly kind: "read"; readonly towards: string; readonly marks: number }
+  | {
+      readonly kind: "crow";
+      readonly across: number;
+      readonly down: number;
+      readonly squares: number;
+    }
+  | {
+      readonly kind: "legs";
+      readonly across: PortalLeg;
+      readonly down: PortalLeg;
+    }
+  | null;
+
+export function portalHelp(cast: PortalCast): PortalHelp {
+  const journey = portalHint(cast);
+  if (!journey) return null;
+  switch (journey.rung.tier) {
+    case PortalTier.Count:
+      return { kind: "count", answer: journey.answer };
+    case PortalTier.Read:
+      return { kind: "read", towards: journey.asked.towards, marks: journey.asked.marks };
+    case PortalTier.Crow:
+      return {
+        kind: "crow",
+        across: journey.across.marks,
+        down: journey.down.marks,
+        squares: journey.across.marks ** 2 + journey.down.marks ** 2,
+      };
+    default:
+      return { kind: "legs", across: journey.across, down: journey.down };
+  }
+}

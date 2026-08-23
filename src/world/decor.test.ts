@@ -1,0 +1,441 @@
+// SPDX-FileCopyrightText: 2026 Marko Ivankovic
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+import { describe, expect, test } from "bun:test";
+import {
+  DECOR_ITEMS,
+  DECOR_LOOKS,
+  DECOR_TYPES,
+  DecorType,
+  type Placed,
+  ROOM_COST,
+  arrangementIn,
+  blockersFor,
+  cellsUnder,
+  colourPlanFor,
+  decorFor,
+  decorFromSave,
+  decorItem,
+  decorToSave,
+  fits,
+  hearthCells,
+  itemParts,
+  occupiedCells,
+  pieceArt,
+  pieceOn,
+  protectedCells,
+  roomsAfforded,
+  same,
+  without,
+} from "./decor";
+import { MaterialType } from "./materials";
+import type { GrowableSidecar } from "./spriteSidecar";
+
+const SIZES = {
+  [DecorType.Bed]: { cols: 1, rows: 2 },
+  [DecorType.Table]: { cols: 2, rows: 1 },
+  [DecorType.Chair]: { cols: 1, rows: 1 },
+  [DecorType.Rug]: { cols: 2, rows: 2 },
+  [DecorType.Bookshelf]: { cols: 1, rows: 1 },
+};
+const anywhere = () => true;
+
+describe("what a room is furnished with", () => {
+  // The store already sells a `table`, which is a one-cell garden table
+  // against a two-cell one indoors. Two pieces of furniture that happen to
+  // share an English word, and an item type is a key rather than a label.
+  test("the indoor table does not collide with the one in the garden", () => {
+    expect(DecorType.Table).not.toBe("table");
+    expect(pieceArt(DecorType.Table)).toBe("table");
+    expect(decorFor("table")).toBe(DecorType.Table);
+    expect(new Set(DECOR_TYPES).size).toBe(DECOR_TYPES.length);
+  });
+
+  /**
+   * The hearth is not furniture.
+   *
+   * It is the eight animated frames the room ships for, and it is what
+   * lights the house's windows from the road at dusk — `hearthCell` coming
+   * back empty is what makes `windowsOf` skip a building. A child who could
+   * carry the fire out would put the lights out in their own house, at
+   * night, with nothing on screen to say why.
+   */
+  test("and the fireplace is not one of the things you can carry", () => {
+    expect(decorFor("fireplace")).toBeNull();
+    expect(DECOR_TYPES).not.toContain("fireplace" as never);
+  });
+
+  test("a piece covers every cell of its own footprint", () => {
+    const bed: Placed = { piece: DecorType.Bed, col: 1, row: 2, look: 0 };
+    expect(cellsUnder(bed, SIZES).map((c) => `${c.col},${c.row}`)).toEqual(["1,2", "1,3"]);
+    const rug: Placed = { piece: DecorType.Rug, col: 3, row: 3, look: 0 };
+    expect(cellsUnder(rug, SIZES).length).toBe(4);
+  });
+});
+
+describe("what is standing where", () => {
+  const room: Placed[] = [
+    { piece: DecorType.Bed, col: 1, row: 2, look: 0 },
+    { piece: DecorType.Table, col: 5, row: 2, look: 0 },
+  ];
+
+  /**
+   * The rule the minus spell reads before it takes a floor square up.
+   *
+   * Worked out from *this* arrangement rather than from the sidecar: a bed
+   * that has been moved protects the cells it is on now, and a sidecar
+   * reading would go on protecting the corner it used to be in — which is
+   * the one rule about all this that was asked for explicitly.
+   */
+  test("every cell under every piece is spoken for", () => {
+    const taken = occupiedCells(room, SIZES);
+    expect([...taken].sort()).toEqual(["1,2", "1,3", "5,2", "6,2"]);
+  });
+
+  test("and it follows a piece when it moves", () => {
+    const moved = [
+      ...without(room, room[0] as Placed),
+      { piece: DecorType.Bed, col: 4, row: 4, look: 0 },
+    ];
+    const taken = occupiedCells(moved, SIZES);
+    expect(taken.has("1,2")).toBe(false);
+    expect(taken.has("4,4")).toBe(true);
+    expect(taken.has("4,5")).toBe(true);
+  });
+
+  test("tapping any cell of a piece finds the piece", () => {
+    expect(pieceOn(room, { col: 1, row: 3 }, SIZES)?.piece).toBe(DecorType.Bed);
+    expect(pieceOn(room, { col: 6, row: 2 }, SIZES)?.piece).toBe(DecorType.Table);
+    expect(pieceOn(room, { col: 9, row: 9 }, SIZES)).toBeNull();
+  });
+});
+
+describe("putting something down", () => {
+  const room: Placed[] = [{ piece: DecorType.Bed, col: 1, row: 2, look: 0 }];
+
+  test("it goes on empty floor", () => {
+    const chair: Placed = { piece: DecorType.Chair, col: 3, row: 3, look: 0 };
+    expect(fits(chair, room, SIZES, anywhere)).toBe(true);
+  });
+
+  test("not on top of something else, at any cell of it", () => {
+    for (const row of [2, 3]) {
+      const chair: Placed = { piece: DecorType.Chair, col: 1, row, look: 0 };
+      expect({ row, fits: fits(chair, room, SIZES, anywhere) }).toEqual({ row, fits: false });
+    }
+  });
+
+  // Every cell of the footprint, not only its corner: a two-by-two rug whose
+  // top-left is clear can still have its far side over the bed.
+  test("and every cell of its own footprint has to be clear", () => {
+    const rug: Placed = { piece: DecorType.Rug, col: 0, row: 1, look: 0 };
+    expect(fits(rug, room, SIZES, anywhere)).toBe(false);
+  });
+
+  test("and all of it has to be on floor", () => {
+    const floor = (col: number, row: number) => col >= 0 && col < 3 && row >= 0 && row < 3;
+    expect(fits({ piece: DecorType.Chair, col: 2, row: 2, look: 0 }, [], SIZES, floor)).toBe(true);
+    expect(fits({ piece: DecorType.Chair, col: 3, row: 2, look: 0 }, [], SIZES, floor)).toBe(false);
+    // The rug's corner is on floor and its far side is not.
+    expect(fits({ piece: DecorType.Rug, col: 2, row: 2, look: 0 }, [], SIZES, floor)).toBe(false);
+  });
+
+  // Moving a thing is picking it up and putting it down, so a piece must not
+  // be blocked by where it already is.
+  test("a piece does not block itself", () => {
+    const bed = room[0] as Placed;
+    expect(fits(bed, room, SIZES, anywhere)).toBe(true);
+  });
+
+  /**
+   * Matched by what and where, never by identity.
+   *
+   * A room nobody has rearranged has no stored arrangement, so it is rebuilt
+   * from the sidecar every time it is asked for — and a chair a sprite
+   * captured a moment ago is a different object from the chair that comes
+   * back this time. Compared by reference, picking a chair up put one in the
+   * basket and left the chair standing, and putting it back gave the room
+   * two chairs.
+   */
+  test("and an equal copy is the same piece, not a second one", () => {
+    const bed = room[0] as Placed;
+    const copy: Placed = { piece: bed.piece, col: bed.col, row: bed.row, look: bed.look };
+    expect(copy).not.toBe(bed);
+    expect(same(copy, bed)).toBe(true);
+    expect(without(room, copy)).toEqual([]);
+    expect(fits(copy, room, SIZES, anywhere)).toBe(true);
+  });
+});
+
+describe("what a save remembers", () => {
+  test("an arrangement survives the round trip", () => {
+    const room: Placed[] = [
+      { piece: DecorType.Bed, col: 1, row: 2, look: 0 },
+      { piece: DecorType.Rug, col: -3, row: -4, look: 0 },
+    ];
+    expect(decorFromSave(JSON.parse(JSON.stringify(decorToSave(room))))).toEqual(room);
+  });
+
+  // One mangled chair must not cost a child the room it stands in.
+  test("and anything mangled is dropped rather than repaired", () => {
+    expect(decorFromSave(["bed,1,2,0", "nonsense", "chair,x,4", "rug,1", 7, null])).toEqual([
+      { piece: DecorType.Bed, col: 1, row: 2, look: 0 },
+    ]);
+    expect(decorFromSave(undefined)).toEqual([]);
+    expect(decorFromSave("bed,1,2")).toEqual([]);
+  });
+});
+
+describe("a piece in a colour", () => {
+  /**
+   * The colour belongs to the *item*, not to where it was put down.
+   *
+   * That falls out of the shop being two taps — pick a chair, pick a colour
+   * — because a child who has bought a green chair owns a green chair, and a
+   * basket that only knew "three chairs" would have to ask again every time
+   * one went down.
+   */
+  test("a basket entry names the piece and the colour", () => {
+    expect(decorItem(DecorType.Chair, 3)).toBe("chair~3");
+    expect(itemParts("chair~3")).toEqual({ piece: DecorType.Chair, look: 3 });
+    // The indoor table keeps its suffix and still round-trips.
+    expect(itemParts(decorItem(DecorType.Table, 0))).toEqual({
+      piece: DecorType.Table,
+      look: 0,
+    });
+  });
+
+  test("and nothing else does", () => {
+    for (const junk of ["chair", "chair~", "chair~x", "~2", "fence~1", "chair~2~3", ""]) {
+      expect({ junk, parts: itemParts(junk) }).toEqual({ junk, parts: null });
+    }
+  });
+
+  test("a colour is never negative and never a fraction", () => {
+    expect(decorItem(DecorType.Rug, -4)).toBe("rug~0");
+    expect(decorItem(DecorType.Rug, 2.7)).toBe("rug~2");
+  });
+
+  // The basket has to enumerate every kind of thing it can hold in a stable
+  // order, and cannot ask an asset that has not loaded yet.
+  test("every piece in every colour is a thing a basket can hold", () => {
+    expect(DECOR_ITEMS.length).toBe(DECOR_TYPES.length * DECOR_LOOKS);
+    expect(new Set(DECOR_ITEMS).size).toBe(DECOR_ITEMS.length);
+    for (const item of DECOR_ITEMS) expect(itemParts(item)).not.toBeNull();
+  });
+
+  // Nought is the room as it shipped. A house nobody has redecorated has to
+  // look exactly as it always has, and that is the whole of why.
+  test("the same piece in two colours is two different things", () => {
+    const red: Placed = { piece: DecorType.Rug, col: 1, row: 1, look: 0 };
+    const blue: Placed = { piece: DecorType.Rug, col: 1, row: 1, look: 3 };
+    expect(same(red, blue)).toBe(false);
+    expect(without([red, blue], red)).toEqual([blue]);
+  });
+
+  test("and the colour survives a save", () => {
+    const room: Placed[] = [{ piece: DecorType.Chair, col: 2, row: 4, look: 3 }];
+    expect(decorFromSave(decorToSave(room))).toEqual(room);
+  });
+
+  /**
+   * A save from before anything could be repainted has no colour on it, and
+   * everything in it is the colour the room shipped in.
+   */
+  test("and a save from before colours reads as the room's own", () => {
+    expect(decorFromSave(["bed,1,2"])).toEqual([{ piece: DecorType.Bed, col: 1, row: 2, look: 0 }]);
+  });
+});
+
+describe("what a room protects and what it blocks", () => {
+  // A stand-in for the shipped sidecar: the pieces, their sizes, whether they
+  // block, and the one that is a fire.
+  const sidecar = {
+    furniture: [
+      {
+        name: "fireplace",
+        cell: [1, 1],
+        footprint: [2, 1],
+        blocks: true,
+        animated: true,
+        light: "fire",
+      },
+      {
+        name: "bookshelf",
+        cell: [1, 6],
+        footprint: [1, 1],
+        blocks: true,
+        animated: false,
+        light: null,
+      },
+      { name: "bed", cell: [2, 1], footprint: [1, 2], blocks: true, animated: false, light: null },
+      { name: "rug", cell: [3, 3], footprint: [2, 2], blocks: false, animated: false, light: null },
+    ],
+  } as unknown as GrowableSidecar;
+
+  test("the hearth's cells are known by name, because no arrangement holds them", () => {
+    expect([...hearthCells(sidecar)].sort()).toEqual(["1,1", "2,1"]);
+  });
+
+  /**
+   * Two different questions about one square.
+   *
+   * "May I stand here" and "may I take this up" differ for exactly one piece
+   * — a rug is walked over and still keeps its floor — and the two answers
+   * live in two functions so that neither can quietly start answering the
+   * other.
+   */
+  test("a rug is protected from the minus spell and does not block the way", () => {
+    const rug: Placed = { piece: DecorType.Rug, col: 3, row: 3, look: 0 };
+    expect(protectedCells(sidecar, [rug]).has("3,3")).toBe(true);
+    const rugBlocker = blockersFor(sidecar, [rug]).find((b) => b.cell[0] === 3);
+    expect(rugBlocker?.blocks).toBe(false);
+  });
+
+  test("and a bed is protected and does block", () => {
+    const bed: Placed = { piece: DecorType.Bed, col: 1, row: 2, look: 0 };
+    const guarded = protectedCells(sidecar, [bed]);
+    expect(guarded.has("1,2")).toBe(true);
+    expect(guarded.has("1,3")).toBe(true);
+    expect(blockersFor(sidecar, [bed])[0]?.blocks).toBe(true);
+  });
+
+  // The rule that was asked for out loud, and the one that breaks silently:
+  // a moved bed protects where it is now, not where the sidecar left it.
+  test("what is protected follows a piece when it is moved", () => {
+    const moved: Placed = { piece: DecorType.Bed, col: 5, row: 4, look: 0 };
+    const guarded = protectedCells(sidecar, [moved]);
+    expect(guarded.has("5,4")).toBe(true);
+    expect(guarded.has("5,5")).toBe(true);
+    // The corner the sidecar put it in is free again.
+    expect(guarded.has("1,2")).toBe(false);
+  });
+
+  test("the hearth is protected and blocks whatever anybody has rearranged", () => {
+    for (const arrangement of [[], [{ piece: DecorType.Chair, col: 4, row: 4, look: 2 }]]) {
+      const guarded = protectedCells(sidecar, arrangement as Placed[]);
+      expect(guarded.has("1,1")).toBe(true);
+      const fire = blockersFor(sidecar, arrangement as Placed[]).find(
+        (b) => b.cell[0] === 1 && b.cell[1] === 1,
+      );
+      expect(fire?.blocks).toBe(true);
+    }
+  });
+
+  test("and whoever is standing in the room keeps the floor under her feet", () => {
+    const guarded = protectedCells(sidecar, [], { col: 4, row: 2 });
+    expect(guarded.has("4,2")).toBe(true);
+    expect(protectedCells(sidecar, []).has("4,2")).toBe(false);
+  });
+
+  /**
+   * A room nobody has rearranged is rebuilt from the sidecar every read.
+   *
+   * That fallback is the reason `same` compares by value: the chair a caller
+   * is holding is never the chair that comes back.
+   */
+  test("an untouched room is the room the generator drew, freshly each time", () => {
+    const once = arrangementIn(undefined, sidecar);
+    const twice = arrangementIn(undefined, sidecar);
+    expect(once).toEqual(twice);
+    expect(once[0]).not.toBe(twice[0]);
+    // The hearth is not in it: a child cannot carry the fire out.
+    expect(once.some((p) => p.piece === ("fireplace" as never))).toBe(false);
+  });
+
+  test("and a room somebody arranged is theirs, sidecar or no sidecar", () => {
+    const mine: Placed[] = [{ piece: DecorType.Chair, col: 9, row: 9, look: 4 }];
+    expect(arrangementIn(mine, sidecar)).toEqual(mine);
+    expect(arrangementIn(undefined, null)).toEqual([]);
+  });
+});
+
+describe("what a room costs", () => {
+  /**
+   * One list for the price and the refund.
+   *
+   * Taking a square back up hands back exactly what it took to lay, and a
+   * refund that did not match the cost would make the minus spell either a
+   * penalty or a way of printing planks. Stated as one constant so the two
+   * cannot drift apart.
+   */
+  test("a square is a plank and a stone, and both come from the minus spell", () => {
+    expect(ROOM_COST.map(([item]) => item).sort()).toEqual(["stone", "wood"]);
+    for (const [, each] of ROOM_COST) expect(each).toBeGreaterThan(0);
+  });
+
+  /**
+   * The fewest any one material allows, not the total.
+   *
+   * A child with ten planks and one stone can build one room. Adding the two
+   * up would offer eleven and charge for a stone they have not got.
+   */
+  test("a basket pays for as many as its scarcest material allows", () => {
+    const held = (wood: number, stone: number) => (item: MaterialType) =>
+      item === MaterialType.Wood ? wood : stone;
+    expect(roomsAfforded(held(10, 1))).toBe(1);
+    expect(roomsAfforded(held(1, 10))).toBe(1);
+    expect(roomsAfforded(held(4, 4))).toBe(4);
+    expect(roomsAfforded(held(0, 9))).toBe(0);
+    expect(roomsAfforded(held(0, 0))).toBe(0);
+  });
+
+  test("and never a fraction of one", () => {
+    const held = () => 3;
+    expect(Number.isInteger(roomsAfforded(held))).toBe(true);
+  });
+});
+
+describe("painting a piece of furniture", () => {
+  const palette = {
+    wood_dark: [110, 72, 40],
+    wood: [156, 106, 58],
+    wood_light: [196, 146, 92],
+    fabric_dark: [150, 66, 78],
+    fabric: [196, 96, 108],
+    fabric_light: [232, 148, 156],
+  } as Readonly<Record<string, readonly [number, number, number]>>;
+  const green = {
+    wood: [
+      [52, 88, 58],
+      [82, 128, 86],
+      [124, 172, 124],
+    ] as readonly (readonly [number, number, number])[],
+    fabric: [
+      [112, 78, 130],
+      [152, 112, 176],
+      [196, 160, 214],
+    ] as readonly (readonly [number, number, number])[],
+  };
+
+  /**
+   * Wood and cloth in one plan, because a colourway paints both together —
+   * a green chair has a green blanket on it, not green legs and a red seat.
+   */
+  test("a colourway maps every tone of both ramps", () => {
+    const plan = colourPlanFor(palette, green);
+    expect(plan.size).toBe(6);
+  });
+
+  /**
+   * Colourway nought is free, and that is what makes an untouched house cost
+   * nothing: `repaintedSheet` hands the original straight back for an empty
+   * plan rather than copying a sheet to change nothing.
+   */
+  test("and nothing to do comes back as nothing to do", () => {
+    expect(colourPlanFor(undefined, green).size).toBe(0);
+    expect(colourPlanFor(palette, undefined).size).toBe(0);
+    // A palette missing its ramps maps nothing rather than mapping wrongly.
+    expect(colourPlanFor({}, green).size).toBe(0);
+  });
+
+  test("a piece painted its own colour is a piece nothing happens to", () => {
+    const same = {
+      wood: [palette.wood_dark, palette.wood, palette.wood_light] as never,
+      fabric: [palette.fabric_dark, palette.fabric, palette.fabric_light] as never,
+    };
+    const plan = colourPlanFor(palette, same);
+    // Every entry maps a colour onto itself, so repainting changes no pixel.
+    for (const [from, to] of plan) expect(from).toBe(to);
+  });
+});

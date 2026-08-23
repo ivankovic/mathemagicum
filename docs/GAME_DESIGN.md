@@ -36,9 +36,12 @@ time, each tied to a specific gardening action and a specific math skill.
   educational game, not a live-service one — no artificial scarcity, no
   daily-login hooks, no grind economy engineered to maximize retention.
   If a player can earn effectively unlimited money by genuinely enjoying
-  the loop of helping villagers (each time still requires actually
-  solving a minigame — the friction is real engagement, not a timer),
-  that's fine. Nothing here is trying to control how often someone plays.
+  a loop that still requires actually solving a minigame every time — the
+  friction is real engagement, not a timer — that's fine. Nothing here is
+  trying to control how often someone plays. (This used to be illustrated
+  with "helping villagers", which was a request loop that got designed and
+  never built, and has since been abandoned outright. The principle stands;
+  the example was the only thing that leaned on it.)
 
 ## Core loop
 
@@ -169,6 +172,22 @@ distribution.
 it out of the world. That is the theme rule read backwards — the spell that
 subtracts is the one that removes — and it is the same rule the growth spell
 follows in being the one that adds.
+
+**Floor, indoors.** In a house the minus rune takes a square of floor back up
+rather than clearing ground — see "The house grows". Same rune, same number
+line, and the same idea: the spell that subtracts is the one that removes.
+
+**Crops as well as trees.** Planting had no undo: a carrot dropped on the
+wrong square stayed there until it was ripe enough to pick, which for a child
+who has just worked out what the seed pouch does is a mistake the game gives
+them no way to take back. The minus rune pulls it up, at any stage, ripe or
+not — a seedling and a full-grown carrot are the same act.
+
+**And nothing goes in the basket for it.** Clearing a tree pays wood, because
+taking a tree out of the ground is work somebody did. Pulling up your own
+carrot is undoing something, and paying for it would make the minus spell a
+second way to harvest — one that works *before* the crop is ripe, which would
+quietly make the ripening stages pointless.
 
 **Icon:** a minus, on the second rune in the spellbook. Built from the plus's
 own arm and half-width, with the same sparks at the same four corners, so the
@@ -333,11 +352,61 @@ see "Three teachers" below.
 
 #### The array spell — multiplication (implemented)
 
-**Action:** tap the rune, tap two corners on the ground, and choose what to do
-with what you marked — plant it, grow it, or clear it. A rectangle of dots
-appears on the parchment with one question under it: how many squares is
-that? Answer it and the thing happens to every square of the patch that can
-take it.
+**Action:** tap the rune and choose which spell you are multiplying — the
+plus rune or the minus rune, drawn as themselves. Then mark two corners on
+the ground, **cast that spell once** by hand, and only then is the rectangle
+of dots put on the parchment with its one question under it: how many squares
+is that? Answer it and the thing happens to every square of the patch that
+can take it.
+
+**The choice is two runes, not two words.** It carried the words for a while —
+"grow it", "clear it" — and words are the one thing this game will not put in
+front of a child on its own. The rune is what they already tap to cast the
+spell; the same picture asking which spell to multiply is a question they can
+answer without reading anything, in any language. Indoors the answer is
+always the plus rune, so nothing is asked at all: a menu of one is not a
+choice, it is a tap that asks a child to confirm a decision the game already
+made.
+
+**And it multiplies spells, only ever spells.** Planting was on the list once,
+and it was the one thing here with no arithmetic behind it: mark out six by
+seven, answer one multiplication, and forty-two squares are planted having
+cast nothing. That made planting the obvious pick every time and turned the
+times spell into a way of *avoiding* sums. A seed goes in the ground one at a
+time now, which is what putting a seed in the ground is.
+
+**What, then where, then once, then how many.** The choice used to come after
+the rectangle was drawn, off a menu that also said how many squares each
+action would land on — which is the answer to the multiplication about to be
+asked, sitting on screen a second before the question. Asking first takes it
+away, and it reads better besides: a child decides what they are doing and
+then goes and does it, rather than drawing a rectangle and being asked what
+it was for.
+
+**And the spell is cast once before it is multiplied.** One addition, or one
+subtraction, or one wall of bricks — by hand, on the parchment it normally
+uses — and then the question of how many times. That order is the spell's
+whole argument. Multiplication is doing the same thing many times without
+doing it many times, and a child who has not done it once has not been shown
+what is being multiplied. Planting is the exception, because putting a seed
+in the ground has no sum anywhere in this game; there is nothing to
+demonstrate.
+
+The patch is checked for whether the chosen spell has anything to do in it
+*before* any sum is asked, so a choice that turns out to land on nothing
+costs a tap rather than two minigames. And walking away from the first
+parchment ends the whole cast: nothing is marked out any more and nothing
+happens, which is the same rule every other spell follows — there is no fail
+state here, and closing a panel was never one.
+
+**And the rectangle gets a beat to itself.** The second corner used to land
+and the parchment arrive in the same frame, so the only thing a child ever
+saw of what they had drawn was the *first* corner. Four hundred and twenty
+milliseconds — the same as a refusal mark, and for the same reason: long
+enough to take in, short enough not to be waiting, on something that happens
+on every cast. Taps do nothing while it runs, or a child tapping quickly
+would re-anchor a corner on a rectangle the game had already accepted and be
+asked a second sum for it.
 
 **The child draws the rectangle**, and that is the whole design. It began as
 a spell that chose its own patch and planted it, which worked and taught
@@ -347,9 +416,10 @@ area somebody else picked is a worksheet with a garden behind it.
 
 **One multiplication buys many of something**, which is what multiplication
 is *for* — doing the same thing many times without doing it many times. The
-thing itself is one of the game's own verbs, so the array spell is not a
-fourth kind of action but a *way of doing the other three at once*: eight
-carrots planted, eight grown, eight thickets cleared, for one `4 × 5`.
+thing itself is one of the game's own spells, so the array spell is not
+another kind of action but a *way of casting one of them many times over*:
+twenty crops grown, or twenty thickets cleared, or twenty squares of house
+built, for one `4 × 5`.
 
 **It is not a number line, and that is the point.** Addition walks the line
 up and subtraction walks it down; both are journeys, and one parchment serves
@@ -734,7 +804,7 @@ the carrot's icon has always been a root and not a spray of fronds.
 
 A count per item and nothing else: no slots, no stack size, no weight, no
 capacity. Those are scarcity mechanics, and a basket that filled up would
-turn "go help a villager" into "walk home first" — friction that pads a
+turn "go and do the thing" into "walk home first" — friction that pads a
 session rather than teaching anything. See "No manipulative engagement
 mechanics" above.
 
@@ -996,6 +1066,284 @@ something.
 has always had, and no villager is ever given it. Their home is the one
 building they need to find from a distance without thinking, and a house that
 changed colour between worlds would be a landmark that is not one.
+
+**And the same plot for all four.** House zero had a seven-by-five "per the
+original design request (a big garden)" and the other three a four-by-four,
+which was fine while a world belonged to one child and is one child getting
+half their sibling's garden the moment four of them share a tablet. Every
+plot is thirty-five squares now.
+
+**Turned to face the square rather than always lying the same way.** The long
+side runs *across* the way out of the village, so a plot to the north is
+seven wide and five deep and one to the east is five wide and seven deep.
+Rotated rather than reshaped: every child gets the same ground, and they all
+meet it the same way round — walking in at the middle of a seven-tile
+frontage. All four houses sit on cardinal directions, which is what makes
+"across" a single axis rather than a diagonal to round off.
+
+**Four houses round the square, one per child.** A device holds four players
+and the ring has four cottages, and `Profile.house` has always said which was
+whose — it simply went unread, so every child was put down at house zero's
+gate, including the three who do not live there. They start in their own beds
+inside their own fence now, which is where the game has always started; it is
+just four gardens rather than one.
+
+**And the villagers moved out.** Three of those four cottages used to have a
+villager standing at the gate, which was fine when a world belonged to one
+child and read as a stranger loitering outside somebody's home the moment the
+nameplates went up. They have four cottages of their own now, strewn over the
+village's own green — a cottage in a clearing off the road, which says
+*somebody lives near the village* rather than adding an eighth spoke to a
+wheel that already has seven.
+
+**Placed on ground the village has not carved.** Everything the layout builds
+— the square, every path, every plot and the ring its fence stands on — is
+set to dirt, and nothing else in the box is. So one condition excludes the
+plaza, the roads, the gardens and the seven buildings without the scatter
+having to know what any of them are, and the paths it carves as it goes
+become dirt too, so no cottage lands on the way to another. Each keeps two
+tiles of clear ground on every side, which is both "they do not touch" and
+"there is somewhere to walk between them", stated once where it can be
+checked a cell at a time.
+
+A candidate is refused if the straight walk to it crosses anything standing.
+The path carver draws a line and sets dirt under whatever it passes, which is
+harmless running radially out of a square and is not harmless at all running
+diagonally through somebody's fence.
+
+**And it throws rather than settling for three.** A village one cottage short
+is a generator bug, not a world worth shipping, and a villager whose home is
+nowhere is a villager every later pass has to special-case. Checked over a
+hundred and twenty seeds.
+
+**The villagers' request loop is abandoned.** Their gardens existed to hold
+the struggling plants a request would have been about; nothing of it was ever
+built, and the four cottages have no gardens. See `WORLD_GENERATION.md`.
+
+**And every house says who lives in it.** The paragraph above was written when
+a world belonged to one child, and for children two, three and four it was
+quietly false: their house was one of the ones that looks like a villager's,
+and a reserved roof colour does nothing for them. So each of the four
+cottages carries a small plate beside its door with the face of whoever lives
+there — their own avatar, their own hair and shirt, drawn from the same sheet
+their character walks around in.
+
+**A villager's cottage carries one too**, with the villager who lives there on
+it. Every cottage in the village is the same picture, so a plate on four of
+them and an empty recess on the other four would read as art that failed to
+load. It also makes the plate mean one thing everywhere: *this is whose door
+this is*.
+
+**A child's house nobody has moved into gets a question mark**, which is the
+same mark the animals use when they want something. A villager's never does —
+a villager's cottage is never empty. It is the game's own way of saying
+*nobody has answered this*, so an empty plate reads as a house waiting for
+somebody rather than as a plate that failed to load. A device with one child
+on it has one face and three question marks, which is a true picture of the
+village and an invitation besides.
+
+**The plate is the picture's, the face is the game's.** The board is drawn
+into the cottage sprite and ships blank, because which face belongs to which
+house is a fact about who is playing on this device — something the generator
+cannot know and a PNG cannot carry. `sign_rect_px` in the sidecar says where
+the recess is, on the same contract `window_rects_px` uses and for the same
+reason: the game cannot see the picture, and a coordinate typed into the game
+by hand goes on being right only until somebody moves the door.
+
+It hangs on the **right** of the door, which is where the wall is widest. The
+facade lights its left edge across sixteen per cent of its span and shades
+its right across eleven, so the plain render either side of a cottage door is
+not symmetric: 20.9 pixels to the left and 25.0 to the right, for a board
+twenty wide. On the left it pressed against the edge of the lit band; on the
+right it has five pixels in hand.
+
+The crop is head and shoulders rather than the whole figure — that is where
+all three colours a child picked live — and it is cropped rather than scaled,
+because a face squeezed to fit a plate is a face with some rows twice as tall
+as others.
+
+### The house grows
+
+**A child builds their own room out, a square at a time.** Cast the addition
+spell on a square of house that is not there yet and it becomes floor — for a
+plank and a stone, and a wall of bricks answered correctly. It is deliberately
+the *addition* rune rather than a fourth spell: adding a square to a room is
+adding, and a child who has learned what the plus rune does should find it
+does that everywhere.
+
+**The wall is a new minigame, and a new kind of question.** Six bricks in a
+triangle, three along the bottom, and every brick is the sum of the two it
+rests on. Three are rubbed out and have to be put back. The garden's spell
+hands a child two numbers and asks for the total; this asks *what goes here*,
+and a gap in the bottom row cannot be filled by adding — they have the total
+and one of the parts, and the only way to the answer is backwards. That is
+the same arithmetic seen from the other end, it is what becomes algebra
+later, and it is a different enough skill to get its own ladder.
+
+The ladder climbs on *how much of the working runs backwards* rather than on
+how big the numbers are: nought is a wall built upwards by adding, three is a
+wall where every gap is a subtraction a child has to find for themselves.
+Sixteen of the twenty ways to rub out three bricks leave exactly one wall
+standing; the other four take half the wall with them and are never set. The
+gaps are asked in the order they can be got, because a child allowed to tap a
+gap nothing yet determines would be told "not that one" for a reason about
+plumbing rather than about arithmetic.
+
+**The furniture is things, not paint.** A bed used to be a fact about the
+picture: the generator said one stood at cell (1, 2) and the game drew it
+there, for ever, in every house. That was fine while a room *was* a picture.
+It stopped being fine the moment a child could build the room out — a house
+twice the size with its bed still in the original corner is a house nobody
+arranged.
+
+So the shipped placements are a *starting* arrangement. Tap a thing to pick
+it up and it goes in the basket; put it back down from the crate, the same
+verb and the same place as a fence taken out of the garden. What the
+generator ships is the room somebody left; what a child does with it is
+theirs, and it is written down per house alongside the floor plan.
+
+**And they come in five colours.** Wood and cloth together, so somebody
+picking green gets a green chair *and* a green blanket rather than a table
+whose legs are one colour and whose cloth is another. Colourway nought is the
+paint already on the room, which is load-bearing rather than a coincidence: a
+house nobody has redecorated has to look exactly as it always has.
+
+Painted woods rather than a run of real timbers — oak, walnut and ash are
+three browns, and three browns at thirty-two pixels is one brown, where a
+green chair and a blue chair are two chairs a four-year-old tells apart
+across a room.
+
+**The colour belongs to the thing, not to the square it stands on.** A child
+who has bought a green chair owns a green chair; a basket that only knew
+"three chairs" would have to ask again every time one went down. So the
+basket counts `chair~3`, and the sheet for it is made once and kept — the
+same route the avatars and the house roofs take, a ramp mapped onto a ramp
+and cached under a derived key.
+
+**Two taps, not a list.** Tap the piece, then tap the colour, and the colours
+offered are the piece itself painted — a row of five chairs is a question a
+four-year-old can answer without reading anything, where five swatches would
+be a colour chart. Five pieces times five colours as one flat list would be
+twenty-five rows to scroll past. A chooser of one is not a choice and skips
+itself, the same rule the spell menu keeps.
+
+**The hearth is the exception.** A fireplace is structural: it is the eight
+animated frames the room ships for, and it is what lights the house's windows
+from the road at dusk — `hearthCell` coming back empty is what makes
+`windowsOf` skip a building entirely. A child who could carry the fire out of
+their own house would put the lights out in it, at night, with nothing on
+screen to say why.
+
+**Every occupied square is safe from the minus spell**, whether the thing on
+it blocks the way or not. A rug is walked over and still keeps its floor: the
+two questions are different, and the answer to "may I take this floor up" is
+"not if something is standing on it". That rule reads the arrangement *as it
+stands* rather than the sidecar — a bed that has been moved protects the
+squares it is on now, and reading the shipped placements would go on
+protecting the corner it used to be in.
+
+**And the minus rune takes a square back up.** The mirror of the plus rune in
+here, and the only way to unmake a room built the wrong shape — the sums are
+the same number line walked backwards, so it is the subtraction spell doing
+outdoors what it does indoors rather than a fifth thing to learn. A plank and
+a stone come back, exactly what the square took to lay: undoing a mistake
+should cost a sum, not a walk back to the woods, and a refund that did not
+match the cost would make the minus spell either a penalty or a way of
+printing planks.
+
+**Four squares it will not take.** One somebody is standing on, because a
+child who pulled the floor out from under themselves would be standing in a
+wall. One with furniture on it, because the bed does not move out of the way
+to be helpful. The square behind the front door, because the way in is a hole
+in the south wall with floor behind it and that is the floor — the one
+mistake in here that would need an adult and a save file to undo. And any
+square whose going would leave the room in two halves.
+
+**That last one is the one a child cannot see coming**, which is why it is
+worked out rather than guessed at: a flood fill from behind the front door
+after the square is notionally gone, checking everything left is still walked
+to. The cheap tests are the ones that are wrong — counting neighbours says a
+corridor one tile wide is fine to cut, and looking only at the cells round
+the hole cannot see that the two halves it separates rejoin the long way
+round. A room is a few hundred squares and this runs once per tap.
+
+A hole in the *middle* of a room is fine and reads as a pillar. Only a hole
+that severs is refused.
+
+**The times spell takes up a patch of it**, the same way it lays one, and the
+list is walked forward for the sharper version of the same reason: four
+squares that could each come up on their own can cut the room in half if all
+four go, and a list checked against the room as it stands would offer exactly
+that.
+
+**A plank and a stone per square, and both come from the clearing spell.**
+Subtraction is the spell this game under-uses. A child who wants a bigger
+house now has a reason to go and take a tree out of the ground, which is a
+better answer to "why would anybody cast minus" than anything a shop could
+sell. Short of either, the refusal is a thought cloud with the two things in
+it — a cross on its own is the game saying no with no way to find out why,
+which for a child who cannot read the word "stone" is the same as the game
+being broken.
+
+**The multiplication spell builds a patch of it**, exactly as it plants one
+outdoors: mark out the floor, say how many squares that is, and every square
+of it goes down. Capped by the basket — a patch of nine with wood for four in
+it builds four, because the child has answered the sum either way and a cast
+that does nothing looks broken.
+
+**The grid runs past the walls, and that is what makes building out
+possible.** It used to stop at them, so the outermost square anybody could
+*tap* was the wall itself — a tap past the grid's edge lands on nothing and
+does nothing — and one cast could add a strip a single square deep. From
+inside that reads as not being able to see out of your own house. There is
+four squares of open ground round the room now: aimable, never standable,
+nothing drawn on it. A four-by-four wing in one cast is a proper room.
+
+The camera still frames the *room* rather than the margin. A room framed to
+include it is a room bigger than the screen, which turns the still, centred
+framing every interior has into a camera that follows a child about their own
+sitting room; the margin is where the screen already had nothing on it.
+
+It also cost one rule its meaning. Walking out of a door was detected as
+*stepping off the grid*, which is true of every room that is a picture,
+because theirs ends at the wall. The cell past this doorway is still on the
+grid, so that rule shut a child inside their own house. Leaving is stepping
+out of the *room* now, and the two are no longer the same thing.
+
+**Only the cottage grows, and only away from the front door.** A shop does
+not grow, and a schoolhouse a child could add a wing to is a schoolhouse they
+could wall the teacher into. The door is a hole in the south wall lined up
+with the door of the building outside, and the building does not move — so
+the front of the house stays where it is and the room grows the other three
+ways, which is also the rule that stops a child walling in their own way out.
+
+**What this cost the art.** Six of the seven rooms are one drawn picture and
+stay one. The cottage cannot be: the wall it grows through is a wall that has
+to come down, and you cannot take a wall out of a PNG. So it ships a second
+time as *parts* — a wall tile for every shape a corner can be, the floor, the
+window, the doorway, and its furniture loose.
+
+The thing that made this tractable is that **a wall was always a cell, not an
+edge**. The shipped cottage is eight by six with a one-cell wall ring round a
+six-by-four floor, and its `blocked_cells` has always said so. The eighteen
+pixels a north wall rises are extra height on a cell the wall already owns —
+the same trick the fences use — so a renderer that sorts on a sprite's feet
+draws an arbitrary outline correctly with nothing new taught to it. A wall
+standing in front of floor hides that floor's far edge, which is not an
+artefact but the three-quarter view working.
+
+A wall tile is chosen by five facts: which of its four sides have floor
+against them, and whether the cell to its north is outside the room — which
+is what makes a wall one you look at rather than one seen from above. Thirty
+two tiles, six hundred and forty-five bytes for all of them.
+
+**The plan is its floor and nothing else.** Walls, wall shapes, where the
+room begins and ends, what may be built next: all worked out from the floor
+every time. A save with both in it is a save whose two halves can disagree,
+and a room with a wall through the middle of it is what that looks like. The
+plan lives with the *world* rather than with the child, because a house is a
+fact about the world and two siblings on one tablet own different cottages in
+one village.
 
 ### Saved games
 
@@ -1293,26 +1641,38 @@ no level, no badge, no sound — a child who is flying simply finds the sums
 getting bigger, which is what a good teacher does and a progress bar does
 not.
 
-The band used to be a fence the game could not cross, and playtesting killed
-that: a child reaches the top of their band in a dozen casts and then nothing
-ever changes again, which from the outside is indistinguishable from a fixed
-difficulty. The ladder is open at both ends now — the band is where a child
-*starts*, not where they are kept.
+**And it stops at the edges of the band.** The band was opened at both ends
+for a while, on a playtest reading that a child who tops out and then sees
+nothing change is looking at something indistinguishable from a fixed
+difficulty. That was true and it was the wrong fix. Once the ladder was open,
+a run of lucky guesses could carry a six-year-old into three-digit sums, and
+the first anybody heard of it was a child in tears over sums nobody chose for
+them. The band is a fence again, and moving between bands is a person's
+decision — made in the options panel by somebody who has watched this child
+play, not by a rule counting the last four casts.
 
-The fence was protecting something real, though, and three things replace it.
-**Leaving a band takes twice the run that moving inside one does**, so a good
-afternoon moves a child along without moving them up a year: from the
-gentlest sums to the hardest is sixty-four consecutive clean casts, which is
-thirty-two crops grown without a single mistake. **Coming down works across a
-boundary exactly as inside one**, and is quicker than going up in both cases,
-so a child carried up by a lucky run falls back on the first two casts that
-show it. And **the options panel still names the band**, so an adult can put
-a child back in one tap — a setup choice was made before anybody had seen the
-child play, and an adaptive system that has quietly settled on the wrong
-answer with no way to overrule it is worse than no adaptation at all.
+The cost is real and stated rather than discovered: a child at the top of
+their band sees the sums stop growing, and only an adult can start them
+growing again. That is the trade, taken deliberately. How hard a child's sums
+should be is a judgement about that child, and an adaptation that quietly
+overrules the person who made that judgement is not adapting to the child,
+it is disagreeing with their parent.
 
-What the band still decides is where a child begins and what the money looks
-like. What it no longer decides is where they may be.
+So the options panel naming the band is not a safety net any more, it is the
+control. It is one tap, it shows the sums each band actually sets, and it is
+where a child's difficulty changes when they have grown into the next one.
+
+**A band is scaled onto each spell's own ladder.** Bands are counted in
+addition rungs, and the addition ladder is the longest — the clock and the
+great tree have six rungs each. Truncating a band against a shorter ladder
+puts the hardest band on its last rung with nothing above *or below* it,
+which is not a fence, it is the adaptation switched off. Scaled, every band
+keeps its share of every ladder: the gentlest band on the clock is the two
+easiest readings rather than only the one, and a child in the hardest band
+opens the times-table spell partway up it with somewhere left to climb.
+
+What the band decides, then, is where a child begins, what the money looks
+like, and where they may be.
 
 **The teacher follows.** She works through `148 + 114` at three places and
 `8 + 4` at one — the same sum cut down, so its shape never changes — and she

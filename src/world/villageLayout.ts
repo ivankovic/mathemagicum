@@ -6,6 +6,7 @@ import { type BuildingRole, footprintFor } from "./buildings";
 import { FixtureType } from "./fixtures";
 import type { WorldGrid } from "./grid";
 import type { PlacedObject } from "./objects";
+import { createRng, randInt } from "./rng";
 import { TerrainType } from "./terrain";
 import type { GridPoint } from "./topdown";
 
@@ -37,12 +38,12 @@ const GARDEN_GAP = 3;
 // when the true Euclidean distance already cleared it.
 const NPC_HOME_CLEARANCE = 2;
 
-interface Direction {
+export interface Direction {
   dCol: number;
   dRow: number;
 }
 
-const DIRECTIONS: Record<string, Direction> = {
+export const DIRECTIONS: Record<string, Direction> = {
   N: { dCol: 0, dRow: -1 },
   NE: { dCol: 1, dRow: -1 },
   E: { dCol: 1, dRow: 0 },
@@ -52,9 +53,31 @@ const DIRECTIONS: Record<string, Direction> = {
   W: { dCol: -1, dRow: 0 },
 };
 
-interface GardenSpec {
-  width: number;
-  height: number;
+/**
+ * The plot behind a child's house: seven across the frontage, five deep.
+ *
+ * One size for all four of them. House zero had a seven-by-five "per the
+ * original design request (a big garden)" and the other three had a
+ * four-by-four, which was fine while a world belonged to one child and is a
+ * child getting half their sibling's garden the moment four of them share a
+ * tablet.
+ *
+ * **Turned to face the square.** The long side always runs *across* the way
+ * out of the village, so a plot to the north is seven wide and five deep and
+ * one to the east is five wide and seven deep. Rotated rather than reshaped:
+ * every child gets the same thirty-five squares to plant, and they all meet
+ * their plot the same way round — walking in at the middle of a seven-tile
+ * frontage. All four houses sit on cardinal directions, which is what makes
+ * "across" a single axis rather than a diagonal to round off.
+ */
+const PLOT_ACROSS = 7;
+const PLOT_DEEP = 5;
+
+export function plotFor(direction: Direction): { width: number; height: number } {
+  const radial = Math.abs(direction.dCol) > Math.abs(direction.dRow);
+  return radial
+    ? { width: PLOT_DEEP, height: PLOT_ACROSS }
+    : { width: PLOT_ACROSS, height: PLOT_DEEP };
 }
 
 interface BuildingSpec {
@@ -62,7 +85,8 @@ interface BuildingSpec {
   type: BuildingRole;
   direction: Direction;
   npcId: string | null;
-  garden: GardenSpec | null;
+  /** Whether it has a plot behind it. Its size comes from `plotFor`. */
+  garden: boolean;
   /**
    * Whether market stalls stand in front of it.
    *
@@ -98,14 +122,14 @@ const BUILDINGS: readonly BuildingSpec[] = [
     type: "house",
     direction: DIRECTIONS.N as Direction,
     npcId: null,
-    garden: { width: 7, height: 5 },
+    garden: true,
   },
   {
     id: "school",
     type: "school",
     direction: DIRECTIONS.NE as Direction,
     npcId: "teacher",
-    garden: null,
+    garden: false,
     // Like the shopkeeper, and for the same reason: a teacher you have to
     // find in the square is a teacher you meet by accident. She is where a
     // child would look for her, and the school has a reason to exist.
@@ -115,15 +139,19 @@ const BUILDINGS: readonly BuildingSpec[] = [
     id: "villager-house-1",
     type: "house",
     direction: DIRECTIONS.E as Direction,
-    npcId: "villager-1",
-    garden: { width: 4, height: 4 },
+    // Nobody's but a child's. The villagers used to live in these three and
+    // moved out when it became clear four children share a tablet and three
+    // of them were being housed in somebody else's cottage. See
+    // `scatterVillagerHomes`.
+    npcId: null,
+    garden: true,
   },
   {
     id: "post-office",
     type: "post-office",
     direction: DIRECTIONS.SE as Direction,
     npcId: "postal-worker",
-    garden: null,
+    garden: false,
     // The tower is a study as well as a post office, and the geometry
     // teacher is in it. He is where the map on the wall is, which is the
     // one thing in the village that was already about distances.
@@ -133,15 +161,15 @@ const BUILDINGS: readonly BuildingSpec[] = [
     id: "villager-house-2",
     type: "house",
     direction: DIRECTIONS.S as Direction,
-    npcId: "villager-2",
-    garden: { width: 4, height: 4 },
+    npcId: null,
+    garden: true,
   },
   {
     id: "store",
     type: "store",
     direction: DIRECTIONS.SW as Direction,
     npcId: "shopkeeper",
-    garden: null,
+    garden: false,
     npcIndoors: true,
     stalls: true,
   },
@@ -149,10 +177,66 @@ const BUILDINGS: readonly BuildingSpec[] = [
     id: "villager-house-3",
     type: "house",
     direction: DIRECTIONS.W as Direction,
-    npcId: "villager-3",
-    garden: { width: 4, height: 4 },
+    npcId: null,
+    garden: true,
   },
 ];
+
+/**
+ * The houses somebody can live in, in the order profiles are given them.
+ *
+ * Derived from `BUILDINGS` rather than written out, because a list typed by
+ * hand is one that quietly stops matching the day a house is added or the
+ * square is rearranged. `Profile.house` is an index into exactly this.
+ *
+ * The first is the player's own — the one with the big garden, the one the
+ * game spawns at, and the one `houseLook` reserves a roof colour for. That
+ * ordering is not an accident of the array: it is what makes "house zero" the
+ * house the game has always treated as the player's.
+ */
+export const HOUSE_IDS: readonly string[] = BUILDINGS.filter((spec) => spec.type === "house").map(
+  (spec) => spec.id,
+);
+
+/** Which building a profile's house number means, or nothing if it is past the end. */
+export function houseIdFor(house: number): string | null {
+  return HOUSE_IDS[house] ?? null;
+}
+
+/** Whether this building is one somebody could live in. */
+export function isHouseId(id: string): boolean {
+  return HOUSE_IDS.includes(id);
+}
+
+/**
+ * How many cottages the villagers live in, off the square.
+ *
+ * Four, one per villager, and none of them on the ring. The ring's four
+ * houses belong to the children now — there are four of those too, and a
+ * child sent to live in a cottage with somebody else's name on the door is
+ * the thing the nameplates made impossible to ignore.
+ */
+export const VILLAGER_HOME_COUNT = 4;
+
+/** The villagers who live in them. One each, in this order. */
+export const VILLAGER_IDS: readonly string[] = Array.from(
+  { length: VILLAGER_HOME_COUNT },
+  (_, at) => `villager-${at + 1}`,
+);
+
+/**
+ * Open ground kept round a scattered cottage, on every side.
+ *
+ * Two, which is what stops them touching and what leaves somewhere to walk
+ * between them. It is also the whole of "far enough apart": rather than a
+ * distance between centres, every cottage simply insists on its own margin
+ * being empty, which is the same rule stated where it can be checked one
+ * cell at a time.
+ */
+const HOME_CLEARANCE = 2;
+
+/** How many places are tried before the village admits it has no room. */
+const HOME_TRIES = 600;
 
 export interface VillageNpcSpec {
   id: string;
@@ -198,6 +282,19 @@ export interface VillageLayout {
    * disappeared the first time this was drawn.
    */
   playerDoorstep: GridPoint;
+  /**
+   * Where each of the four children's houses puts its owner down.
+   *
+   * By building id, because a child's house is `Profile.house` and that is an
+   * index into `HOUSE_IDS`. The scene picks whichever belongs to whoever is
+   * playing — see `GameScene.startFor` — and `playerSpawn` stays as the
+   * fallback for a session that has no child in it at all.
+   *
+   * `inside` is the middle of their own beds where there is a garden, which
+   * is where the game has always started; `doorstep` is the tile on the path
+   * outside their front door, which is where it starts when there is not.
+   */
+  homes: Readonly<Record<string, { inside: GridPoint; doorstep: GridPoint }>>;
 }
 
 /**
@@ -454,7 +551,7 @@ function nearestCellTo(
   };
 }
 
-export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageLayout {
+export function layoutVillage(grid: WorldGrid, village: AreaPlacement, seed = 0): VillageLayout {
   const center: GridPoint = {
     col: village.col + Math.floor(village.width / 2),
     row: village.row + Math.floor(village.height / 2),
@@ -481,6 +578,10 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
   const npcs: VillageNpcSpec[] = [];
   let playerSpawn: GridPoint | undefined;
   let playerDoorstep: GridPoint | undefined;
+  const homes: Record<string, { inside: GridPoint; doorstep: GridPoint }> = {};
+  // Filled while the ring is laid out and read once it is: a garden is
+  // placed before the doorstep it belongs to is worked out.
+  const gardenMiddles: Record<string, GridPoint> = {};
 
   for (const spec of BUILDINGS) {
     const buildingCenter = alongDirection(center, spec.direction, RING_RADIUS);
@@ -524,28 +625,29 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
     }
 
     if (spec.garden) {
-      const gardenRadialHalf = Math.max(spec.garden.width, spec.garden.height) / 2;
+      const plot = plotFor(spec.direction);
+      const gardenRadialHalf = Math.max(plot.width, plot.height) / 2;
       const gardenDistance =
         RING_RADIUS + Math.max(buildingWidth, buildingHeight) / 2 + GARDEN_GAP + gardenRadialHalf;
       const gardenCenter = alongDirection(center, spec.direction, gardenDistance);
-      const gardenTopLeft = topLeftFor(gardenCenter, spec.garden.width, spec.garden.height);
-      carveRect(grid, gardenTopLeft, spec.garden.width, spec.garden.height);
+      const gardenTopLeft = topLeftFor(gardenCenter, plot.width, plot.height);
+      carveRect(grid, gardenTopLeft, plot.width, plot.height);
       // The ground the fence stands on, carved too, so the enclosure reads as
       // one plot — and so nothing scatters scenery into the fence line, which
       // only ever lands on the terrain it grows from.
       carveRect(
         grid,
         { col: gardenTopLeft.col - 1, row: gardenTopLeft.row - 1 },
-        spec.garden.width + 2,
-        spec.garden.height + 2,
+        plot.width + 2,
+        plot.height + 2,
       );
 
-      const ring = gardenFenceRing(gardenTopLeft, spec.garden.width, spec.garden.height);
+      const ring = gardenFenceRing(gardenTopLeft, plot.width, plot.height);
       const entrance = gardenEntrance(ring, center);
       const gate = entrance[Math.floor(entrance.length / 2)] ?? gardenGate(ring, center);
       const left = gardenTopLeft.col - 1;
-      const right = gardenTopLeft.col + spec.garden.width;
-      const bottomRow = gardenTopLeft.row + spec.garden.height;
+      const right = gardenTopLeft.col + plot.width;
+      const bottomRow = gardenTopLeft.row + plot.height;
       const topRow = gardenTopLeft.row - 1;
       // A way up to it: the entrance faces the square, and what lies between
       // is whatever the world put there. Carved to the middle of the way in,
@@ -625,7 +727,12 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
         });
       }
       // Standing in their own beds, inside their own fence: the first thing
-      // the game is about is the thing the player is stood in.
+      // the game is about is the thing the player is stood in. Recorded for
+      // every house rather than only the first, because there are four
+      // children and each of them starts in their own.
+      if (isHouseId(spec.id)) {
+        gardenMiddles[spec.id] = { col: gardenCenter.col, row: gardenCenter.row };
+      }
       if (spec.id === "player-house")
         playerSpawn = { col: gardenCenter.col, row: gardenCenter.row };
     }
@@ -661,8 +768,11 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
         indoors: true,
       });
     }
-    // The doorstep is the spawn's fallback too: a player house without a
-    // garden would otherwise have nowhere to put its owner.
+    // The doorstep is the spawn's fallback too: a house without a garden
+    // would otherwise have nowhere to put its owner.
+    if (isHouseId(spec.id)) {
+      homes[spec.id] = { inside: gardenMiddles[spec.id] ?? doorstep, doorstep };
+    }
     if (spec.id === "player-house") {
       playerDoorstep = doorstep;
       playerSpawn ??= doorstep;
@@ -683,5 +793,190 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement): VillageL
   // villager with nowhere to go home to.
   lightTheSquare(grid, center, [playerDoorstep, ...npcs.map((npc) => npc.home)]);
 
-  return { well, buildings, npcs, playerSpawn, playerDoorstep };
+  // The villagers' own cottages, scattered over whatever green the village
+  // has not built on. Last, so every path, plot and fence is already down
+  // and counts as ground that is spoken for.
+  for (const home of scatterVillagerHomes(grid, village, center, seed)) {
+    buildings.push(home.building);
+    npcs.push({
+      id: home.villagerId,
+      homeBuildingId: home.building.id,
+      home: home.doorstep,
+      indoors: false,
+    });
+  }
+
+  return { well, buildings, npcs, playerSpawn, playerDoorstep, homes };
+}
+
+interface VillagerHome {
+  readonly building: PlacedObject;
+  readonly villagerId: string;
+  readonly doorstep: GridPoint;
+}
+
+/**
+ * Four cottages for the four villagers, strewn over the village's own green.
+ *
+ * **On ground the village has not carved.** Everything the layout builds —
+ * the square, every path, every garden and the ring its fence stands on —
+ * is set to dirt, and nothing else in the box is. So "not dirt, nothing
+ * standing on it, and something you could walk on" excludes the plaza, the
+ * roads, the plots and the seven buildings in one condition, without this
+ * pass having to know what any of them are. The paths it carves as it goes
+ * become dirt too, so no cottage lands on the way to another.
+ *
+ * The box is mostly woodland, which is the point: a cottage in a clearing
+ * off the road reads as somebody living *near* the village rather than as an
+ * eighth spoke on a wheel that already has seven.
+ *
+ * **A candidate is rejected if the walk to it crosses anything.** `carvePath`
+ * draws a straight line and sets dirt under whatever it passes, which is
+ * harmless running radially out of a square and is not harmless at all
+ * running diagonally across somebody's fence. Checking the line before
+ * carving it is cheaper than routing round things and says the same thing.
+ * See `walkOutOfSquare` for why the line starts at the plaza's edge.
+ *
+ * Throws rather than settling for three. A village one cottage short is a
+ * generator bug, not a world worth shipping, and a villager whose home is
+ * nowhere is a villager every later pass has to special-case.
+ */
+function scatterVillagerHomes(
+  grid: WorldGrid,
+  village: AreaPlacement,
+  center: GridPoint,
+  seed: number,
+): readonly VillagerHome[] {
+  const rng = createRng(seed ^ 0x5eed_10c8);
+  const { width, height } = footprintFor("house");
+  const homes: VillagerHome[] = [];
+
+  for (let tries = 0; tries < HOME_TRIES && homes.length < VILLAGER_HOME_COUNT; tries++) {
+    // Anywhere in the box that leaves the cottage and its margin inside it.
+    const topLeft = {
+      col: randInt(
+        rng,
+        village.col + HOME_CLEARANCE,
+        village.col + village.width - width - HOME_CLEARANCE - 1,
+      ),
+      row: randInt(
+        rng,
+        village.row + HOME_CLEARANCE,
+        village.row + village.height - height - HOME_CLEARANCE - 1,
+      ),
+    };
+    // The door is the bottom middle of a cottage and the step is the tile
+    // below it. Stated as the shape rather than read from a sidecar, which
+    // this pass has no access to — `villageLayout.test.ts` checks the two
+    // agree against the art that actually ships.
+    const doorstep = {
+      col: topLeft.col + Math.floor(width / 2),
+      row: topLeft.row + height,
+    };
+    if (!isClearGround(grid, topLeft, width, height, HOME_CLEARANCE)) continue;
+    if (!grid.inBounds(doorstep.col, doorstep.row)) continue;
+    const roadHead = walkOutOfSquare(grid, center, doorstep);
+    if (!roadHead) continue;
+
+    const villagerId = VILLAGER_IDS[homes.length];
+    if (!villagerId) break;
+    const anchor = nearestCellTo(topLeft, width, height, center);
+    const building: PlacedObject = {
+      id: `villager-home-${homes.length + 1}`,
+      type: "house",
+      ...topLeft,
+      width,
+      height,
+      blocksMovement: true,
+      anchorCol: anchor.col,
+      anchorRow: anchor.row,
+    };
+    // Put down *here*, not by the caller. A cottage the grid has not been
+    // told about is a cottage the next candidate's clearance check cannot
+    // see, and four of them chosen against an empty green ended up in a
+    // terrace with one-tile alleys between them.
+    grid.placeObject(building);
+    homes.push({ villagerId, doorstep, building });
+    carvePath(grid, roadHead, doorstep);
+  }
+
+  if (homes.length < VILLAGER_HOME_COUNT) {
+    throw new Error(
+      `the village found room for ${homes.length} of ${VILLAGER_HOME_COUNT} villager cottages`,
+    );
+  }
+  return homes;
+}
+
+/** Whether a footprint and the margin round it are untouched, walkable ground. */
+function isClearGround(
+  grid: WorldGrid,
+  topLeft: GridPoint,
+  width: number,
+  height: number,
+  margin: number,
+): boolean {
+  for (let row = topLeft.row - margin; row < topLeft.row + height + margin; row++) {
+    for (let col = topLeft.col - margin; col < topLeft.col + width + margin; col++) {
+      if (!grid.inBounds(col, row)) return false;
+      // Dirt is the village's own mark: the square, the roads, the plots and
+      // the ground their fences stand on are all of them carved to it.
+      if (grid.getTerrain(col, row) === TerrainType.Dirt) return false;
+      if (!grid.isPassable(col, row)) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * The walk out of the square to a cell, or null if it does not exist.
+ *
+ * Starts at the square's *edge* rather than its middle, for two reasons that
+ * both bite. The middle is the well, which is a placed object and therefore
+ * impassable — a line checked from there fails on its own first cell, every
+ * time, for every candidate. And the plaza is paved last, over the ends of
+ * the roads; a path carved from the centre would draw a dirt scar across
+ * fresh cobble on its way out.
+ *
+ * Null when anything standing is in the way. `carvePath` draws a straight
+ * line and sets dirt under whatever it crosses, which is harmless running
+ * radially out of a square and is not harmless at all running diagonally
+ * through somebody's fence.
+ */
+function walkOutOfSquare(grid: WorldGrid, center: GridPoint, to: GridPoint): GridPoint | null {
+  const line = straightLine(center, to);
+  const beyond = line.findIndex(
+    (at) => Math.max(Math.abs(at.col - center.col), Math.abs(at.row - center.row)) > SQUARE_RADIUS,
+  );
+  if (beyond < 0) return null;
+  for (const at of line.slice(beyond)) {
+    if (!grid.inBounds(at.col, at.row)) return null;
+    if (!grid.isPassable(at.col, at.row)) return null;
+  }
+  return line[beyond] ?? null;
+}
+
+/** Every cell a straight walk between two points passes through. */
+function straightLine(from: GridPoint, to: GridPoint): GridPoint[] {
+  const cells: GridPoint[] = [];
+  let col = from.col;
+  let row = from.row;
+  const dCol = Math.abs(to.col - from.col);
+  const dRow = -Math.abs(to.row - from.row);
+  const stepCol = from.col < to.col ? 1 : -1;
+  const stepRow = from.row < to.row ? 1 : -1;
+  let err = dCol + dRow;
+  for (;;) {
+    cells.push({ col, row });
+    if (col === to.col && row === to.row) return cells;
+    const e2 = 2 * err;
+    if (e2 >= dRow) {
+      err += dRow;
+      col += stepCol;
+    }
+    if (e2 <= dCol) {
+      err += dCol;
+      row += stepRow;
+    }
+  }
 }

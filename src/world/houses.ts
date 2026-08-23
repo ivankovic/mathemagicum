@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { Rgb } from "../render/recolour";
+import { HOUSE_IDS } from "./villageLayout";
 
 /**
  * Why every house in the village is not the same house.
@@ -138,4 +139,37 @@ export const VARYING_SPRITES: readonly string[] = ["cottage", "townhouse"];
 
 export function varies(sprite: string): boolean {
   return VARYING_SPRITES.includes(sprite);
+}
+
+/**
+ * Who lives behind a door, for the plate beside it.
+ *
+ * Three answers and they are not interchangeable. A villager's cottage shows
+ * the villager standing outside it. One of the four round the square shows
+ * its owner, or nothing if nobody has moved in — and *nothing* is the answer
+ * a question mark is drawn for, which is why it is distinct from "this
+ * building has no plate at all".
+ *
+ * Generic over the child rather than importing a `Profile`, so the rule
+ * about who lives where does not drag the save format into the world
+ * modules. All it needs to know is that a child has a house number.
+ */
+export type Resident<T> =
+  | { readonly kind: "villager"; readonly character: string }
+  | { readonly kind: "child"; readonly owner: T }
+  | { readonly kind: "vacant" }
+  | null;
+
+export function whoLivesIn<T extends { house: number }>(
+  buildingId: string,
+  villagers: readonly { readonly homeBuildingId?: string; readonly character: string }[],
+  household: readonly T[],
+): Resident<T> {
+  const villager = villagers.find((one) => one.homeBuildingId === buildingId);
+  if (villager) return { kind: "villager", character: villager.character };
+  const house = HOUSE_IDS.indexOf(buildingId);
+  // Not a house at all: a school has no plate and no question to answer.
+  if (house < 0) return null;
+  const owner = household.find((one) => one.house === house);
+  return owner ? { kind: "child", owner } : { kind: "vacant" };
 }

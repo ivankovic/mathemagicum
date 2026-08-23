@@ -379,6 +379,23 @@ export class WorldGrid {
   }
 
   /**
+   * Take the crop off this tile whatever stage it is at.
+   *
+   * The other way a crop leaves the ground, and deliberately not
+   * `harvestCrop` with the maturity rule relaxed: picking is about a crop
+   * being *ready*, and this is about it being in the wrong place. A seedling
+   * pulled up and a ripe carrot pulled up are the same act, and neither of
+   * them puts anything in a basket — see the clearing spell.
+   */
+  removeCrop(col: number, row: number): Crop | null {
+    const idx = this.requireInBounds(col, row);
+    const crop = this.crops.get(idx);
+    if (!crop) return null;
+    this.crops.delete(idx);
+    return crop;
+  }
+
+  /**
    * Move the crop on this tile one stage further along, if there is one and
    * it is not already grown.
    *

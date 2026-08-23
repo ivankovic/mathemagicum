@@ -15,7 +15,16 @@ import { CLIFF_ATLAS_KEY } from "../world/cliffAtlas";
 import { DECK_SHEET_KEY, DECK_SIDECAR_KEY, type DeckSidecar } from "../world/decking";
 import { EFFECT_TYPES, effectSheetKey, effectSidecarKey } from "../world/effects";
 import { FIXTURE_TYPES, fixtureSheetKey, fixtureSidecarKey } from "../world/fixtures";
-import { INTERIOR_ROOMS, interiorSheetKey, interiorSidecarKey } from "../world/interiors";
+import { WALL_MASKS } from "../world/growableRoom";
+import {
+  GROWABLE_ROOM,
+  INTERIOR_ROOMS,
+  growablePieceKey,
+  growableSheetKey,
+  growableSidecarKey,
+  interiorSheetKey,
+  interiorSidecarKey,
+} from "../world/interiors";
 import { LANDMARK_TYPES, landmarkSheetKey, landmarkSidecarKey } from "../world/landmarks";
 import { PLANT_TYPES, plantSheetKey, plantSidecarKey } from "../world/plants";
 import { SCENERY_KINDS, scenerySheetKey, scenerySidecarKey } from "../world/scenery";
@@ -24,6 +33,7 @@ import type {
   CharacterSidecar,
   EffectSidecar,
   FixtureSidecar,
+  GrowableSidecar,
   InteriorSidecar,
   ObjectSidecar,
   PlantSidecar,
@@ -109,6 +119,13 @@ export class BootScene extends Phaser.Scene {
     for (const room of INTERIOR_ROOMS) {
       this.load.json(interiorSidecarKey(room), `${this.base()}assets/interiors/${room}.json`);
     }
+    // The cottage a second time, as the parts a room that grows is built
+    // from. See growableRoom.ts — a room somebody can add a square to cannot
+    // be one picture, because the wall it grows through has to come down.
+    this.load.json(
+      growableSidecarKey(GROWABLE_ROOM),
+      `${this.base()}assets/interiors/${GROWABLE_ROOM}_growable.json`,
+    );
     for (const plant of PLANT_TYPES) {
       this.load.json(plantSidecarKey(plant), `${this.base()}assets/plants/${plant}.json`);
     }
@@ -183,6 +200,25 @@ export class BootScene extends Phaser.Scene {
     for (const room of INTERIOR_ROOMS) {
       const sidecar = this.cache.json.get(interiorSidecarKey(room)) as InteriorSidecar | undefined;
       this.queueSheet(interiorSheetKey(room), "interiors", room, sidecar?.sheet);
+    }
+    const grown = this.cache.json.get(growableSidecarKey(GROWABLE_ROOM)) as
+      | GrowableSidecar
+      | undefined;
+    for (const name of Object.keys(grown?.sheets ?? {})) {
+      this.queueSheet(
+        growableSheetKey(GROWABLE_ROOM, name),
+        "interiors",
+        name,
+        grown?.sheets[name],
+      );
+    }
+    for (const piece of Object.keys(grown?.piece_sheets ?? {})) {
+      this.queueSheet(
+        growablePieceKey(GROWABLE_ROOM, piece),
+        "interiors",
+        piece,
+        grown?.piece_sheets[piece],
+      );
     }
     for (const plant of PLANT_TYPES) {
       const sidecar = this.cache.json.get(plantSidecarKey(plant)) as PlantSidecar | undefined;
@@ -359,6 +395,39 @@ export class BootScene extends Phaser.Scene {
     for (const room of INTERIOR_ROOMS) {
       const sheet = (this.cache.json.get(interiorSidecarKey(room)) as InteriorSidecar).sheet;
       if (sheet) expected.push([room, interiorSheetKey(room), sheet.frame_count]);
+    }
+    // The growable room's parts, and the wall atlas above all. It is indexed
+    // straight by the mask a cell computes — `batchDrawFrame(walls, mask)` —
+    // so a strip that sliced into thirty-one frames instead of thirty-two
+    // draws the wrong wall for some corners and nothing for others, with
+    // nothing anywhere saying why.
+    const grown = this.cache.json.get(growableSidecarKey(GROWABLE_ROOM)) as
+      | GrowableSidecar
+      | undefined;
+    for (const [name, sheet] of Object.entries(grown?.sheets ?? {})) {
+      expected.push([
+        `${GROWABLE_ROOM} ${name}`,
+        growableSheetKey(GROWABLE_ROOM, name),
+        sheet.frame_count,
+      ]);
+    }
+    for (const [piece, sheet] of Object.entries(grown?.piece_sheets ?? {})) {
+      expected.push([
+        `${GROWABLE_ROOM} ${piece}`,
+        growablePieceKey(GROWABLE_ROOM, piece),
+        sheet.frame_count,
+      ]);
+    }
+    // And the atlas has to hold a tile for every mask the game can compute,
+    // which is a fact about the *rule* rather than about the file: a sheet
+    // sliced correctly into too few frames passes the count check above and
+    // still has no tile for the corner somebody is about to build.
+    const atlas = grown?.sheets.walls?.frame_count;
+    if (atlas !== undefined && atlas < WALL_MASKS) {
+      throw new Error(
+        `the ${GROWABLE_ROOM} wall atlas has ${atlas} tiles, ` +
+          `and a wall can be any of ${WALL_MASKS} shapes`,
+      );
     }
     for (const plant of PLANT_TYPES) {
       const sidecar = this.cache.json.get(plantSidecarKey(plant)) as PlantSidecar;

@@ -1,0 +1,436 @@
+// SPDX-FileCopyrightText: 2026 Marko Ivankovic
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+import { type Rgb, rampPlan } from "../render/recolour";
+import { FABRIC_SLOTS } from "./houses";
+import type { RoomBlocker } from "./interiors";
+import { MaterialType } from "./materials";
+import type { GrowableSidecar } from "./spriteSidecar";
+import type { GridPoint } from "./topdown";
+
+/**
+ * The things standing in a room, and where they stand.
+ *
+ * Furniture used to be a fact about the *picture*: the generator said a bed
+ * was at cell (1, 2) and the game drew one there, for ever, in every house.
+ * That was fine while a room was a picture. It stopped being fine the moment
+ * a child could build the room out — a house twice the size with its bed
+ * still in the original corner is a house nobody arranged.
+ *
+ * So the shipped placements are a *starting* arrangement now, and everything
+ * in a room is an ordinary thing that can be picked up and put down again.
+ * What the generator ships is the room somebody left; what a child does with
+ * it is theirs.
+ *
+ * **The hearth is not in here.** A fireplace is the one thing in a room that
+ * is structural: it is the eight animated frames the room ships for, and it
+ * is what lights the house's windows from the road at dusk — `hearthCell`
+ * coming back empty is what makes `windowsOf` skip a building entirely. A
+ * child who could carry the fire out of their own house would put the lights
+ * out in it, at night, with nothing on screen to say why.
+ */
+
+export const DecorType = {
+  Bed: "bed",
+  Table: "table-indoor",
+  Chair: "chair",
+  Rug: "rug",
+  Bookshelf: "bookshelf",
+} as const;
+
+export type DecorType = (typeof DecorType)[keyof typeof DecorType];
+
+export const DECOR_TYPES: readonly DecorType[] = Object.values(DecorType);
+
+/**
+ * The name the *art* uses, which is not always the name the game does.
+ *
+ * One of them collides: the store already sells a `table`, which is a
+ * different drawing at a different size — a one-cell garden table against a
+ * two-cell one indoors. They are two pieces of furniture that happen to
+ * share an English word, and an item type is a key rather than a label, so
+ * the indoor one carries a suffix and the pictures stay apart.
+ */
+const PIECE_ART: Record<DecorType, string> = {
+  [DecorType.Bed]: "bed",
+  [DecorType.Table]: "table",
+  [DecorType.Chair]: "chair",
+  [DecorType.Rug]: "rug",
+  [DecorType.Bookshelf]: "bookshelf",
+};
+
+export function pieceArt(decor: DecorType): string {
+  return PIECE_ART[decor];
+}
+
+export function decorFor(art: string): DecorType | null {
+  for (const decor of DECOR_TYPES) {
+    if (PIECE_ART[decor] === art) return decor;
+  }
+  return null;
+}
+
+/**
+ * One kind of thing in one colour: what a basket counts and a shop sells.
+ *
+ * The colour is part of the *item*, not of where it was put down. That falls
+ * out of the shop being two taps — pick a chair, pick a colour — because a
+ * child who has bought a green chair owns a green chair, and a basket that
+ * only knew "three chairs" would have to ask again every time one went down.
+ */
+export type DecorItem = `${DecorType}~${number}`;
+
+export function decorItem(piece: DecorType, look: number): DecorItem {
+  return `${piece}~${Math.max(0, Math.trunc(look))}` as DecorItem;
+}
+
+/**
+ * How many colours a piece can be painted.
+ *
+ * Stated here as well as shipped in the sidecar, because the *basket* has to
+ * enumerate every kind of thing it can hold in a stable order and cannot ask
+ * an asset that has not loaded yet. Kept honest by a test against what the
+ * generator actually ships.
+ */
+export const DECOR_LOOKS = 5;
+
+/** Every kind of thing a basket can hold: each piece in each colour. */
+export const DECOR_ITEMS: readonly DecorItem[] = DECOR_TYPES.flatMap((piece) =>
+  Array.from({ length: DECOR_LOOKS }, (_, look) => decorItem(piece, look)),
+);
+
+/** The piece and the colour a basket entry stands for, or nothing. */
+export function itemParts(item: string): { piece: DecorType; look: number } | null {
+  // Exactly two parts. `chair~2~3` splits into three and would otherwise
+  // read as a chair in colour two with a stray tail nobody notices.
+  const parts = item.split("~");
+  if (parts.length !== 2) return null;
+  const [piece, look] = parts;
+  const known = DECOR_TYPES.find((one) => one === piece);
+  if (!known || look === undefined || !/^\d+$/.test(look)) return null;
+  return { piece: known, look: Number(look) };
+}
+
+/** One thing standing in a room, in the plan's own coordinates. */
+export interface Placed {
+  readonly piece: DecorType;
+  readonly col: number;
+  readonly row: number;
+  /** Which colourway it is painted. Nought is the one the room shipped in. */
+  readonly look: number;
+}
+
+/** How many cells a piece covers, from the art it is drawn as. */
+export type Footprints = Readonly<Record<string, { cols: number; rows: number }>>;
+
+export function footprintsOf(sidecar: GrowableSidecar): Footprints {
+  const sizes: Record<string, { cols: number; rows: number }> = {};
+  for (const piece of sidecar.furniture) {
+    const decor = decorFor(piece.name);
+    if (!decor) continue;
+    sizes[decor] = { cols: piece.footprint[0], rows: piece.footprint[1] };
+  }
+  return sizes;
+}
+
+/**
+ * The arrangement a house starts with: the one the generator drew.
+ *
+ * Everything in it but the hearth, which is structural — see the note at the
+ * top. Its cells are the sidecar's own, so a house nobody has rearranged
+ * looks exactly as it always has.
+ */
+export function startingDecor(sidecar: GrowableSidecar): Placed[] {
+  const placed: Placed[] = [];
+  for (const piece of sidecar.furniture) {
+    const decor = decorFor(piece.name);
+    if (!decor) continue;
+    const [row, col] = piece.cell;
+    placed.push({ piece: decor, col, row, look: 0 });
+  }
+  return placed;
+}
+
+export function cellKey(col: number, row: number): string {
+  return `${col},${row}`;
+}
+
+/** Every cell one piece covers, top-left first. */
+export function cellsUnder(placed: Placed, footprints: Footprints): GridPoint[] {
+  const size = footprints[placed.piece] ?? { cols: 1, rows: 1 };
+  const cells: GridPoint[] = [];
+  for (let dr = 0; dr < size.rows; dr++) {
+    for (let dc = 0; dc < size.cols; dc++) {
+      cells.push({ col: placed.col + dc, row: placed.row + dr });
+    }
+  }
+  return cells;
+}
+
+/**
+ * Every cell in the room that something is standing on.
+ *
+ * The rule the minus spell reads before it takes a floor square up, and the
+ * reason it has to be worked out from *this* arrangement rather than from
+ * the sidecar: a bed that has been moved protects the cells it is on now,
+ * and a sidecar reading would protect the corner it used to be in.
+ */
+export function occupiedCells(decor: readonly Placed[], footprints: Footprints): Set<string> {
+  const taken = new Set<string>();
+  for (const placed of decor) {
+    for (const at of cellsUnder(placed, footprints)) taken.add(cellKey(at.col, at.row));
+  }
+  return taken;
+}
+
+/** Whatever is standing on this cell, or nothing. */
+export function pieceOn(
+  decor: readonly Placed[],
+  at: GridPoint,
+  footprints: Footprints,
+): Placed | null {
+  for (const placed of decor) {
+    for (const cell of cellsUnder(placed, footprints)) {
+      if (cell.col === at.col && cell.row === at.row) return placed;
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether a piece would stand here: on floor, on nothing else, inside the room.
+ *
+ * `floor` is asked rather than handed a plan, because the caller has one and
+ * this module deliberately does not — where the floor is is the room's
+ * business and what is standing on it is this one's.
+ */
+export function fits(
+  placed: Placed,
+  decor: readonly Placed[],
+  footprints: Footprints,
+  floor: (col: number, row: number) => boolean,
+): boolean {
+  // Everything but this piece itself: moving a thing is picking it up and
+  // putting it down, so it must not be blocked by where it already is.
+  const taken = occupiedCells(
+    decor.filter((other) => !same(other, placed)),
+    footprints,
+  );
+  for (const at of cellsUnder(placed, footprints)) {
+    if (!floor(at.col, at.row)) return false;
+    if (taken.has(cellKey(at.col, at.row))) return false;
+  }
+  return true;
+}
+
+/** Whether two entries describe the same thing standing in the same spot. */
+export function same(one: Placed, other: Placed): boolean {
+  return (
+    one.piece === other.piece &&
+    one.col === other.col &&
+    one.row === other.row &&
+    one.look === other.look
+  );
+}
+
+/**
+ * The arrangement with one thing taken out of it.
+ *
+ * Matched by *what and where* rather than by identity, and that is not a
+ * nicety. A room nobody has rearranged has no stored arrangement, so it is
+ * rebuilt from the sidecar every time it is asked for — and a chair a sprite
+ * captured a moment ago is a different object from the chair in the array
+ * that came back this time. Compared by reference, picking a chair up put
+ * one in the basket and left the chair standing, and putting it down again
+ * gave the room two.
+ */
+export function without(decor: readonly Placed[], taken: Placed): Placed[] {
+  return decor.filter((one) => !same(one, taken));
+}
+
+/** What a save writes down, and what it reads back. */
+export function decorToSave(decor: readonly Placed[]): string[] {
+  return decor.map(({ piece, col, row, look }) => `${piece},${col},${row},${look}`);
+}
+
+/**
+ * Read an arrangement back, dropping anything mangled.
+ *
+ * A bad entry is dropped rather than repaired: what a child loses is one
+ * chair, and what they keep is a room. A chair repaired into something
+ * plausible would be a chair standing where nobody put it.
+ */
+export function decorFromSave(saved: unknown): Placed[] {
+  if (!Array.isArray(saved)) return [];
+  const placed: Placed[] = [];
+  for (const entry of saved) {
+    if (typeof entry !== "string") continue;
+    const [piece, col, row, look] = entry.split(",");
+    const known = DECOR_TYPES.find((one) => one === piece);
+    if (!known || col === undefined || row === undefined) continue;
+    if (!/^-?\d+$/.test(col) || !/^-?\d+$/.test(row)) continue;
+    // A save from before anything could be repainted has no colour on it,
+    // and everything in it is the colour the room shipped in.
+    placed.push({
+      piece: known,
+      col: Number(col),
+      row: Number(row),
+      look: look !== undefined && /^\d+$/.test(look) ? Number(look) : 0,
+    });
+  }
+  return placed;
+}
+
+/**
+ * The cells the hearth stands on.
+ *
+ * Not furniture and never moved, so it is nowhere in an arrangement and has
+ * to be asked for by name. That is exactly the sort of thing a refactor
+ * drops — a fireplace is furniture right up until you notice that carrying
+ * it off puts the lights out in the house — so it is one function that
+ * everything needing the answer calls.
+ */
+export function hearthCells(sidecar: GrowableSidecar): Set<string> {
+  const taken = new Set<string>();
+  for (const piece of sidecar.furniture) {
+    if (piece.light !== "fire") continue;
+    const [row, col] = piece.cell;
+    const [cols, rows] = piece.footprint;
+    for (let dr = 0; dr < rows; dr++) {
+      for (let dc = 0; dc < cols; dc++) taken.add(cellKey(col + dc, row + dr));
+    }
+  }
+  return taken;
+}
+
+/**
+ * Every cell the minus spell must not take the floor from under.
+ *
+ * The arrangement as it stands, never the sidecar's: a bed that has been
+ * moved protects the cells it is on *now*, and reading the shipped
+ * placements would go on protecting the corner it used to be in while the
+ * floor under the bed came up.
+ *
+ * The hearth as well, which no arrangement contains. And whoever is standing
+ * in the room, because a child who pulled the floor out from under herself
+ * would be standing in a wall.
+ */
+export function protectedCells(
+  sidecar: GrowableSidecar,
+  decor: readonly Placed[],
+  standing?: GridPoint,
+): Set<string> {
+  const taken = occupiedCells(decor, footprintsOf(sidecar));
+  for (const key of hearthCells(sidecar)) taken.add(key);
+  if (standing) taken.add(cellKey(standing.col, standing.row));
+  return taken;
+}
+
+/**
+ * What stands in the *way*, which is a different question.
+ *
+ * A rug is walked over and still keeps its floor from the minus spell — see
+ * `protectedCells` for the other half. Whether a piece blocks is a fact
+ * about the art, so it is read from the sidecar rather than decided here.
+ *
+ * Built from the arrangement rather than the sidecar's placements because
+ * the grid is made afresh every time a square of floor is laid or taken up:
+ * furniture the grid was never told about is furniture the next cast wipes.
+ */
+export function blockersFor(sidecar: GrowableSidecar, decor: readonly Placed[]): RoomBlocker[] {
+  const solid = new Set(sidecar.furniture.filter((piece) => piece.blocks).map((p) => p.name));
+  const sizes = footprintsOf(sidecar);
+  const standing = decor.map((placed) => {
+    const size = sizes[placed.piece] ?? { cols: 1, rows: 1 };
+    return {
+      cell: [placed.row, placed.col] as const,
+      footprint: [size.cols, size.rows] as const,
+      blocks: solid.has(pieceArt(placed.piece)),
+    };
+  });
+  const hearths = sidecar.furniture
+    .filter((piece) => piece.light === "fire")
+    .map((piece) => ({
+      cell: piece.cell as readonly [number, number],
+      footprint: piece.footprint as readonly [number, number],
+      blocks: piece.blocks,
+    }));
+  return [...standing, ...hearths];
+}
+
+/**
+ * How a house is furnished: what somebody arranged, or what it shipped as.
+ *
+ * The fallback is the reason `same` compares by value rather than by
+ * identity — a room nobody has rearranged is rebuilt here on every read, so
+ * the chair a caller is holding is never the chair that comes back.
+ */
+export function arrangementIn(
+  stored: readonly Placed[] | undefined,
+  sidecar: GrowableSidecar | null,
+): Placed[] {
+  if (stored) return [...stored];
+  return sidecar ? startingDecor(sidecar) : [];
+}
+
+/**
+ * What one square of house costs, and what it hands back.
+ *
+ * A plank and a stone, and the point of it is that both come from the
+ * *clearing* spell: subtraction is the spell this game under-uses, and a
+ * child who wants a bigger house now has a reason to go and take a tree out
+ * of the ground.
+ *
+ * One list for the price and the refund, and that is the whole of why it is
+ * a constant rather than two: taking a square back up hands back exactly
+ * what it took to lay, and a refund that did not match the cost would make
+ * the minus spell either a penalty or a way of printing planks.
+ */
+export const ROOM_COST: readonly (readonly [MaterialType, number])[] = [
+  [MaterialType.Wood, 1],
+  [MaterialType.Stone, 1],
+];
+
+/**
+ * How many squares of floor a basket will pay for.
+ *
+ * The *fewest* any one material allows, not the total: a child with ten
+ * planks and one stone can build one room, and adding the two up would offer
+ * them eleven and charge for a stone they have not got.
+ */
+export function roomsAfforded(held: (item: MaterialType) => number): number {
+  return ROOM_COST.reduce(
+    (fewest, [item, each]) => Math.min(fewest, Math.floor(held(item) / each)),
+    Number.POSITIVE_INFINITY,
+  );
+}
+
+/**
+ * The recolour plan that paints a piece of furniture a colourway.
+ *
+ * Wood and cloth in one plan, because a colourway paints both together — a
+ * green chair has a green blanket on it. Empty when there is nothing to do,
+ * which is what makes colourway nought free: it is the paint already on the
+ * art, and `repaintedSheet` hands the original straight back for an empty
+ * plan rather than copying a sheet to change nothing.
+ */
+export function colourPlanFor(
+  palette: Readonly<Record<string, readonly [number, number, number]>> | undefined,
+  colourway:
+    | {
+        wood: readonly (readonly [number, number, number])[];
+        fabric: readonly (readonly [number, number, number])[];
+      }
+    | undefined,
+): Map<number, number> {
+  const plan = new Map<number, number>();
+  if (!palette || !colourway) return plan;
+  const ramp = (slots: readonly string[]) =>
+    slots.map((slot) => palette[slot]).filter((tone): tone is Rgb => tone !== undefined);
+  rampPlan(ramp(WOOD_SLOTS), colourway.wood as Rgb[], plan);
+  rampPlan(ramp(FABRIC_SLOTS), colourway.fabric as Rgb[], plan);
+  return plan;
+}
+
+/** The three tones a piece's timber is drawn in, and its cloth. */
+export const WOOD_SLOTS = ["wood_dark", "wood", "wood_light"] as const;

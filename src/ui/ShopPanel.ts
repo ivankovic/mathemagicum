@@ -43,7 +43,16 @@ const SOLD: readonly { item: ItemType; icon: string }[] = [
   })),
 ];
 import type { Rng } from "../world/rng";
-import { CROP_PRICE, MAX_TRADE, type Purse, priceOf, sellPriceOf } from "../world/shop";
+import {
+  CROP_PRICE,
+  MAX_TRADE,
+  type Purse,
+  SHOP_STOCK,
+  mostBuyable,
+  mostSellable,
+  priceOf,
+  sellPriceOf,
+} from "../world/shop";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { type UiIndex, coinIcon, cropIcon, itemIcon, materialIcon, uiTextureKey } from "./assets";
 
@@ -214,6 +223,75 @@ export class ShopPanel {
     }
   }
 
+  /**
+   * Where every button on the counter is, so a script can press one.
+   *
+   * The same seam the other panels carry, and this one went without it for
+   * a long while: the shop is the only screen in the game with arithmetic a
+   * child can get *wrong on the coins* rather than on the sum, and nothing
+   * could drive it to find out. Named by what they do rather than by index,
+   * because a row's position moves with the stock list and a test pinned to
+   * `buy.3` is a test that quietly starts checking a different fence.
+   */
+  buttonPositions(): Record<string, { x: number; y: number }> {
+    if (!this.open) return {};
+    const at: Record<string, { x: number; y: number }> = {
+      "shop.close": { x: this.closeButton.box.x, y: this.closeButton.box.y },
+    };
+    if (this.mode === "menu") {
+      for (const [index, item] of SHOP_STOCK.entries()) {
+        const row = this.buyRows[index];
+        if (row) at[`shop.buy.${item}`] = { x: row.box.x, y: row.box.y };
+      }
+      for (const [index, plant] of PLANT_TYPES.entries()) {
+        const row = this.sellRows[index];
+        if (row) at[`shop.sell.${plant}`] = { x: row.box.x, y: row.box.y };
+      }
+      return at;
+    }
+    at["shop.fewer"] = { x: this.fewer.box.x, y: this.fewer.box.y };
+    at["shop.more"] = { x: this.more.box.x, y: this.more.box.y };
+    at["shop.back"] = { x: this.back.box.x, y: this.back.box.y };
+    if (this.mode === "buy") {
+      for (const [index, value] of CURRENCY.denominations.entries()) {
+        const coin = this.coinButtons[index];
+        if (coin) at[`shop.coin.${value}`] = { x: coin.box.x, y: coin.box.y };
+      }
+      at["shop.clear"] = { x: this.deny.box.x, y: this.deny.box.y };
+      at["shop.pay"] = { x: this.confirm.box.x, y: this.confirm.box.y };
+    } else {
+      at["shop.yes"] = { x: this.confirm.box.x, y: this.confirm.box.y };
+      at["shop.no"] = { x: this.deny.box.x, y: this.deny.box.y };
+    }
+    return at;
+  }
+
+  /**
+   * What the counter says right now, for a script that cannot read a
+   * parchment: the mode, what is being traded, how many, and what is owed.
+   */
+  get counter(): {
+    mode: Mode;
+    item: string | null;
+    quantity: number;
+    most: number;
+    owed: number;
+    onCounter: number;
+  } | null {
+    if (!this.open) return null;
+    return {
+      mode: this.mode,
+      item: this.chosenFixture ?? this.chosenCrop ?? null,
+      quantity: this.quantity,
+      most: this.mostTradeable(),
+      owed:
+        this.mode === "buy" && this.chosenFixture
+          ? priceOf(this.chosenFixture, this.cropPrice) * this.quantity
+          : (this.offer?.owed ?? 0),
+      onCounter: this.tender ? tenderTotal(this.tender) : 0,
+    };
+  }
+
   private allButtons(): Button[] {
     return [
       ...this.sellRows,
@@ -367,12 +445,10 @@ export class ShopPanel {
    */
   private mostTradeable(): number {
     if (this.mode === "sell" && this.chosenCrop) {
-      const stock = Math.max(1, Math.min(MAX_TRADE, this.inventory.count(this.chosenCrop)));
-      return maxSaleCount(CURRENCY, sellPriceOf(this.chosenCrop, this.cropPrice), stock);
+      return mostSellable(this.chosenCrop, this.inventory.count(this.chosenCrop), this.cropPrice);
     }
     if (this.mode === "buy" && this.chosenFixture) {
-      const affordable = Math.floor(this.purse.coins / priceOf(this.chosenFixture, this.cropPrice));
-      return Math.max(1, Math.min(MAX_TRADE, affordable));
+      return mostBuyable(this.chosenFixture, this.purse.coins, this.cropPrice);
     }
     return 1;
   }

@@ -68,6 +68,26 @@ export interface DevOptions {
    */
   readonly intro: boolean;
   /**
+   * Put a wall on the parchment as soon as the world is up.
+   *
+   * The bricklaying spell is cast on a square of a house that is not built
+   * yet, so playtesting one rung of it otherwise means walking indoors and
+   * finding an edge — several minutes of the wrong thing before the thing
+   * being looked at. With `?wall&brickRung=6` it is the first thing on
+   * screen. It builds nothing: the floor tile is laid by whatever asked for
+   * the wall, and nothing asked.
+   */
+  readonly wall: boolean;
+  /**
+   * Start with this many of every material in the basket.
+   *
+   * Wood and stone come from the clearing spell, so playtesting anything
+   * that *spends* them otherwise begins with several minutes of taking
+   * trees out of the ground — which is the loop, and not the loop being
+   * looked at. `?materials=6` is three rooms' worth.
+   */
+  readonly materials: number;
+  /**
    * Places to count as already walked into, for the portal spell.
    *
    * `?reached=all`, or a comma-separated list of anchor ids. Without it a
@@ -93,6 +113,7 @@ export interface DevOptions {
   readonly portalRung: number | null;
   /** Hold the array spell at one rung of its own ladder. */
   readonly arrayRung: number | null;
+  readonly brickRung: number | null;
   /** Hold the hourglass at one rung of the clock ladder. */
   readonly clockRung: number | null;
   /**
@@ -155,10 +176,13 @@ const NONE: DevOptions = {
   hungry: false,
   language: null,
   intro: false,
+  wall: false,
+  materials: 0,
   reached: [],
   portalRung: null,
   arrayRung: null,
   clockRung: null,
+  brickRung: null,
   away: null,
   learned: [],
   hour: null,
@@ -237,9 +261,12 @@ export function parseDevOptions(search: string): DevOptions {
     hungry: params.has("hungry"),
     language: params.get("lang")?.trim() || null,
     intro: params.has("intro"),
+    wall: params.has("wall"),
+    materials: Math.max(0, number("materials") ?? 0),
     reached: places(params.get("reached")),
     portalRung: number("portalRung"),
     arrayRung: number("arrayRung"),
+    brickRung: number("brickRung"),
     clockRung: number("clockRung"),
     away: number("away"),
     learned: names(params.get("learned"), ALL_SPELLS),
@@ -269,6 +296,64 @@ export interface DevHandle {
   readonly session: GameSession;
   /** Screen positions of the named buttons, so scripts stop guessing them. */
   readonly ui: () => Record<string, { x: number; y: number }>;
+  /**
+   * The wall of bricks on the parchment, or null when none is open.
+   *
+   * Hands over the answer as well as the question, which the other spells'
+   * seams do not have to: an array's answer is its two sides multiplied and
+   * a script can work that out, but a wall's gaps are recovered by a solver,
+   * and a script that reimplemented it would be testing its own copy.
+   */
+  /**
+   * The floor plan of the room she is standing in, or null.
+   *
+   * The one thing about a growable room a script cannot see: the picture is
+   * a texture, and counting plaster pixels to work out where the walls are
+   * is not a test, it is a second implementation of the mask rule.
+   */
+  readonly house: () => {
+    room: string;
+    /** The house this room belongs to, so a plan can be found in a save. */
+    id: string | null;
+    /** Floor squares, in the plan's own coordinates — which may be negative. */
+    floor: string[];
+    /** The offset between those and the grid she walks on. */
+    origin: { col: number; row: number };
+    /** Where she could build next, in *grid* coordinates, as she taps them. */
+    buildable: { col: number; row: number }[];
+  } | null;
+  /**
+   * What is standing in the room she is in, and where.
+   *
+   * The furniture is sprites now rather than paint, so a script *could* find
+   * it by hunting the display list — which is a second implementation of
+   * "which of these is a bed" and would pass while the real one was wrong.
+   */
+  /**
+   * What the shop counter says, or null when nobody is at it.
+   *
+   * The one screen in the game where a child can be wrong about the *coins*
+   * rather than about the sum, and until now nothing could drive it — the
+   * panel had no seam at all, which is a large part of why it had no tests.
+   */
+  readonly shop: () => {
+    mode: string;
+    item: string | null;
+    quantity: number;
+    most: number;
+    owed: number;
+    onCounter: number;
+  } | null;
+  readonly decor: () => { piece: string; col: number; row: number; look: number }[] | null;
+  readonly bricks: () => {
+    values: number[];
+    hidden: number[];
+    asked: number | null;
+    answer: number | null;
+    entry: string;
+    missteps: number;
+    done: boolean;
+  } | null;
   /**
    * The spell whose rune is lit and waiting for a square, or null.
    *

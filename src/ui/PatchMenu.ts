@@ -17,38 +17,37 @@ import type Phaser from "phaser";
  * or walks away, and the whole thing goes; a menu that had to be dismissed
  * before the game would listen again is a menu a child gets stuck in.
  *
+ * **Runes, not words.** It carried the words for a while — "grow it", "clear
+ * it" — and words are the one thing this game will not put in front of a
+ * child on its own. The rune is what they already tap to cast the spell; the
+ * same picture asking which spell to multiply is a question they can answer
+ * without reading anything, in any language.
+ *
  * Deliberately *not* an `IconTray`. A tray is a container in a fixed corner
- * that springs open in place; this follows a patch of ground, carries words
- * rather than runes, and closes itself. The two look nothing alike on screen
- * and share nothing but being buttons.
+ * that springs open in place; this follows the player, is built fresh every
+ * time, and closes itself. The two share nothing but being buttons.
  */
 
 const FILL = 0x000000;
 const FILL_ALPHA = 0.72;
 const STROKE = 0xffe08a;
-const INK = "#f6e8c4";
-const COUNT_INK = "#c8901c";
 
-const TEXT_SIZE = 13;
-const COUNT_SIZE = 11;
-const PAD_X = 10;
-const PAD_Y = 6;
-const GAP = 4;
-const MIN_WIDTH = 96;
+/** How big a rune is drawn on a button, and the button around it. */
+const RUNE = 28;
+const PAD = 7;
+const GAP = 5;
 /** How far above the patch's top edge the first button floats. */
 const RISE = 10;
 
 export interface PatchChoice<TAction extends string> {
   readonly action: TAction;
-  readonly label: string;
-  /** How many squares this would actually touch. */
-  readonly count: number;
+  /** The texture of the rune this choice casts. */
+  readonly rune: string;
 }
 
 interface Row {
   readonly box: Phaser.GameObjects.Rectangle;
-  readonly text: Phaser.GameObjects.Text;
-  readonly tally: Phaser.GameObjects.Text;
+  readonly rune: Phaser.GameObjects.Image;
 }
 
 export class PatchMenu<TAction extends string> {
@@ -69,9 +68,15 @@ export class PatchMenu<TAction extends string> {
    * Show the choices at a point on screen.
    *
    * Rebuilt each time rather than pooled. A menu whose contents change with
-   * every patch — three buttons here, one there — is one where a pool would
-   * mean hiding and re-labelling rows, and a row left over from last time
-   * showing the wrong count is exactly the bug this avoids by construction.
+   * where it is opened — three choices out of doors, one indoors — is one
+   * where a pool would mean hiding and re-labelling rows, and a row left
+   * over from last time is exactly the bug this avoids by construction.
+   *
+   * **No tally.** Each row used to carry `x12` — how many squares the action
+   * would land on — and that is the answer to the multiplication the spell
+   * is about to ask. It was there when the menu came *after* the rectangle
+   * was drawn; the menu comes first now, and the count is neither knowable
+   * nor wanted.
    */
   openAt(
     at: { x: number; y: number },
@@ -82,43 +87,30 @@ export class PatchMenu<TAction extends string> {
     this.choose = onChoose;
 
     const add = this.scene.add;
-    let width = MIN_WIDTH;
+    const size = RUNE + PAD * 2;
     const built: { row: Row; action: TAction }[] = [];
     for (const choice of choices) {
-      const text = add
-        .text(0, 0, choice.label, {
-          fontFamily: "monospace",
-          fontSize: `${TEXT_SIZE}px`,
-          color: INK,
-        })
-        .setOrigin(0, 0.5);
-      const tally = add
-        .text(0, 0, `x${choice.count}`, {
-          fontFamily: "monospace",
-          fontSize: `${COUNT_SIZE}px`,
-          color: COUNT_INK,
-        })
-        .setOrigin(1, 0.5);
-      width = Math.max(width, text.width + tally.width + PAD_X * 3);
+      const rune = add.image(0, 0, choice.rune).setDisplaySize(RUNE, RUNE);
       const box = add
-        .rectangle(0, 0, width, TEXT_SIZE + PAD_Y * 2, FILL, FILL_ALPHA)
+        .rectangle(0, 0, size, size, FILL, FILL_ALPHA)
         .setStrokeStyle(2, STROKE, 0.9)
         .setInteractive({ useHandCursor: true });
       box.on("pointerdown", () => this.choose?.(choice.action));
-      built.push({ row: { box, text, tally }, action: choice.action });
+      built.push({ row: { box, rune }, action: choice.action });
     }
 
-    const height = TEXT_SIZE + PAD_Y * 2;
-    const total = built.length * height + (built.length - 1) * GAP;
+    // Side by side rather than stacked. Two runes read as a pair of things
+    // to pick between; the same two in a column read as a list, and a list
+    // of two is a shape nothing else in this game uses.
+    const total = built.length * size + (built.length - 1) * GAP;
+    const left = at.x - total / 2 + size / 2;
     for (const [index, { row }] of built.entries()) {
-      // Stacked *upward* from the patch, so the finger that marked it is not
-      // over the buttons it just produced — the same reason the icon trays
-      // open upward out of their corner.
-      const y = at.y - RISE - total + index * (height + GAP) + height / 2;
-      row.box.setSize(width, height).setPosition(at.x, y);
-      row.text.setPosition(at.x - width / 2 + PAD_X, y);
-      row.tally.setPosition(at.x + width / 2 - PAD_X, y);
-      for (const part of [row.box, row.text, row.tally]) {
+      // Lifted clear of the patch, so the finger that marked it is not over
+      // the buttons it just produced.
+      const y = at.y - RISE - size / 2;
+      row.box.setPosition(left + index * (size + GAP), y);
+      row.rune.setPosition(row.box.x, y);
+      for (const part of [row.box, row.rune]) {
         part.setScrollFactor(0).setDepth(this.depth + (part === row.box ? 0 : 1));
         this.register(part);
       }
@@ -134,8 +126,7 @@ export class PatchMenu<TAction extends string> {
   close(): void {
     for (const row of this.rows) {
       row.box.destroy();
-      row.text.destroy();
-      row.tally.destroy();
+      row.rune.destroy();
     }
     this.rows.length = 0;
     this.choose = null;

@@ -4,7 +4,8 @@
 import type { AvatarStyle } from "../avatar/style";
 import { DEFAULT_AVATAR } from "../avatar/style";
 import { type Language, languageOf } from "../settings";
-import { type Band, DEFAULT_BAND, bandAt, rungInBand } from "../spells/difficulty";
+import { HARDEST_BRICK_RUNG } from "../spells/bricks";
+import { type Band, DEFAULT_BAND, bandAt, bandOn, rungInBand } from "../spells/difficulty";
 import { HARDEST_CLOCK_RUNG } from "../spells/hourglass";
 import { HARDEST_ARRAY_RUNG } from "../spells/multiplication";
 import { readLearned } from "../spells/spellbook";
@@ -128,6 +129,18 @@ export interface Progress {
    * a clock without numbers on it.
    */
   readonly clockRung: number;
+  /**
+   * Where the bricklaying ladder sits: how hard a wall is to finish.
+   *
+   * A fifth number, and the one that most deserves to be its own. The other
+   * four all ask a child to work something *out*; this asks them what goes
+   * in a gap, which for half the bricks means running the sum backwards. A
+   * child who adds three-digit numbers without blinking can be nowhere near
+   * `? + 6 = 14`, because nobody has ever asked them that — and the day they
+   * meet it is not the day to also make the numbers bigger. See
+   * src/spells/bricks.ts.
+   */
+  readonly brickRung: number;
   /**
    * The named places this child has stood in.
    *
@@ -276,8 +289,9 @@ export function createProfile(
     house: freeHouse(existing),
     rung: bandAt(wanted.band).from,
     portalRung: bandAt(wanted.band).from,
-    arrayRung: arrayRungInBand(bandAt(wanted.band), bandAt(wanted.band).from),
-    clockRung: clockRungInBand(bandAt(wanted.band), bandAt(wanted.band).from),
+    arrayRung: arrayFloor(bandAt(wanted.band)),
+    clockRung: clockFloor(bandAt(wanted.band)),
+    brickRung: brickFloor(bandAt(wanted.band)),
     // The village, because that is where they live. A portal spell whose
     // first cast has nowhere to go is a spell that looks broken.
     reached: [HOME_PLACE],
@@ -325,8 +339,9 @@ export function freshProgress(bandAt_: number): Progress {
     introSeen: false,
     rung: band.from,
     portalRung: band.from,
-    arrayRung: arrayRungInBand(band, band.from),
-    clockRung: clockRungInBand(band, band.from),
+    arrayRung: arrayFloor(band),
+    clockRung: clockFloor(band),
+    brickRung: brickFloor(band),
     reached: [HOME_PLACE],
     learned: [],
     carried: null,
@@ -336,32 +351,48 @@ export function freshProgress(bandAt_: number): Progress {
 /**
  * A usable rung on the array ladder, which is shorter than the other two.
  *
- * Clamped against its own end rather than against the addition ladder's:
- * a band whose `from` is past the top of this ladder would otherwise write a
- * rung that `arrayRungAt` silently corrects on every read, and a saved
- * number that disagrees with the number in play is the kind of thing that
- * looks fine until somebody tries to explain a bug with it.
- *
- * A consequence worth stating rather than discovering: the bands are indexed
- * against the *addition* ladder, which is two rungs longer, so the hardest
- * band starts at the top of this one and has no headroom above it. That is
- * honest — the ten times table really is the end of this ladder — but it
- * does mean the longer run it takes to climb out of a band can never fire
- * here for the upper bands.
- *
- * Falls back to the band's own floor for a corrupt number rather than to
- * zero, which is what `rungInBand` does: a mangled save should read as "we
- * do not know where this child was", not as "start them on doubles".
+ * Both of these are `rungInBand` told which ladder it is reading, and that
+ * is the whole of them. They used to be two hand-written clamps against the
+ * ends of their own ladders, which was fine while a band was only a starting
+ * point; now that a band is a fence, a rung read in has to land inside the
+ * *band*, and scaling a band onto a shorter ladder is a thing exactly one
+ * piece of code should know how to do.
  */
 function arrayRungInBand(band: Band, rung: number): number {
-  const wanted = Number.isFinite(rung) ? Math.trunc(rung) : band.from;
-  return Math.max(0, Math.min(HARDEST_ARRAY_RUNG, wanted));
+  return rungInBand(band, rung, HARDEST_ARRAY_RUNG);
 }
 
-/** The same clamp again, against the clock ladder's own end. */
+/** The same again, against the clock ladder. */
 function clockRungInBand(band: Band, rung: number): number {
-  const wanted = Number.isFinite(rung) ? Math.trunc(rung) : band.from;
-  return Math.max(0, Math.min(HARDEST_CLOCK_RUNG, wanted));
+  return rungInBand(band, rung, HARDEST_CLOCK_RUNG);
+}
+
+/** And against the bricklaying ladder, which is shorter again. */
+function brickRungInBand(band: Band, rung: number): number {
+  return rungInBand(band, rung, HARDEST_BRICK_RUNG);
+}
+
+/**
+ * Where a child who has never cast one of the shorter spells begins.
+ *
+ * The floor of their band — but the floor *on that spell's ladder*, which is
+ * not the number in `band.from`. Bands are counted in addition rungs, and
+ * handing `band.from` to a six-rung ladder puts a child in the hardest band
+ * at the top of it, with the times table waiting on their first ever cast
+ * and nowhere left to climb. Scaled, the same child opens on the fourth rung
+ * of six, which is what "the bottom of their band" was always supposed to
+ * mean.
+ */
+function arrayFloor(band: Band): number {
+  return bandOn(band, HARDEST_ARRAY_RUNG).from;
+}
+
+function clockFloor(band: Band): number {
+  return bandOn(band, HARDEST_CLOCK_RUNG).from;
+}
+
+function brickFloor(band: Band): number {
+  return bandOn(band, HARDEST_BRICK_RUNG).from;
 }
 
 /** Newest first: the child who played last is the one most likely playing now. */
@@ -425,10 +456,13 @@ export function readProfile(value: unknown): Profile | null {
     portalRung: rungInBand(bandAt(band), Number(record.portalRung ?? bandAt(band).from)),
     // A child saved before the great tree existed starts it at the bottom of
     // their own band, exactly as a new child does — they have never cast it.
-    arrayRung: arrayRungInBand(bandAt(band), Number(record.arrayRung ?? bandAt(band).from)),
+    arrayRung: arrayRungInBand(bandAt(band), Number(record.arrayRung ?? arrayFloor(bandAt(band)))),
     // A child saved before the astronomer existed starts it at the bottom of
     // their own band, exactly as a new child does — they have never cast it.
-    clockRung: clockRungInBand(bandAt(band), Number(record.clockRung ?? bandAt(band).from)),
+    clockRung: clockRungInBand(bandAt(band), Number(record.clockRung ?? clockFloor(bandAt(band)))),
+    // A child saved before anybody could build a room has never laid a
+    // brick: the bottom of their own band, exactly as a new child gets.
+    brickRung: brickRungInBand(bandAt(band), Number(record.brickRung ?? brickFloor(bandAt(band)))),
     reached: readReached(record.reached),
     // A child saved before the tower taught anything has not been taught it:
     // they walk up and meet him like everybody else.

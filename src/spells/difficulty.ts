@@ -30,29 +30,30 @@
  * four sample sums rather than from ages or from the words "easy" and
  * "hard", because those sit on a screen a child shares with their siblings.
  *
- * **The band is where a child starts, not where they are kept.** It used to
- * be a fence the game could not cross, and playtesting said the adaptation
- * looked like it was not working: a child reaches the top of their band in a
- * dozen casts and then nothing ever changes again, which from the outside is
- * indistinguishable from a fixed difficulty. So the ladder is open at both
- * ends now.
+ * **The band is a fence, and the adaptation works inside it.** The game
+ * moves a child up and down within the band somebody chose for them, and it
+ * never moves them out of it. It was open at both ends for a while, on the
+ * theory that a child who tops out and then sees nothing change is looking
+ * at something indistinguishable from a fixed difficulty. What that theory
+ * missed is who the adaptation is answerable to. A run of lucky guesses
+ * could carry a six-year-old into three-digit sums, and the first anybody
+ * heard of it was a child in tears over sums nobody chose for them.
  *
- * The fence was protecting something real, though, and deleting it without
- * replacing it would be a mistake. It stopped a wrong answer at setup
- * pitching the game at somebody else, and it stopped a run of lucky guesses
- * walking a six-year-old up to three-digit sums with only an adult likely to
- * notice. Three things replace it:
+ * So the rule is the simple one. Inside the band the game is quiet and
+ * quick — four clean casts up, two stumbles down, nothing announced. At the
+ * edges of the band it stops. Moving *between* bands is a person's decision,
+ * made in the options panel by somebody who has watched this child play, and
+ * the band a person chose is the one they find there when they look.
  *
- * - **Leaving a band is slower than moving inside one.** Climbing within the
- *   band takes a run of clean casts; climbing *out* of it takes a longer
- *   one. A good afternoon moves a child along; it does not move them up a
- *   year.
- * - **Coming down works across a boundary exactly as it works inside one**,
- *   and it is quicker than going up in both cases. A child carried up by a
- *   lucky run falls back on the first two casts that show it.
- * - **The options panel still names the band**, so an adult can always put a
- *   child back where they belong in one tap. The band a *person* chose is
- *   still recorded, and it still decides what the money looks like.
+ * The cost is real and worth stating: a child at the top of their band sees
+ * the sums stop growing, and only an adult can start them growing again.
+ * That is the trade, taken deliberately. How hard a child's sums should be
+ * is a judgement about that child, and a rule counting the last four casts
+ * is not entitled to make it on their behalf.
+ *
+ * **A band is indexed against the addition ladder**, which is the longest
+ * one. The other spells have their own, shorter, ladders, and a band is
+ * scaled onto whichever ladder is asking — see `bandOn`.
  */
 
 export interface Rung {
@@ -174,17 +175,49 @@ export function rungAt(index: number): Rung {
 }
 
 /**
+ * A band, scaled onto one spell's own ladder.
+ *
+ * Bands are indexed against the addition ladder, which has ten rungs. The
+ * clock and the great tree have six each. Truncating a band against a
+ * shorter ladder — the obvious thing, and what this code used to do on the
+ * way in from a save — puts the hardest band at `[5, 5]` on both of them: a
+ * window one rung wide, inside which nothing can move in either direction. A
+ * child drowning in the bare times table would have no way down, which is
+ * not "kept inside the range an adult chose", it is the adaptation switched
+ * off and dressed up as a fence.
+ *
+ * So it scales instead, and every band keeps its share of every ladder: the
+ * gentlest band on the clock is the two easiest readings rather than only
+ * the one. On a ladder as long as the addition one — the portal's — it is
+ * the identity, and the fence sits on exactly the rungs a person picked.
+ */
+export function bandOn(band: Band, hardest: number = HARDEST_RUNG): Band {
+  if (hardest === HARDEST_RUNG) return band;
+  const onto = (rung: number) => Math.round((rung * hardest) / HARDEST_RUNG);
+  return { ...band, from: onto(band.from), to: onto(band.to) };
+}
+
+/**
  * A usable rung for a saved number that may be neither a number nor sensible.
  *
- * Clamped to the *ladder*, not to the band — the game may have carried this
- * child out of the band they started in, and reading their save must not
- * quietly drag them back. The band still decides where somebody *starts*
- * (`band.from`) and what the money looks like; it no longer decides where
- * they may be.
+ * Clamped to the *band*, which is now the whole of the rule: a child is
+ * where an adult put them, give or take whatever the adaptation has done
+ * inside that window.
+ *
+ * A save written while the ladder was open at both ends can name a rung
+ * outside the band, and it reads back as the nearest rung inside it. That is
+ * a real change to a real save, and it is the intended one — that child is
+ * being put back where somebody chose to put them, on the way in rather than
+ * mid-session, so the sums a child is looking at do not change under them.
+ *
+ * Falls back to the band's floor for a number that is not one. A mangled
+ * save should read as "we do not know where this child was", not as "start
+ * them on doubles".
  */
-export function rungInBand(band: Band, rung: number): number {
-  const wanted = Number.isFinite(rung) ? Math.trunc(rung) : band.from;
-  return Math.max(0, Math.min(HARDEST_RUNG, wanted));
+export function rungInBand(band: Band, rung: number, hardest: number = HARDEST_RUNG): number {
+  const fence = bandOn(band, hardest);
+  const wanted = Number.isFinite(rung) ? Math.trunc(rung) : fence.from;
+  return Math.max(fence.from, Math.min(fence.to, wanted));
 }
 
 /**
@@ -206,35 +239,20 @@ export const CLEAN_TO_CLIMB = 4;
 export const STUMBLES_TO_EASE = 2;
 
 /**
- * How long a run it takes to climb out of the band somebody chose.
- *
- * Longer than climbing inside it, which is what is left of the fence. A
- * child who has topped out has to keep doing it for a good while before the
- * game decides the choice made at setup was too low — a run of lucky guesses
- * should not be able to carry a six-year-old into three-digit sums before an
- * adult has a chance to notice.
- *
- * Falling *out* of the bottom of a band needs no extra patience: a child who
- * is struggling has already told you, and making them prove it for longer
- * because their band happens to end here would be a rule with nothing behind
- * it.
- */
-export const CLEAN_TO_LEAVE_BAND = 8;
-
-/**
  * How many recent casts are looked at.
  *
  * Derived rather than chosen, because the two are not independent: a window
  * shorter than the longest run the game has to recognise means that run can
  * never be seen, and the rule that depends on it silently never fires. That
- * happened — the window was six and leaving a band needed eight, so no child
- * could ever have left one.
+ * happened, back when there was a third and longer run for climbing out of a
+ * band: it needed eight and the window held six, so no child could ever have
+ * climbed out of one.
  *
  * Long enough for the longest run, and no longer: a window that remembered
  * more would let a mistake from the start of a session hold a child back at
  * the end of it.
  */
-export const RECENT_CASTS = Math.max(CLEAN_TO_LEAVE_BAND, CLEAN_TO_CLIMB, STUMBLES_TO_EASE);
+export const RECENT_CASTS = Math.max(CLEAN_TO_CLIMB, STUMBLES_TO_EASE);
 
 /** The last few casts, newest last, `true` for every box right first time. */
 export type Recent = readonly boolean[];
@@ -254,16 +272,6 @@ export function recordCast(recent: Recent, result: { solved: boolean; clean: boo
   return [...recent, result.clean].slice(-RECENT_CASTS);
 }
 
-/**
- * Where the difficulty should sit after a cast, and whether the window
- * should be cleared.
- *
- * The window is emptied whenever the rung moves. Without that, the four
- * clean casts that earned a climb are still sitting there on the next cast
- * and earn another one immediately — a child would be walked from the bottom
- * of their band to the top in five casts, which is not adaptation, it is a
- * ramp.
- */
 /**
  * A sum that stands for a band, for the tiles somebody picks from.
  *
@@ -300,11 +308,28 @@ export interface Sample {
 const SAMPLE_DRAWS = 24;
 
 /**
- * `hardest` is a parameter because there is more than one ladder now. The
- * portal spell has ten rungs of its own — counting stones up to squaring
- * numbers — and it climbs and falls by exactly these rules, which are about
- * how a child is doing rather than about what they are being asked. A second
- * copy of this for the second spell would be a second thing to keep true.
+ * Where the difficulty should sit after a cast.
+ *
+ * Never outside the band. A run of clean casts at the top of the band leaves
+ * the rung exactly where it is, and so does a run of stumbles at the bottom
+ * — the caller sees no move, clears nothing, and writes nothing. Whoever
+ * chose the band is the only one who can widen it.
+ *
+ * **The caller empties its window whenever the rung moves.** Without that,
+ * the four clean casts that earned a climb are still sitting there on the
+ * next cast and earn another one immediately, and a child is walked from the
+ * bottom of their band to the top in five casts — which is not adaptation,
+ * it is a ramp. Nothing is cleared when the rung holds at an edge, which is
+ * right: a child pressed against the top of their band should not have to
+ * start their run again every time they finish one.
+ *
+ * `hardest` is a parameter because there is more than one ladder. The portal
+ * spell has ten rungs of its own — counting stones up to squaring numbers —
+ * and the clock and the great tree have six each, and all of them climb and
+ * fall by exactly these rules, which are about how a child is doing rather
+ * than about what they are being asked. A second copy of this for the second
+ * spell would be a second thing to keep true. The band is scaled onto
+ * whichever ladder is asking, so the fence means the same thing on all four.
  */
 export function nextRung(
   band: Band,
@@ -312,17 +337,15 @@ export function nextRung(
   recent: Recent,
   hardest: number = HARDEST_RUNG,
 ): number {
-  const here = Math.max(0, Math.min(hardest, Math.trunc(rung)));
-  // Leaving the band the child was put in takes a longer run than moving
-  // within it. That difference is the whole of what replaces the fence.
-  const needed = here >= band.to ? CLEAN_TO_LEAVE_BAND : CLEAN_TO_CLIMB;
-  const clean = recent.slice(-needed);
-  if (clean.length >= needed && clean.every(Boolean)) {
-    return Math.min(hardest, here + 1);
+  const fence = bandOn(band, hardest);
+  const here = rungInBand(band, rung, hardest);
+  const clean = recent.slice(-CLEAN_TO_CLIMB);
+  if (clean.length >= CLEAN_TO_CLIMB && clean.every(Boolean)) {
+    return Math.min(fence.to, here + 1);
   }
   const stumbles = recent.slice(-STUMBLES_TO_EASE);
   if (stumbles.length >= STUMBLES_TO_EASE && stumbles.every((was) => !was)) {
-    return Math.max(0, here - 1);
+    return Math.max(fence.from, here - 1);
   }
   return here;
 }

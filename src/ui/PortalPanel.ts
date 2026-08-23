@@ -18,7 +18,9 @@ import {
   markFraction,
   marksAcross,
   marksOnLegs,
+  portalHelp,
   portalHint,
+  readingOf,
   stonesAlong,
   submitPortal,
   typePortalDigit,
@@ -720,7 +722,7 @@ export class PortalPanel {
    * from the edge of the map as a real map counts.
    */
   private reading(mark: number, origin: number, journey: PortalJourney): number {
-    return journey.rung.origin === "corner" ? mark : Math.abs(mark - origin);
+    return readingOf(mark, origin, journey.rung);
   }
 
   /**
@@ -863,22 +865,26 @@ export class PortalPanel {
   }
 
   private helpLine(): string {
-    const journey = this.cast ? portalHint(this.cast) : null;
-    if (!journey) return "";
-    const across = this.words.portalCompass(journey.across.towards);
-    const down = this.words.portalCompass(journey.down.towards);
-    if (journey.rung.tier === PortalTier.Count) return this.words.portalHintCount(journey.answer);
-    if (journey.rung.tier === PortalTier.Read) {
-      return this.words.portalHintRead(
-        this.words.portalCompass(journey.asked.towards),
-        journey.asked.marks,
-      );
+    const help = this.cast ? portalHelp(this.cast) : null;
+    if (!help) return "";
+    switch (help.kind) {
+      case "count":
+        return this.words.portalHintCount(help.answer);
+      case "read":
+        return this.words.portalHintRead(
+          this.words.portalCompass(help.towards as never),
+          help.marks,
+        );
+      case "crow":
+        return this.words.portalHintCrow(help.across, help.down, help.squares);
+      default:
+        return this.words.portalHintLegs(
+          this.words.portalCompass(help.across.towards),
+          help.across.marks,
+          this.words.portalCompass(help.down.towards),
+          help.down.marks,
+        );
     }
-    if (journey.rung.tier === PortalTier.Crow) {
-      const squares = journey.across.marks ** 2 + journey.down.marks ** 2;
-      return this.words.portalHintCrow(journey.across.marks, journey.down.marks, squares);
-    }
-    return this.words.portalHintLegs(across, journey.across.marks, down, journey.down.marks);
   }
 
   // --- the keypad ----------------------------------------------------------

@@ -6,14 +6,21 @@ import type { AreaPlacement } from "./anchors";
 import { floodFillReachable, isReachable } from "./connectivity";
 import { FixtureType } from "./fixtures";
 import { WorldGrid } from "./grid";
+import type { PlacedObject } from "./objects";
 import { TerrainType } from "./terrain";
+import type { GridPoint } from "./topdown";
 import {
+  DIRECTIONS,
   GARDEN_ENTRANCE_WIDTH,
+  HOUSE_IDS,
+  VILLAGER_HOME_COUNT,
+  VILLAGER_IDS,
   VILLAGE_SIZE,
   gardenEntrance,
   gardenFenceRing,
   gardenGate,
   layoutVillage,
+  plotFor,
   stallCells,
 } from "./villageLayout";
 
@@ -50,10 +57,11 @@ describe("layoutVillage", () => {
     expect(grid.isPassable(center.col + 2, center.row)).toBe(true);
   });
 
-  test("places exactly 7 buildings, all blocking, all inside the anchor box", () => {
+  test("places the ring and the villagers' cottages, all blocking, all in the box", () => {
     const { grid, village } = villageGrid();
     const { buildings } = layoutVillage(grid, village);
-    expect(buildings.length).toBe(7);
+    // Seven round the square, and one apiece for the villagers off it.
+    expect(buildings.length).toBe(7 + VILLAGER_HOME_COUNT);
     for (const building of buildings) {
       expect(building.blocksMovement).toBe(true);
       expect(building.col).toBeGreaterThanOrEqual(village.col);
@@ -147,23 +155,22 @@ describe("layoutVillage", () => {
     expect(tower.filter((npc) => npc.indoors).map((npc) => npc.id)).toEqual(["geometer"]);
   });
 
-  test("every villager/teacher/postal-worker/shopkeeper gets a home point, player-house does not", () => {
+  test("everybody who lives here gets a home point, and no child's house does", () => {
     const { grid, village } = villageGrid();
     const { npcs, buildings } = layoutVillage(grid, village);
     const npcIds = npcs.map((n) => n.id).sort();
     expect(npcIds).toEqual(
-      [
-        "geometer",
-        "postal-worker",
-        "shopkeeper",
-        "teacher",
-        "villager-1",
-        "villager-2",
-        "villager-3",
-      ].sort(),
+      ["geometer", "postal-worker", "shopkeeper", "teacher", ...VILLAGER_IDS].sort(),
     );
-    expect(buildings.find((b) => b.id === "player-house")).toBeDefined();
-    expect(npcs.some((n) => n.homeBuildingId === "player-house")).toBe(false);
+    // None of the four round the square: those are the children's, one each,
+    // and a villager living in one was a stranger in somebody's home.
+    for (const id of HOUSE_IDS) {
+      expect(buildings.find((b) => b.id === id)).toBeDefined();
+      expect({ id, taken: npcs.some((n) => n.homeBuildingId === id) }).toEqual({
+        id,
+        taken: false,
+      });
+    }
 
     for (const npc of npcs) {
       expect(grid.isPassable(npc.home.col, npc.home.row)).toBe(true);
@@ -811,5 +818,189 @@ describe("the shop's stalls", () => {
     })).filter((cell) => grid.isPassable(cell.col, cell.row));
     expect(doorstep.length).toBeGreaterThan(0);
     expect(doorstep.some((cell) => isReachable(visited, grid, cell))).toBe(true);
+  });
+});
+
+describe("where the villagers live", () => {
+  /**
+   * The village has to find room for all four, in every world.
+   *
+   * Rejection sampling is the kind of thing that works on the seed it was
+   * written against and quietly comes up one short on another — and a
+   * villager with no home is a villager every later pass has to special-case.
+   * `layoutVillage` throws rather than settling for three, so this is a test
+   * that it never has to.
+   */
+  test("four cottages, in every world", () => {
+    for (let seed = 0; seed < 120; seed++) {
+      const { grid, village } = villageGrid();
+      const { buildings } = layoutVillage(grid, village, seed);
+      const cottages = buildings.filter((b) => b.id.startsWith("villager-home-"));
+      expect({ seed, count: cottages.length }).toEqual({ seed, count: VILLAGER_HOME_COUNT });
+    }
+  });
+
+  test("and no two of them touch", () => {
+    for (let seed = 0; seed < 120; seed++) {
+      const { grid, village } = villageGrid();
+      const cottages = layoutVillage(grid, village, seed).buildings.filter((b) =>
+        b.id.startsWith("villager-home-"),
+      );
+      for (let a = 0; a < cottages.length; a++) {
+        for (let b = a + 1; b < cottages.length; b++) {
+          const one = cottages[a] as PlacedObject;
+          const two = cottages[b] as PlacedObject;
+          const apart = Math.max(
+            one.col - (two.col + two.width - 1),
+            two.col - (one.col + one.width - 1),
+            one.row - (two.row + two.height - 1),
+            two.row - (one.row + one.height - 1),
+          );
+          expect({ seed, a, b, clear: apart > 0 }).toEqual({ seed, a, b, clear: true });
+        }
+      }
+    }
+  });
+
+  // Not on the square, not on a road, not in anybody's plot. Everything the
+  // village builds is carved to dirt and nothing else in the box is, so
+  // "started on ground that was not dirt" is the whole rule — checked here
+  // by the consequence: a cottage never stands on another building.
+  test("they stand clear of everything the village had already built", () => {
+    for (let seed = 0; seed < 60; seed++) {
+      const { grid, village } = villageGrid();
+      const { buildings } = layoutVillage(grid, village, seed);
+      const ring = buildings.filter((b) => !b.id.startsWith("villager-home-"));
+      for (const cottage of buildings.filter((b) => b.id.startsWith("villager-home-"))) {
+        for (const other of ring) {
+          const overlaps =
+            cottage.col < other.col + other.width &&
+            other.col < cottage.col + cottage.width &&
+            cottage.row < other.row + other.height &&
+            other.row < cottage.row + cottage.height;
+          expect({ seed, cottage: cottage.id, other: other.id, overlaps }).toEqual({
+            seed,
+            cottage: cottage.id,
+            other: other.id,
+            overlaps: false,
+          });
+        }
+      }
+    }
+  });
+
+  /**
+   * A villager can get home, and a child can get to them.
+   *
+   * `carvePath` draws a straight line and sets dirt under whatever it
+   * crosses, so a cottage whose walk from the square passed through a fence
+   * would leave a dirt scar and a villager on the wrong side of it. The
+   * candidate's line is checked before it is carved; this checks the
+   * consequence, which is the thing that matters.
+   */
+  test("and every one of them can be walked to from the square", () => {
+    for (let seed = 0; seed < 40; seed++) {
+      const { grid, village } = villageGrid();
+      const { well, npcs } = layoutVillage(grid, village, seed);
+      const reachable = floodFillReachable(grid, { col: well.col, row: well.row + 1 });
+      for (const npc of npcs.filter((n) => n.homeBuildingId.startsWith("villager-home-"))) {
+        expect({ seed, npc: npc.id, home: isReachable(reachable, grid, npc.home) }).toEqual({
+          seed,
+          npc: npc.id,
+          home: true,
+        });
+      }
+    }
+  });
+
+  // The layout has no sidecars, so it places a doorstep by the shape a
+  // cottage is: door in the bottom middle, step on the tile below. If the
+  // art ever moves that door, this is what says so.
+  test("the doorstep the layout assumes is the doorstep the art draws", () => {
+    const { grid, village } = villageGrid();
+    const { npcs, buildings } = layoutVillage(grid, village, 3);
+    for (const npc of npcs.filter((n) => n.homeBuildingId.startsWith("villager-home-"))) {
+      const home = buildings.find((b) => b.id === npc.homeBuildingId) as PlacedObject;
+      expect(npc.home).toEqual({
+        col: home.col + Math.floor(home.width / 2),
+        row: home.row + home.height,
+      });
+      expect(grid.isPassable(npc.home.col, npc.home.row)).toBe(true);
+    }
+  });
+});
+
+describe("where each child starts", () => {
+  // Four houses round the square, four children on a device, and
+  // `Profile.house` says which is whose. Nothing read it until the
+  // nameplates went up and made it plain that everybody was being put down
+  // at house zero's gate.
+  test("every house says where its owner begins, and they are all different", () => {
+    const { grid, village } = villageGrid();
+    const { homes, buildings } = layoutVillage(grid, village);
+    expect(Object.keys(homes).sort()).toEqual([...HOUSE_IDS].sort());
+    const spots = new Set(Object.values(homes).map((h) => `${h.inside.col},${h.inside.row}`));
+    expect(spots.size).toBe(HOUSE_IDS.length);
+    for (const [id, home] of Object.entries(homes)) {
+      expect({ id, standable: grid.isPassable(home.inside.col, home.inside.row) }).toEqual({
+        id,
+        standable: true,
+      });
+      expect({ id, doorstep: grid.isPassable(home.doorstep.col, home.doorstep.row) }).toEqual({
+        id,
+        doorstep: true,
+      });
+      // Their own, not somebody else's: the nearest house to where they are
+      // put down is the one whose name is on it.
+      const nearest = buildings
+        .filter((b) => HOUSE_IDS.includes(b.id))
+        .sort(
+          (a, b) =>
+            Math.hypot(a.col - home.inside.col, a.row - home.inside.row) -
+            Math.hypot(b.col - home.inside.col, b.row - home.inside.row),
+        )[0];
+      expect({ id, nearest: nearest?.id }).toEqual({ id, nearest: id });
+    }
+  });
+});
+
+describe("the four plots", () => {
+  /**
+   * The same garden four times, turned to face the square.
+   *
+   * House zero had a seven-by-five "per the original design request (a big
+   * garden)" and the other three a four-by-four, which was fine while a
+   * world belonged to one child and is one child getting half their
+   * sibling's garden the moment four of them share a tablet.
+   */
+  test("every child gets the same number of squares to plant", () => {
+    const areas = new Set<number>();
+    for (const name of ["N", "E", "S", "W"]) {
+      const plot = plotFor(DIRECTIONS[name] as never);
+      areas.add(plot.width * plot.height);
+    }
+    expect([...areas]).toEqual([35]);
+  });
+
+  // The long side runs *across* the way out of the village, so every child
+  // meets their plot the same way round: walking in at the middle of a
+  // seven-tile frontage. North and south are wide; east and west are deep.
+  test("and it is turned to face the square rather than always lying the same way", () => {
+    expect(plotFor(DIRECTIONS.N as never)).toEqual({ width: 7, height: 5 });
+    expect(plotFor(DIRECTIONS.S as never)).toEqual({ width: 7, height: 5 });
+    expect(plotFor(DIRECTIONS.E as never)).toEqual({ width: 5, height: 7 });
+    expect(plotFor(DIRECTIONS.W as never)).toEqual({ width: 5, height: 7 });
+  });
+
+  // Every one of the four houses really is on a cardinal direction, which is
+  // what makes "across" one axis rather than a diagonal to round off.
+  test("and every house it applies to sits square to the compass", () => {
+    const { grid, village } = villageGrid();
+    const { well, homes } = layoutVillage(grid, village);
+    for (const id of HOUSE_IDS) {
+      const at = homes[id]?.inside as GridPoint;
+      const straight = at.col === well.col || at.row === well.row;
+      expect({ id, straight }).toEqual({ id, straight: true });
+    }
   });
 });

@@ -30,6 +30,8 @@ import {
 import { type Profile, createProfile, freshStart } from "../save/profiles";
 import {
   type WorldBaseline,
+  readDecor,
+  readPlans,
   restorePlayer,
   restoreWorld,
   savedAtOf,
@@ -37,7 +39,7 @@ import {
   snapshotPlayer,
   worldBaseline,
 } from "../save/snapshot";
-import { saveProfile } from "../save/store";
+import { readProfiles, saveProfile } from "../save/store";
 import {
   Language,
   type Settings,
@@ -56,11 +58,18 @@ import {
   smallestCoin,
 } from "../shop/currency";
 import { makeAdditionProblem, movedBy } from "../spells/addition";
+import {
+  HARDEST_BRICK_RUNG,
+  brickBeingAsked,
+  brickRungAt,
+  makeBrickProblem,
+} from "../spells/bricks";
 import type { CastResult } from "../spells/cast";
 import {
   DEFAULT_BAND,
   type Recent,
   bandAt,
+  bandOn,
   nextRung,
   recordCast,
   rungAt,
@@ -91,6 +100,7 @@ import { Spell, knowsSpell, learnSpell } from "../spells/spellbook";
 import { makeSubtractionProblem } from "../spells/subtraction";
 import { AboutPanel } from "../ui/AboutPanel";
 import { ArrayPopup } from "../ui/ArrayPopup";
+import { BrickPopup } from "../ui/BrickPopup";
 import { ClockPopup } from "../ui/ClockPopup";
 import { GeometryLessonPanel } from "../ui/GeometryLessonPanel";
 import { GroveLessonPanel } from "../ui/GroveLessonPanel";
@@ -175,6 +185,32 @@ import type { CityLayout } from "../world/city";
 import { CLIFF_ATLAS_KEY, cliffFrameFor, cornerLevelsFor } from "../world/cliffAtlas";
 import { DECK_SHEET_KEY, DECK_SIDECAR_KEY, type DeckSidecar } from "../world/decking";
 import {
+  DECOR_LOOKS,
+  DECOR_TYPES,
+  type DecorItem,
+  type DecorType,
+  type Footprints,
+  type Placed,
+  ROOM_COST,
+  arrangementIn,
+  blockersFor,
+  cellsUnder,
+  colourPlanFor,
+  fits as decorFits,
+  decorFromSave,
+  decorItem,
+  decorToSave,
+  without as decorWithout,
+  footprintsOf,
+  itemParts,
+  occupiedCells,
+  pieceArt,
+  pieceOn,
+  protectedCells,
+  roomsAfforded,
+  startingDecor,
+} from "../world/decor";
+import {
   EFFECT_FPS,
   EFFECT_TYPES,
   EffectType,
@@ -194,6 +230,25 @@ import {
   isPlaceable,
 } from "../world/fixtures";
 import type { WorldGrid } from "../world/grid";
+import {
+  type PlanPatch,
+  type RoomPlan,
+  buildOn,
+  buildableCells,
+  buildableIn,
+  canBuild,
+  canUnbuild,
+  cellKey,
+  isFloor,
+  planBounds,
+  planFromKeys,
+  planOf,
+  removableIn,
+  unbuildFrom,
+  wallMasks,
+  whyNotBuild,
+  windowCells,
+} from "../world/growableRoom";
 import type { HarbourLayout } from "../world/harbour";
 import {
   FABRIC_SLOTS,
@@ -203,13 +258,22 @@ import {
   lightingDelay,
   rampOf,
   varies,
+  whoLivesIn,
   windowBrightness,
 } from "../world/houses";
 import {
+  GROWABLE_ROOM,
   INTERIOR_ROOMS,
   LightKind,
+  type RoomBlocker,
   type RoomLight,
   buildInteriorGrid,
+  buildPlanGrid,
+  growableDoor,
+  growablePieceAnimKey,
+  growablePieceKey,
+  growableSheetKey,
+  growableSidecarKey,
   hearthCell,
   interiorAnimKey,
   interiorAttendantCell,
@@ -221,6 +285,7 @@ import {
   lightBreath,
   roomCameraBounds,
   roomLights,
+  startingPlan,
   wallHangingCell,
 } from "../world/interiors";
 import type { Inventory, ItemType } from "../world/inventory";
@@ -233,7 +298,7 @@ import {
   landmarkSidecarKey,
 } from "../world/landmarks";
 import { hasStep } from "../world/levels";
-import { MATERIAL_TYPES, yieldOf } from "../world/materials";
+import { MATERIAL_TYPES, MaterialType, yieldOf } from "../world/materials";
 import type { PlacedObject } from "../world/objects";
 import { LAMP_POSTS, type Observatory, lampsLit, postsFree } from "../world/observatory";
 import { findPath } from "../world/pathfinding";
@@ -271,6 +336,7 @@ import {
   type CharacterSidecar,
   type EffectSidecar,
   type FixtureSidecar,
+  type GrowableSidecar,
   type InteriorSidecar,
   type LandmarkSidecar,
   type ObjectSidecar,
@@ -305,8 +371,8 @@ import {
   gridToScreen,
   screenToGrid,
 } from "../world/topdown";
-import type { VillageNpcSpec } from "../world/villageLayout";
-import { generateWorld } from "../world/worldGenerator";
+import { type VillageNpcSpec, houseIdFor } from "../world/villageLayout";
+import { type GeneratedWorld, generateWorld } from "../world/worldGenerator";
 import { sidecarKey } from "./BootScene";
 import { type DevOptions, devOptions, exposeForTests } from "./devHooks";
 
@@ -332,6 +398,20 @@ const AUTOSAVE_MS = 4000;
 const REFUSAL_COLOR = 0xd8342a;
 /** Long enough to be seen by somebody looking a beat late, short enough not to linger. */
 const REFUSAL_MS = 420;
+/**
+ * How long the finished rectangle is left alone before the sum opens over it.
+ *
+ * The second corner used to land and the parchment arrive in the same frame,
+ * so the only thing a child ever saw of what they had drawn was the *first*
+ * corner. The rectangle is the whole of what the times spell is about — the
+ * numbers in the question are numbers they made with their own hands — and
+ * it was on screen for no time at all.
+ *
+ * The same length as a refusal mark, and for the same reason: long enough to
+ * take in, short enough not to be waiting. This happens on every cast, so a
+ * beat that felt generous once would be dead time by the tenth.
+ */
+const PATCH_BEAT_MS = REFUSAL_MS;
 /**
  * How a result is shown: the thing that changed, rising off its square.
  *
@@ -543,18 +623,46 @@ const GROVE_DUSK_ALPHA = 0.3;
  * What the array spell can do to a patch it has been drawn round.
  *
  * The three things this game does to ground, and the point of the spell is
- * that it does any of them many times over. Naming them here rather than
- * reusing the spell names — "grow" is the addition spell and "clear" is the
- * subtraction spell — because from the player's side these are *choices
- * about a patch*, not spells being cast inside a spell.
+ * that it does any of them many times over.
+ *
+ * **Every one of them is a spell, and always will be.** Planting used to be
+ * on this list, and it was the one thing here with no arithmetic behind it:
+ * a child could mark out six by seven, answer one multiplication, and fill
+ * forty-two squares having cast nothing. That made planting the obvious
+ * choice every time and the times spell a way of *avoiding* sums. The times
+ * spell multiplies spells; a seed still goes in the ground one at a time,
+ * which is what putting a seed in the ground is.
  */
 export const PatchAction = {
-  Plant: "plant",
   Grow: "grow",
   Clear: "clear",
+  /**
+   * Build every square of it, indoors.
+   *
+   * The one action that is not about the garden, and it is here rather than
+   * as a spell of its own for the reason the others are: from the child's
+   * side this is a *choice about a patch*. Multiplication is doing the same
+   * thing many times without doing it many times, and laying nine squares of
+   * floor is as good an example of that as planting nine carrots.
+   */
+  Build: "build",
 } as const;
 
 export type PatchAction = (typeof PatchAction)[keyof typeof PatchAction];
+
+/**
+ * The rune each of them casts — which is the whole of what the menu shows.
+ *
+ * Building is the plus rune too, and deliberately: indoors the addition
+ * spell puts a square of floor down instead of a crop up, and a child who
+ * has learned what plus does should not have to learn a second picture for
+ * the same spell doing the same arithmetic in a different room.
+ */
+const SPELL_RUNES: Record<PatchAction, string> = {
+  [PatchAction.Grow]: UiAsset.RuneAdd,
+  [PatchAction.Clear]: UiAsset.RuneMinus,
+  [PatchAction.Build]: UiAsset.RuneAdd,
+};
 
 /** The marker drawn over ground the player has marked out. */
 const PATCH_FILL = 0xffe08a;
@@ -706,6 +814,19 @@ const WALL_HANGINGS: Record<string, string> = {
 };
 // How far up the wall it hangs, from the floor cell it is measured against.
 const WALL_MAP_RISE = 10;
+
+/**
+ * The part of a character's idle frame that goes on a nameplate.
+ *
+ * Head and shoulders, which is where every colour a child picked lives:
+ * their hair, their face and their shirt. Measured off the art — the figure
+ * is sixteen pixels across, starting eight in, and its head runs from row
+ * fifteen — and cropped rather than scaled, because a face squeezed to fit a
+ * plate is a face with some rows twice as tall as others.
+ */
+const DECOR_LOOKS_RANGE = Array.from({ length: DECOR_LOOKS }, (_, at) => at);
+
+const FACE_CROP = { x: 8, y: 15, width: 16, height: 18 } as const;
 // The one who comes to *you*. He patrols the whole village anyway, so a round
 // that starts at the player's gate is in character — and a tutorial that
 // walks over and introduces itself is one a child meets as a person rather
@@ -787,6 +908,13 @@ interface AnimalRuntime extends NpcRuntime {
 
 interface NpcRuntime {
   id: string;
+  /**
+   * The building they live behind, so their cottage can say whose it is.
+   *
+   * Optional because the animals share this shape and a chicken lives in no
+   * building — it has a patch of grass it keeps near, and no door.
+   */
+  homeBuildingId?: string;
   character: string;
   facing: Facing;
   homeCol: number;
@@ -851,6 +979,14 @@ interface BuildingRuntime {
   windows: readonly { at: { x: number; y: number }; glow: Phaser.GameObjects.Image }[];
   /** How late in the dusk this house lights up. See `lightingDelay`. */
   lightsAt: number;
+  /**
+   * The plate beside the door, in world pixels, or null.
+   *
+   * Only the cottages have one, and the sidecar says so — the game cannot
+   * see the picture. Worked out when the building is placed and filled once
+   * the cast is known, because a plate says who lives behind that door.
+   */
+  nameplate: { x: number; y: number; width: number; height: number } | null;
 }
 
 // The room the player is currently standing in, or null outdoors. Interiors
@@ -864,6 +1000,34 @@ interface InteriorRuntime {
   exit: GridPoint;
   returnTo: GridPoint;
   originY: number;
+  /**
+   * The floor plan, for the one room that has one.
+   *
+   * Null for the six rooms that are a picture. When it is set the room is
+   * drawn from parts instead — see `paintPlan` — and `origin` is the offset
+   * between the plan's own coordinates, which may be negative, and the grid
+   * the player actually walks on, which may not.
+   */
+  plan?: RoomPlan;
+  origin: GridPoint;
+  /** Which house this is, so a plan is saved against the right one. */
+  house?: string;
+  /**
+   * The room's own box, in grid cells — which is not the whole grid.
+   *
+   * A growable room's grid runs a margin of open ground past its walls so a
+   * child can aim a rectangle into it, and *stepping off the grid* is how
+   * the game used to know somebody had walked out of a door. With a margin
+   * that never happens: the cell past the doorway is still on the grid, so a
+   * child would be shut in their own house. Walking out is leaving the
+   * *room*, and this is where the room ends.
+   */
+  bounds: { col: number; row: number; cols: number; rows: number };
+  /** What the room is drawn into, and the fire that will not sit still in it. */
+  canvas?: Phaser.GameObjects.RenderTexture;
+  fires: Phaser.GameObjects.Sprite[];
+  /** The furniture, as things rather than as paint. See `spawnDecor`. */
+  decor: Phaser.GameObjects.Image[];
 }
 
 interface ActiveChunk {
@@ -985,8 +1149,11 @@ export class GameScene extends Phaser.Scene {
   private geometryPanel?: GeometryLessonPanel;
   private grovePanel?: GroveLessonPanel;
   private arrayPopup?: ArrayPopup;
+  private brickPopup?: BrickPopup;
   private clockPopup?: ClockPopup;
   private patchMenu?: PatchMenu<PatchAction>;
+  /** The second of the two taps: which colour of a thing to put down. */
+  private decorMenu?: PatchMenu<DecorItem>;
   /**
    * The array spell, part way through being aimed.
    *
@@ -994,7 +1161,18 @@ export class GameScene extends Phaser.Scene {
    * and waiting for its first corner. Three states rather than two booleans,
    * so "armed but no corner yet" cannot be confused with "not armed".
    */
-  private marking: { from: GridPoint | null; patch: Patch | null } | null = null;
+  private marking: {
+    from: GridPoint | null;
+    patch: Patch | null;
+    /** Chosen before any ground is marked — see `castArraySpell`. */
+    action: PatchAction;
+  } | null = null;
+  /**
+   * Whether a finished rectangle is being looked at before its sum opens.
+   *
+   * Taps do nothing while it is set. See `PATCH_BEAT_MS`.
+   */
+  private settling = false;
   private patchInk?: Phaser.GameObjects.Graphics;
   private socketInk?: Phaser.GameObjects.Graphics;
   /**
@@ -1026,6 +1204,7 @@ export class GameScene extends Phaser.Scene {
    */
   private recentPortalCasts: Recent = [];
   private recentArrayCasts: Recent = [];
+  private recentBrickCasts: Recent = [];
   private recentClockCasts: Recent = [];
   /**
    * When the world was last written down before this session started.
@@ -1111,7 +1290,11 @@ export class GameScene extends Phaser.Scene {
    */
   private worldForgotten = false;
   /** The room the camera is framing, in pixels, so a rotation can re-frame it. */
-  private framedRoom: { width: number; height: number } | null = null;
+  private framedRoom: {
+    width: number;
+    height: number;
+    at: { x: number; y: number };
+  } | null = null;
 
   private mobileControls = false;
   private joystick?: VirtualJoystick;
@@ -1154,7 +1337,42 @@ export class GameScene extends Phaser.Scene {
    */
   private deckVariations = 1;
   private buildings: BuildingRuntime[] = [];
+  /**
+   * Every child on this device, for the nameplates on the four houses.
+   *
+   * All of them rather than the one playing: the plates say who lives in the
+   * village, and a sibling's house is theirs whether or not they are the one
+   * holding the tablet. Read once when the scene starts, because profiles
+   * are made on the screen before this one.
+   */
+  private household: readonly Profile[] = [];
   private interiorSidecars = new Map<string, InteriorSidecar>();
+  /**
+   * The parts the one growable room is assembled from, once loaded.
+   *
+   * Null in a world whose assets predate it, which is why every use of it is
+   * guarded: a missing sidecar means the cottage falls back to the picture
+   * every other room is, rather than the game refusing to open a door.
+   */
+  private growable: GrowableSidecar | null = null;
+  /**
+   * The floor plan of every house somebody has added a room to, by building.
+   *
+   * Only the houses that have been *changed*: a cottage nobody has touched
+   * is the cottage the generator shipped, and `planFor` says so. Keyed by
+   * building rather than by child, because a house is a fact about the world
+   * and two siblings on one tablet live in different ones.
+   */
+  private plans = new Map<string, RoomPlan>();
+  /**
+   * How each house is furnished, by building.
+   *
+   * The shipped placements are a *starting* arrangement, not a fact about
+   * the picture: everything in a room but the hearth is an ordinary thing
+   * that can be picked up and put down again. Only houses somebody has
+   * rearranged are in here; `decorFor` fills in the rest from the sidecar.
+   */
+  private decor = new Map<string, Placed[]>();
   private interior: InteriorRuntime | null = null;
   // The outdoor grid and its camera bounds, kept so stepping back outside
   // restores exactly what was there rather than regenerating it.
@@ -1285,6 +1503,12 @@ export class GameScene extends Phaser.Scene {
     // A child who has not opened this one before starts it from scratch
     // without losing who they are.
     if (!this.anonymous) this.profile = profileIn(this.savedGame, this.profile);
+    // Everybody on the device, for the nameplates. The child playing is
+    // included by way of the store rather than by being appended: a script
+    // that jumped straight here has an anonymous profile that was never
+    // saved, and a village where the only plate is a stranger's would be
+    // worse than a village of question marks.
+    this.household = readProfiles(browserStore());
     const world = generateWorld(WORLD_SIZE, WORLD_SIZE, this.seed);
     this.grid = world.grid;
     this.worldGrid = world.grid;
@@ -1293,7 +1517,7 @@ export class GameScene extends Phaser.Scene {
     this.city = world.city;
     this.observatory = world.observatory;
     this.harbourFront = world.harbour;
-    this.session = new GameSession({ grid: world.grid, start: world.playerStart });
+    this.session = new GameSession({ grid: world.grid, start: this.startFor(world) });
     // What the generator made, remembered before the child's own world is
     // laid over it — the diff that gets saved is the difference between the
     // two, and after this line there is no other way to tell them apart.
@@ -1309,6 +1533,9 @@ export class GameScene extends Phaser.Scene {
     if (this.dev.coins > 0) this.session.purse.earn(this.dev.coins);
     if (this.dev.crops > 0) {
       for (const plant of PLANT_TYPES) this.inventory.add(plant, this.dev.crops);
+    }
+    if (this.dev.materials > 0) {
+      for (const material of MATERIAL_TYPES) this.inventory.add(material, this.dev.materials);
     }
 
     const bounds = computeMapScreenBounds(this.grid.width, this.grid.height);
@@ -1383,6 +1610,9 @@ export class GameScene extends Phaser.Scene {
       createRng(this.seed ^ 0x0a11_4a15),
     );
     this.spawnNpcs(this.villageNpcs, world.anchors.village);
+    // After the cast, because a plate says who lives behind that door and
+    // which villager wears which face is settled while they are spawned.
+    this.hangNameplates();
 
     // The marker the array spell draws on the ground. In the world rather
     // than on the screen — it is over a patch of earth, and it has to slide
@@ -1484,10 +1714,14 @@ export class GameScene extends Phaser.Scene {
     this.arrayPopup = new ArrayPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
+    this.brickPopup = new BrickPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
+      this.ui(object),
+    );
     this.clockPopup = new ClockPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
     this.patchMenu = new PatchMenu<PatchAction>(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
+    this.decorMenu = new PatchMenu<DecorItem>(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
     this.portalPanel = new PortalPanel(
       this,
       uiIndex,
@@ -1503,6 +1737,10 @@ export class GameScene extends Phaser.Scene {
     // He walks it over the first time, and after that only if asked. ?intro
     // asks for it again without clearing the saved settings.
     this.introToGive = !this.profile.introSeen || this.dev.intro;
+    // `?wall`: the bricklaying parchment, on its own, before anything else.
+    // A beat first, so it opens over a world that has finished drawing
+    // itself rather than over a grey screen.
+    if (this.dev.wall) this.time.delayedCall(50, () => this.openBrickWall(() => {}));
     this.optionsPanel = new OptionsPanel(
       this,
       uiIndex,
@@ -1591,6 +1829,55 @@ export class GameScene extends Phaser.Scene {
           for (const object of bucket) if (inside(object)) live++;
         }
         return { inView, live };
+      },
+      /**
+       * The wall on the parchment: which brick is being asked for, what the
+       * answer to it is, and what has been typed.
+       *
+       * The answer is handed over deliberately. A script cannot work a wall
+       * out for itself without reimplementing the solver, and a test that
+       * reimplements the thing it is testing checks nothing.
+       */
+      house: () => {
+        const inside = this.interior;
+        const parts = this.growable;
+        if (!inside?.plan || !parts) return null;
+        const door = growableDoor(parts);
+        return {
+          room: inside.room,
+          id: inside.house ?? null,
+          floor: [...inside.plan.floor],
+          origin: { ...inside.origin },
+          buildable: buildableCells(inside.plan, door).map(({ col, row }) => ({
+            col: col - inside.origin.col,
+            row: row - inside.origin.row,
+          })),
+        };
+      },
+      shop: () => this.shopPanel?.counter ?? null,
+      decor: () => {
+        const inside = this.interior;
+        if (!inside?.plan || !inside.house) return null;
+        return this.decorIn(inside.house).map(({ piece, col, row, look }) => ({
+          piece,
+          col,
+          row,
+          look,
+        }));
+      },
+      bricks: () => {
+        const cast = this.brickPopup?.cast;
+        if (!cast) return null;
+        const asked = brickBeingAsked(cast);
+        return {
+          values: [...cast.problem.values],
+          hidden: [...cast.problem.hidden],
+          asked,
+          answer: asked === null ? null : (cast.problem.values[asked] ?? null),
+          entry: cast.entry,
+          missteps: cast.missteps,
+          done: cast.done,
+        };
       },
       array: () => {
         const cast = this.arrayPopup?.cast;
@@ -1864,10 +2151,29 @@ export class GameScene extends Phaser.Scene {
   // than living in one. They cannot simply sit outside both: a Layer renders
   // as a unit at its own depth, so a player left on the scene's display list
   // would always draw over the buildings instead of sorting against them.
+  /**
+   * Move everything that lives in both modes to whichever layer is showing.
+   *
+   * The player is the obvious one and was the only one for a long time. The
+   * three sheets of ink are the same case and were not: they are made once
+   * in `create`, when there is no interior, so they were filed under the
+   * world layer for good — and the world layer is *hidden* while a room is
+   * on screen. The marker the times spell draws over the ground it is about
+   * to act on was therefore invisible in a house, which is where a child now
+   * marks out the room they are building.
+   *
+   * Not a depth problem: they sit at zero and the room's own picture is at
+   * `CHUNK_DEPTH`, a thousand below. A hidden layer draws nothing whatever
+   * its contents are sorted to.
+   */
   private movePlayerToLayer(): void {
-    this.worldLayer.remove(this.player);
-    this.interiorLayer.remove(this.player);
-    this.sceneryLayer().add(this.player);
+    const showing = this.sceneryLayer();
+    for (const object of [this.player, this.patchInk, this.aimInk, this.socketInk]) {
+      if (!object) continue;
+      this.worldLayer.remove(object);
+      this.interiorLayer.remove(object);
+      showing.add(object);
+    }
   }
 
   /** Part of the interface: drawn at 1:1 by the UI camera only. */
@@ -1932,6 +2238,7 @@ export class GameScene extends Phaser.Scene {
     // The popup can be open across a phone rotation, and every one of its
     // pieces is placed from the viewport's size.
     this.spellPopup?.layout();
+    this.brickPopup?.layout();
     this.portalPanel?.layout();
     this.geometryPanel?.layout();
     this.shopPanel?.layout();
@@ -2121,8 +2428,13 @@ export class GameScene extends Phaser.Scene {
     glow.setVisible(cell !== null && strength > 0);
     if (!cell || strength <= 0) return;
     const at = this.screenOf(cell.col, cell.row);
-    const frames = this.interior?.image.anims.currentAnim?.frames.length ?? 1;
-    const index = this.interior?.image.anims.currentFrame?.index ?? 1;
+    // The flame that drives the flicker. In a room that is one animated
+    // picture it is the picture; in a room assembled from parts it is the
+    // fireplace, which is the only piece that moves — and a RenderTexture
+    // has no `anims` at all, which is what asking the wrong one cost.
+    const flame = this.interior?.fires[0] ?? (this.interior?.canvas ? null : this.interior?.image);
+    const frames = flame?.anims?.currentAnim?.frames.length ?? 1;
+    const index = flame?.anims?.currentFrame?.index ?? 1;
     const phase = frames > 1 ? ((index - 1) % frames) / frames : 0;
     const flicker = 1 - (HEARTH_FLICKER * (1 - Math.cos(phase * Math.PI * 2))) / 2;
     glow
@@ -2254,6 +2566,17 @@ export class GameScene extends Phaser.Scene {
    * nothing here — and a kind this game has not learned yet is dropped by
    * `roomLights` rather than drawn in some default colour.
    */
+  /** The fire in a room that has one, at a cell the caller has worked out. */
+  private lightHearthAt(cell: GridPoint): void {
+    // Snuffed first, exactly as `lightHearth` does. `paintPlan` runs on every
+    // square built, so without this a child who adds nine squares in one
+    // multiplication cast leaves nine orphaned glows behind — hidden, so
+    // nothing on screen would ever have shown it.
+    this.snuffHearth();
+    this.hearth = cell;
+    this.hearthGlow = this.newGlow(HEARTH_GLOW_COLOR);
+  }
+
   private lightHearth(sidecar: InteriorSidecar): void {
     this.snuffHearth();
     for (const light of roomLights(sidecar)) {
@@ -2508,6 +2831,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private registerInteriorAnims(): void {
+    // The parts the cottage can be rebuilt from, if this build shipped them.
+    this.growable =
+      (this.cache.json.get(growableSidecarKey(GROWABLE_ROOM)) as GrowableSidecar | undefined) ??
+      null;
     for (const room of INTERIOR_ROOMS) {
       const sidecar = this.cache.json.get(interiorSidecarKey(room)) as InteriorSidecar | undefined;
       if (!sidecar) throw new Error(`missing sidecar for interior "${room}"`);
@@ -3166,8 +3493,14 @@ export class GameScene extends Phaser.Scene {
     if (this.interior) {
       // Walking off the room's edge means nothing except at the door, which
       // is the one cell in the wall that is not blocked.
+      const box = this.interior.bounds;
+      const outsideTheRoom =
+        targetCol < box.col ||
+        targetRow < box.row ||
+        targetCol >= box.col + box.cols ||
+        targetRow >= box.row + box.rows;
       if (
-        !this.grid.inBounds(targetCol, targetRow) &&
+        outsideTheRoom &&
         this.playerCol === this.interior.exit.col &&
         this.playerRow === this.interior.exit.row
       ) {
@@ -3345,8 +3678,21 @@ export class GameScene extends Phaser.Scene {
         texture: uiTextureKey(itemIcon(fixture)),
         count: () => this.inventory.count(fixture),
         act: () => this.placeFixture(fixture),
-      })),
-      count: () => PLACEABLE_FIXTURES.reduce((sum, f) => sum + this.inventory.count(f), 0),
+      })).concat(
+        // Furniture goes in the crate with everything else a player puts
+        // down: it is the same verb and it should live in the same place.
+        // Its own picture is its icon — a bed at tray size reads as a bed,
+        // and drawing a second one for the button would be two drawings to
+        // keep in step.
+        DECOR_TYPES.map((piece) => ({
+          texture: growablePieceKey(GROWABLE_ROOM, pieceArt(piece)),
+          count: () => this.decorHeld(piece),
+          act: () => this.chooseDecorColour(piece),
+        })),
+      ),
+      count: () =>
+        PLACEABLE_FIXTURES.reduce((sum, f) => sum + this.inventory.count(f), 0) +
+        DECOR_TYPES.reduce((sum, piece) => sum + this.decorHeld(piece), 0),
       size,
       right: edge + (size + 10) * 3,
       bottom,
@@ -3444,6 +3790,14 @@ export class GameScene extends Phaser.Scene {
     // through it would restart the cast half way through the problem.
     if (this.modalOpen) return;
 
+    // Indoors, the same rune builds. A square of a house that is not there
+    // yet is a square you can put there — one wall of bricks and a stone and
+    // a plank, and the room is that much bigger. It is deliberately the
+    // *addition* spell rather than a fourth rune: adding a square to a room
+    // is adding, and a child who has learned what the plus rune does should
+    // find it does that everywhere.
+    if (this.buildCastAt(at)) return;
+
     const target = this.session.checkGrowth(at);
     if (!target.ok || !target.tile) {
       this.report(target);
@@ -3458,6 +3812,211 @@ export class GameScene extends Phaser.Scene {
       if (result.solved) this.growCropAt(col, row);
       this.noteCast(result);
     });
+  }
+
+  /**
+   * What one square of house costs.
+   *
+   * A stone and a plank, and the point of it is that both come from the
+   * *clearing* spell. Subtraction is the spell this game under-uses, and a
+   * child who wants a bigger house now has a reason to go and take a tree
+   * out of the ground — which is a better answer to "why would anybody cast
+   * minus" than anything a shop could sell.
+   */
+
+  /**
+   * Build a square of house, if that is what this tap was.
+   *
+   * Returns whether it took the tap. False means the square was not a
+   * buildable one and the growth spell should go on to do what it does
+   * outdoors — so a child casting plus on the floor they are standing on
+   * still gets told about the crop that is not there rather than about
+   * bricks.
+   */
+  private buildCastAt(at: GridPoint): boolean {
+    const inside = this.interior;
+    const parts = this.growable;
+    if (!inside?.plan || !parts) return false;
+    // Grid space to plan space. Everything below is in the plan's own
+    // coordinates, which may be negative.
+    const cell = { col: at.col + inside.origin.col, row: at.row + inside.origin.row };
+    if (!canBuild(inside.plan, cell, growableDoor(parts))) return false;
+
+    const short = ROOM_COST.filter(([item, n]) => this.inventory.count(item) < n);
+    if (short.length > 0) {
+      // The refusal says what is missing rather than that something is: a
+      // cross on its own is the game saying no with no way to find out why.
+      this.showCostOnPlayer(ROOM_COST.map(([item]) => materialIcon(item)));
+      return true;
+    }
+
+    this.joystick?.release();
+    this.openBrickWall(() => this.layFloorAt(cell));
+    return true;
+  }
+
+  /**
+   * Take a square of house back up, if that is what this tap was.
+   *
+   * Returns whether it took the tap, the same way `buildCastAt` does — false
+   * means the square was not one that could come up, and the clearing spell
+   * carries on to say what it normally would.
+   *
+   * **A square only comes up if the room survives it.** Somebody standing on
+   * it, a bed on it, the floor behind the front door, or a cut that would
+   * leave the room in two halves: all refused, and refused before the sum is
+   * asked, so a wrong tap costs a tap. The last of those is the one a child
+   * cannot see coming, which is why it is worked out rather than guessed at
+   * — see `whyNotUnbuild`.
+   */
+  private unbuildCastAt(at: GridPoint): boolean {
+    const inside = this.interior;
+    const parts = this.growable;
+    if (!inside?.plan || !parts) return false;
+    const cell = { col: at.col + inside.origin.col, row: at.row + inside.origin.row };
+    if (!canUnbuild(inside.plan, cell, growableDoor(parts), this.spokenFor())) return false;
+
+    this.joystick?.release();
+    const rung = rungAt(this.profile.rung);
+    this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, (result) => {
+      if (result.solved) this.takeFloorUp([cell]);
+      this.noteCast(result);
+    });
+    return true;
+  }
+
+  /**
+   * Every square of the room that something is already on.
+   *
+   * The furniture, and the child herself. Both in the plan's own
+   * coordinates, because that is what the rules are written in.
+   */
+  private spokenFor(): Set<string> {
+    const inside = this.interior;
+    const parts = this.growable;
+    if (!inside?.plan || !parts || !inside.house) return new Set<string>();
+    const her = this.session.tile;
+    return protectedCells(parts, this.decorIn(inside.house), {
+      col: her.col + inside.origin.col,
+      row: her.row + inside.origin.row,
+    });
+  }
+
+  /**
+   * Take squares of floor up, and hand back what they cost.
+   *
+   * A plank and a stone each, the same as they took to lay. Building a room
+   * the wrong shape is a mistake a child should be able to undo for the
+   * price of a sum, not for the price of going back to the woods — and a
+   * refund that did not match the cost would make the minus spell either a
+   * penalty or a way of printing planks.
+   *
+   * Everything downstream happens once, whatever the count: one grid, one
+   * repaint, one reframe, one save. See `layFloor`, which this mirrors.
+   */
+  private takeFloorUp(cells: readonly GridPoint[]): void {
+    const inside = this.interior;
+    const parts = this.growable;
+    if (!inside?.plan || !inside.house || !parts || cells.length === 0) return;
+
+    const wasCol = this.session.tile.col + inside.origin.col;
+    const wasRow = this.session.tile.row + inside.origin.row;
+
+    let smaller = inside.plan;
+    for (const cell of cells) {
+      for (const [item, count] of ROOM_COST) this.inventory.add(item, count);
+      smaller = unbuildFrom(smaller, cell);
+      this.playEffect(EffectType.Minus, cell.col - inside.origin.col, cell.row - inside.origin.row);
+    }
+    inside.plan = smaller;
+    this.plans.set(inside.house, smaller);
+
+    const door = growableDoor(parts);
+    const { grid, origin, extent } = buildPlanGrid(smaller, door, this.blockers(inside.house));
+    inside.grid = grid;
+    inside.origin = origin;
+    inside.bounds = {
+      col: extent.minCol - origin.col,
+      row: extent.minRow - origin.row,
+      cols: extent.cols,
+      rows: extent.rows,
+    };
+    inside.exit = { col: door.col - origin.col, row: door.row - origin.row };
+    this.grid = grid;
+    this.paintPlan();
+    this.placePlayer(wasCol - origin.col, wasRow - origin.row, this.session.facing);
+    this.frameGrownRoom();
+    this.refreshCarried();
+    this.autosave();
+  }
+
+  /**
+   * Put the square down, and pay for it.
+   *
+   * Paid here rather than before the wall goes up, so a child who closes the
+   * parchment half way through has spent nothing. There is no fail state
+   * anywhere in this game and abandoning a cast is not one either.
+   */
+  private layFloorAt(cell: GridPoint): void {
+    this.layFloor([cell]);
+  }
+
+  /**
+   * Put squares of floor down, and pay for them.
+   *
+   * Takes a list rather than a square because the multiplication spell lays
+   * a whole patch at once, and everything after the plan itself is *per
+   * room* rather than per square: one grid, one repaint, one reframe, one
+   * save. Nine squares laid one at a time was nine RenderTexture rebuilds
+   * and nine writes to storage inside a single cast, all but the last of
+   * them describing a room that existed for a frame.
+   *
+   * The cells arrive in an order that works — each one buildable given only
+   * the ones before it — because `buildableIn` walked a plan forward to find
+   * them. Applied in that order they stay valid.
+   *
+   * Paid here rather than before the wall goes up, so a child who closes the
+   * parchment half way through has spent nothing. There is no fail state
+   * anywhere in this game and abandoning a cast is not one either.
+   */
+  private layFloor(cells: readonly GridPoint[]): void {
+    const inside = this.interior;
+    const parts = this.growable;
+    if (!inside?.plan || !inside.house || !parts || cells.length === 0) return;
+
+    // Where she is standing, in the plan's own coordinates. Read before
+    // anything moves: a room that grows west shifts every grid cell one to
+    // the right, and a player left at her old numbers would be standing a
+    // square from where she was.
+    const wasCol = this.session.tile.col + inside.origin.col;
+    const wasRow = this.session.tile.row + inside.origin.row;
+
+    let grown = inside.plan;
+    for (const cell of cells) {
+      for (const [item, count] of ROOM_COST) this.inventory.remove(item, count);
+      grown = buildOn(grown, cell);
+    }
+    inside.plan = grown;
+    this.plans.set(inside.house, grown);
+
+    // The room is a different shape now, so everything measured from it is
+    // rebuilt: the grid she walks on, the picture, and the camera framing.
+    const door = growableDoor(parts);
+    const { grid, origin, extent } = buildPlanGrid(grown, door, this.blockers(inside.house));
+    inside.grid = grid;
+    inside.origin = origin;
+    inside.bounds = {
+      col: extent.minCol - origin.col,
+      row: extent.minRow - origin.row,
+      cols: extent.cols,
+      rows: extent.rows,
+    };
+    inside.exit = { col: door.col - origin.col, row: door.row - origin.row };
+    this.grid = grid;
+    this.paintPlan();
+    this.placePlayer(wasCol - origin.col, wasRow - origin.row, this.session.facing);
+    this.frameGrownRoom();
+    this.autosave();
   }
 
   /**
@@ -3482,7 +4041,10 @@ export class GameScene extends Phaser.Scene {
       this.showRefusalOnPlayer(UiAsset.RuneTimes);
       return;
     }
-    if (this.interior) {
+    // Indoors it marks out floor to build rather than ground to plant, and
+    // only in a room that can be added to: a patch drawn on the schoolhouse
+    // is a rectangle nothing could happen to.
+    if (this.interior && !this.interior.plan) {
       this.showRefusalOnPlayer();
       return;
     }
@@ -3491,13 +4053,52 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.joystick?.release();
+    // **What, before where.** The choice used to come after the ground was
+    // marked, off a menu that also said how many squares were in it — which
+    // is the answer to the multiplication about to be asked. Asking first
+    // takes the answer off the screen, and it reads better besides: a child
+    // decides what they are doing and then goes and does it, rather than
+    // drawing a rectangle and being asked what it was for.
+    this.openSpellChoice();
+  }
+
+  /**
+   * Which spell is being multiplied: the plus one or the minus one.
+   *
+   * Over her head rather than over the ground, because there is no ground
+   * yet — this is the first thing that happens when the times rune is
+   * tapped. Everything offered here is offered *unconditionally*, since
+   * whether a patch has anything to grow in it cannot be known before the
+   * patch exists; a choice that turns out to land on nothing is refused when
+   * the rectangle is drawn, which is before any sum has been asked.
+   */
+  private openSpellChoice(): void {
+    const choices = (
+      this.interior?.plan
+        ? [PatchAction.Build, PatchAction.Clear]
+        : [PatchAction.Grow, PatchAction.Clear]
+    ).map((action) => ({ action, rune: uiTextureKey(SPELL_RUNES[action]) }));
+    // A menu of one is not a choice. Indoors there is only the plus rune to
+    // pick, so picking it is a tap that asks a child to confirm a decision
+    // the game already made for them.
+    const only = choices[0];
+    if (choices.length === 1 && only) {
+      this.beginMarking(only.action);
+      return;
+    }
+    const above = this.screenOfPoint(this.player.x, this.player.y - TILE_SIZE);
+    this.patchMenu?.openAt(above, choices, (action) => this.beginMarking(action));
+  }
+
+  private beginMarking(action: PatchAction): void {
+    this.patchMenu?.close();
     // The square she is pointing at is the patch's first corner, if she is
     // pointing at one. That is what the pointing is *for* — she has already
     // said where, and asking again would be asking twice.
     const aimed = this.session.aimed;
     this.marking = aimed
-      ? { from: aimed, patch: patchBetween(aimed, aimed, this.worldGrid) }
-      : { from: null, patch: null };
+      ? { from: aimed, patch: patchBetween(aimed, aimed, this.worldGrid), action }
+      : { from: null, patch: null, action };
     // The rune hangs over her head for as long as the spell is armed. It is
     // the whole of "mark out the ground": a spell that is waiting for a tap
     // and says nothing is a spell that looks like it did not fire.
@@ -3579,6 +4180,7 @@ export class GameScene extends Phaser.Scene {
   private stopMarking(): void {
     if (!this.marking) return;
     this.marking = null;
+    this.settling = false;
     this.patchMenu?.close();
     this.paintPatch();
     this.armedRune?.destroy();
@@ -3596,11 +4198,11 @@ export class GameScene extends Phaser.Scene {
    */
   private markPatchAt(worldX: number, worldY: number): void {
     const marking = this.marking;
-    if (!marking) return;
+    if (!marking || this.settling) return;
     const at = this.tileAtWorld(worldX, worldY);
     if (!at) return;
     if (!marking.from) {
-      this.marking = { from: at, patch: patchBetween(at, at, this.worldGrid) };
+      this.marking = { ...marking, from: at, patch: patchBetween(at, at, this.worldGrid) };
       this.paintPatch();
       return;
     }
@@ -3609,7 +4211,7 @@ export class GameScene extends Phaser.Scene {
       // A single square is not a multiplication. Rather than refuse the tap,
       // the corner moves — which is what a child who tapped the same cell
       // twice almost certainly meant.
-      this.marking = { from: at, patch: patchBetween(at, at, this.worldGrid) };
+      this.marking = { ...marking, from: at, patch: patchBetween(at, at, this.worldGrid) };
       this.paintPatch();
       // One square is not a rectangle. The corner has already moved to where
       // she tapped, so the only thing left to say is *not that one* — on the
@@ -3617,9 +4219,20 @@ export class GameScene extends Phaser.Scene {
       this.markRefusal(at.col, at.row);
       return;
     }
-    this.marking = { from: marking.from, patch };
+    this.marking = { ...marking, from: marking.from, patch };
     this.paintPatch();
-    this.openPatchMenu(patch);
+    // A beat on the finished rectangle before the sum covers it up. Taps are
+    // ignored while it runs: without that, a child tapping quickly would
+    // re-anchor a corner on a rectangle the game had already accepted, and
+    // get a second sum for it.
+    this.settling = true;
+    this.time.delayedCall(PATCH_BEAT_MS, () => {
+      this.settling = false;
+      // Unless they changed their mind in the meantime — tapping the rune
+      // again cancels, and a cancelled marking must not still go off.
+      if (this.marking?.patch !== patch) return;
+      this.beginPatchCast(patch, marking.action);
+    });
   }
 
   /** Draw the marker over the ground it covers, or take it away. */
@@ -3758,12 +4371,72 @@ export class GameScene extends Phaser.Scene {
 
   /** Which cells of the patch each action could touch. */
   private patchOffers(patch: Patch): { action: PatchAction; cells: GridPoint[] }[] {
-    const plant = PLANT_TYPES[this.selectedPlantIndex] ?? PLANT_TYPES[0];
+    if (this.interior?.plan) {
+      return [
+        { action: PatchAction.Build, cells: this.buildableIn(patch) },
+        { action: PatchAction.Clear, cells: this.removableIn(patch) },
+      ];
+    }
     return [
-      { action: PatchAction.Plant, cells: plant ? this.session.plantableIn(plant, patch) : [] },
       { action: PatchAction.Grow, cells: this.session.growableIn(patch) },
       { action: PatchAction.Clear, cells: this.session.clearableIn(patch) },
     ];
+  }
+
+  /**
+   * Which squares of a marked patch could be built on, and how many are paid for.
+   *
+   * Capped by the basket. A patch of nine squares with wood for four in it
+   * builds four, and the four it builds are the ones nearest the front of
+   * the list — which beats refusing the whole cast, because the child has
+   * answered the sum either way and a cast that does nothing looks broken.
+   */
+  private buildableIn(patch: Patch, afford = true): GridPoint[] {
+    const inside = this.interior;
+    const parts = this.growable;
+    if (!inside?.plan || !parts) return [];
+    const most = afford ? this.roomsAfforded() : Number.POSITIVE_INFINITY;
+    return buildableIn(inside.plan, this.planPatch(patch), growableDoor(parts), most).map((at) =>
+      this.toGridCell(at),
+    );
+  }
+
+  /**
+   * Which squares of a marked patch could be taken up, in the order they may
+   * go.
+   */
+  private removableIn(patch: Patch): GridPoint[] {
+    const inside = this.interior;
+    const parts = this.growable;
+    if (!inside?.plan || !parts) return [];
+    return removableIn(
+      inside.plan,
+      this.planPatch(patch),
+      growableDoor(parts),
+      this.spokenFor(),
+    ).map((at) => this.toGridCell(at));
+  }
+
+  /** A marked rectangle, carried across into the plan's own coordinates. */
+  private planPatch(patch: Patch): PlanPatch {
+    const origin = this.interior?.origin ?? { col: 0, row: 0 };
+    return {
+      col: patch.col + origin.col,
+      row: patch.row + origin.row,
+      width: patch.width,
+      height: patch.height,
+    };
+  }
+
+  /** And back again, for anything the scene has to draw or tap. */
+  private toGridCell(at: GridPoint): GridPoint {
+    const origin = this.interior?.origin ?? { col: 0, row: 0 };
+    return { col: at.col - origin.col, row: at.row - origin.row };
+  }
+
+  /** How many squares of floor the basket will pay for. See `roomsAfforded`. */
+  private roomsAfforded(): number {
+    return roomsAfforded((item) => this.inventory.count(item));
   }
 
   /**
@@ -3774,27 +4447,34 @@ export class GameScene extends Phaser.Scene {
    * ignore; an action that is simply not there when there is nothing for it
    * to do is a menu that answers the question "what can I do here".
    */
-  private openPatchMenu(patch: Patch): void {
-    const offers = this.patchOffers(patch).filter(({ cells }) => cells.length > 0);
-    if (offers.length === 0) {
-      // Every square in it is already dimmed by `paintPatch`; the cross says
-      // that the dimming is the whole patch rather than part of it.
-      this.markRefusal(
-        patch.col + Math.floor(patch.width / 2),
-        patch.row + Math.floor(patch.height / 2),
-      );
-      return;
+  /**
+   * Whether this patch has anything in it for the spell that was chosen.
+   *
+   * Asked when the rectangle is finished and *before* any sum, so a choice
+   * that turns out to land on nothing costs a child a tap rather than two
+   * minigames. It is the one thing the old order got for free: the menu was
+   * built from the patch, so an action with nothing to do was never offered.
+   */
+  private patchIsWorthCasting(patch: Patch, action: PatchAction): boolean {
+    const offer = this.patchOffers(patch).find((each) => each.action === action);
+    if (offer && offer.cells.length > 0) return true;
+    // Indoors there are two ways to have nothing to do, and they want
+    // different answers. Nowhere to build is the cross; somewhere to build
+    // and no wood behind it is the price, said the same way one square says
+    // it. A cross for the second is the game refusing over something the
+    // child can go and fix, and not saying so.
+    if (action === PatchAction.Build && this.buildableIn(patch, false).length > 0) {
+      this.stopMarking();
+      this.showCostOnPlayer(ROOM_COST.map(([item]) => materialIcon(item)));
+      return false;
     }
-    const at = this.toFeet(patch.col + patch.width / 2, patch.row);
-    this.patchMenu?.openAt(
-      this.screenOfPoint(at.x, at.y - TILE_SIZE),
-      offers.map(({ action, cells }) => ({
-        action,
-        count: cells.length,
-        label: this.words.patchAction(action, cells.length),
-      })),
-      (action) => this.beginPatchCast(patch, action),
+    // Every square in it is already dimmed by `paintPatch`; the cross says
+    // that the dimming is the whole patch rather than part of it.
+    this.markRefusal(
+      patch.col + Math.floor(patch.width / 2),
+      patch.row + Math.floor(patch.height / 2),
     );
+    return false;
   }
 
   /**
@@ -3807,10 +4487,63 @@ export class GameScene extends Phaser.Scene {
    * the world's business.
    */
   private beginPatchCast(patch: Patch, action: PatchAction): void {
-    this.patchMenu?.close();
+    if (!this.patchIsWorthCasting(patch, action)) return;
+    this.joystick?.release();
+    // **The spell once, then the multiplication.** A child casts the thing
+    // they are about to do many times over, once, by hand — and only then is
+    // asked how many times. That order is the spell's whole argument:
+    // multiplication is doing the same thing many times without doing it
+    // many times, and a child who has not done it once has not been shown
+    // what is being multiplied.
+    //
+    this.castOnce(action, (worked) => {
+      if (!worked) {
+        this.stopMarking();
+        return;
+      }
+      this.askTheMultiplication(patch, action);
+    });
+  }
+
+  /**
+   * The one cast that stands for all of them: plus, minus, or a wall.
+   *
+   * `done(false)` for a parchment closed part way through, which ends the
+   * whole cast — nothing is marked out any more and nothing happens. There
+   * is no fail state here: a wrong answer costs the cast its cleanness and
+   * nothing else, and closing a panel was never one either.
+   */
+  private castOnce(action: PatchAction, done: (worked: boolean) => void): void {
+    if (action === PatchAction.Build) {
+      // The brick wall, which is the addition spell indoors. One wall for
+      // the whole room, not one per square — that is what the times spell
+      // is *for*.
+      this.openBrickWall(() => done(true));
+      return;
+    }
+    const rung = rungAt(this.profile.rung);
+    const problem =
+      action === PatchAction.Grow
+        ? makeAdditionProblem(this.spellRng, rung)
+        : makeSubtractionProblem(this.spellRng, rung);
+    this.spellPopup.open(problem, rung.given, (result) => {
+      this.noteCast(result);
+      done(result.solved);
+    });
+  }
+
+  /**
+   * Ask the multiplication, then do the thing to every square of the patch.
+   *
+   * The question is about the patch, not about the cells the action will
+   * land on: a child who marked out six by seven answers six by seven, even
+   * if four of those squares already hold a grown carrot. The rectangle is
+   * what they drew and what they are being asked about; what it lands on is
+   * the world's business.
+   */
+  private askTheMultiplication(patch: Patch, action: PatchAction): void {
     const rung = arrayRungAt(this.dev.arrayRung ?? this.profile.arrayRung);
     const problem = arrayProblemFor(patch.height, patch.width, rung);
-    this.joystick?.release();
     this.arrayPopup?.open(problem, (result) => {
       // The marker goes away *first*: it clears the message line on its way
       // out, so putting it after the cast wiped the one line saying what the
@@ -3831,16 +4564,21 @@ export class GameScene extends Phaser.Scene {
    * the whole reason to cast it on a patch rather than one at a time.
    */
   private applyToPatch(patch: Patch, action: PatchAction): void {
-    const plant = PLANT_TYPES[this.selectedPlantIndex] ?? PLANT_TYPES[0];
     let done = 0;
-    if (action === PatchAction.Plant && plant) {
-      for (const at of this.session.plantableIn(plant, patch)) {
-        if (!this.grid.plant(at.col, at.row, plant)) continue;
-        this.spawnCropSprite(at.col, at.row, { plant, stage: PLANTED_STAGE });
-        this.showResult(cropIcon(plant), at.col, at.row);
-        done++;
-      }
-      this.playGesture(PLANT);
+    // Indoors first: the minus rune means "take the floor up" in here and
+    // "clear the ground" out there, and the indoor reading has to be tried
+    // before the outdoor one or it is never reached.
+    if (action === PatchAction.Clear && this.interior?.plan) {
+      // Worked out once and applied together, because the origin can move
+      // underneath a patch and a list recomputed mid-way would be a list in
+      // the wrong coordinates.
+      const before = { ...this.interior.origin };
+      const cells = this.removableIn(patch).map((at) => ({
+        col: at.col + before.col,
+        row: at.row + before.row,
+      }));
+      this.takeFloorUp(cells);
+      done += cells.length;
     } else if (action === PatchAction.Grow) {
       for (const at of this.session.growableIn(patch)) {
         this.growCropAt(at.col, at.row);
@@ -3851,6 +4589,18 @@ export class GameScene extends Phaser.Scene {
         this.clearAt(at.col, at.row);
         done++;
       }
+    } else if (action === PatchAction.Build) {
+      // Worked out once, in the coordinates that hold now, and laid in one
+      // go. Laying them one at a time would move the origin under the patch
+      // and leave the rest of the list pointing at the wrong squares.
+      const inside = this.interior;
+      const at = inside ? { ...inside.origin } : { col: 0, row: 0 };
+      const cells = this.buildableIn(patch).map((cell) => ({
+        col: cell.col + at.col,
+        row: cell.row + at.row,
+      }));
+      this.layFloor(cells);
+      done += cells.length;
     }
     void done;
   }
@@ -4318,6 +5068,48 @@ export class GameScene extends Phaser.Scene {
     this.saveProfileChange({ arrayRung: moved });
   }
 
+  /**
+   * Let the bricklaying ladder see how a wall went.
+   *
+   * A fifth window and a fifth rung, on the same rules as the other four.
+   * Filling a gap in a wall is not the skill that adds 347 and 265 — half
+   * the gaps run the sum backwards — and a child fluent at one can be
+   * nowhere near the other.
+   */
+  private noteBrickCast(result: CastResult): void {
+    this.recentBrickCasts = recordCast(this.recentBrickCasts, result);
+    const band = bandAt(this.profile.band);
+    const moved = nextRung(band, this.profile.brickRung, this.recentBrickCasts, HARDEST_BRICK_RUNG);
+    if (moved === this.profile.brickRung) return;
+    this.recentBrickCasts = [];
+    // Not while `?brickRung=` is holding the spell at one rung: the
+    // adaptation is computed against the child's own saved rung, so a dev
+    // session that answers four cleanly would move a child who never played.
+    if (this.dev.brickRung !== null) return;
+    this.saveProfileChange({ brickRung: moved });
+  }
+
+  /**
+   * Put a wall up, and do the thing on the other side of it if it is built.
+   *
+   * The one way into the bricklaying spell. `onBuilt` is what the wall was
+   * for — laying a floor tile — and it runs only when every gap is filled;
+   * a parchment closed part way through has cost nothing and built nothing.
+   */
+  private openBrickWall(onBuilt: () => void): void {
+    // The same guard every other cast opens with. A wall is asked for by
+    // tapping a square, and on a phone a square can be under a parchment
+    // that is already up — a second one over the top of it would be two
+    // questions at once and a keypad that types into whichever was newer.
+    if (this.modalOpen) return;
+    const rung = brickRungAt(this.dev.brickRung ?? this.profile.brickRung);
+    this.joystick?.release();
+    this.brickPopup?.open(makeBrickProblem(this.spellRng, rung), rung, (result) => {
+      if (result.solved) onBuilt();
+      this.noteBrickCast(result);
+    });
+  }
+
   private notePortalCast(result: CastResult): void {
     this.recentPortalCasts = recordCast(this.recentPortalCasts, result);
     const band = bandAt(this.profile.band);
@@ -4357,6 +5149,11 @@ export class GameScene extends Phaser.Scene {
   private clearingCastAt(at: GridPoint): void {
     if (this.modalOpen) return;
 
+    // Indoors, the same rune takes the floor back up. The mirror of what
+    // plus does in here, and a child who has built a room the wrong shape
+    // has no other way to unmake it.
+    if (this.unbuildCastAt(at)) return;
+
     const target = this.session.checkClearing(at);
     if (!target.ok || !target.tile) {
       this.report(target);
@@ -4378,8 +5175,20 @@ export class GameScene extends Phaser.Scene {
     // than every frame: `groveProgress` walks the thicket and sixteen
     // squares, which is nothing once and something sixty times a second.
     this.time.delayedCall(0, () => this.checkGrove());
-    const object = this.session.clearAt(col, row);
-    if (!object) return;
+    const cleared = this.session.clearAt(col, row);
+    if (!cleared) return;
+    if (cleared.kind === "crop") {
+      // Pulled up, not picked: nothing goes in the basket. The sprite has to
+      // go *and* leave the registry, or the growth spell would re-animate a
+      // destroyed object the next time this tile was planted and cast on.
+      const key = tileKey(col, row);
+      this.cropSprites.get(key)?.destroy();
+      this.cropSprites.delete(key);
+      this.playEffect(EffectType.Minus, col, row);
+      this.playGesture(PLANT); // the same bend; she is reaching for the ground
+      return;
+    }
+    const object = cleared.object;
     // The sprite lives in its chunk's bucket, so both have to forget it —
     // the bucket is what respawns a chunk when the camera comes back, and a
     // tree left in there would grow again the moment the player walked away
@@ -4522,6 +5331,54 @@ export class GameScene extends Phaser.Scene {
    * in her hands. With an icon it says *you have none of these*; without one
    * it says *not here*, which is what standing indoors with a trowel means.
    */
+  /**
+   * What a thing costs, said over her head in pictures.
+   *
+   * A cross on its own is the game saying no with no way to find out why,
+   * which for a child who cannot read the word "stone" is the same as the
+   * game being broken. So the refusal carries the price: the same thought
+   * cloud the animals use, with one icon per thing needed, and the cross
+   * beside it rather than over it — a cross drawn on top of the picture
+   * hides the half that says *which* thing they have none of.
+   */
+  private showCostOnPlayer(icons: readonly string[]): void {
+    const x = this.player.x;
+    const y = this.player.y - TILE_SIZE - BUBBLE_H / 2;
+    const span = icons.length * BUBBLE_SLOT + (icons.length - 1) * BUBBLE_SLOT_GAP;
+    const left = BUBBLE_INNER_X + (BUBBLE_INNER_W - span) / 2;
+    const middle = -BUBBLE_H + BUBBLE_INNER_Y + BUBBLE_INNER_H / 2;
+    const cloud = this.add.image(0, 0, uiTextureKey(UiAsset.ThoughtBubble)).setOrigin(0, 1);
+    const drawn = icons.map((icon, at) =>
+      this.add
+        .image(
+          left + at * (BUBBLE_SLOT + BUBBLE_SLOT_GAP) + BUBBLE_SLOT / 2,
+          middle,
+          uiTextureKey(icon),
+        )
+        .setDisplaySize(BUBBLE_SLOT, BUBBLE_SLOT),
+    );
+    // And the cross, beside the cloud rather than over it. Over the top it
+    // would hide the half that says *which* things are wanted, which is the
+    // only part a child who cannot read the word "stone" can use.
+    const half = RESULT_ICON * 0.4;
+    const mark = this.add.graphics().setPosition(-half * 1.6, -BUBBLE_H / 2);
+    mark.lineStyle(3, REFUSAL_COLOR, 1);
+    mark.lineBetween(-half, -half, half, half);
+    mark.lineBetween(half, -half, -half, half);
+
+    const shown = this.world(
+      this.add.container(x, y, [mark, cloud, ...drawn]).setDepth(this.player.depth + 1),
+    );
+    this.tweens.add({
+      targets: shown,
+      y: y - RESULT_RISE / 2,
+      alpha: 0,
+      duration: REFUSAL_MS * 2,
+      ease: "Quad.easeIn",
+      onComplete: () => shown.destroy(),
+    });
+  }
+
   private showRefusalOnPlayer(icon?: string): void {
     const x = this.player.x;
     // Just clear of her hat rather than as high as the sprite is tall: a mark
@@ -5051,10 +5908,14 @@ export class GameScene extends Phaser.Scene {
         positions[`${name}.${index}`] = item;
       }
     }
+    for (const [index, at] of (this.decorMenu?.buttonPositions() ?? []).entries()) {
+      positions[`colour.${index}`] = at;
+    }
     for (const [index, at] of (this.patchMenu?.buttonPositions() ?? []).entries()) {
       positions[`patch.${index}`] = at;
     }
     if (this.optionsPanel?.isOpen) Object.assign(positions, this.optionsPanel.buttonPositions());
+    Object.assign(positions, this.shopPanel?.buttonPositions() ?? {});
     return positions;
   }
 
@@ -5139,6 +6000,17 @@ export class GameScene extends Phaser.Scene {
     this.awayFrom =
       this.dev.away === null ? savedAtOf(saved) : Date.now() - this.dev.away * 60 * 60 * 1000;
     if (saved) restoreWorld(this.grid, saved.world);
+    // What anybody has added to their house. Read after the world rather
+    // than with it: a plan is not a thing standing on a tile, it is the
+    // shape of a room behind a door.
+    this.plans.clear();
+    for (const [house, floor] of Object.entries(readPlans(saved?.world))) {
+      this.plans.set(house, planFromKeys(floor));
+    }
+    this.decor.clear();
+    for (const [house, pieces] of Object.entries(readDecor(saved?.world))) {
+      this.decor.set(house, decorFromSave(pieces));
+    }
     // The child's own things come from their progress in this game, never
     // from the ground — which is why a world the generator can no longer
     // rebuild cannot cost them a coin. `loadGame` drops such a world and
@@ -5169,7 +6041,14 @@ export class GameScene extends Phaser.Scene {
     const store = browserStore();
     const now = Date.now();
     // The ground, which everybody in this game shares.
-    const snapshot = snapshotGame(this.worldGrid, this.baseline, this.seed, now);
+    const snapshot = snapshotGame(
+      this.worldGrid,
+      this.baseline,
+      this.seed,
+      now,
+      this.savedPlans(),
+      this.savedDecor(),
+    );
     // And this child's own things, which nobody else's game may touch. Kept
     // separate all the way down: a shared purse would let one child spend
     // what another earned, and the crops in a basket belong to whoever
@@ -5238,11 +6117,38 @@ export class GameScene extends Phaser.Scene {
    * band rather than to a proportional place in it, because a band is picked
    * when the last one turned out to be wrong and starting gently is the
    * kinder half of being wrong in either direction.
+   *
+   * **All five ladders move, not just the sums'.** The band is a statement
+   * about the child rather than about one spell, and it is a fence now — a
+   * band changed while the clock and the great tree stayed where they were
+   * would leave two spells handing out problems from outside the range an
+   * adult just chose. They would be dragged back on their next cast, which
+   * is a cast too late: the point of the fence is that a child is never
+   * *shown* a problem nobody chose for them.
+   *
+   * Each ladder gets the floor of the new band scaled onto its own length,
+   * which for the two short ones is not `band.from` — see `bandOn`.
+   *
+   * Every window is emptied too. A run of clean casts earned at one
+   * difficulty says nothing about another, and leaving them would move a
+   * child up a rung on their first cast in the new band.
    */
   private applyBand(band: number): void {
     if (band === this.profile.band) return;
     this.recentCasts = [];
-    this.saveProfileChange({ band, rung: bandAt(band).from });
+    this.recentPortalCasts = [];
+    this.recentArrayCasts = [];
+    this.recentClockCasts = [];
+    this.recentBrickCasts = [];
+    const chosen = bandAt(band);
+    this.saveProfileChange({
+      band,
+      rung: chosen.from,
+      portalRung: bandOn(chosen, HARDEST_PORTAL_RUNG).from,
+      arrayRung: bandOn(chosen, HARDEST_ARRAY_RUNG).from,
+      clockRung: bandOn(chosen, HARDEST_CLOCK_RUNG).from,
+      brickRung: bandOn(chosen, HARDEST_BRICK_RUNG).from,
+    });
     this.applyCropPrice();
     this.applyRung();
   }
@@ -5284,6 +6190,7 @@ export class GameScene extends Phaser.Scene {
     this.mapPanel?.setPhrases(this.words);
     this.portalPanel?.setPhrases(this.words);
     this.geometryPanel?.setPhrases(this.words);
+    this.brickPopup?.setPhrases(this.words);
     this.shopPanel?.setPhrases(this.words);
     // The line on screen was written in the old language by whatever the
     // player last did; it would otherwise sit there until they did something
@@ -5836,8 +6743,93 @@ export class GameScene extends Phaser.Scene {
         door: DoorState.Closed,
         windows: this.windowsOf(sprite, sidecar, origin),
         lightsAt: lightingDelay(object.id, this.seed),
+        nameplate: sidecar.sign_rect_px
+          ? {
+              x: this.originX + origin.x + sidecar.sign_rect_px[0] + sidecar.sign_rect_px[2] / 2,
+              y: this.originY + origin.y + sidecar.sign_rect_px[1] + sidecar.sign_rect_px[3] / 2,
+              width: sidecar.sign_rect_px[2],
+              height: sidecar.sign_rect_px[3],
+            }
+          : null,
       });
     }
+  }
+
+  /**
+   * Put whoever lives here on the plate beside their door.
+   *
+   * Every cottage in the village carries one — the four round the square
+   * that belong to the children, and the four out on the green that belong
+   * to the villagers. They are the same picture, so without this a child has
+   * to count doors round a green to find their own house.
+   *
+   * **A face, or a question mark.** A child's house with nobody in it yet
+   * gets the same mark the animals use when they want something: it is the
+   * game's own way of saying *nobody has answered this*, so an empty plate
+   * reads as a house waiting for somebody rather than as a plate that failed
+   * to load. A villager's cottage is never empty, so it never shows one.
+   *
+   * Run after the villagers are spawned, because which of them wears which
+   * face is decided there, and a second copy of that reckoning here would be
+   * a second thing to keep in step.
+   */
+  private hangNameplates(): void {
+    for (const building of this.buildings) {
+      const plate = building.nameplate;
+      if (!plate) continue;
+      const face = this.faceFor(building.id);
+      if (!face) {
+        // Only a house somebody could move into says so — `whoLivesIn`
+        // answers "vacant" for those and null for a building nobody could
+        // ever live in, which is the difference between a question mark and
+        // no plate at all.
+        if (whoLivesIn(building.id, this.npcs, this.household)?.kind !== "vacant") continue;
+        this.world(
+          this.add
+            .image(plate.x, plate.y, uiTextureKey(UiAsset.MarkQuestion))
+            .setDisplaySize(plate.width - 2, plate.height - 2)
+            .setDepth(building.image.depth + 0.1),
+        );
+        continue;
+      }
+      // The head and shoulders of the idle frame, which is where all three of
+      // the colours a child picked live: their hair, their face and their
+      // shirt. Cropped rather than scaled — this is pixel art, and a face
+      // squeezed to fit is a face with some rows twice as tall as others.
+      const portrait = this.world(
+        this.add
+          .image(plate.x, plate.y, characterSheetKey(face), 0)
+          .setDepth(building.image.depth + 0.1)
+          .setCrop(FACE_CROP.x, FACE_CROP.y, FACE_CROP.width, FACE_CROP.height),
+      );
+      // A cropped image still reports its whole frame's size, so the offset
+      // that centres the crop has to be applied by hand.
+      portrait.setPosition(
+        plate.x - (FACE_CROP.x + FACE_CROP.width / 2 - portrait.width / 2),
+        plate.y - (FACE_CROP.y + FACE_CROP.height / 2 - portrait.height / 2),
+      );
+    }
+  }
+
+  /**
+   * Whose face belongs on this building's plate, or null.
+   *
+   * Three answers. A child's house shows its owner, recoloured to whatever
+   * they picked — every avatar *body* is loaded whatever this child chose, so
+   * a sibling who picked a different one still gets their own face rather
+   * than quietly borrowing somebody else's. A villager's cottage shows the
+   * villager standing outside it. Anything else has no plate to fill.
+   */
+  private faceFor(buildingId: string): string | null {
+    const lives = whoLivesIn(buildingId, this.npcs, this.household);
+    if (!lives || lives.kind === "vacant") return null;
+    if (lives.kind === "villager") return lives.character;
+    const catalogue = avatarCatalogue(this);
+    const style = catalogue ? usableAvatar(catalogue, lives.owner.avatar) : lives.owner.avatar;
+    const sheet = (this.cache.json.get(characterSidecarKey(style.body)) as CharacterSidecar)?.sheet;
+    if (!sheet) return null;
+    const character = avatarTexture(this, catalogue, style, sheet);
+    return this.textures.exists(characterSheetKey(character)) ? character : null;
   }
 
   // Anything placed that is not a building: today the village well. Throws
@@ -6142,12 +7134,439 @@ export class GameScene extends Phaser.Scene {
     return name;
   }
 
+  /**
+   * Step into a house that can be added to.
+   *
+   * The same shape as `enterInterior` and deliberately beside it, but the
+   * room is assembled from parts rather than shown as a picture: floor,
+   * walls, windows and the doorway drawn into one texture, the fire on top
+   * of it because a fire is the one thing in a room that moves.
+   *
+   * `origin` is what makes the rest of the scene able to ignore all of this.
+   * A plan may name negative cells — building on the west side takes it there
+   * on the first square — and a grid may not, so the grid is laid over the
+   * plan's bounding box and everything crossing between them goes through
+   * one offset.
+   */
+  private enterGrowableRoom(building: BuildingRuntime): void {
+    const parts = this.growable;
+    if (!parts) throw new Error("no growable room to enter");
+    const plan = this.planFor(building.id);
+    const door = growableDoor(parts);
+    const { grid, origin, extent } = buildPlanGrid(plan, door, this.blockers(building.id));
+    const entered = this.setInterior({
+      room: GROWABLE_ROOM,
+      grid,
+      image: undefined as unknown as Phaser.GameObjects.Sprite,
+      plan,
+      origin,
+      bounds: {
+        col: extent.minCol - origin.col,
+        row: extent.minRow - origin.row,
+        cols: extent.cols,
+        rows: extent.rows,
+      },
+      house: building.id,
+      fires: [],
+      decor: [],
+      exit: { col: door.col - origin.col, row: door.row - origin.row },
+      returnTo: { col: building.doorCol, row: building.doorRow + 1 },
+      originY: parts.wall_rise_px,
+    });
+
+    this.grid = entered.grid;
+    this.originX = 0;
+    this.originY = entered.originY;
+    this.paintPlan();
+    // No wall hanging: only the post office and the dome have one, and
+    // `wallHangingCell` reads a *shipped* room's size and furniture, which
+    // is not this room's. Passing it the cottage's would be a coordinate
+    // that means nothing the moment somebody builds north.
+    this.worldLayer.setVisible(false);
+    this.interiorLayer.setVisible(true);
+    this.movePlayerToLayer();
+    this.placePlayer(entered.exit.col, entered.exit.row, Facing.Up);
+    this.frameGrownRoom();
+  }
+
+  /**
+   * Where this child starts: in their own garden, outside their own door.
+   *
+   * There are four houses round the square and four children on a device,
+   * and `Profile.house` says which is whose — but nothing read it until the
+   * nameplates went up and made it obvious that everybody was being put down
+   * at house zero's gate, including the three children who do not live
+   * there.
+   *
+   * Falls back to the generator's own answer, which is house zero's garden.
+   * That is right for the one case it covers: a session with no child in it,
+   * which is a script jumping straight to this scene.
+   */
+  private startFor(world: GeneratedWorld): GridPoint {
+    const id = houseIdFor(this.profile.house);
+    const home = id ? world.village.homes[id] : undefined;
+    return home?.inside ?? world.playerStart;
+  }
+
+  /** The house's plan, or the room as it shipped if nobody has touched it. */
+  private planFor(house: string): RoomPlan {
+    const saved = this.plans.get(house);
+    if (saved) return saved;
+    const parts = this.growable;
+    return parts ? startingPlan(parts) : planOf([]);
+  }
+
+  /**
+   * Draw the room the plan describes.
+   *
+   * One texture for everything that holds still, in row order — which is the
+   * whole of what makes an arbitrary outline drawable. A wall tile is a tile
+   * wide and a tile *and a rise* tall, so a wall painted after the floor
+   * behind it correctly hides that floor's far edge, exactly as a wall in
+   * front of you hides the floor behind it. See `growableRoom.ts`.
+   *
+   * The fire is the exception, because it is the one thing in a room that
+   * moves, and a texture that had to be repainted eight times a second would
+   * be a texture repainted eight times a second.
+   */
+  private paintPlan(): void {
+    const inside = this.interior;
+    const parts = this.growable;
+    if (!inside?.plan || !parts) return;
+    const plan = inside.plan;
+    const tile = TILE_SIZE;
+    const rise = parts.wall_rise_px;
+    const bounds = planBounds(plan);
+    const width = bounds.cols * tile;
+    const height = bounds.rows * tile + rise;
+    // The room is drawn where the *grid* says it is. Those used to be the
+    // same number; they stopped being one the moment the grid grew a margin
+    // of open ground round the walls, and a picture a margin adrift from the
+    // squares under it is a room whose floor is not where you walk.
+    const offsetX = (bounds.minCol - inside.origin.col) * tile;
+    const offsetY = (bounds.minRow - inside.origin.row) * tile;
+
+    inside.canvas?.destroy();
+    for (const fire of inside.fires) fire.destroy();
+    inside.fires = [];
+    for (const standing of inside.decor) standing.destroy();
+    inside.decor = [];
+
+    const canvas = this.world(
+      this.add.renderTexture(offsetX, offsetY, width, height).setOrigin(0, 0).setDepth(CHUNK_DEPTH),
+    );
+    inside.canvas = canvas;
+    inside.image = canvas as unknown as Phaser.GameObjects.Sprite;
+
+    const walls = growableSheetKey(GROWABLE_ROOM, "walls");
+    const floors = growableSheetKey(GROWABLE_ROOM, "floor");
+    const masks = wallMasks(plan);
+    const windows = new Set(windowCells(plan).map(({ col, row }) => cellKey(col, row)));
+    const door = growableDoor(parts);
+    // Where a cell's own tile goes: the grid origin plus the rise, since
+    // every wall tile is drawn from a rise above its own cell.
+    const px = (col: number, row: number) => ({
+      x: (col - bounds.minCol) * tile,
+      y: rise + (row - bounds.minRow) * tile,
+    });
+
+    canvas.beginDraw();
+    for (let row = bounds.minRow; row <= bounds.maxRow; row++) {
+      for (let col = bounds.minCol; col <= bounds.maxCol; col++) {
+        if (!isFloor(plan, col, row)) continue;
+        const at = px(col, row);
+        // `row %` the atlas: a plank's seams are seeded by the row so that a
+        // board runs the width of a room unbroken, and a room that can grow
+        // has no greatest row.
+        const layout = ((row % parts.floor_rows) + parts.floor_rows) % parts.floor_rows;
+        const variation =
+          (((row + col) % parts.floor_variations) + parts.floor_variations) %
+          parts.floor_variations;
+        canvas.batchDrawFrame(floors, layout * parts.floor_variations + variation, at.x, at.y);
+      }
+      for (let col = bounds.minCol; col <= bounds.maxCol; col++) {
+        const mask = masks.get(cellKey(col, row));
+        if (mask === undefined) continue;
+        const at = px(col, row);
+        canvas.batchDrawFrame(walls, mask, at.x, at.y - rise);
+        if (windows.has(cellKey(col, row))) {
+          canvas.batchDrawFrame(growableSheetKey(GROWABLE_ROOM, "window"), 0, at.x, at.y - rise);
+        }
+        if (col === door.col && row === door.row) {
+          canvas.batchDrawFrame(growableSheetKey(GROWABLE_ROOM, "door"), 0, at.x, at.y - rise);
+        }
+      }
+    }
+    canvas.endDraw();
+
+    // The furniture is *sprites* now, not paint. It used to be baked into
+    // the texture with the floor, which was right while a bed was a fact
+    // about the picture; a thing a child can pick up has to be a thing they
+    // can tap, and a texture cannot be tapped.
+    this.spawnDecor(px, offsetX, offsetY);
+
+    for (const piece of parts.furniture) {
+      if (!piece.animated) continue;
+      const [anchorRow, anchorCol] = piece.cell;
+      const at = px(anchorCol, anchorRow);
+      const key = growablePieceKey(GROWABLE_ROOM, piece.name);
+      const animKey = growablePieceAnimKey(GROWABLE_ROOM, piece.name);
+      if (!this.anims.exists(animKey)) {
+        this.anims.create({
+          key: animKey,
+          frames: this.anims.generateFrameNumbers(key, {
+            start: 0,
+            end: (parts.piece_sheets[piece.name]?.frame_count ?? 1) - 1,
+          }),
+          frameRate: BUILDING_ANIM_FPS,
+          repeat: -1,
+        });
+      }
+      const fire = this.world(
+        this.add
+          .sprite(offsetX + at.x, offsetY + at.y - parts.piece_rise_px, key)
+          .setOrigin(0, 0)
+          .setDepth(CHUNK_DEPTH + 1),
+      );
+      fire.play(animKey);
+      inside.fires.push(fire);
+      if (piece.light === LightKind.Fire) {
+        this.lightHearthAt({
+          col: anchorCol - inside.origin.col,
+          row: anchorRow - inside.origin.row,
+        });
+      }
+    }
+  }
+
+  /**
+   * Put the furniture in the room, as things rather than as paint.
+   *
+   * Each piece is its own sprite so it can be tapped and carried off, and
+   * each is depth-sorted on the row its *feet* are on rather than the row it
+   * is anchored at — a bed is two rows deep, and sorting it by its anchor
+   * puts the floor of the row below in front of its own foot.
+   */
+  private spawnDecor(
+    px: (col: number, row: number) => { x: number; y: number },
+    offsetX: number,
+    offsetY: number,
+  ): void {
+    const inside = this.interior;
+    const parts = this.growable;
+    if (!inside?.plan || !parts || !inside.house) return;
+    for (const standing of inside.decor) standing.destroy();
+    inside.decor = [];
+
+    const sizes = this.pieceSizes();
+    for (const placed of this.decorIn(inside.house)) {
+      const size = sizes[placed.piece] ?? { cols: 1, rows: 1 };
+      const at = px(placed.col, placed.row);
+      const sprite = this.world(
+        this.add
+          .image(
+            offsetX + at.x,
+            offsetY + at.y - parts.piece_rise_px,
+            this.decorTexture(placed.piece, placed.look),
+          )
+          .setOrigin(0, 0)
+          .setDepth(depthFor((placed.row - inside.origin.row + size.rows) * TILE_SIZE)),
+      );
+      // A tile-sized hit area at its foot, the same as a placed fence has:
+      // the art of a bed is eighty pixels tall and a tap anywhere on the
+      // bedding should reach it, but a tap on the wall behind it should not.
+      sprite.setInteractive(
+        new Phaser.Geom.Rectangle(
+          0,
+          sprite.height - size.rows * TILE_SIZE,
+          size.cols * TILE_SIZE,
+          size.rows * TILE_SIZE,
+        ),
+        Phaser.Geom.Rectangle.Contains,
+      );
+      sprite.on("pointerdown", () => {
+        if (this.pointerIsSpokenFor) return;
+        this.takeDecor(placed);
+      });
+      inside.decor.push(sprite);
+    }
+  }
+
+  /** How many of a piece are in the basket, in every colour together. */
+  private decorHeld(piece: DecorType): number {
+    return DECOR_LOOKS_RANGE.reduce(
+      (sum, look) => sum + this.inventory.count(decorItem(piece, look)),
+      0,
+    );
+  }
+
+  /**
+   * The sheet for one piece in one colour, made once and kept.
+   *
+   * The same route the avatars and the house roofs take: a recolour plan
+   * mapping the ramps the art was drawn in onto the ones somebody picked,
+   * and `repaintedSheet` caching it under a derived key. Nought is the room
+   * as it shipped and is handed straight back unrepainted, so a house nobody
+   * has redecorated costs nothing and looks untouched.
+   */
+  private decorTexture(piece: DecorType, look: number): string {
+    const parts = this.growable;
+    const source = growablePieceKey(GROWABLE_ROOM, pieceArt(piece));
+    const wanted = parts?.piece_colourways?.[look];
+    const sheet = parts?.piece_sheets[pieceArt(piece)];
+    if (!parts || !wanted || !sheet || look === 0) return source;
+    const plan = colourPlanFor(parts.palette, wanted);
+    return repaintedSheet(this, source, `${source}~${look}`, plan, sheet);
+  }
+
+  /**
+   * Which colour of a thing to put down: the second of the two taps.
+   *
+   * The choices are the piece itself, painted. A row of five chairs is a
+   * question a four-year-old can answer without reading anything, where five
+   * swatches would be a colour chart — and the same picture that ends up on
+   * the floor is the one they picked from.
+   *
+   * Only the colours actually in the basket. A chooser offering five when
+   * one is owned would be four taps that do nothing.
+   */
+  private chooseDecorColour(piece: DecorType): void {
+    const parts = this.growable;
+    if (!parts) return;
+    const owned = (parts.piece_colourways ?? []).flatMap((_, look) =>
+      this.inventory.count(decorItem(piece, look)) > 0 ? [look] : [],
+    );
+    const only = owned[0];
+    if (only === undefined) {
+      this.showRefusalOnPlayer();
+      return;
+    }
+    // A chooser of one is not a choice — the same rule the spell menu keeps.
+    if (owned.length === 1) {
+      this.putDecorDown(piece, only);
+      return;
+    }
+    const above = this.screenOfPoint(this.player.x, this.player.y - TILE_SIZE);
+    this.decorMenu?.openAt(
+      above,
+      owned.map((look) => ({
+        action: decorItem(piece, look),
+        rune: this.decorTexture(piece, look),
+      })),
+      (item) => {
+        this.decorMenu?.close();
+        const parts = itemParts(item);
+        if (parts) this.putDecorDown(parts.piece, parts.look);
+      },
+    );
+  }
+
+  /**
+   * Pick a thing up off the floor and carry it away.
+   *
+   * Into the basket, exactly as a fence taken back out of the garden goes —
+   * it is the same verb and it should feel like it. Nothing is checked
+   * beyond it being there: a thing you put down is a thing you can pick up
+   * again, and the room is the child's own.
+   */
+  private takeDecor(placed: Placed): void {
+    if (this.modalOpen) return;
+    const inside = this.interior;
+    if (!inside?.house) return;
+    this.decor.set(inside.house, decorWithout(this.decorIn(inside.house), placed));
+    this.inventory.add(decorItem(placed.piece, placed.look), 1);
+    // No mark over the square: the thing lifting off it *is* the feedback,
+    // and `showResult` wants a UI asset, which a bed is not.
+    this.playGesture(PLANT);
+    this.refreshRoom();
+  }
+
+  /**
+   * Put a thing down on the square she is facing, if it will stand there.
+   *
+   * On floor, clear of everything else, and clear of the hearth. Refused
+   * rather than nudged: a chair that slid to the next square along would be
+   * the game deciding where the furniture goes, which is the whole of what
+   * this feature takes back from it.
+   */
+  private putDecorDown(piece: DecorType, look: number): void {
+    if (this.modalOpen) return;
+    const inside = this.interior;
+    const item = decorItem(piece, look);
+    if (!inside?.plan || !inside.house || this.inventory.count(item) <= 0) {
+      this.showRefusalOnPlayer();
+      return;
+    }
+    const ahead = this.session.targetTile();
+    const at: Placed = {
+      piece,
+      look,
+      col: ahead.col + inside.origin.col,
+      row: ahead.row + inside.origin.row,
+    };
+    const room = this.decorIn(inside.house);
+    const taken = this.spokenFor();
+    const standable = (col: number, row: number) =>
+      isFloor(inside.plan as RoomPlan, col, row) && !taken.has(cellKey(col, row));
+    if (!decorFits(at, room, this.pieceSizes(), standable)) {
+      this.markRefusal(ahead.col, ahead.row);
+      return;
+    }
+    this.inventory.remove(item, 1);
+    this.decor.set(inside.house, [...room, at]);
+    this.playGesture(PLANT);
+    this.refreshRoom();
+  }
+
+  /** Redraw the room and write it down: what every rearrangement ends with. */
+  private refreshRoom(): void {
+    const inside = this.interior;
+    if (!inside?.plan || !inside.house) return;
+    const parts = this.growable;
+    if (!parts) return;
+    // The grid too: what blocks the way changed, and a chair that had been
+    // moved would go on blocking the square it left.
+    const door = growableDoor(parts);
+    const { grid, origin } = buildPlanGrid(inside.plan, door, this.blockers(inside.house));
+    inside.grid = grid;
+    inside.origin = origin;
+    this.grid = grid;
+    this.paintPlan();
+    this.refreshCarried();
+    this.autosave();
+  }
+
+  /**
+   * Point the camera at the room, not at the margin around it.
+   *
+   * The margin is ground a child can *aim* at, not ground there is anything
+   * to look at — and a room framed to include it is a room bigger than the
+   * screen, which turns the still, centred framing every interior has into a
+   * camera that follows. `roomCameraBounds` already leaves a room smaller
+   * than the viewport sitting in the middle with the rest of the screen
+   * around it, and that is where the margin is: reachable by a finger,
+   * without the camera pretending the house is twice its size.
+   */
+  private frameGrownRoom(): void {
+    const inside = this.interior;
+    if (!inside?.plan) return;
+    const extent = planBounds(inside.plan);
+    this.frameRoom(extent.cols * TILE_SIZE, this.originY + extent.rows * TILE_SIZE, {
+      x: (extent.minCol - inside.origin.col) * TILE_SIZE,
+      y: (extent.minRow - inside.origin.row) * TILE_SIZE,
+    });
+  }
+
   private enterInterior(building: BuildingRuntime): void {
     // Nothing marked out survives a doorway. The marker lives in the world
     // layer, which is hidden while a room is on screen, and the patch it
     // referred to is a hundred tiles away.
     this.stopMarking();
     const room = interiorFor(building.sprite);
+    if (room === GROWABLE_ROOM && this.growable) {
+      this.enterGrowableRoom(building);
+      return;
+    }
     const sidecar = this.interiorSidecars.get(room);
     if (!sidecar) throw new Error(`no interior for "${room}"`);
 
@@ -6157,6 +7576,15 @@ export class GameScene extends Phaser.Scene {
       grid: buildInteriorGrid(sidecar),
       // Placed below, once `world` will file it under the interior layer.
       image: undefined as unknown as Phaser.GameObjects.Sprite,
+      origin: { col: 0, row: 0 },
+      bounds: {
+        col: 0,
+        row: 0,
+        cols: sidecar.size_cells.cols,
+        rows: sidecar.size_cells.rows,
+      },
+      fires: [],
+      decor: [],
       exit: door,
       // Back onto the doorstep: the door cell itself is part of the
       // building's footprint and so is never stood on.
@@ -6219,24 +7647,66 @@ export class GameScene extends Phaser.Scene {
    */
   private reframeInterior(): void {
     const framed = this.framedRoom;
-    if (framed) this.frameRoom(framed.width, framed.height);
+    if (framed) this.frameRoom(framed.width, framed.height, framed.at);
   }
 
-  private frameRoom(width: number, height: number): void {
-    this.framedRoom = { width, height };
+  /**
+   * `at` is where the room's top-left corner is in world pixels.
+   *
+   * Zero for the six rooms that are a picture — they are drawn from the
+   * origin, because the grid under them starts there. A growable room does
+   * not: its grid begins a margin of open ground outside its own walls, so
+   * the room itself sits that far in, and a camera framed from zero would
+   * frame the margin and leave the house off to one side of it.
+   */
+  private frameRoom(width: number, height: number, at = { x: 0, y: 0 }): void {
+    this.framedRoom = { width, height, at };
     const camera = this.cameras.main;
     const bounds = roomCameraBounds(
       { width, height },
       { width: camera.width / camera.zoom, height: camera.height / camera.zoom },
     );
-    camera.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
+    camera.setBounds(bounds.x + at.x, bounds.y + at.y, bounds.width, bounds.height);
     camera.startFollow(this.player);
+  }
+
+  /** Every plan that differs from the room as it shipped, ready to write. */
+  private savedPlans(): Record<string, readonly string[]> {
+    const plans: Record<string, readonly string[]> = {};
+    for (const [house, plan] of this.plans) plans[house] = [...plan.floor];
+    return plans;
+  }
+
+  /** And every room somebody has rearranged. */
+  private savedDecor(): Record<string, readonly string[]> {
+    const rooms: Record<string, readonly string[]> = {};
+    for (const [house, pieces] of this.decor) rooms[house] = decorToSave(pieces);
+    return rooms;
+  }
+
+  /** How a house is furnished: what somebody arranged, or what it shipped as. */
+  private decorIn(house: string): Placed[] {
+    return arrangementIn(this.decor.get(house), this.growable);
+  }
+
+  /** How big each kind of thing is, from the art it is drawn as. */
+  private pieceSizes(): Footprints {
+    return this.growable ? footprintsOf(this.growable) : {};
+  }
+
+  /** What stands in the way in this house. See `blockersFor`. */
+  private blockers(house: string): RoomBlocker[] {
+    const parts = this.growable;
+    return parts ? blockersFor(parts, this.decorIn(house)) : [];
   }
 
   private leaveInterior(): void {
     const interior = this.interior;
     if (!interior) return;
-    interior.image.destroy();
+    interior.canvas?.destroy();
+    for (const fire of interior.fires) fire.destroy();
+    for (const standing of interior.decor) standing.destroy();
+    if (!interior.canvas) interior.image.destroy();
     this.snuffHearth();
     this.interiorLayer.setVisible(false);
     this.worldLayer.setVisible(true);
@@ -6325,6 +7795,7 @@ export class GameScene extends Phaser.Scene {
         }
         return {
           id: spec.id,
+          homeBuildingId: spec.homeBuildingId,
           character,
           facing: DEFAULT_FACING,
           homeCol: spec.home.col,
@@ -6657,6 +8128,11 @@ export class GameScene extends Phaser.Scene {
       this.taskPanel?.isOpen === true ||
       this.portalPanel?.isOpen === true ||
       this.geometryPanel?.isOpen === true ||
+      // The array and clock parchments are not on this list. Whether that is
+      // deliberate has not been established here, so it is left alone — but
+      // a new parchment goes on it, because everything that reads this asks
+      // "is a question already on screen", and a wall is one.
+      this.brickPopup?.isOpen === true ||
       // Mid-crossing: a step from a tile they are no longer standing on.
       this.travelling
     );

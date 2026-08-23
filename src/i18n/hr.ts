@@ -342,11 +342,16 @@ export const HR: Phrases = {
     `Sad okreni gredicu na bok: ${columns} reda po ${rows}. Opet ${total}. ${rows} × ${columns} i ${columns} × ${rows} su ista gredica gledana s dvije strane, pa moraš naučiti samo pola tablice.`,
 
   arrayTitle: (rows, columns) => `${rows} × ${columns}`,
-  patchAction: (action) =>
-    action === "plant" ? "posadi" : action === "grow" ? "uzgoji" : "očisti",
   arrayAsk: "Koliko ih je u cijeloj gredici?",
   arrayHintRows: (columns, counted) =>
     `Broji po ${columns}: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
+
+  brickTitle: "Zid",
+  brickAsk: "Svaka je cigla zbroj dviju ispod sebe.",
+  brickWrong: "Ta nije. Pogledaj još jednom.",
+  brickDone: "To je zid. Tvoja je soba gotova.",
+  brickHintAdd: "Zbroji dvije cigle ispod nje.",
+  brickHintTakeAway: "Oduzmi ciglu do nje od one iznad.",
 
   hourglassTitle: "Pješčani sat",
   hourglassAsk: "Koliko si sati bio odsutan?",

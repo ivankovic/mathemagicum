@@ -256,11 +256,16 @@ export const DE: Phrases = {
     `Jetzt dreh das Beet um: ${columns} Reihen zu ${rows}. Immer noch ${total}. ${rows} × ${columns} und ${columns} × ${rows} sind dasselbe Beet von zwei Seiten — du musst also nur das halbe Einmaleins lernen.`,
 
   arrayTitle: (rows, columns) => `${rows} × ${columns}`,
-  patchAction: (action) =>
-    action === "plant" ? "bepflanzen" : action === "grow" ? "wachsen lassen" : "räumen",
   arrayAsk: "Wie viele sind es im ganzen Beet?",
   arrayHintRows: (columns, counted) =>
     `Zähl in ${columns}er-Schritten: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
+
+  brickTitle: "Die Mauer",
+  brickAsk: "Jeder Stein ist die Summe der beiden darunter.",
+  brickWrong: "Der nicht. Schau noch einmal.",
+  brickDone: "Das ist eine Mauer. Dein Zimmer steht.",
+  brickHintAdd: "Zähl die beiden Steine darunter zusammen.",
+  brickHintTakeAway: "Zieh den Stein daneben von dem darüber ab.",
 
   hourglassTitle: "Das Stundenglas",
   hourglassAsk: "Wie viele Stunden warst du fort?",

@@ -495,7 +495,8 @@ describe("clearing what is in the way", () => {
     const game = session(grid);
     expect(grid.isPassable(2, 3)).toBe(false);
     const taken = game.clearAt(2, 3);
-    expect(taken?.type).toBe(sceneryType("woodland"));
+    expect(taken?.kind).toBe("scenery");
+    expect(taken?.kind === "scenery" && taken.object.type).toBe(sceneryType("woodland"));
     expect(grid.getObjectAt(2, 3)).toBeNull();
     expect(grid.isPassable(2, 3)).toBe(true);
   });
@@ -627,5 +628,90 @@ describe("a spell told where to land", () => {
     s.checkGrowth({ col: 8, row: 8 });
     expect(s.aimed).toBeNull();
     expect(s.targetTile()).toEqual({ col: 5, row: 6 });
+  });
+});
+
+describe("pulling a crop back out of the ground", () => {
+  /**
+   * The undo planting never had.
+   *
+   * A carrot dropped on the wrong square used to stay there until it was
+   * ripe enough to pick — which for a child who has just learned what the
+   * seed pouch does is a mistake the game gives them no way to take back.
+   * It is also more for the minus spell to do, which is the spell this game
+   * under-uses.
+   */
+  test("the minus spell takes a seedling out", () => {
+    const grid = WorldGrid.empty(8, 8, TerrainType.Grass);
+    const game = session(grid);
+    expect(grid.plant(2, 3, PlantType.Carrot)).toBe(true);
+    expect(game.checkClearing({ col: 2, row: 3 })).toEqual({
+      ok: true,
+      outcome: Outcome.Cleared,
+      tile: { col: 2, row: 3 },
+    });
+    const taken = game.clearAt(2, 3);
+    expect(taken?.kind).toBe("crop");
+    expect(taken?.kind === "crop" && taken.crop.plant).toBe(PlantType.Carrot);
+    expect(grid.getCrop(2, 3)).toBeNull();
+  });
+
+  // Whatever stage it is at. A seedling pulled up and a ripe carrot pulled
+  // up are the same act — see `removeCrop`, which is deliberately not
+  // `harvestCrop` with the maturity rule relaxed.
+  test("and a ripe one too, at every stage in between", () => {
+    for (const grows of [0, 1, 2]) {
+      const grid = WorldGrid.empty(8, 8, TerrainType.Grass);
+      const game = session(grid);
+      grid.plant(2, 3, PlantType.Carrot);
+      for (let n = 0; n < grows; n++) grid.growCrop(2, 3);
+      expect({ grows, taken: game.clearAt(2, 3)?.kind }).toEqual({ grows, taken: "crop" });
+      expect({ grows, left: grid.getCrop(2, 3) }).toEqual({ grows, left: null });
+    }
+  });
+
+  /**
+   * And nothing goes in the basket for it.
+   *
+   * Clearing a tree pays wood, because taking a tree out of the ground is
+   * work somebody did. Pulling up your own carrot is undoing something, and
+   * paying for it would make the minus spell a second way to harvest — one
+   * that works before the crop is ripe.
+   */
+  test("but nothing is picked up for it", () => {
+    const grid = WorldGrid.empty(8, 8, TerrainType.Grass);
+    const game = session(grid);
+    grid.plant(2, 3, PlantType.Carrot);
+    for (let n = 0; n < 3; n++) grid.growCrop(2, 3);
+    const before = game.inventory.total;
+    game.clearAt(2, 3);
+    expect(game.inventory.total).toBe(before);
+  });
+
+  test("a bare square still has nothing to clear", () => {
+    const grid = WorldGrid.empty(8, 8, TerrainType.Grass);
+    const game = session(grid);
+    expect(game.checkClearing({ col: 2, row: 3 })).toEqual({
+      ok: false,
+      outcome: Outcome.NothingThere,
+      tile: { col: 2, row: 3 },
+    });
+    expect(game.clearAt(2, 3)).toBeNull();
+  });
+
+  // The times spell clears a whole patch, and it has to agree with the one
+  // that clears a square — otherwise a rectangle full of seedlings offers
+  // nothing to do while every square in it can be cleared one at a time.
+  test("and a marked patch offers the crops in it", () => {
+    const grid = WorldGrid.empty(12, 12, TerrainType.Grass);
+    const game = session(grid);
+    grid.plant(3, 3, PlantType.Carrot);
+    grid.plant(4, 3, PlantType.Carrot);
+    const patch = { col: 2, row: 2, width: 4, height: 3 };
+    const offered = game.clearableIn(patch);
+    expect(offered.map((at) => `${at.col},${at.row}`).sort()).toEqual(["3,3", "4,3"]);
+    for (const at of offered) {
+      expect(game.checkClearing(at).ok).toBe(true);
+    }
   });
 });

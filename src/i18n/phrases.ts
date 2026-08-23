@@ -177,12 +177,31 @@ export interface Phrases {
 
   /** `4 x 6`, over the array. */
   arrayTitle: (rows: number, columns: number) => string;
-  /** A button on the little menu over a marked patch, and its tally. */
-  patchAction: (action: string, count: number) => string;
   /** The question under it. */
   arrayAsk: string;
   /** The help that arrives after a wrong answer: count along, row by row. */
   arrayHintRows: (columns: number, counted: number) => string;
+
+  // --- building a room -----------------------------------------------------
+
+  /** Over the wall of bricks. */
+  brickTitle: string;
+  /** The rule, said once under the title. The picture says the rest. */
+  brickAsk: string;
+  /** What a wrong brick says. Never a scolding, and never the answer. */
+  brickWrong: string;
+  /** The line under a finished wall. */
+  brickDone: string;
+  /**
+   * The help, when it comes: which way the working goes.
+   *
+   * Two lines rather than one, and the difference is the whole of the spell.
+   * A brick with two bricks under it is added up to; a gap under a brick
+   * that is already known has to be taken away from. The two lit bricks say
+   * *where*; these say *what to do with them*.
+   */
+  brickHintAdd: string;
+  brickHintTakeAway: string;
 
   // --- the hourglass spell -------------------------------------------------
 

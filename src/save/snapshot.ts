@@ -47,6 +47,35 @@ export interface WorldSnapshot {
   readonly placed: readonly PlacedObject[];
   /** Generated objects the player took away, by the tile they stood on. */
   readonly cleared: readonly (readonly [number, number])[];
+  /**
+   * The floor plan of every house somebody has added a room to, by building.
+   *
+   * Here rather than with the child, and the placement is the whole of it: a
+   * house is a fact about the world, and two siblings on one tablet own
+   * different cottages in the same village. Keeping a plan on the *player*
+   * would put sister's extension in brother's house the moment he walked
+   * into his own.
+   *
+   * Only the floor, as `col,row` keys — the walls are worked out from it,
+   * and a save with both in it is a save whose two halves can disagree. Only
+   * houses that have been *changed* appear: a cottage nobody has touched is
+   * the cottage the generator shipped, and writing that down every autosave
+   * would be storing the absence of news.
+   *
+   * Optional, because every save written before anybody could build has no
+   * such thing and must go on loading.
+   */
+  readonly plans?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * How each house is furnished, by building.
+   *
+   * Beside the floor plans and for the same reason: a house is a fact about
+   * the world, and two siblings own different cottages in one village. Only
+   * houses that have been *rearranged* appear — a room nobody has touched is
+   * the room the generator drew, and writing that down every autosave would
+   * be storing the absence of news.
+   */
+  readonly decor?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface PlayerSnapshot {
@@ -133,7 +162,12 @@ export function worldBaseline(grid: WorldGrid): WorldBaseline {
  * a check for occupancy alone would record no change at all, so the world
  * would reload with the generator's fence back and theirs gone.
  */
-export function snapshotWorld(grid: WorldGrid, baseline: WorldBaseline): WorldSnapshot {
+export function snapshotWorld(
+  grid: WorldGrid,
+  baseline: WorldBaseline,
+  plans: Readonly<Record<string, readonly string[]>> = {},
+  decor: Readonly<Record<string, readonly string[]>> = {},
+): WorldSnapshot {
   const placed: PlacedObject[] = [];
   const standing = new Map<string, string>();
   for (const object of grid.listObjects()) {
@@ -152,6 +186,8 @@ export function snapshotWorld(grid: WorldGrid, baseline: WorldBaseline): WorldSn
     crops: grid.listCrops().map(([col, row, crop]) => [col, row, crop.plant, crop.stage] as const),
     placed,
     cleared,
+    ...(Object.keys(plans).length > 0 ? { plans } : {}),
+    ...(Object.keys(decor).length > 0 ? { decor } : {}),
   };
 }
 
@@ -181,14 +217,46 @@ export function snapshotGame(
   baseline: WorldBaseline,
   seed: number,
   savedAt: number,
+  plans: Readonly<Record<string, readonly string[]>> = {},
+  decor: Readonly<Record<string, readonly string[]>> = {},
 ): GameSnapshot {
   return {
     snapshotVersion: SNAPSHOT_VERSION,
     generatorVersion: GENERATOR_VERSION,
     seed,
-    world: snapshotWorld(grid, baseline),
+    world: snapshotWorld(grid, baseline, plans, decor),
     savedAt,
   };
+}
+
+/**
+ * The floor plans out of a save, with anything mangled dropped.
+ *
+ * A bad plan is dropped rather than repaired, and one bad house does not
+ * take the other three with it: what a child loses is an extension, and
+ * what they keep is a cottage they can build out again. A plan repaired
+ * into something plausible would be a room somebody did not build.
+ */
+export function readPlans(world: WorldSnapshot | undefined): Record<string, readonly string[]> {
+  return readByHouse(world?.plans, (key) => /^-?\d+,-?\d+$/.test(key));
+}
+
+/** The same again for how each house is furnished. `decor.ts` reads the entries. */
+export function readDecor(world: WorldSnapshot | undefined): Record<string, readonly string[]> {
+  return readByHouse(world?.decor, () => true);
+}
+
+function readByHouse(
+  saved: Readonly<Record<string, readonly string[]>> | undefined,
+  usable: (entry: string) => boolean,
+): Record<string, readonly string[]> {
+  const plans: Record<string, readonly string[]> = {};
+  for (const [house, floor] of Object.entries(saved ?? {})) {
+    if (!Array.isArray(floor)) continue;
+    const cells = floor.filter((key): key is string => typeof key === "string" && usable(key));
+    if (cells.length > 0) plans[house] = cells;
+  }
+  return plans;
 }
 
 /**

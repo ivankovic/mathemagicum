@@ -651,8 +651,23 @@ resolved here, one of them structural:
   generated world's anchor placements, not just static per-object text.
   Whether all four are revealed at once or progressively is undecided.
 
-**Villagers — always have a request available or active.** Superseded:
-not "occasionally" anymore — each villager's request slot is never empty.
+**Villagers — always have a request available or active.** **Abandoned.**
+Nothing of this was ever built, and it is not going to be. What it was
+designed around no longer exists: the three villagers lived in three of the
+four cottages ringing the square, and those four are the *children's* houses
+now — one each, for the four players a device can hold. The villagers have
+four cottages of their own, scattered over the village green, and no gardens,
+because the gardens were only ever there to hold the struggling plants a
+request would have been about.
+
+What the request loop was reaching for — a reason to cast a spell that is not
+the player's own farm — is still a real gap. It is not this. Kept below as
+written, because the reasoning is worth reading and because "we tried this
+and dropped it" is a thing a design log should say out loud rather than
+quietly lose.
+
+Superseded: not "occasionally" anymore — each villager's request slot is
+never empty.
 A request lifecycle: **available** (offered, not yet accepted) →
 **active** (accepted, in progress) → completed → immediately becomes
 available again. No random trigger needed at all, which resolves last

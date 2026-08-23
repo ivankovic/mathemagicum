@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { DECOR_ITEMS, type DecorItem } from "./decor";
 import { type FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import { MATERIAL_TYPES, type MaterialType } from "./materials";
 import { PLANT_TYPES, type PlantType } from "./plants";
@@ -29,12 +30,13 @@ import { PLANT_TYPES, type PlantType } from "./plants";
  * spell turned out to pay.
  */
 
-export type ItemType = PlantType | FixtureType | MaterialType;
+export type ItemType = PlantType | FixtureType | MaterialType | DecorItem;
 
 export const ITEM_TYPES: readonly ItemType[] = [
   ...PLANT_TYPES,
   ...PLACEABLE_FIXTURES,
   ...MATERIAL_TYPES,
+  ...DECOR_ITEMS,
 ];
 
 export class Inventory {

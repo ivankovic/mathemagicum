@@ -1,0 +1,595 @@
+{
+  "sheets": {
+    "walls": {
+      "file": "cottage_walls.png",
+      "frame_width": 32,
+      "frame_height": 50,
+      "frame_count": 32,
+      "columns": 32,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "floor": {
+      "file": "cottage_floor.png",
+      "frame_width": 32,
+      "frame_height": 32,
+      "frame_count": 96,
+      "columns": 96,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "window": {
+      "file": "cottage_window.png",
+      "frame_width": 32,
+      "frame_height": 50,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "door": {
+      "file": "cottage_door.png",
+      "frame_width": 32,
+      "frame_height": 50,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    }
+  },
+  "piece_sheets": {
+    "bed": {
+      "file": "cottage_piece_bed.png",
+      "frame_width": 32,
+      "frame_height": 80,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "table": {
+      "file": "cottage_piece_table.png",
+      "frame_width": 64,
+      "frame_height": 48,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "bookshelf": {
+      "file": "cottage_piece_bookshelf.png",
+      "frame_width": 32,
+      "frame_height": 48,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "rug": {
+      "file": "cottage_piece_rug.png",
+      "frame_width": 64,
+      "frame_height": 80,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "fireplace": {
+      "file": "cottage_piece_fireplace.png",
+      "frame_width": 64,
+      "frame_height": 48,
+      "frame_count": 8,
+      "columns": 8,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "chair": {
+      "file": "cottage_piece_chair.png",
+      "frame_width": 32,
+      "frame_height": 48,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    }
+  },
+  "room": "cottage",
+  "tile_size": 32,
+  "wall_rise_px": 18,
+  "piece_rise_px": 16,
+  "floor_rows": 32,
+  "floor_variations": 3,
+  "wall_masks": 32,
+  "wall_bits": {
+    "floor_s": 1,
+    "floor_n": 2,
+    "floor_w": 4,
+    "floor_e": 8,
+    "faces": 16
+  },
+  "start_floor": [
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      1,
+      4
+    ],
+    [
+      1,
+      5
+    ],
+    [
+      1,
+      6
+    ],
+    [
+      2,
+      1
+    ],
+    [
+      2,
+      2
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      2,
+      4
+    ],
+    [
+      2,
+      5
+    ],
+    [
+      2,
+      6
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      3,
+      3
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      3,
+      5
+    ],
+    [
+      3,
+      6
+    ],
+    [
+      4,
+      1
+    ],
+    [
+      4,
+      2
+    ],
+    [
+      4,
+      3
+    ],
+    [
+      4,
+      4
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      4,
+      6
+    ]
+  ],
+  "door_cell": [
+    5,
+    4
+  ],
+  "start_size_cells": {
+    "cols": 8,
+    "rows": 6
+  },
+  "furniture": [
+    {
+      "name": "fireplace",
+      "cell": [
+        1,
+        1
+      ],
+      "footprint": [
+        2,
+        1
+      ],
+      "blocks": true,
+      "animated": true,
+      "light": "fire"
+    },
+    {
+      "name": "bookshelf",
+      "cell": [
+        1,
+        6
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    {
+      "name": "bed",
+      "cell": [
+        2,
+        1
+      ],
+      "footprint": [
+        1,
+        2
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    {
+      "name": "table",
+      "cell": [
+        2,
+        5
+      ],
+      "footprint": [
+        2,
+        1
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    {
+      "name": "chair",
+      "cell": [
+        3,
+        5
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    {
+      "name": "rug",
+      "cell": [
+        3,
+        3
+      ],
+      "footprint": [
+        2,
+        2
+      ],
+      "blocks": false,
+      "animated": false,
+      "light": null
+    }
+  ],
+  "window_columns": [
+    2,
+    5
+  ],
+  "piece_colourways": [
+    {
+      "wood": [
+        [
+          110,
+          72,
+          40
+        ],
+        [
+          156,
+          106,
+          58
+        ],
+        [
+          196,
+          146,
+          92
+        ]
+      ],
+      "fabric": [
+        [
+          150,
+          66,
+          78
+        ],
+        [
+          196,
+          96,
+          108
+        ],
+        [
+          232,
+          148,
+          156
+        ]
+      ]
+    },
+    {
+      "wood": [
+        [
+          62,
+          42,
+          28
+        ],
+        [
+          96,
+          66,
+          44
+        ],
+        [
+          134,
+          98,
+          68
+        ]
+      ],
+      "fabric": [
+        [
+          146,
+          104,
+          44
+        ],
+        [
+          190,
+          142,
+          70
+        ],
+        [
+          224,
+          184,
+          116
+        ]
+      ]
+    },
+    {
+      "wood": [
+        [
+          150,
+          124,
+          86
+        ],
+        [
+          198,
+          172,
+          130
+        ],
+        [
+          232,
+          212,
+          176
+        ]
+      ],
+      "fabric": [
+        [
+          96,
+          122,
+          62
+        ],
+        [
+          132,
+          164,
+          88
+        ],
+        [
+          176,
+          206,
+          128
+        ]
+      ]
+    },
+    {
+      "wood": [
+        [
+          44,
+          72,
+          102
+        ],
+        [
+          70,
+          110,
+          150
+        ],
+        [
+          112,
+          156,
+          196
+        ]
+      ],
+      "fabric": [
+        [
+          62,
+          96,
+          148
+        ],
+        [
+          92,
+          134,
+          192
+        ],
+        [
+          140,
+          180,
+          228
+        ]
+      ]
+    },
+    {
+      "wood": [
+        [
+          52,
+          88,
+          58
+        ],
+        [
+          82,
+          128,
+          86
+        ],
+        [
+          124,
+          172,
+          124
+        ]
+      ],
+      "fabric": [
+        [
+          112,
+          78,
+          130
+        ],
+        [
+          152,
+          112,
+          176
+        ],
+        [
+          196,
+          160,
+          214
+        ]
+      ]
+    }
+  ],
+  "palette": {
+    "wall_dark": [
+      198,
+      186,
+      168
+    ],
+    "wall": [
+      232,
+      222,
+      206
+    ],
+    "wall_light": [
+      250,
+      244,
+      232
+    ],
+    "wall_trim": [
+      168,
+      154,
+      136
+    ],
+    "wood_dark": [
+      110,
+      72,
+      40
+    ],
+    "wood": [
+      156,
+      106,
+      58
+    ],
+    "wood_light": [
+      196,
+      146,
+      92
+    ],
+    "fabric_dark": [
+      150,
+      66,
+      78
+    ],
+    "fabric": [
+      196,
+      96,
+      108
+    ],
+    "fabric_light": [
+      232,
+      148,
+      156
+    ],
+    "metal_dark": [
+      96,
+      104,
+      130
+    ],
+    "metal": [
+      140,
+      148,
+      174
+    ],
+    "metal_light": [
+      186,
+      194,
+      216
+    ],
+    "fire_dim": [
+      214,
+      108,
+      48
+    ],
+    "fire": [
+      248,
+      168,
+      62
+    ],
+    "fire_bright": [
+      255,
+      226,
+      138
+    ],
+    "opening": [
+      52,
+      44,
+      62
+    ],
+    "paper": [
+      248,
+      244,
+      232
+    ],
+    "board": [
+      58,
+      92,
+      74
+    ]
+  }
+}

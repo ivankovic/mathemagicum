@@ -7,7 +7,7 @@ import { describe, expect, test } from "bun:test";
 const CLOCK = new Date(2026, 0, 5, 9, 0, 0, 0).getTime();
 import { DEFAULT_AVATAR } from "../avatar/style";
 import { Language, type SettingsStore } from "../settings";
-import { BANDS, DEFAULT_BAND, HARDEST_RUNG, bandAt } from "../spells/difficulty";
+import { BANDS, DEFAULT_BAND, HARDEST_RUNG, bandAt, bandOn } from "../spells/difficulty";
 import { HARDEST_ARRAY_RUNG } from "../spells/multiplication";
 import { Spell, knowsSpell } from "../spells/spellbook";
 import { Facing } from "../world/characters";
@@ -34,6 +34,7 @@ import {
 } from "./profiles";
 import {
   GENERATOR_VERSION,
+  readPlans,
   restorePlayer,
   restoreWorld,
   snapshotGame,
@@ -151,6 +152,7 @@ describe("the list of players", () => {
     portalRung: 0,
     arrayRung: 0,
     clockRung: 0,
+    brickRung: 0,
     reached: ["village"],
     learned: [],
     carried: null,
@@ -213,19 +215,29 @@ describe("what the portal spell remembers about a child", () => {
     expect(readProfiles(store)).toEqual([mia]);
   });
 
-  // The array ladder is two rungs shorter than the other two, and the bands
-  // are indexed against the longer one — so the hardest band's floor sits at
-  // the top of this ladder and a saved number past its end has to come back
-  // as its end rather than as whatever the addition ladder would allow.
-  test("the array rung is clamped against its own ladder, not the sums'", () => {
+  // The array ladder is four rungs shorter than the sums', and the bands are
+  // counted in addition rungs — so a band has to be *scaled* onto it rather
+  // than truncated against its end. A saved number past its end still comes
+  // back as its end, whatever the addition ladder would have allowed.
+  test("the array rung is scaled onto its own ladder, not the sums'", () => {
     const top = { ...made(), band: 3, arrayRung: 9 };
     expect(readProfile(JSON.parse(JSON.stringify(top)))?.arrayRung).toBe(HARDEST_ARRAY_RUNG);
+  });
+
+  // Truncation used to open the hardest band on the last rung of this ladder,
+  // so a nine-year-old's first ever cast was the bare times table and there
+  // was nothing above it to climb to. Scaled, they open partway up with room
+  // in both directions — which is what "the bottom of their band" meant all
+  // along.
+  test("and a new child opens partway up it, with somewhere left to climb", () => {
     const hardest = createProfile(
       [],
       { name: "Ada", avatar: DEFAULT_AVATAR, language: Language.English, band: 3 },
       1,
     );
-    expect(hardest.arrayRung).toBe(HARDEST_ARRAY_RUNG);
+    const fence = bandOn(bandAt(3), HARDEST_ARRAY_RUNG);
+    expect(hardest.arrayRung).toBe(fence.from);
+    expect(hardest.arrayRung).toBeLessThan(HARDEST_ARRAY_RUNG);
   });
 
   // A corrupt number reads as "we do not know where this child was", which
@@ -234,7 +246,8 @@ describe("what the portal spell remembers about a child", () => {
   // would quietly drop a nine-year-old to two times two.
   test("a corrupt array rung falls back to the band's floor", () => {
     const mangled = { ...made(), arrayRung: "banana" };
-    expect(readProfile(JSON.parse(JSON.stringify(mangled)))?.arrayRung).toBe(bandAt(1).from);
+    const floor = bandOn(bandAt(1), HARDEST_ARRAY_RUNG).from;
+    expect(readProfile(JSON.parse(JSON.stringify(mangled)))?.arrayRung).toBe(floor);
   });
 
   // A child saved before the portal existed has never cast it.
@@ -582,5 +595,54 @@ describe("a save that no longer fits its world", () => {
     expect(session.purse.coins).toBe(0);
     expect(session.inventory.total).toBe(0);
     expect(session.facing).toBe(Facing.Down);
+  });
+});
+
+describe("what a house somebody built out remembers", () => {
+  const store = memory();
+
+  // The plan lives with the *world* rather than with the child, and this is
+  // why: two siblings on one tablet own different cottages in one village,
+  // and a plan kept on the player would put sister's extension in brother's
+  // house the moment he walked into his own.
+  test("a plan survives a round trip through storage", () => {
+    const grid = WorldGrid.empty(8, 8, TerrainType.Grass);
+    const plans = { "player-house": ["1,1", "2,1", "3,0"] };
+    const snapshot = snapshotGame(grid, new Map(), 7, 1000, plans);
+    expect(snapshot.world.plans).toEqual(plans);
+    const read = JSON.parse(JSON.stringify(snapshot)) as typeof snapshot;
+    expect(readPlans(read.world)).toEqual(plans);
+  });
+
+  // A cottage nobody has touched is the cottage the generator shipped.
+  // Writing that down every autosave would be storing the absence of news.
+  test("a house nobody has changed writes nothing at all", () => {
+    const snapshot = snapshotGame(WorldGrid.empty(4, 4, TerrainType.Grass), new Map(), 7, 1);
+    expect(snapshot.world.plans).toBeUndefined();
+    expect(readPlans(snapshot.world)).toEqual({});
+  });
+
+  // One mangled house must not take the other three with it. What a child
+  // loses is an extension; what they keep is a cottage they can build again.
+  test("a mangled plan is dropped, and the houses beside it are not", () => {
+    const world = {
+      crops: [],
+      placed: [],
+      cleared: [],
+      plans: {
+        good: ["1,1", "-2,-3"],
+        rubbish: ["not a cell", ""],
+        empty: [],
+        wrong: "1,1",
+      },
+    } as unknown as Parameters<typeof readPlans>[0];
+    expect(readPlans(world)).toEqual({ good: ["1,1", "-2,-3"] });
+  });
+
+  // Every save written before anybody could build has no plans in it, and
+  // has to go on loading rather than opening on a house with no walls.
+  test("a save from before any of this reads as nobody having built", () => {
+    expect(readPlans(undefined)).toEqual({});
+    expect(readPlans({ crops: [], placed: [], cleared: [] })).toEqual({});
   });
 });

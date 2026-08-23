@@ -107,6 +107,15 @@ export interface BuildingSidecar extends SpriteSidecar {
    * anybody lights.
    */
   window_rects_px?: readonly (readonly [number, number, number, number])[];
+  /**
+   * The nameplate's panel beside a house's door, or absent.
+   *
+   * `[x, y, width, height]` in the sprite's own pixels, and the *recess*
+   * rather than the board round it: a face drawn to the board's own size
+   * would have its ears behind wood. Only buildings somebody lives in have
+   * one. See `window_rects_px` for why this is stated rather than guessed.
+   */
+  sign_rect_px?: readonly [number, number, number, number] | null;
   door_cell_relative_to_anchor: readonly [number, number];
   // One frame range per door position, keyed `door_{state}`. The door is
   // state rather than a transition that plays, so each range is its own
@@ -165,6 +174,54 @@ export interface PlantSidecar extends SheetSprite {
 // sprite standing on the world grid, an interior *is* a little grid of its
 // own — so it carries its size and its own blocked cells rather than a
 // footprint and an offset.
+/**
+ * The cottage a second time, as the parts it is assembled from.
+ *
+ * A room somebody can add a square to cannot be one picture — the wall it
+ * grows through is a wall that has to come down. So the cottage ships twice:
+ * once as the finished image every other room ships as, and once as this.
+ * See `growableRoom.ts` for what the game does with it.
+ */
+export interface GrowableSidecar {
+  room: string;
+  tile_size: number;
+  wall_rise_px: number;
+  /** How far a piece of furniture may stand above its own cell. */
+  piece_rise_px: number;
+  /** Seam layouts in the floor atlas before it repeats; index `row %` them. */
+  floor_rows: number;
+  floor_variations: number;
+  wall_masks: number;
+  /** The bit each of the five facts about a wall cell occupies. */
+  wall_bits: Readonly<Record<string, number>>;
+  sheets: Readonly<Record<string, SheetLayout>>;
+  piece_sheets: Readonly<Record<string, SheetLayout>>;
+  /** The room as it ships, in `[row, col]` as every sidecar is. */
+  start_floor: readonly (readonly [number, number])[];
+  door_cell: readonly [number, number];
+  start_size_cells: { cols: number; rows: number };
+  furniture: readonly {
+    name: string;
+    cell: readonly [number, number];
+    footprint: readonly [number, number];
+    blocks: boolean;
+    animated: boolean;
+    light: string | null;
+  }[];
+  palette?: Readonly<Record<string, readonly [number, number, number]>>;
+  /**
+   * What a piece of furniture may be painted: wood and cloth together.
+   *
+   * Paired rather than two lists, because a child picking "green" should get
+   * a green chair *and* a green blanket. The first is the room as it ships,
+   * which is what lets a house nobody has redecorated look untouched.
+   */
+  piece_colourways?: readonly {
+    wood: readonly (readonly [number, number, number])[];
+    fabric: readonly (readonly [number, number, number])[];
+  }[];
+}
+
 export interface InteriorSidecar {
   /** Every colour the room was drawn in, by slot name. See BuildingSidecar. */
   palette?: Readonly<Record<string, readonly [number, number, number]>>;

@@ -299,6 +299,22 @@ sums with only an adult likely to notice. Leaving the band open means:
 - **The options panel becomes the safety net**, which is another reason it
   shows the band and lets an adult put it back.
 
+**Reversed, later, by the author.** *"Automatic difficulty adjustment is
+being too smart. Let's never exit the user selected difficulty range. The
+parents should adjust it based on the child's development."*
+
+The three replacements above were all built and they all worked, and they
+still did not answer the objection underneath the fence. A slower climb out
+of a band is still a climb out of a band, decided by a rule that has seen
+four casts, on behalf of a person who has seen the child. So the ladder is
+fenced again at both ends of the band, and the options panel stops being a
+safety net and becomes the control.
+
+The reading in the first bullet above — *they did not notice it working* —
+is accepted as the cost rather than argued with. A child at the top of their
+band will see the sums stop, and an adult has to move them. What that buys is
+that nobody is ever moved by accident.
+
 ## 8. The currency names are confusing — **built**
 
 **Reported:** the currency names are confusing.

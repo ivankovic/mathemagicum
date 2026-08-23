@@ -7,7 +7,6 @@ import { makeAdditionProblem, problemFor } from "./addition";
 import {
   BANDS,
   CLEAN_TO_CLIMB,
-  CLEAN_TO_LEAVE_BAND,
   DEFAULT_BAND,
   HARDEST_RUNG,
   RECENT_CASTS,
@@ -15,12 +14,24 @@ import {
   STUMBLES_TO_EASE,
   SUGGESTED_BAND,
   bandAt,
+  bandOn,
   nextRung,
   recordCast,
   rungAt,
   rungInBand,
   sampleProblem,
 } from "./difficulty";
+import { HARDEST_CLOCK_RUNG } from "./hourglass";
+import { HARDEST_ARRAY_RUNG } from "./multiplication";
+import { HARDEST_PORTAL_RUNG } from "./portal";
+
+/** Every ladder `nextRung` is asked to walk, and what each one is called. */
+const LADDERS = [
+  { name: "addition", hardest: HARDEST_RUNG },
+  { name: "portal", hardest: HARDEST_PORTAL_RUNG },
+  { name: "array", hardest: HARDEST_ARRAY_RUNG },
+  { name: "clock", hardest: HARDEST_CLOCK_RUNG },
+] as const;
 
 describe("the ladder", () => {
   test("every rung asks for at least one jump the child has to make", () => {
@@ -160,32 +171,33 @@ describe("moving inside a band", () => {
     expect(STUMBLES_TO_EASE).toBeLessThan(CLEAN_TO_CLIMB);
   });
 
-  test("it never leaves the ladder, however the casts go", () => {
+  test("it walks the whole band and stops at both ends", () => {
     let rung = band.from;
     for (let cast = 0; cast < 400; cast++) {
       rung = nextRung(band, rung, clean(RECENT_CASTS));
-      expect(rung).toBeLessThanOrEqual(HARDEST_RUNG);
+      expect(rung).toBeLessThanOrEqual(band.to);
     }
-    expect(rung).toBe(HARDEST_RUNG);
+    expect(rung).toBe(band.to);
     for (let cast = 0; cast < 400; cast++) {
       rung = nextRung(band, rung, Array(RECENT_CASTS).fill(false));
-      expect(rung).toBeGreaterThanOrEqual(0);
+      expect(rung).toBeGreaterThanOrEqual(band.from);
     }
-    expect(rung).toBe(0);
+    expect(rung).toBe(band.from);
   });
 
   // The rule that could never fire. The window was six casts and leaving a
   // band needed a run of eight, so no child could ever have left one — the
-  // condition was simply unreachable, and nothing said so.
+  // condition was simply unreachable, and nothing said so. There is no
+  // leaving a band any more, but the window is still derived from the runs
+  // rather than picked, which is what stopped it happening again.
   test("the window can hold the longest run any rule asks about", () => {
-    expect(RECENT_CASTS).toBeGreaterThanOrEqual(CLEAN_TO_LEAVE_BAND);
     expect(RECENT_CASTS).toBeGreaterThanOrEqual(CLEAN_TO_CLIMB);
     expect(RECENT_CASTS).toBeGreaterThanOrEqual(STUMBLES_TO_EASE);
     let recent: readonly boolean[] = [];
-    for (let at = 0; at < CLEAN_TO_LEAVE_BAND; at++) {
+    for (let at = 0; at < RECENT_CASTS; at++) {
       recent = recordCast(recent, { solved: true, clean: true });
     }
-    expect(recent.length).toBe(CLEAN_TO_LEAVE_BAND);
+    expect(recent.length).toBe(RECENT_CASTS);
   });
 
   // Opening the spellbook and thinking better of it is a thing children do.
@@ -210,13 +222,15 @@ describe("moving inside a band", () => {
     expect(nextRung(band, band.from, recent)).toBe(band.from + 1);
   });
 
-  // The band decides where a child *starts* and what the money looks like.
-  // It no longer decides where they may be, so reading a save must not drag
-  // a child the game has carried onward back into the box they began in.
-  test("a saved rung is clamped to the ladder, not to the band", () => {
-    expect(rungInBand(band, 0)).toBe(0);
-    expect(rungInBand(band, HARDEST_RUNG)).toBe(HARDEST_RUNG);
-    expect(rungInBand(band, 99)).toBe(HARDEST_RUNG);
+  // A save written while the ladder was open at both ends can name a rung
+  // outside the band. It reads back as the nearest rung inside it: that child
+  // is being put back where a person chose to put them, and it happens on the
+  // way in rather than mid-session so the sums never change under them.
+  test("a saved rung is clamped to the band", () => {
+    expect(rungInBand(band, 0)).toBe(band.from);
+    expect(rungInBand(band, HARDEST_RUNG)).toBe(band.to);
+    expect(rungInBand(band, 99)).toBe(band.to);
+    expect(rungInBand(band, band.from + 1)).toBe(band.from + 1);
     expect(rungInBand(band, Number.NaN)).toBe(band.from);
   });
 
@@ -315,61 +329,142 @@ describe("where a new player starts", () => {
   });
 });
 
-describe("leaving the band you started in", () => {
+describe("the fence at the edges of the band", () => {
   const band = bandAt(0);
   const clean = (count: number) => Array.from({ length: count }, () => true);
 
-  // Playtesting said the adaptation looked broken: a child tops out in a
-  // dozen casts and then nothing ever changes again, which from the outside
-  // is indistinguishable from a fixed difficulty.
-  test("a child who keeps playing well goes past what was picked for them", () => {
-    expect(nextRung(band, band.to, clean(CLEAN_TO_LEAVE_BAND))).toBe(band.to + 1);
+  // The rule, in one line. A child at the top of the gentlest band who
+  // answers perfectly for as long as they like is still doing sums within
+  // ten, because that is what somebody chose for them.
+  test("no run of clean casts, however long, takes a child past the top", () => {
+    for (const length of [CLEAN_TO_CLIMB, CLEAN_TO_CLIMB * 4, 200]) {
+      expect(nextRung(band, band.to, clean(length))).toBe(band.to);
+    }
   });
 
-  // What is left of the fence. A good afternoon should move a child along; it
-  // should not move them up a year before an adult notices.
-  test("but it takes a longer run than moving inside the band", () => {
-    expect(CLEAN_TO_LEAVE_BAND).toBeGreaterThan(CLEAN_TO_CLIMB);
-    expect(nextRung(band, band.to, clean(CLEAN_TO_CLIMB))).toBe(band.to);
+  test("and no run of stumbles takes them below the bottom", () => {
+    for (const length of [STUMBLES_TO_EASE, STUMBLES_TO_EASE * 4, 200]) {
+      expect(nextRung(band, band.from, Array(length).fill(false))).toBe(band.from);
+    }
+  });
+
+  // Inside the band nothing changed: the whole point is that the adaptation
+  // still works, it simply works within what a person chose.
+  test("but inside the band it still moves, both ways", () => {
     expect(nextRung(band, band.from, clean(CLEAN_TO_CLIMB))).toBe(band.from + 1);
+    expect(nextRung(band, band.to, Array(STUMBLES_TO_EASE).fill(false))).toBe(band.to - 1);
   });
 
-  // A child carried up by a lucky run has to be able to fall back, and a
-  // boundary is no reason to make them prove it for longer.
-  test("coming back down needs no extra patience, boundary or not", () => {
-    const stumbles = Array(STUMBLES_TO_EASE).fill(false);
-    expect(nextRung(band, band.to + 1, stumbles)).toBe(band.to);
-    expect(nextRung(band, band.to, stumbles)).toBe(band.to - 1);
-    const higher = bandAt(2);
-    expect(nextRung(higher, higher.from, stumbles)).toBe(higher.from - 1);
+  /**
+   * The invariant, checked rather than argued: no sequence of results puts
+   * any rung outside the band, on any ladder.
+   *
+   * Exhaustive over the bands and the four ladders, and over runs long
+   * enough to reach either edge several times over, with the results driven
+   * by a fixed seed so a failure is a failure somebody can reproduce.
+   */
+  test("no sequence of casts on any ladder ever leaves the band", () => {
+    for (const { name, hardest } of LADDERS) {
+      for (const [at, chosen] of BANDS.entries()) {
+        const fence = bandOn(chosen, hardest);
+        const rng = createRng(at * 31 + hardest);
+        // Start outside it on purpose: an old save may name such a rung, and
+        // the first thing that happens must be a step back inside.
+        for (const opening of [-3, 0, hardest, hardest + 5, Number.NaN]) {
+          let rung = rungInBand(chosen, opening, hardest);
+          let recent: readonly boolean[] = [];
+          for (let cast = 0; cast < 300; cast++) {
+            recent = recordCast(recent, { solved: true, clean: rng() < 0.7 });
+            const moved = nextRung(chosen, rung, recent, hardest);
+            if (moved !== rung) recent = [];
+            rung = moved;
+            expect({ name, at, opening, inside: rung >= fence.from && rung <= fence.to }).toEqual({
+              name,
+              at,
+              opening,
+              inside: true,
+            });
+          }
+        }
+      }
+    }
   });
 
-  test("and down is still quicker than up, everywhere", () => {
-    expect(STUMBLES_TO_EASE).toBeLessThan(CLEAN_TO_CLIMB);
-    expect(STUMBLES_TO_EASE).toBeLessThan(CLEAN_TO_LEAVE_BAND);
+  /**
+   * A band has to be worth having on every ladder.
+   *
+   * Bands are indexed against the addition ladder and two of the others are
+   * four rungs shorter, so truncating rather than scaling puts the hardest
+   * band at `[5, 5]` on both — one rung wide, nothing able to move in either
+   * direction. Fencing a child into a window with no way *down* is not the
+   * thing that was asked for; it is the adaptation switched off.
+   */
+  test("every band leaves room to move on every ladder", () => {
+    for (const { name, hardest } of LADDERS) {
+      for (const [at, chosen] of BANDS.entries()) {
+        const fence = bandOn(chosen, hardest);
+        expect({ name, at, wide: fence.to > fence.from }).toEqual({ name, at, wide: true });
+        expect({ name, at, low: fence.from >= 0 }).toEqual({ name, at, low: true });
+        expect({ name, at, high: fence.to <= hardest }).toEqual({ name, at, high: true });
+      }
+    }
   });
 
-  // The long way up, counted: a child starting at the gentlest sums and
-  // never making a mistake still takes this many casts to reach the hardest.
-  // It is a number worth being able to see rather than reason about.
-  test("the whole ladder is a long climb, not an afternoon", () => {
-    let rung = bandAt(0).from;
+  // The bands are named against the addition ladder, so on a ladder of the
+  // same length they must be exactly the rungs a person picked — no rounding,
+  // no drift. The portal's ladder is that length.
+  test("on a ladder the same length, the fence is the band itself", () => {
+    for (const chosen of BANDS) {
+      expect(bandOn(chosen, HARDEST_RUNG)).toEqual(chosen);
+      expect(bandOn(chosen, HARDEST_PORTAL_RUNG)).toEqual(chosen);
+    }
+  });
+
+  // Scaling must not reorder anything: a gentler band stays gentler on every
+  // ladder, or an adult moving a child down would be moving them up.
+  test("and a gentler band stays gentler, whichever ladder is asking", () => {
+    for (const { name, hardest } of LADDERS) {
+      for (let at = 1; at < BANDS.length; at++) {
+        const under = bandOn(bandAt(at - 1), hardest);
+        const over = bandOn(bandAt(at), hardest);
+        expect({ name, at, rising: over.from >= under.from && over.to > under.to }).toEqual({
+          name,
+          at,
+          rising: true,
+        });
+      }
+    }
+  });
+
+  // The climb a child can still make on their own, counted. It is a number
+  // worth being able to see rather than reason about: the widest band is four
+  // rungs across, so a perfect run moves them that far and then stops.
+  test("the climb inside the widest band is a real one, and it is finite", () => {
+    const widest = BANDS.reduce((a, b) => (b.to - b.from > a.to - a.from ? b : a));
+    let rung = widest.from;
     let recent: readonly boolean[] = [];
     let casts = 0;
-    while (rung < HARDEST_RUNG && casts < 500) {
+    while (rung < widest.to && casts < 500) {
       recent = recordCast(recent, { solved: true, clean: true });
-      const moved = nextRung(bandAt(0), rung, recent);
+      const moved = nextRung(widest, rung, recent);
       if (moved !== rung) recent = [];
       rung = moved;
       casts++;
     }
-    expect(rung).toBe(HARDEST_RUNG);
-    expect(casts).toBeGreaterThan(CLEAN_TO_LEAVE_BAND * 4);
+    expect(rung).toBe(widest.to);
+    expect(casts).toBeGreaterThanOrEqual(CLEAN_TO_CLIMB * (widest.to - widest.from));
+    // And then it stops, however well they keep playing.
+    for (let more = 0; more < 100; more++) {
+      recent = recordCast(recent, { solved: true, clean: true });
+      rung = nextRung(widest, rung, recent);
+    }
+    expect(rung).toBe(widest.to);
   });
 
-  test("a child at the very top stays there rather than falling off it", () => {
-    expect(nextRung(bandAt(DEFAULT_BAND), HARDEST_RUNG, clean(CLEAN_TO_LEAVE_BAND))).toBe(
-      HARDEST_RUNG,
-    );
+  // A child who was already playing had the hardest sums the game had, and
+  // the hardest band tops out exactly there. Fencing them in must not be a
+  // way of quietly moving them down.
+  test("a child at the very top of the hardest band stays there", () => {
+    expect(nextRung(bandAt(DEFAULT_BAND), HARDEST_RUNG, clean(200))).toBe(HARDEST_RUNG);
   });
 });

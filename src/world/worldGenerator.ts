@@ -100,7 +100,7 @@ export function generateWorld(width: number, height: number, seed: number): Gene
   // gardens, which are not natural ground and must not be painted over. Also
   // before ensureConnectivity, since the Village's centre tile ends up the
   // well (impassable), not a safe start point.
-  const village = layoutVillage(grid, anchors.village);
+  const village = layoutVillage(grid, anchors.village, seed);
   // The second anchor with anything in it. After the village so the two
   // cannot argue about a tile, and before the scatter — which skips reserved
   // boxes, so the grove is the only thing that ever grows in there.

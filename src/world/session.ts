@@ -166,6 +166,18 @@ export function stepsToSpeak(a: GridPoint, b: GridPoint): number {
   return Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row));
 }
 
+/**
+ * What the clearing spell took off a tile.
+ *
+ * A union rather than a `PlacedObject | Crop`, because the two are not
+ * interchangeable to anybody downstream: one of them is worth wood and lives
+ * in a chunk's scenery bucket, and the other is worth nothing and lives in
+ * the crop registry.
+ */
+export type Cleared =
+  | { readonly kind: "scenery"; readonly object: PlacedObject }
+  | { readonly kind: "crop"; readonly crop: Crop };
+
 export class GameSession {
   readonly grid: WorldGrid;
   readonly inventory = new Inventory();
@@ -344,7 +356,8 @@ export class GameSession {
     if (this.indoors) return [];
     return patchCells(patch).filter((at) => {
       const object = this.grid.getObjectAt(at.col, at.row);
-      return object !== null && sceneryKind(object.type) !== null;
+      if (object) return sceneryKind(object.type) !== null;
+      return this.grid.getCrop(at.col, at.row) !== null;
     });
   }
 
@@ -396,18 +409,37 @@ export class GameSession {
     const { col, row } = at ?? this.targetTile();
     if (!this.grid.inBounds(col, row)) return { ok: false, outcome: Outcome.NothingThere };
     const object = this.grid.getObjectAt(col, row);
-    if (!object) return { ok: false, outcome: Outcome.NothingThere, tile: { col, row } };
-    if (sceneryKind(object.type) === null) {
-      return { ok: false, outcome: Outcome.NotYours, tile: { col, row } };
+    if (object) {
+      if (sceneryKind(object.type) === null) {
+        return { ok: false, outcome: Outcome.NotYours, tile: { col, row } };
+      }
+      return { ok: true, outcome: Outcome.Cleared, tile: { col, row } };
     }
-    return { ok: true, outcome: Outcome.Cleared, tile: { col, row } };
+    // A crop she put there herself. The minus spell is the only way to take
+    // one back out of the ground: planting had no undo, so a carrot dropped
+    // on the wrong square stayed there until it was ripe enough to pick.
+    if (this.grid.getCrop(col, row)) {
+      return { ok: true, outcome: Outcome.Cleared, tile: { col, row } };
+    }
+    return { ok: false, outcome: Outcome.NothingThere, tile: { col, row } };
   }
 
-  /** Take it away. Gives back what stood there, so the scene can unmake it. */
-  clearAt(col: number, row: number): PlacedObject | null {
+  /**
+   * Take it away. Gives back what was there, so the scene can unmake it.
+   *
+   * Two things it can be, and the scene has to know which: a tree leaves
+   * wood behind and a crop leaves nothing, and the sprite that has to be
+   * destroyed lives in a different place for each.
+   */
+  clearAt(col: number, row: number): Cleared | null {
     const object = this.grid.getObjectAt(col, row);
-    if (!object || sceneryKind(object.type) === null) return null;
-    return this.grid.removeObjectAt(col, row);
+    if (object) {
+      if (sceneryKind(object.type) === null) return null;
+      const removed = this.grid.removeObjectAt(col, row);
+      return removed ? { kind: "scenery", object: removed } : null;
+    }
+    const crop = this.grid.removeCrop(col, row);
+    return crop ? { kind: "crop", crop } : null;
   }
 
   growAt(col: number, row: number): CropResult {

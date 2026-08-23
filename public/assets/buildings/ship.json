@@ -62,6 +62,7 @@
     2
   ],
   "window_rects_px": [],
+  "sign_rect_px": null,
   "sprite_offset_px": {
     "x": 0,
     "y": -124

@@ -226,11 +226,16 @@ export const EN: Phrases = {
     `Now turn the patch on its side: ${columns} rows of ${rows}. Still ${total}. ${rows} × ${columns} and ${columns} × ${rows} are the same patch seen two ways, so you only ever have to learn half the table.`,
 
   arrayTitle: (rows, columns) => `${rows} × ${columns}`,
-  patchAction: (action) =>
-    action === "plant" ? "plant it" : action === "grow" ? "grow it" : "clear it",
   arrayAsk: "How many in the whole patch?",
   arrayHintRows: (columns, counted) =>
     `Count along by ${columns}: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
+
+  brickTitle: "The wall",
+  brickAsk: "Every brick is the two under it, added up.",
+  brickWrong: "Not that one. Have another look.",
+  brickDone: "That is a wall. Your room is built.",
+  brickHintAdd: "Add the two bricks under it.",
+  brickHintTakeAway: "Take the brick beside it away from the one above.",
 
   hourglassTitle: "The hourglass",
   hourglassAsk: "How many hours were you away?",
