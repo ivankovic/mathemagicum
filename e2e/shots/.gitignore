@@ -1,0 +1,4 @@
+# Pictures a failing scenario left behind, and the dev server it ran
+# against. Not checked in.
+*.png
+*.log
