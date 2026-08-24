@@ -62,3 +62,33 @@ export function tileGrid(width: number, height: number, count: number): TileGrid
     }),
   };
 }
+
+/**
+ * The three steps that make a player, in the order they are asked.
+ *
+ * Here rather than in the scene for the same reason the tile grid is: it is
+ * a rule about what follows what, it has an off-the-end case in each
+ * direction, and both are worth a test rather than a walkthrough.
+ *
+ * The order is the whole design. Language first, because every word of the
+ * two steps after it is written in the answer — a form that asks a child to
+ * read English in order to find the button that stops it being in English
+ * has asked them the wrong thing first.
+ */
+export const MAKING_STEPS = ["tongue", "who", "sums"] as const;
+
+export type MakingStep = (typeof MAKING_STEPS)[number];
+
+/**
+ * Where "next" or "back" goes from here.
+ *
+ * `null` means off the end: forward off the last step is finishing, and back
+ * off the first is leaving without making anybody. Both are the caller's to
+ * act on, because what they mean depends on what is behind this screen —
+ * back off the front of a device with nobody on it has nowhere to go.
+ */
+export function stepFrom(from: MakingStep, by: number): MakingStep | null {
+  const at = MAKING_STEPS.indexOf(from);
+  if (at < 0) return null;
+  return MAKING_STEPS[at + by] ?? null;
+}

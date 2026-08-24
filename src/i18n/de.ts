@@ -315,6 +315,7 @@ export const DE: Phrases = {
 
   playersTitle: "Wer spielt?",
   newPlayer: "Neu",
+  tongueTitle: "Sprache",
   makePlayerTitle: "Wer bist du?",
   namePrompt: "Dein Name",
   skinHeading: "Haut",
@@ -329,6 +330,8 @@ export const DE: Phrases = {
   deleteYes: "Ja, entfernen",
   deleteNo: "Nein, behalten",
   sumsHeading: "Deine Aufgaben",
+  sumsTitle: "Wie groß sind deine Aufgaben?",
+  nextStep: "Weiter",
   gamesHeading: "Spielstände",
   gameWhen: (savedAt) =>
     new Date(savedAt).toLocaleDateString("de-DE", { day: "numeric", month: "short" }),

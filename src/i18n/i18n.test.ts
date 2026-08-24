@@ -135,7 +135,10 @@ function sample(p: Phrases): Record<string, string> {
 
     playersTitle: p.playersTitle,
     newPlayer: p.newPlayer,
+    tongueTitle: p.tongueTitle,
     makePlayerTitle: p.makePlayerTitle,
+    sumsTitle: p.sumsTitle,
+    nextStep: p.nextStep,
     namePrompt: p.namePrompt,
     skinHeading: p.skinHeading,
     hairHeading: p.hairHeading,

@@ -291,7 +291,17 @@ export interface Phrases {
   playersTitle: string;
   /** The tile that makes a new player. */
   newPlayer: string;
-  /** Over the name box and the swatches, when a player is being made. */
+  /**
+   * Over the flags, on the first of the three steps that make a player.
+   *
+   * Written in whatever language the screen is already in, which is not
+   * necessarily one this child reads — so it is one word, and the flags
+   * under it are what actually carries the question. It re-titles itself
+   * the moment a flag is tapped, which is the fastest way to show that the
+   * tap did something.
+   */
+  tongueTitle: string;
+  /** Over the name box and the swatches, on the second step. */
   makePlayerTitle: string;
   namePrompt: string;
   /** The three rows of swatches, and the row of bodies. */
@@ -319,6 +329,17 @@ export interface Phrases {
    * screen they share with their siblings.
    */
   sumsHeading: string;
+  /**
+   * Over the sums, on the third step.
+   *
+   * The title says what is being chosen; the four sums under it say what
+   * the choice *is*. That division is deliberate — a parent looking for
+   * where the difficulty lives needs the word, and a child picking needs
+   * the sums, and neither is served by making the other read the wrong one.
+   */
+  sumsTitle: string;
+  /** Moves on to the next of the three steps. */
+  nextStep: string;
   /** The options row that throws the world away. */
   /** The options row that lists the games saved on this device. */
   gamesHeading: string;

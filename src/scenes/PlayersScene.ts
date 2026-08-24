@@ -39,7 +39,7 @@ import { makeAdditionProblem } from "../spells/addition";
 import { BANDS, DEFAULT_BAND, SUGGESTED_BAND, sampleProblem } from "../spells/difficulty";
 import { GAME_NAME } from "../ui/TitleCard";
 import { flagIcon, uiTextureKey } from "../ui/assets";
-import { HEADER, tileGrid } from "../ui/playersLayout";
+import { HEADER, MAKING_STEPS, type MakingStep, stepFrom, tileGrid } from "../ui/playersLayout";
 import {
   ALL_CHARACTERS,
   DEFAULT_FACING,
@@ -90,17 +90,26 @@ const SWATCH_GAP = 8;
 const ROW_GAP = 26;
 const BODY_CELL = 46;
 const NAME_HEIGHT = 62;
+/** The shortest a sum's box may get, whatever the screen leaves for it. */
 const SUMS_HEIGHT = 32;
-const LANGUAGE_HEIGHT = 30;
-/** Between a flag and the name of the language it stands for. */
-const FLAG_GAP = 8;
-/** Air either side of the language row, so nothing touches the screen edge. */
+/** Air either side of a full-width row, so nothing touches the screen edge. */
 const ROW_MARGIN = 12;
 const BUTTON_HEIGHT = 34;
 /** Air under the last row, so nothing sits against the bottom edge. */
 const FOOTER_ROOM = 64;
 
-type Mode = "list" | "make" | "remove";
+/**
+ * Which screen is up.
+ *
+ * Making a player is three of these rather than one form, in the order a
+ * child can actually answer them: the language first, because everything
+ * after it is written in whatever they pick; then who they are; then how
+ * big their sums are. It used to be one page with all of it stacked down
+ * it, which fitted on a tablet and did not fit on a phone — and worse than
+ * the fitting, it asked a child to read an English form in order to find
+ * the button that would stop it being in English.
+ */
+type Mode = "list" | MakingStep | "remove";
 
 export class PlayersScene extends Phaser.Scene {
   private words!: Phrases;
@@ -173,7 +182,9 @@ export class PlayersScene extends Phaser.Scene {
     this.parts = [];
     const { width, height } = this.scale;
     this.own(this.add.rectangle(0, 0, width, height, GROUND).setOrigin(0, 0).setDepth(-1));
-    if (this.mode === "make") this.renderMaking();
+    if (this.mode === "tongue") this.renderTongue();
+    else if (this.mode === "who") this.renderWho();
+    else if (this.mode === "sums") this.renderSums();
     else this.renderList();
   }
 
@@ -316,21 +327,90 @@ export class PlayersScene extends Phaser.Scene {
     );
   }
 
-  private renderMaking(): void {
+  // --- making a player, in three steps ---------------------------------------
+
+  /**
+   * Step one: which language.
+   *
+   * Flags, big, and the name of each language written the way that language
+   * writes it — "Deutsch", not "German". This is the one screen in the game
+   * that cannot assume its reader can read it: it opens in whatever the last
+   * person to play chose, so a German-reading child meets it in English or
+   * in Croatian, and a row of words would be a row of words they have to get
+   * past before they can ask for their own.
+   *
+   * It is first for the same reason. Everything after this — the name box's
+   * prompt, the swatch headings, the sums — is written in what is picked
+   * here, so picking it here means nothing later has to be guessed at.
+   */
+  private renderTongue(): void {
+    const { width, height } = this.scale;
+    const top = this.heading(this.words.tongueTitle);
+    // The same fitting the faces use: as many across as the width allows at
+    // a size a finger can hit, and taller rows rather than smaller tiles on
+    // a narrow screen.
+    const grid = tileGrid(width, height - top + HEADER, LANGUAGES.length);
+    LANGUAGES.forEach((language, index) => {
+      const at = grid.at(index);
+      this.tongueTile(language, at.x, at.y + top - HEADER, grid.tile);
+    });
+    this.stepButtons(
+      this.words.nextStep,
+      () => this.step(1),
+      () => this.step(-1),
+    );
+  }
+
+  /** One flag, its own name under it, and the whole tile is the target. */
+  private tongueTile(language: Language, x: number, y: number, size: number): void {
+    const chosen = this.draftLanguage === language;
+    const face = this.own(
+      this.add
+        .rectangle(x, y, size, size, TILE_FACE)
+        .setOrigin(0, 0)
+        .setStrokeStyle(chosen ? 3 : 1, chosen ? TILE_HOT : TILE_EDGE)
+        .setInteractive({ useHandCursor: true }),
+    ) as Phaser.GameObjects.Rectangle;
+    face.on("pointerdown", () => {
+      this.draftLanguage = language;
+      // Re-titled on the spot, in the language just chosen. The fastest way
+      // to show a tap did something is for the words above it to change.
+      this.words = phrasesFor(language);
+      this.render();
+    });
+
+    const flag = this.own(
+      this.add
+        .image(x + size / 2, y + size / 2 - LABEL_SIZE, uiTextureKey(flagIcon(language)))
+        .setOrigin(0.5)
+        .setAlpha(chosen ? 1 : 0.6),
+    ) as Phaser.GameObjects.Image;
+    // Grown to the tile rather than drawn at its shipped size, and by a
+    // whole number so the pixels stay square.
+    const room = size - LABEL_SIZE * 2 - 20;
+    flag.setScale(Math.max(1, Math.floor(room / Math.max(flag.width, flag.height))));
+    this.own(
+      this.text(LANGUAGE_NAMES[language], LABEL_SIZE, chosen ? INK : INK_DIM)
+        .setOrigin(0.5, 1)
+        .setPosition(x + size / 2, y + size - 10),
+    );
+  }
+
+  /**
+   * Step two: who are you.
+   *
+   * The portrait, the name box, and the colours — everything that is about
+   * this child rather than about their arithmetic. The preview is the one
+   * thing that gives ground when the screen is short: a phone held upright
+   * has room for the swatches or for a big character, and the swatches are
+   * what the child came here to press.
+   */
+  private renderWho(): void {
     const { width, height } = this.scale;
     const middle = width / 2;
     let y = this.heading(this.words.makePlayerTitle);
 
-    // Everything below is laid out from the top down against the space that
-    // is actually there. The preview is the one thing that can give ground —
-    // a phone held upright has room for the swatches or for a big character,
-    // and the swatches are what the child came here to press.
-    const rows =
-      AVATAR_COLOURS.length * (SWATCH + ROW_GAP) +
-      (BODY_CELL + ROW_GAP) +
-      (SUMS_HEIGHT + ROW_GAP) +
-      (LANGUAGE_HEIGHT + ROW_GAP) +
-      BUTTON_HEIGHT;
+    const rows = AVATAR_COLOURS.length * (SWATCH + ROW_GAP) + (BODY_CELL + ROW_GAP) + BUTTON_HEIGHT;
     const room = height - y - NAME_HEIGHT - rows - FOOTER_ROOM;
     const tall = this.bodySheet(this.draft.body)?.frame_height ?? 48;
     const scale = Math.max(1, Math.min(3, Math.floor(room / tall)));
@@ -346,48 +426,42 @@ export class PlayersScene extends Phaser.Scene {
       y += SWATCH + ROW_GAP;
     }
     this.bodyRow(middle, y);
-    y += BODY_CELL + ROW_GAP;
 
-    // Four sums rather than four ages or the words "easy" and "hard". A
-    // parent can pick by looking and so can a child, and nobody is told they
-    // are on the gentle one — which matters on a screen where a sibling's
-    // tile sits beside theirs.
-    this.sumsRow(middle, y);
-    y += SUMS_HEIGHT + ROW_GAP;
-
-    // Language sits with the avatar because it is the same kind of choice —
-    // something about this child rather than about the device — and because
-    // asking a German-reading child to find it in an options panel written
-    // in English is asking them to read English first.
-    this.languageRow(middle, y);
-    y += LANGUAGE_HEIGHT + ROW_GAP;
-
-    // Directly under the last thing chosen, not pinned to the bottom of the
-    // screen. Pinned, it sat a hand's width below the language row on a
-    // desktop window with a band of empty ground between them, so the button
-    // that finishes the form did not look like part of the form.
-    const footer = y + BUTTON_HEIGHT / 2;
-    // Alone in the middle when it is the only button there. It used to sit
-    // off to the right whether or not anything sat beside it, which nobody
-    // saw while it was pinned to the bottom of the screen and everybody sees
-    // now that it is the last thing in the form.
-    const pair = this.profiles.length > 0;
-    this.button(this.words.startPlaying, pair ? middle + 74 : middle, footer, () =>
-      this.finishMaking(),
+    this.stepButtons(
+      this.words.nextStep,
+      () => {
+        if (!isUsableName(this.draftName)) {
+          // Nothing scolds. The box is simply where the game is waiting,
+          // and a child who taps on with an empty name gets the keyboard
+          // back rather than a sentence telling them what they did wrong.
+          this.nameBox?.focus();
+          return;
+        }
+        this.step(1);
+      },
+      () => this.step(-1),
     );
-    if (pair) {
-      this.button(
-        this.words.neverMind,
-        middle - 74,
-        footer,
-        () => {
-          this.mode = "list";
-          this.hideNameBox();
-          this.render();
-        },
-        TILE_EDGE,
-      );
-    }
+  }
+
+  /**
+   * Step three: how big the sums are.
+   *
+   * Sums rather than ages or the words "easy" and "hard". A parent can pick
+   * by looking and so can a child, and nobody is told they are on the gentle
+   * one — which matters on a screen whose result sits beside a sibling's
+   * tile for the rest of the game.
+   */
+  private renderSums(): void {
+    const { width, height } = this.scale;
+    const middle = width / 2;
+    const top = this.heading(this.words.sumsTitle);
+    const footer = height - FOOTER_ROOM;
+    this.sumsColumn(middle, top, footer - top);
+    this.stepButtons(
+      this.words.startPlaying,
+      () => this.finishMaking(),
+      () => this.step(-1),
+    );
   }
 
   private swatchRow(colour: AvatarColour, centreX: number, y: number): void {
@@ -448,20 +522,29 @@ export class PlayersScene extends Phaser.Scene {
     });
   }
 
-  private sumsRow(centreX: number, y: number): void {
-    this.own(
-      this.text(this.words.sumsHeading, LABEL_SIZE, INK_DIM)
-        .setOrigin(0.5, 1)
-        .setPosition(centreX, y - 4),
+  /**
+   * The four sums, filling what the step gives them.
+   *
+   * A column rather than a row now that the choice has a screen to itself:
+   * four boxes side by side had to be a hundred pixels each to hold
+   * `347 + 265`, which is four hundred pixels of width a phone held upright
+   * does not have. Stacked, every one of them is as wide as the screen and
+   * as tall as a finger.
+   */
+  private sumsColumn(centreX: number, top: number, room: number): void {
+    const cell = Math.max(
+      SUMS_HEIGHT,
+      Math.min(64, (room - SWATCH_GAP * BANDS.length) / BANDS.length),
     );
-    const cell = 100;
+    const width = Math.min(320, this.scale.width - ROW_MARGIN * 2);
     const span = BANDS.length * cell + (BANDS.length - 1) * SWATCH_GAP;
+    const first = top + Math.max(0, (room - span) / 2);
     BANDS.forEach((band, index) => {
-      const x = centreX - span / 2 + index * (cell + SWATCH_GAP);
+      const y = first + index * (cell + SWATCH_GAP);
       const chosen = this.draftBand === index;
       const face = this.own(
         this.add
-          .rectangle(x, y, cell, SUMS_HEIGHT, TILE_FACE)
+          .rectangle(centreX - width / 2, y, width, cell, TILE_FACE)
           .setOrigin(0, 0)
           .setStrokeStyle(chosen ? 3 : 1, chosen ? TILE_HOT : TILE_EDGE)
           .setInteractive({ useHandCursor: true }),
@@ -477,81 +560,59 @@ export class PlayersScene extends Phaser.Scene {
         makeAdditionProblem(createRng(seed), rung),
       );
       this.own(
-        this.text(`${sample.start} + ${sample.addend}`, LABEL_SIZE, chosen ? INK : INK_DIM)
+        this.text(`${sample.start} + ${sample.addend}`, TITLE_SIZE - 6, chosen ? INK : INK_DIM)
           .setOrigin(0.5)
-          .setPosition(x + cell / 2, y + SUMS_HEIGHT / 2),
+          .setPosition(centreX, y + cell / 2),
       );
     });
   }
 
-  private languageRow(centreX: number, y: number): void {
-    // Wider than it was, because there is a flag in it now: ninety-six left
-    // the flag and the longest of the names a pixel short of touching. And
-    // capped to what the screen has, because a third language is a third
-    // more row and a phone does not have it — three tiles at their full
-    // width ran off both edges.
-    const room = this.scale.width - ROW_MARGIN * 2;
-    const wanted = 124;
-    const gaps = (LANGUAGES.length - 1) * SWATCH_GAP;
-    const cell = Math.min(wanted, (room - gaps) / LANGUAGES.length);
-    const span = LANGUAGES.length * cell + gaps;
-    // Measured once, before anything is drawn: the widest name plus a flag
-    // against what one tile has. See the branch below.
-    const flagWidth = this.textures
-      .get(uiTextureKey(flagIcon(LANGUAGES[0] ?? "en")))
-      .getSourceImage().width;
-    const wordless = LANGUAGES.some((language) => {
-      const measure = this.text(LANGUAGE_NAMES[language], LABEL_SIZE, INK);
-      const width = measure.width;
-      measure.destroy();
-      return flagWidth + FLAG_GAP + width > cell - FLAG_GAP;
-    });
-    LANGUAGES.forEach((language, index) => {
-      const x = centreX - span / 2 + index * (cell + SWATCH_GAP);
-      const chosen = this.draftLanguage === language;
-      const face = this.own(
-        this.add
-          .rectangle(x, y, cell, LANGUAGE_HEIGHT, TILE_FACE)
-          .setOrigin(0, 0)
-          .setStrokeStyle(chosen ? 3 : 1, chosen ? TILE_HOT : TILE_EDGE)
-          .setInteractive({ useHandCursor: true }),
-      ) as Phaser.GameObjects.Rectangle;
-      face.on("pointerdown", () => {
-        this.draftLanguage = language;
-        this.words = phrasesFor(language);
-        this.render();
-      });
-      // Flag and name together, centred as one block rather than each in the
-      // middle of the tile — two things both centred are two things on top of
-      // each other.
-      //
-      // The flag is for the child who cannot read either name, which on this
-      // screen is more of them than anywhere else: it is where the language
-      // is still whatever the last person to play chose, so a German-reading
-      // child meets it in English.
-      const label = this.own(
-        this.text(LANGUAGE_NAMES[language], LABEL_SIZE, chosen ? INK : INK_DIM).setOrigin(0.5),
-      ) as Phaser.GameObjects.Text;
-      const flag = this.own(
-        this.add
-          .image(0, 0, uiTextureKey(flagIcon(language)))
-          .setOrigin(0.5)
-          .setAlpha(chosen ? 1 : 0.55),
-      ) as Phaser.GameObjects.Image;
-      const middle = y + LANGUAGE_HEIGHT / 2;
-      if (wordless) {
-        // The flag alone, and for every tile at once rather than only the
-        // one whose name is longest: a row where two tiles keep their word
-        // and the third loses it reads as a tile that failed.
-        label.setVisible(false);
-        flag.setPosition(x + cell / 2, middle);
-        return;
-      }
-      const block = flag.width + FLAG_GAP + label.width;
-      const left = x + cell / 2 - block / 2;
-      flag.setPosition(left + flag.width / 2, middle);
-      label.setPosition(left + flag.width + FLAG_GAP + label.width / 2, middle);
-    });
+  // --- moving between the steps ----------------------------------------------
+
+  /**
+   * Forward or back one step.
+   *
+   * Back off the front of the three is back to the faces, which is what
+   * "never mind" used to be — and it is only ever offered when there are
+   * faces to go back to. On a device with nobody on it, the first step is
+   * where the game starts and there is nothing behind it.
+   *
+   * The name box goes on every move without exception. It is a real HTML
+   * input positioned over the canvas rather than something drawn here, so
+   * nothing about changing what the canvas shows removes it: left behind,
+   * it floats over the flags with the child's half-typed name in it.
+   */
+  private step(by: number): void {
+    if (this.mode === "list" || this.mode === "remove") return;
+    this.hideNameBox();
+    // Off the front is back to the faces, which is what "never mind" used to
+    // be. Off the back cannot happen: the last step's button finishes rather
+    // than steps.
+    this.mode = stepFrom(this.mode, by) ?? "list";
+    this.render();
+  }
+
+  /**
+   * The pair at the foot of every step: on, and back.
+   *
+   * One place rather than three, and pinned to the foot of the screen on all
+   * three. The single form these came from put its buttons directly under
+   * the last row instead, on the argument that a button a hand's width below
+   * the thing it finishes does not look like part of it — which was right
+   * about that form and is wrong about these. Three steps make a *sequence*,
+   * and a "next" that moves up and down the screen between them is a "next"
+   * a child has to find again every time.
+   */
+  private stepButtons(onward: string, go: () => void, back: () => void): void {
+    const { width, height } = this.scale;
+    const middle = width / 2;
+    const y = height - 32;
+    // Nothing behind the first step on a device with nobody on it, so it is
+    // the only screen here that shows one button and centres it.
+    const first = this.mode === MAKING_STEPS[0];
+    const alone = first && this.profiles.length === 0;
+    this.button(onward, alone ? middle : middle + 74, y, go);
+    if (!alone) this.button(this.words.neverMind, middle - 74, y, back, TILE_EDGE);
   }
 
   /**
@@ -673,7 +734,9 @@ export class PlayersScene extends Phaser.Scene {
   }
 
   private beginMaking(): void {
-    this.mode = "make";
+    // At the front of the three. The language is asked first because
+    // everything after it is written in the answer.
+    this.mode = "tongue";
     this.removing = null;
     this.draftName = "";
     this.draftBand = SUGGESTED_BAND;
@@ -684,10 +747,14 @@ export class PlayersScene extends Phaser.Scene {
   }
 
   private finishMaking(): void {
+    // The name is gated on the way out of the step that asks for it, not
+    // here — a child sent back two screens to fill in a box would have to
+    // find out for themselves which box. This stays as the last word on it
+    // because nothing else guarantees the step was walked through rather
+    // than jumped over.
     if (!isUsableName(this.draftName)) {
-      // Nothing scolds. The box is simply where the game is waiting, and a
-      // child who taps "that's me" with an empty name gets the keyboard back
-      // rather than a sentence telling them what they did wrong.
+      this.mode = "who";
+      this.render();
       this.nameBox?.focus();
       return;
     }
@@ -745,14 +812,30 @@ export class PlayersScene extends Phaser.Scene {
    * the question is what the child is being asked, so putting the question
    * first ran a dim line straight through a bright one.
    */
+  /**
+   * The game's name, and what this screen is asking.
+   *
+   * The title shrinks to whatever the screen has. It used to be set at one
+   * size and centred, which held for as long as every title was two short
+   * words — and stopped the moment one of them was a question with a German
+   * translation, which ran off both edges of a phone with its first and last
+   * letters missing. Shrinking rather than wrapping keeps the heading one
+   * line tall, which is what everything below it is measured from.
+   */
   private heading(words: string): number {
     const middle = this.scale.width / 2;
     this.own(this.text(GAME_NAME, LABEL_SIZE, INK_DIM).setOrigin(0.5, 0).setPosition(middle, 10));
-    this.own(
+    const title = this.own(
       this.text(words, TITLE_SIZE, INK)
         .setOrigin(0.5, 0)
         .setPosition(middle, 10 + LABEL_SIZE + 8),
-    );
+    ) as Phaser.GameObjects.Text;
+    const room = this.scale.width - ROW_MARGIN * 2;
+    if (title.width > room) {
+      const smaller = Math.max(LABEL_SIZE, Math.floor((TITLE_SIZE * room) / title.width));
+      title.setFontSize(smaller);
+      title.setPosition(middle, 10 + LABEL_SIZE + 8 + (TITLE_SIZE - smaller) / 2);
+    }
     return 10 + LABEL_SIZE + 8 + TITLE_SIZE + 12;
   }
 

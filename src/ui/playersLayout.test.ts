@@ -3,7 +3,16 @@
 
 import { describe, expect, test } from "bun:test";
 import { MAX_PROFILES } from "../save/profiles";
-import { FOOTER, HEADER, TILE_GAP, TILE_MAX, TILE_MIN, tileGrid } from "./playersLayout";
+import {
+  FOOTER,
+  HEADER,
+  MAKING_STEPS,
+  TILE_GAP,
+  TILE_MAX,
+  TILE_MIN,
+  stepFrom,
+  tileGrid,
+} from "./playersLayout";
 
 // The screens this is actually played on: a phone upright, a phone on its
 // side, a small tablet, a laptop.
@@ -93,5 +102,25 @@ describe("fitting the faces on the screen", () => {
     expect(grid.tile).toBeGreaterThanOrEqual(TILE_MIN);
     expect(grid.columns).toBeGreaterThan(0);
     expect(TILE_GAP).toBeGreaterThan(0);
+  });
+});
+
+describe("the three steps that make a player", () => {
+  test("go language, then who, then sums", () => {
+    expect(MAKING_STEPS).toEqual(["tongue", "who", "sums"]);
+  });
+
+  test("next walks forward and back walks back", () => {
+    expect(stepFrom("tongue", 1)).toBe("who");
+    expect(stepFrom("who", 1)).toBe("sums");
+    expect(stepFrom("sums", -1)).toBe("who");
+    expect(stepFrom("who", -1)).toBe("tongue");
+  });
+
+  // Both ends are the caller's to act on: forward off the last is finishing,
+  // and back off the first is leaving without making anybody.
+  test("and walking off either end says so rather than wrapping", () => {
+    expect(stepFrom("sums", 1)).toBeNull();
+    expect(stepFrom("tongue", -1)).toBeNull();
   });
 });

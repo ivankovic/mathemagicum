@@ -406,6 +406,7 @@ export const HR: Phrases = {
 
   playersTitle: "Tko igra?",
   newPlayer: "Novi igrač",
+  tongueTitle: "Jezik",
   makePlayerTitle: "Tko si ti?",
   namePrompt: "Tvoje ime",
   skinHeading: "Koža",
@@ -421,6 +422,8 @@ export const HR: Phrases = {
   deleteYes: "Da, ukloni",
   deleteNo: "Ne, ostavi",
   sumsHeading: "Tvoji zadaci",
+  sumsTitle: "Koliko su veliki tvoji zadaci?",
+  nextStep: "Dalje",
   gamesHeading: "Igre na ovom uređaju",
   gameWhen: (savedAt) =>
     new Date(savedAt).toLocaleDateString("hr-HR", { day: "numeric", month: "short" }),
