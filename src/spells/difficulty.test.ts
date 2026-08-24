@@ -11,6 +11,7 @@ import {
   HARDEST_RUNG,
   RECENT_CASTS,
   RUNGS,
+  SHARED_TOP_RUNG,
   STUMBLES_TO_EASE,
   SUGGESTED_BAND,
   bandAt,
@@ -37,7 +38,7 @@ describe("the ladder", () => {
   test("every rung asks for at least one jump the child has to make", () => {
     for (const [index, rung] of RUNGS.entries()) {
       expect({ index, ok: rung.given < rung.places }).toEqual({ index, ok: true });
-      expect({ index, ok: rung.places >= 1 && rung.places <= 3 }).toEqual({ index, ok: true });
+      expect({ index, ok: rung.places >= 1 && rung.places <= 6 }).toEqual({ index, ok: true });
     }
   });
 
@@ -61,9 +62,28 @@ describe("the ladder", () => {
 
   // What every player had before any of this existed, and what a saved
   // profile from before it must come back to.
-  test("the top of the ladder is the game as it shipped", () => {
-    expect(rungAt(HARDEST_RUNG)).toEqual({ places: 3, crossing: true, given: 0 });
-    expect(bandAt(DEFAULT_BAND).to).toBe(HARDEST_RUNG);
+  //
+  // No longer the top of the ladder, and that is the point of checking it
+  // here rather than trusting `BANDS.length - 1`: the six-digit band sits
+  // above this one, and a default that followed the end of the list would
+  // have moved every child already playing onto sums nobody chose for them.
+  test("the band a player from before this had still ends where it did", () => {
+    expect(rungAt(SHARED_TOP_RUNG)).toEqual({ places: 3, crossing: true, given: 0 });
+    expect(bandAt(DEFAULT_BAND).to).toBe(SHARED_TOP_RUNG);
+    expect(DEFAULT_BAND).toBeLessThan(BANDS.length - 1);
+  });
+
+  // The ladder above three places is addition getting longer, and nothing
+  // else. Every rung up there carries, because a longer sum that does not
+  // carry is an easier sum than the one below it.
+  test("and the ladder above it grows by places alone", () => {
+    for (const rung of RUNGS.filter((one) => one.places > 3)) {
+      expect({ places: rung.places, crossing: rung.crossing }).toEqual({
+        places: rung.places,
+        crossing: true,
+      });
+    }
+    expect(rungAt(HARDEST_RUNG)).toEqual({ places: 6, crossing: true, given: 0 });
   });
 
   test("a rung index from anywhere is clamped rather than trusted", () => {
@@ -73,7 +93,7 @@ describe("the ladder", () => {
   });
 });
 
-describe("the three bands", () => {
+describe("the bands", () => {
   test("cover the whole ladder between them", () => {
     expect(BANDS[0]?.from).toBe(0);
     expect(BANDS[BANDS.length - 1]?.to).toBe(HARDEST_RUNG);
@@ -127,20 +147,23 @@ describe("the three bands", () => {
     // reason the design states out loud — crops regrow and seeds are free,
     // so the shop is somewhere for the work to go rather than a gate.
     expect(bandAt(DEFAULT_BAND).cropPrice).toBe(350);
-    expect(DEFAULT_BAND).toBe(BANDS.length - 1);
   });
 
   /**
-   * Three, and a crop is worth more the harder the sums are.
+   * A crop is worth more the harder the sums are.
    *
-   * The count is what a playtest asked for: four rows of sums is a row too
-   * many to compare at a glance. The order is the part that was not asked
-   * for and is worth keeping true — the prices used to dip in the middle
-   * (1,00 → 0,50 → …), so the second-easiest band paid least of all, which
-   * is a rule nobody could learn and everybody would notice.
+   * The order is the part worth keeping true — the prices used to dip in the
+   * middle (1,00 → 0,50 → …), so the second-easiest band paid least of all,
+   * which is a rule nobody could learn and everybody would notice.
+   *
+   * The count is no longer asserted. It was three, from a playtest that
+   * found four rows of sums a row too many to compare at a glance — and that
+   * finding was about four rows *side by side* on a page shared with the
+   * name box and the swatches. The choice has a screen of its own now and
+   * the rows are stacked, so the argument that fixed it at three no longer
+   * applies to the screen it was made about.
    */
-  test("there are three of them, and a crop is worth more the harder it gets", () => {
-    expect(BANDS.length).toBe(3);
+  test("a crop is worth more the harder it gets", () => {
     for (let at = 1; at < BANDS.length; at++) {
       const under = BANDS[at - 1];
       const over = BANDS[at];
@@ -334,8 +357,11 @@ describe("where a new player starts", () => {
   // A child who was already playing had one difficulty and it was the
   // hardest. Anything else would restyle their game on the way in.
   test("a player from before any of this keeps the sums they had", () => {
-    expect(bandAt(DEFAULT_BAND).to).toBe(HARDEST_RUNG);
-    expect(rungInBand(bandAt(DEFAULT_BAND), HARDEST_RUNG)).toBe(HARDEST_RUNG);
+    expect(bandAt(DEFAULT_BAND).to).toBe(SHARED_TOP_RUNG);
+    expect(rungInBand(bandAt(DEFAULT_BAND), SHARED_TOP_RUNG)).toBe(SHARED_TOP_RUNG);
+    // And is *not* carried up by the six-digit band being added above them.
+    // A save nobody touched must come back to the sums it left.
+    expect(rungInBand(bandAt(DEFAULT_BAND), HARDEST_RUNG)).toBe(SHARED_TOP_RUNG);
   });
 });
 
@@ -420,28 +446,64 @@ describe("the fence at the edges of the band", () => {
     }
   });
 
-  // The bands are named against the addition ladder, so on a ladder of the
-  // same length they must be exactly the rungs a person picked — no rounding,
-  // no drift. The portal's ladder is that length.
-  test("on a ladder the same length, the fence is the band itself", () => {
+  /**
+   * On a ladder that reaches as far as the bands do, the fence is the band.
+   *
+   * No rounding and no drift: those are the rungs a person picked. True of
+   * the addition ladder by definition, and of the portal's — which is
+   * exactly as long as the addition ladder used to be, and is the ladder
+   * `SHARED_TOP_RUNG` is really describing.
+   *
+   * The six-digit band is the exception, and the only one. Nothing on the
+   * portal's map is a six-digit measurement, so that band stands in for the
+   * hardest one that the shorter ladder can express — see `bandOn`.
+   */
+  test("on a ladder that reaches as far as the bands, the fence is the band", () => {
     for (const chosen of BANDS) {
       expect(bandOn(chosen, HARDEST_RUNG)).toEqual(chosen);
+      if (chosen.from >= SHARED_TOP_RUNG) continue;
       expect(bandOn(chosen, HARDEST_PORTAL_RUNG)).toEqual(chosen);
     }
+    // The window, not the whole band: what a crop is quoted at belongs to
+    // the band a person picked and travels with the child, not with the
+    // ladder being scaled onto.
+    const top = bandOn(bandAt(BANDS.length - 1), HARDEST_PORTAL_RUNG);
+    const stood = bandOn(bandAt(DEFAULT_BAND), HARDEST_PORTAL_RUNG);
+    expect({ from: top.from, to: top.to }).toEqual({ from: stood.from, to: stood.to });
+    expect(top.cropPrice).toBe(bandAt(BANDS.length - 1).cropPrice);
   });
 
-  // Scaling must not reorder anything: a gentler band stays gentler on every
-  // ladder, or an adult moving a child down would be moving them up.
-  test("and a gentler band stays gentler, whichever ladder is asking", () => {
+  /**
+   * Scaling must not reorder anything.
+   *
+   * A gentler band stays gentler on every ladder, or an adult moving a child
+   * down would be moving them up.
+   *
+   * Not *strictly* gentler at the top, and that is the six-digit band again:
+   * on the clock it is the same window as the band below, because the clock
+   * ladder ends at the quarter hour for everybody. Equal is the honest
+   * answer there. Inverted would not be.
+   */
+  test("and a gentler band never becomes harsher, whichever ladder is asking", () => {
     for (const { name, hardest } of LADDERS) {
       for (let at = 1; at < BANDS.length; at++) {
         const under = bandOn(bandAt(at - 1), hardest);
         const over = bandOn(bandAt(at), hardest);
-        expect({ name, at, rising: over.from >= under.from && over.to > under.to }).toEqual({
+        expect({ name, at, rising: over.from >= under.from && over.to >= under.to }).toEqual({
           name,
           at,
           rising: true,
         });
+      }
+    }
+    // And below the six-digit band it does still climb strictly, which is
+    // what stops the check above being satisfied by everything collapsing
+    // onto one window.
+    for (const { name, hardest } of LADDERS) {
+      for (let at = 1; at < DEFAULT_BAND + 1; at++) {
+        const under = bandOn(bandAt(at - 1), hardest);
+        const over = bandOn(bandAt(at), hardest);
+        expect({ name, at, climbing: over.to > under.to }).toEqual({ name, at, climbing: true });
       }
     }
   });
@@ -475,6 +537,14 @@ describe("the fence at the edges of the band", () => {
   // the hardest band tops out exactly there. Fencing them in must not be a
   // way of quietly moving them down.
   test("a child at the very top of the hardest band stays there", () => {
-    expect(nextRung(bandAt(DEFAULT_BAND), HARDEST_RUNG, clean(200))).toBe(HARDEST_RUNG);
+    const hardest = bandAt(BANDS.length - 1);
+    expect(nextRung(hardest, HARDEST_RUNG, clean(200))).toBe(HARDEST_RUNG);
+  });
+
+  // And a child on the band the game shipped at stops where that band stops,
+  // however well they do — the six-digit rungs are above their fence, and
+  // reaching them is somebody's decision rather than a run of clean casts.
+  test("and one on the band the game shipped at stops at three places", () => {
+    expect(nextRung(bandAt(DEFAULT_BAND), SHARED_TOP_RUNG, clean(200))).toBe(SHARED_TOP_RUNG);
   });
 });

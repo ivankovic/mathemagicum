@@ -5,22 +5,34 @@ import { describe, expect, test } from "bun:test";
 import { createRng } from "../world/rng";
 import {
   PLACES,
+  additionPairCount,
   backspace,
   beginCast,
   castResult,
   hintFor,
   isSolved,
   makeAdditionProblem,
+  nthStartForTest,
   problemFor,
   submit,
   typeDigit,
 } from "./addition";
-import { HARDEST_RUNG, RUNGS, rungAt } from "./difficulty";
+import { HARDEST_RUNG, RUNGS, SHARED_TOP_RUNG, rungAt } from "./difficulty";
 
 const SEEDS = Array.from({ length: 200 }, (_, i) => i * 7919 + 3);
 
+/**
+ * Three places, carrying, nothing done for you.
+ *
+ * Named rather than taken from the top of the ladder, which is where these
+ * came from and is no longer the same rung: the ladder runs to six places
+ * now, and a sweep that said "the hardest" quietly started checking that
+ * three-digit assertions held of six-digit sums.
+ */
+const THREE_PLACES = rungAt(SHARED_TOP_RUNG);
+
 function problems() {
-  return SEEDS.map((seed) => makeAdditionProblem(createRng(seed)));
+  return SEEDS.map((seed) => makeAdditionProblem(createRng(seed), THREE_PLACES));
 }
 
 describe("problem generation", () => {
@@ -39,7 +51,7 @@ describe("problem generation", () => {
   // of the puzzle rather than as an easy one.
   test("every jump is a real jump, so every arrow has somewhere to point", () => {
     for (const p of problems()) {
-      expect(p.jumps).toHaveLength(PLACES);
+      expect(p.jumps).toHaveLength(THREE_PLACES.places);
       for (const jump of p.jumps) expect(jump).toBeGreaterThan(0);
     }
   });
@@ -56,7 +68,7 @@ describe("problem generation", () => {
 
   test("the stops are the running total and the last one is the answer", () => {
     for (const p of problems()) {
-      expect(p.stops).toHaveLength(PLACES);
+      expect(p.stops).toHaveLength(THREE_PLACES.places);
       expect(p.stops[0]).toBe(p.start + (p.jumps[0] as number));
       expect(p.stops[1]).toBe((p.stops[0] as number) + (p.jumps[1] as number));
       expect(p.stops[2]).toBe(p.start + p.addend);
@@ -458,9 +470,69 @@ describe("the live box takes only digits the answer could need", () => {
   });
 
   test("at three places it still takes three", () => {
-    const problem = makeAdditionProblem(createRng(2), rungAt(HARDEST_RUNG));
+    const problem = makeAdditionProblem(createRng(2), THREE_PLACES);
     let state = beginCast(problem);
     state = typeDigit(typeDigit(typeDigit(typeDigit(state, 1), 2), 3), 4);
     expect(state.entry).toBe("123");
   });
+});
+
+/**
+ * The counting, against counting.
+ *
+ * `pairsFor` used to build, for every addend, the list of every start that
+ * worked, and take its length as the weight. It now works both out in closed
+ * form — which is what let the six-digit band exist at all, since the list at
+ * six places has of the order of a hundred billion entries in it.
+ *
+ * A rewrite of the thing that decides *which problems exist* is exactly the
+ * kind that passes every test around it while quietly changing the game, so
+ * this is the old way, written out, checked against the new one at every
+ * size the old way can still be run at.
+ */
+describe("counting the pairs without listing them", () => {
+  /** What `pairsFor` used to do, kept here and nowhere else. */
+  function byHand(places: number, crossing: boolean): { addend: number; starts: number[] }[] {
+    const low = places === 1 ? 1 : 10 ** places / 10;
+    const high = 10 ** places - 1;
+    const most = 10 ** places - 1;
+    const ceiling = crossing && places === 1 ? most * 2 : most;
+    const digits = (value: number) => {
+      const out: number[] = [];
+      for (let at = 0; at < places; at++) out.push(Math.floor(value / 10 ** at) % 10);
+      return out;
+    };
+    const out: { addend: number; starts: number[] }[] = [];
+    for (let addend = low; addend <= high; addend++) {
+      const addendDigits = digits(addend);
+      if (addendDigits.some((digit) => digit === 0)) continue;
+      const starts: number[] = [];
+      for (let start = low; start <= Math.min(high, ceiling - addend); start++) {
+        const ok =
+          crossing || digits(start).every((digit, at) => digit + (addendDigits[at] ?? 0) <= 9);
+        if (ok) starts.push(start);
+      }
+      if (starts.length > 0) out.push({ addend, starts });
+    }
+    return out;
+  }
+
+  for (const places of [1, 2, 3]) {
+    for (const crossing of [false, true]) {
+      test(`${places} place${places === 1 ? "" : "s"}, ${crossing ? "carrying" : "not carrying"}`, () => {
+        const listed = byHand(places, crossing);
+        // The same total, which is what the weighted draw picks against.
+        const total = listed.reduce((sum, one) => sum + one.starts.length, 0);
+        expect(additionPairCount(places, crossing)).toBe(total);
+
+        // And the same starts, in the same order — so the k-th start of the
+        // k-th addend is the very same problem it was before. Anything less
+        // and a saved seed would set a different sum than it used to.
+        for (const { addend, starts } of listed) {
+          const rebuilt = starts.map((_, k) => nthStartForTest(places, crossing, addend, k));
+          expect({ addend, rebuilt }).toEqual({ addend, rebuilt: starts });
+        }
+      });
+    }
+  }
 });

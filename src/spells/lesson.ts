@@ -23,7 +23,25 @@ import type { Rung } from "./difficulty";
  * hundreds — and the spell enforces the same order box by box.
  */
 
-/** The pair she works through at the sums the game shipped with. */
+/**
+ * The pair she works through, at the widest the ladder ever asks for.
+ *
+ * Every narrower example is the last few digits of this one, so the sum a
+ * child is shown is recognisably the same sum at every size. Chosen to keep
+ * the properties the three-digit pair was chosen for, all the way up: a
+ * small ones digit so the first jump is the easy one, no zero digit so no
+ * jump lands where it started, and a total that still fits in its width.
+ */
+const WIDEST_START = 342148;
+const WIDEST_ADDEND = 231114;
+const WIDEST_PLACES = String(WIDEST_START).length;
+
+/**
+ * The pair she works through at the sums the game shipped with.
+ *
+ * The last three digits of the pair above, which is checked rather than
+ * asserted by comment — see the test that cuts one to the other.
+ */
 export const LESSON_START = 148;
 export const LESSON_ADDEND = 114;
 
@@ -48,7 +66,7 @@ export const LESSON_EXAMPLE: AdditionProblem = problemFor(LESSON_START, LESSON_A
  * easy one, and no zero digits, so no jump lands where it started.
  */
 export function lessonFor(rung: Rung): AdditionProblem {
-  const size = Math.max(1, Math.min(3, Math.trunc(rung.places)));
+  const size = Math.max(1, Math.min(WIDEST_PLACES, Math.trunc(rung.places)));
   const cut = (value: number) => {
     const digits = String(value).slice(-size);
     // A trailing digit could be a zero, which would make a jump a `+0`. The
@@ -57,8 +75,8 @@ export function lessonFor(rung: Rung): AdditionProblem {
     // example stays recognisably the same sum at every size.
     return Number(digits.replace(/0/g, "1"));
   };
-  const addend = cut(LESSON_ADDEND);
-  let start = cut(LESSON_START);
+  const addend = cut(WIDEST_ADDEND);
+  let start = cut(WIDEST_START);
   if (!rung.crossing) {
     // A worked example that carries, shown to a child whose own sums never
     // do, demonstrates a step they have not been asked for and cannot check.

@@ -8,6 +8,7 @@ import { RUNGS, rungAt } from "./difficulty";
 import {
   type SubtractionProblem,
   makeSubtractionProblem,
+  nthStartForTest,
   pairCountFor,
   subtractionFor,
 } from "./subtraction";
@@ -170,4 +171,58 @@ describe("the parchment reads it as a line like any other", () => {
     }
     expect(cast.index).toBe(problem.jumps.length);
   });
+});
+
+/**
+ * The counting, against counting.
+ *
+ * The same guard addition has, and needed for the same reason: `pairsFor`
+ * used to list every start each amount could be taken from, and now works
+ * the count and the k-th of them out in closed form. This is the old way,
+ * kept here and nowhere else, checked against the new one at every size the
+ * old way can still be run at.
+ *
+ * The no-borrow rule is the more delicate of the two — it strikes out one
+ * start, the amount itself, and it is the smallest — so the order matters as
+ * much as the count and both are checked.
+ */
+describe("counting the pairs without listing them", () => {
+  function byHand(places: number, crossing: boolean): { amount: number; starts: number[] }[] {
+    const low = places === 1 ? 1 : 10 ** places / 10;
+    const high = 10 ** places - 1;
+    const most = 10 ** places - 1;
+    const ceiling = crossing && places === 1 ? most * 2 : most;
+    const digits = (value: number) => {
+      const out: number[] = [];
+      for (let at = 0; at < places; at++) out.push(Math.floor(value / 10 ** at) % 10);
+      return out;
+    };
+    const out: { amount: number; starts: number[] }[] = [];
+    for (let amount = low; amount <= high; amount++) {
+      const takenDigits = digits(amount);
+      if (takenDigits.some((digit) => digit === 0)) continue;
+      const starts: number[] = [];
+      for (let start = low; start <= ceiling; start++) {
+        if (start - amount < 1) continue;
+        const ok = crossing || takenDigits.every((digit, at) => digit <= (digits(start)[at] ?? 0));
+        if (ok) starts.push(start);
+      }
+      if (starts.length > 0) out.push({ amount, starts });
+    }
+    return out;
+  }
+
+  for (const places of [1, 2, 3]) {
+    for (const crossing of [false, true]) {
+      test(`${places} place${places === 1 ? "" : "s"}, ${crossing ? "borrowing" : "not borrowing"}`, () => {
+        const listed = byHand(places, crossing);
+        const total = listed.reduce((sum, one) => sum + one.starts.length, 0);
+        expect(pairCountFor(places, crossing)).toBe(total);
+        for (const { amount, starts } of listed) {
+          const rebuilt = starts.map((_, k) => nthStartForTest(places, crossing, amount, k));
+          expect({ amount, rebuilt }).toEqual({ amount, rebuilt: starts });
+        }
+      });
+    }
+  }
 });

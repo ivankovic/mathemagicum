@@ -115,6 +115,15 @@ export interface DevOptions {
   readonly arrayRung: number | null;
   readonly brickRung: number | null;
   /** Hold the hourglass at one rung of the clock ladder. */
+  /**
+   * `?rung=` — which rung of the *addition* ladder the sums come from.
+   *
+   * The one ladder that had no seam, which was an oversight rather than a
+   * decision: every other spell has one, and this is the ladder the other
+   * five are scaled against. It is also the only way to see a six-digit sum
+   * without climbing sixteen rungs to reach it.
+   */
+  readonly rung: number | null;
   readonly clockRung: number | null;
   /**
    * `?symmetryRung=` — which shape the mirror spell puts on the parchment.
@@ -180,6 +189,7 @@ const NONE: DevOptions = {
   reached: [],
   portalRung: null,
   arrayRung: null,
+  rung: null,
   clockRung: null,
   symmetryRung: null,
   brickRung: null,
@@ -266,6 +276,7 @@ export function parseDevOptions(search: string): DevOptions {
     portalRung: number("portalRung"),
     arrayRung: number("arrayRung"),
     brickRung: number("brickRung"),
+    rung: number("rung"),
     clockRung: number("clockRung"),
     symmetryRung: number("symmetryRung"),
     learned: names(params.get("learned"), ALL_SPELLS),

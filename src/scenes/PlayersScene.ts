@@ -556,8 +556,10 @@ export class PlayersScene extends Phaser.Scene {
       // Built by the spell, never typed out: a sample written by hand is one
       // that can quietly stop matching what that band actually sets, which is
       // the whole basis on which somebody is choosing.
-      const sample = sampleProblem(band, (seed, rung) =>
-        makeAdditionProblem(createRng(seed), rung),
+      const sample = sampleProblem(
+        band,
+        (seed, rung) => makeAdditionProblem(createRng(seed), rung),
+        BANDS[index - 1],
       );
       this.own(
         this.text(`${sample.start} + ${sample.addend}`, TITLE_SIZE - 6, chosen ? INK : INK_DIM)

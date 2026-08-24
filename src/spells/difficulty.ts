@@ -90,10 +90,43 @@ export const RUNGS: readonly Rung[] = [
   { places: 3, crossing: false, given: 0 }, // 142 + 236
   { places: 3, crossing: true, given: 1 }, //  347 + 265, ones done
   { places: 3, crossing: true, given: 0 }, //  347 + 265 — the game as it was
+  // Past three places the ladder changes shape, and deliberately.
+  //
+  // Below here every new size arrives in four rungs: without carries and
+  // with, each of those scaffolded and then not. That is right while the
+  // carry is still being learned — a child meeting two places for the first
+  // time needs somewhere to add 34 and 25 before they are asked for 27 and
+  // 45.
+  //
+  // It is wrong up here. A child who can do `347 + 265` has the method, and
+  // a four-place sum that does not carry is not a step up from a three-place
+  // one that does — it is an easier sum drawn on a longer line, and a rung
+  // that goes backwards is a rung that teaches a child the game is random.
+  // So each new size is two rungs: the same carrying sum with its ones done
+  // for you, and then without.
+  { places: 4, crossing: true, given: 1 }, //  3471 + 2653, ones done
+  { places: 4, crossing: true, given: 0 }, //  3471 + 2653
+  { places: 5, crossing: true, given: 1 }, //  34715 + 26538, ones done
+  { places: 5, crossing: true, given: 0 }, //  34715 + 26538
+  { places: 6, crossing: true, given: 1 }, //  347156 + 265382, ones done
+  { places: 6, crossing: true, given: 0 }, //  347156 + 265382
 ];
 
-/** The hardest rung: what every player had before there was a choice. */
+/** The hardest rung there is. */
 export const HARDEST_RUNG = RUNGS.length - 1;
+
+/**
+ * The hardest rung the other spells' ladders have anything to answer to.
+ *
+ * Three places, carrying, with nothing done for you — which is where the
+ * addition ladder used to end, and it is not a coincidence that it is also
+ * where the *other* ladders end. There is no six-digit way to read a clock
+ * and no six-digit times table; the clock's hardest reading is the quarter
+ * hour whatever a child's sums look like. So the ladder above this point is
+ * addition getting longer, and nothing else in the game has a matching
+ * step. See `bandOn`, which is where that fact is spent.
+ */
+export const SHARED_TOP_RUNG = RUNGS.reduce((last, rung, at) => (rung.places <= 3 ? at : last), 0);
 
 export interface Band {
   /** The rung a child starts on, and the easiest the game may drop them to. */
@@ -152,17 +185,38 @@ export interface Band {
 export const BANDS: readonly Band[] = [
   { from: 0, to: 2, cropPrice: 150 },
   { from: 2, to: 6, cropPrice: 250 },
-  { from: 6, to: HARDEST_RUNG, cropPrice: 350 },
+  { from: 6, to: SHARED_TOP_RUNG, cropPrice: 350 },
+  // Up to six digits, which is as far as this goes.
+  //
+  // The one band that is not about a new *kind* of sum. Everything below it
+  // is a step in method — bridging ten, then two places, then carrying —
+  // and this is the same carrying method run out to numbers a child can
+  // recognise from a price tag or an odometer rather than only from a
+  // worksheet. What it is for is the child who has finished the game's
+  // arithmetic and wants the sums to keep getting bigger; the alternative is
+  // topping out at `347 + 265` and watching nothing change, which is the
+  // thing this whole module was written to avoid.
+  //
+  // Wide, and overlapping the band below it by a rung, for the reason every
+  // band overlaps: picking the neighbouring one is off by a nudge.
+  { from: SHARED_TOP_RUNG, to: HARDEST_RUNG, cropPrice: 450 },
 ];
 
 /**
  * The band a child who was playing before any of this existed is on.
  *
- * The hardest, because that is what the game was: it had one difficulty and
- * it was this one. Anything else here would quietly restyle the sums of
- * every child already playing.
+ * The band that ends on `347 + 265`, because that is what the game was: it
+ * had one difficulty and it was this one.
+ *
+ * **Not the last band, and it must never go back to being written that
+ * way.** It was `BANDS.length - 1`, which was the same number for as long as
+ * the hardest band was the one the game shipped at. The moment a harder band
+ * was added above it that expression silently moved every child already
+ * playing to six-digit sums on their next load — a save nobody touched,
+ * restyled by a constant that looked like it meant "the hardest" and
+ * actually meant "the last one in the list".
  */
-export const DEFAULT_BAND = BANDS.length - 1;
+export const DEFAULT_BAND = BANDS.findIndex((band) => band.to === SHARED_TOP_RUNG);
 
 /**
  * Where the tiles start for somebody making a *new* player.
@@ -172,9 +226,9 @@ export const DEFAULT_BAND = BANDS.length - 1;
  * child given sums that are too easy climbs out within a few casts, while a
  * six-year-old handed `504 + 274` cannot play at all and has no way to say
  * so. So it opens one band up from the gentlest — close enough to the bottom
- * that nobody is stranded, and one tap from either neighbour. With three
- * bands that is the middle one, which is the same sum it opened on when
- * there were four.
+ * that nobody is stranded, and one tap from its easier neighbour. It has
+ * been the second band in the list through every change to how many there
+ * are, and it opens on the same sum it always did.
  */
 export const SUGGESTED_BAND = 1;
 
@@ -202,11 +256,29 @@ export function rungAt(index: number): Rung {
  * gentlest band on the clock is the two easiest readings rather than only
  * the one. On a ladder as long as the addition one — the portal's — it is
  * the identity, and the fence sits on exactly the rungs a person picked.
+ *
+ * **Scaled against `SHARED_TOP_RUNG`, not against `HARDEST_RUNG`.** Those
+ * were the same number until the six-digit band was added, and the
+ * difference between them is a whole class of bug. The other ladders did not
+ * get longer when the addition ladder did — there is no six-digit way to
+ * read a clock — so measuring against the new top would have squeezed every
+ * existing band down the short ladders to make room for a band those ladders
+ * have nothing to put in it. A child on the default band would have come
+ * back to find the hardest clock readings had quietly gone out of reach,
+ * which is precisely what the header of this file promises never happens.
+ *
+ * A band that runs *past* the shared top stands in for the hardest one that
+ * does not. Scaled honestly it would come out as a single rung at the very
+ * top — the degenerate window this function exists to prevent — and the
+ * truthful thing to say about a six-digit child's clock is not "one reading
+ * only" but "the same readings as the band below", because that is where
+ * the clock ladder ends for everybody.
  */
 export function bandOn(band: Band, hardest: number = HARDEST_RUNG): Band {
   if (hardest === HARDEST_RUNG) return band;
-  const onto = (rung: number) => Math.round((rung * hardest) / HARDEST_RUNG);
-  return { ...band, from: onto(band.from), to: onto(band.to) };
+  const stands = band.from >= SHARED_TOP_RUNG ? (BANDS[DEFAULT_BAND] as Band) : band;
+  const onto = (rung: number) => Math.round((rung * hardest) / SHARED_TOP_RUNG);
+  return { ...band, from: onto(stands.from), to: onto(stands.to) };
 }
 
 /**
@@ -294,13 +366,26 @@ export function recordCast(recent: Recent, result: { solved: boolean; clean: boo
  *
  * Not simply the first problem a seed gives, though. That produced `1 + 4`
  * for the gentlest band — a true example and a useless one, because nobody
- * picking between four tiles can tell whether that means sums to nine or
+ * picking between the tiles can tell whether that means sums to nine or
  * sums to five. So several are drawn and the most typical is kept: the one
  * whose starting number sits nearest the middle of the range that band
  * works in.
+ *
+ * **Drawn from where the band starts, unless that is where the band below
+ * starts.** A tile says what a child will meet, and what they meet first is
+ * the floor. The six-digit band broke that: it opens on the same rung the
+ * band below tops out at, so both tiles read as three-digit sums and the
+ * choice between them could not be made by looking — which is the one thing
+ * these tiles have to be good for. A band whose floor is no wider than its
+ * neighbour's shows what it *reaches* instead.
  */
-export function sampleProblem(band: Band, make: (seed: number, rung: Rung) => Sample): Sample {
-  const rung = rungAt(band.from);
+export function sampleProblem(
+  band: Band,
+  make: (seed: number, rung: Rung) => Sample,
+  below?: Band,
+): Sample {
+  const floor = rungAt(band.from);
+  const rung = below && rungAt(below.from).places === floor.places ? rungAt(band.to) : floor;
   const low = rung.places === 1 ? 1 : 10 ** (rung.places - 1);
   const middle = (low + 10 ** rung.places - 1) / 2;
   let best = make(1, rung);

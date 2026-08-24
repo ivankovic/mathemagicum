@@ -28,13 +28,17 @@ import { HARDEST_RUNG, type Rung, rungAt } from "./difficulty";
  */
 
 /**
- * The most jumps a problem is ever broken into: ones, tens, hundreds.
+ * The most jumps a problem is ever broken into.
  *
- * A ceiling now rather than a fixed count — how many a given problem
- * actually has is `problem.jumps.length`, which the difficulty sets. This is
- * what the parchment reserves room for.
+ * A ceiling rather than a fixed count — how many a given problem actually
+ * has is `problem.jumps.length`, which the difficulty sets. This is what the
+ * parchment reserves room for.
+ *
+ * Six since the six-digit band, and the parchment does not simply draw six
+ * of what it drew three of: at that width the boxes and the labels are sized
+ * against how many there are. See `SpellPopup`.
  */
-export const PLACES = 3;
+export const PLACES = 6;
 
 // Re-exported so a caller that already has the spell does not need a second
 // import for the shape of its own result.
@@ -102,10 +106,20 @@ export function runsDown(problem: NumberLine): boolean {
  * So the weight *is* the number of valid starts, and the pair comes out
  * uniform over the problems that actually exist rather than over the
  * addends that happen to be legal.
+ *
+ * **Counted rather than listed.** This used to hold, for every addend, an
+ * array of every start that worked — which is a table of every problem the
+ * game can set, and at three places that is about half a million numbers and
+ * nobody noticed. At six it is of the order of a hundred billion, and the
+ * six-digit band could not have existed while this worked that way.
+ *
+ * It never needed the list. It needed the *count*, and a way to fetch the
+ * k-th of them; both are arithmetic. See `startsFor` and `nthStart`.
  */
 interface Pairs {
+  readonly places: number;
+  readonly crossing: boolean;
   readonly addends: readonly number[];
-  readonly starts: readonly (readonly number[])[];
   readonly weights: readonly number[];
   readonly total: number;
 }
@@ -119,19 +133,86 @@ function digitsOf(value: number, places: number): number[] {
 }
 
 /**
- * The largest answer a rung allows.
+ * How high the answer may go.
  *
  * At two and three places a carry is *internal*: the tens spill into the
- * hundreds and the answer is still as wide as the numbers, which is what
- * keeps the number line the width the parchment draws.
- *
- * At one place there is no such thing. Crossing a ten with single digits
- * means `7 + 5 = 12`, and bridging ten is precisely the exercise at that
+ * hundreds and the answer is still the same width. At one place there is
+ * nothing above the ones for a carry to go into, so `7 + 5` would be
+ * impossible — and that rung exists precisely to teach bridging ten at that
  * size — so the answer is allowed its second digit, and only there.
  */
 function sumCeiling(places: number, crossing: boolean): number {
   const most = 10 ** places - 1;
   return crossing && places === 1 ? most * 2 : most;
+}
+
+/**
+ * How many starts an addend leaves, and what the k-th of them is.
+ *
+ * Two shapes, one per rule, and both are closed form.
+ *
+ * **Crossing** constrains nothing digit by digit — a jump may carry — so the
+ * only rule left is that the answer fits. The starts are the whole run from
+ * the smallest number of this width up to `ceiling - addend`: contiguous, so
+ * the count is a subtraction and the k-th is an addition.
+ *
+ * **Not crossing** constrains each place on its own: `s + d <= 9` there and
+ * nowhere else. The places are independent, so the count is their product,
+ * and the k-th start in counting order is that product read as a mixed-radix
+ * number — most significant place slowest, which is what makes the k-th here
+ * the same start as the k-th of a list built by counting upwards.
+ *
+ * The top place is the one exception, and it is the same exception in both:
+ * its digit cannot be nought, or the number would not be this wide.
+ */
+function startsFor(
+  places: number,
+  crossing: boolean,
+  addend: number,
+  addendDigits: readonly number[],
+): number {
+  const low = places === 1 ? 1 : 10 ** (places - 1);
+  const high = 10 ** places - 1;
+  if (crossing) {
+    return Math.max(0, Math.min(high, sumCeiling(places, crossing) - addend) - low + 1);
+  }
+  let count = 1;
+  for (let at = 0; at < places; at++) {
+    const digit = addendDigits[at] ?? 0;
+    // The top place may not start at nought; every other place may.
+    count *= at === places - 1 ? 9 - digit : 10 - digit;
+  }
+  return Math.max(0, count);
+}
+
+/**
+ * The k-th start, counting from the smallest. See `startsFor`.
+ *
+ * Exported under a second name for the test that checks it against counting,
+ * which is the only thing outside this file with any business knowing that
+ * starts have an order at all.
+ */
+function nthStart(
+  places: number,
+  crossing: boolean,
+  addend: number,
+  addendDigits: readonly number[],
+  k: number,
+): number {
+  const low = places === 1 ? 1 : 10 ** (places - 1);
+  if (crossing) return low + k;
+  const span = (at: number) => (at === places - 1 ? 9 : 10) - (addendDigits[at] ?? 0);
+  const first = (at: number) => (at === places - 1 ? 1 : 0);
+  let rest = k;
+  let start = 0;
+  for (let at = places - 1; at >= 0; at--) {
+    let below = 1;
+    for (let under = at - 1; under >= 0; under--) below *= span(under);
+    const step = Math.floor(rest / below);
+    rest -= step * below;
+    start += (first(at) + step) * 10 ** at;
+  }
+  return start;
 }
 
 function pairsFor(places: number, crossing: boolean): Pairs {
@@ -141,9 +222,7 @@ function pairsFor(places: number, crossing: boolean): Pairs {
 
   const low = places === 1 ? 1 : 10 ** (places - 1);
   const high = 10 ** places - 1;
-  const ceiling = sumCeiling(places, crossing);
   const addends: number[] = [];
-  const starts: number[][] = [];
   const weights: number[] = [];
 
   for (let addend = low; addend <= high; addend++) {
@@ -153,25 +232,26 @@ function pairsFor(places: number, crossing: boolean): Pairs {
     // easy one.
     const addendDigits = digitsOf(addend, places);
     if (addendDigits.some((digit) => digit === 0)) continue;
-
-    const valid: number[] = [];
-    for (let start = low; start <= Math.min(high, ceiling - addend); start++) {
-      if (crossing || noJumpCrosses(digitsOf(start, places), addendDigits)) valid.push(start);
-    }
-    if (valid.length === 0) continue;
+    const count = startsFor(places, crossing, addend, addendDigits);
+    if (count === 0) continue;
     addends.push(addend);
-    starts.push(valid);
-    weights.push(valid.length);
+    weights.push(count);
   }
 
   const pairs: Pairs = {
+    places,
+    crossing,
     addends,
-    starts,
     weights,
     total: weights.reduce((sum, weight) => sum + weight, 0),
   };
   PAIRS.set(key, pairs);
   return pairs;
+}
+
+/** How many pairs a rung can draw from. Worth asking, and worth testing. */
+export function additionPairCount(places: number, crossing: boolean): number {
+  return pairsFor(places, crossing).total;
 }
 
 /**
@@ -205,13 +285,34 @@ export function makeAdditionProblem(rng: Rng, rung: Rung = rungAt(HARDEST_RUNG))
     }
   }
   const addend = pairs.addends[index] as number;
-  const valid = pairs.starts[index] as readonly number[];
-  const start = valid[randInt(rng, 0, valid.length - 1)] as number;
+  // Uniform over the starts this addend leaves, without ever building the
+  // list of them: the k-th is arithmetic. See `nthStart`.
+  const count = pairs.weights[index] as number;
+  const start = nthStart(
+    rung.places,
+    rung.crossing,
+    addend,
+    digitsOf(addend, rung.places),
+    randInt(rng, 0, count - 1),
+  );
   return problemFor(start, addend, rung.places);
 }
 
-/** The same problem from a chosen pair — used by tests and worked examples. */
-export function problemFor(start: number, addend: number, places = PLACES): AdditionProblem {
+/**
+ * The same problem from a chosen pair — used by tests and worked examples.
+ *
+ * How many places it has comes from the addend by default, because that is
+ * what the addend *is*: one jump per digit of it. It used to default to
+ * `PLACES`, which was the same number for as long as the parchment's ceiling
+ * and the shipped example's width were both three — and the moment the
+ * ceiling went to six, every worked example in the game silently grew three
+ * empty jumps of `+0` on the front.
+ */
+export function problemFor(
+  start: number,
+  addend: number,
+  places = String(addend).length,
+): AdditionProblem {
   const jumps = Array.from(
     { length: places },
     (_, at) => (Math.floor(addend / 10 ** at) % 10) * 10 ** at,
@@ -369,4 +470,14 @@ export function hintFor(state: CastState, words: Phrases = EN): string | null {
   if (from === undefined || jump === undefined) return null;
   if (state.attempts === 1) return words.addPlace(state.index, from);
   return words.sumQuestion(from, jump);
+}
+
+/** `nthStart`, for the test that checks the counting against counting. */
+export function nthStartForTest(
+  places: number,
+  crossing: boolean,
+  addend: number,
+  k: number,
+): number {
+  return nthStart(places, crossing, addend, digitsOf(addend, places), k);
 }

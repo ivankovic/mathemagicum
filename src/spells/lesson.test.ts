@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { createRng } from "../world/rng";
 import { PLACES, makeAdditionProblem, problemFor } from "./addition";
-import { HARDEST_RUNG, RUNGS, rungAt } from "./difficulty";
+import { RUNGS, SHARED_TOP_RUNG, rungAt } from "./difficulty";
 import {
   LESSON_ADDEND,
   LESSON_BEATS,
@@ -34,8 +34,11 @@ describe("the worked example", () => {
     for (const jump of LESSON_EXAMPLE.jumps) expect(jump).toBeGreaterThan(0);
   });
 
+  // Three, which is the width of the pair rather than the parchment's
+  // ceiling — the parchment reserves six now, and the shipped example is
+  // still the three-digit sum it always was.
   test("is three jumps, ones then tens then hundreds", () => {
-    expect(LESSON_EXAMPLE.jumps.length).toBe(PLACES);
+    expect(LESSON_EXAMPLE.jumps.length).toBe(3);
     expect(LESSON_EXAMPLE.jumps).toEqual([4, 10, 100]);
     expect(LESSON_EXAMPLE.stops).toEqual([152, 162, 262]);
   });
@@ -49,7 +52,7 @@ describe("the worked example", () => {
   // Built by the same function, so the picture on the teacher's parchment
   // cannot drift from the one on the spell's.
   test("is shaped exactly like a problem the spell rolls", () => {
-    const rolled = makeAdditionProblem(createRng(4));
+    const rolled = makeAdditionProblem(createRng(4), rungAt(SHARED_TOP_RUNG));
     expect(Object.keys(LESSON_EXAMPLE).sort()).toEqual(Object.keys(rolled).sort());
     expect(LESSON_EXAMPLE.jumps.length).toBe(rolled.jumps.length);
   });
@@ -125,11 +128,43 @@ describe("the lesson at every size of sum", () => {
   // The sums the game shipped with are what the hardest rung still teaches:
   // nothing about adding a dial should have restyled the existing lesson.
   test("the hardest rung teaches exactly what it always did", () => {
-    expect(lessonFor(rungAt(HARDEST_RUNG))).toEqual(LESSON_EXAMPLE);
+    // Three places, which is where the shipped example lives — no longer
+    // the top of the ladder, which now runs to six.
+    expect(lessonFor(rungAt(SHARED_TOP_RUNG))).toEqual(LESSON_EXAMPLE);
   });
 
   test("the same sum, cut down — not a different one at every size", () => {
     const ones = RUNGS.map((rung) => lessonFor(rung).addend % 10);
     expect(new Set(ones).size).toBe(1);
+  });
+});
+
+/**
+ * The wide example and the shipped one are the same sum.
+ *
+ * The worked example grows to six places because the sums do, and it grows
+ * by keeping its last digits rather than by becoming a different sum. This
+ * is the join: cut the widest pair to three and the pair the game shipped
+ * with comes out. Written down because the alternative is two constants that
+ * drift, and a teacher demonstrating one sum while the spell sets another.
+ */
+describe("the example at six places", () => {
+  test("is the shipped one with digits in front of it", () => {
+    const wide = lessonFor({ places: 6, crossing: true, given: 0 });
+    expect(String(wide.start).slice(-3)).toBe(String(LESSON_START));
+    expect(String(wide.addend).slice(-3)).toBe(String(LESSON_ADDEND));
+  });
+
+  // The properties the three-digit pair was chosen for, kept all the way up.
+  test("and keeps what made the shipped one a good example", () => {
+    for (const places of [4, 5, 6]) {
+      const wide = lessonFor({ places, crossing: true, given: 0 });
+      expect({ places, jumps: wide.jumps.length }).toEqual({ places, jumps: places });
+      // No jump that lands where it started.
+      for (const jump of wide.jumps) expect(jump).toBeGreaterThan(0);
+      // And an answer that still fits the width it was set at.
+      expect(wide.stops.at(-1)).toBeLessThan(10 ** places);
+      expect(wide.start).toBeGreaterThanOrEqual(10 ** (places - 1));
+    }
   });
 });

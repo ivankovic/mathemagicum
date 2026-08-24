@@ -3915,7 +3915,7 @@ export class GameScene extends Phaser.Scene {
     // A stick still held when the parchment opens never sends its release,
     // and the player walks off the moment the popup closes.
     this.joystick?.release();
-    const rung = rungAt(this.profile.rung);
+    const rung = rungAt(this.dev.rung ?? this.profile.rung);
     this.spellPopup.open(makeAdditionProblem(this.spellRng, rung), rung.given, (result) => {
       if (result.solved) this.growCropAt(col, row);
       this.noteCast(result);
@@ -3985,7 +3985,7 @@ export class GameScene extends Phaser.Scene {
     if (!canUnbuild(inside.plan, cell, growableDoor(parts), this.spokenFor())) return false;
 
     this.joystick?.release();
-    const rung = rungAt(this.profile.rung);
+    const rung = rungAt(this.dev.rung ?? this.profile.rung);
     this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, (result) => {
       if (result.solved) this.takeFloorUp([cell]);
       this.noteCast(result);
@@ -4629,7 +4629,7 @@ export class GameScene extends Phaser.Scene {
       this.openBrickWall(() => done(true));
       return;
     }
-    const rung = rungAt(this.profile.rung);
+    const rung = rungAt(this.dev.rung ?? this.profile.rung);
     const problem =
       action === PatchAction.Grow
         ? makeAdditionProblem(this.spellRng, rung)
@@ -5361,7 +5361,7 @@ export class GameScene extends Phaser.Scene {
     }
     const { col, row } = target.tile;
     this.joystick?.release();
-    const rung = rungAt(this.profile.rung);
+    const rung = rungAt(this.dev.rung ?? this.profile.rung);
     this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, (result) => {
       if (result.solved) this.clearAt(col, row);
       this.noteCast(result);
@@ -5442,6 +5442,12 @@ export class GameScene extends Phaser.Scene {
     // one straight away, walking a child from the bottom of their band to the
     // top in five casts — a ramp rather than an adaptation.
     this.recentCasts = [];
+    // Not while `?rung=` is holding the sums at one setting, for the reason
+    // every other ladder's seam is exempt: the adaptation is computed
+    // against the child's own saved rung rather than the one being looked
+    // at, so a dev session that answered four cleanly would move a real
+    // child up a rung nobody watched them earn.
+    if (this.dev.rung !== null) return;
     this.saveProfileChange({ rung: moved });
     this.applyRung();
   }
@@ -6381,7 +6387,7 @@ export class GameScene extends Phaser.Scene {
    * they were doing yesterday.
    */
   private applyRung(): void {
-    this.lessonPanel?.setRung(rungAt(this.profile.rung));
+    this.lessonPanel?.setRung(rungAt(this.dev.rung ?? this.profile.rung));
   }
 
   private applySettings(next: Settings): void {

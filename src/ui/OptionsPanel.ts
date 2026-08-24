@@ -57,6 +57,8 @@ const CHOSEN_HEX = 0xc8901c;
 
 const TITLE_SIZE = 17;
 const ROW_SIZE = 13;
+/** The smallest a row's words may be set before they stop being words. */
+const ROW_SIZE_MIN = 8;
 const SMALL_SIZE = 12;
 
 const BUTTON_H = 32;
@@ -198,8 +200,10 @@ export class OptionsPanel {
     for (const [index, band] of BANDS.entries()) {
       // Built by the spell, so a label here cannot drift from what the band
       // sets — the same discipline as the teacher's worked example.
-      const sample = sampleProblem(band, (seed, rung) =>
-        makeAdditionProblem(createRng(seed), rung),
+      const sample = sampleProblem(
+        band,
+        (seed, rung) => makeAdditionProblem(createRng(seed), rung),
+        BANDS[index - 1],
       );
       this.bandChoices.push(
         this.choice(`${sample.start} + ${sample.addend}`, () => this.chooseBand(index)),
@@ -510,9 +514,23 @@ export class OptionsPanel {
       const icon = this.iconOf.get(button.box);
       return Boolean(icon?.beside) && this.blockWidth(button) > width - LABEL_GAP;
     });
+    // And one type size for the whole row, on the same argument. A wordless
+    // button is only an option where a picture says the same thing, which is
+    // true of the flags and is not true of a row of sums — so a row whose
+    // longest word will not fit is set smaller rather than emptied.
+    //
+    // It is the six-digit band that asks for this: `557269 + 168594` is
+    // twice the width of `5 + 2`, and set at one size the two of them either
+    // overflow the panel or waste three quarters of it.
+    const shown = buttons.slice(0, count).filter((button) => !this.iconOf.get(button.box)?.beside);
+    const widest = Math.max(0, ...shown.map((button) => button.label.width));
+    const room = width - LABEL_GAP * 2;
+    const size =
+      widest > room ? Math.max(ROW_SIZE_MIN, Math.floor((ROW_SIZE * room) / widest)) : ROW_SIZE;
     for (const [i, value] of values.entries()) {
       const button = buttons[i];
       if (!button) continue;
+      if (!this.iconOf.get(button.box)?.beside) button.label.setFontSize(size);
       const x = rect.left + PAD + (width + BUTTON_GAP) * i + width / 2;
       this.place(button, x, y + BUTTON_H / 2, width, BUTTON_H, tight);
       button.box.setStrokeStyle(2, value === chosen ? CHOSEN_HEX : INK_HEX);

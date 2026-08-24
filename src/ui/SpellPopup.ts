@@ -65,8 +65,15 @@ const HINT_SIZE = 12;
 
 // How tall each arc rises, by place. The line is schematic, so this is the
 // only thing left that can say a hundreds jump is bigger than a ones jump —
-// and saying it is the point of drawing the three separately at all.
-const ARC_HEIGHTS = [26, 40, 54];
+// and saying it is the point of drawing them separately at all.
+//
+// The steps get smaller as they go, which they did not have to while there
+// were three of them. Kept at fourteen apiece a sixth arc would rise a
+// hundred and ten pixels, which is a third of the parchment spent on the
+// gap above one arrow. What has to survive is the *order* — each arc taller
+// than the last, so the jumps read as growing — and that survives a step of
+// four as well as a step of fourteen.
+const ARC_HEIGHTS = [26, 40, 54, 64, 71, 76];
 const ARC_SEGMENTS = 28;
 const ARC_TOP = ARC_HEIGHTS[ARC_HEIGHTS.length - 1] as number;
 
@@ -76,6 +83,12 @@ const LINE_GAP = 9;
 
 const BOX_W = 52;
 const BOX_H = 26;
+/** The narrowest a box may get before a six-digit number stops being legible. */
+const BOX_MIN_W = 40;
+/** How wide one character of the monospace face is, as a share of its size. */
+const CHAR_W = 0.62;
+/** Air between two boxes, so six of them do not read as one long strip. */
+const BOX_GAP = 3;
 const KEY_GAP = 6;
 const KEY_COLS = 5;
 const KEY_ROWS = 3;
@@ -363,7 +376,13 @@ export class SpellPopup {
 
     // The keypad takes what it needs from the bottom, bounded so the number
     // line always keeps enough room to draw its tallest arc plus its boxes.
-    const lineBlockMin = ARC_TOP + BOX_H + LINE_GAP + 20;
+    //
+    // This problem's tallest arc, not the tallest there is. Reserving for
+    // six arcs on a one-jump sum would take sixty pixels off the keypad of
+    // every child in the gentlest band to make room for a picture nobody in
+    // it will ever be shown.
+    const arcCeiling = (ARC_HEIGHTS[state.problem.jumps.length - 1] ?? ARC_TOP) as number;
+    const lineBlockMin = arcCeiling + BOX_H + LINE_GAP + 20;
     const spare =
       innerH - TITLE_SIZE - 10 - HINT_SIZE - 8 - lineBlockMin - KEY_GAP * (KEY_ROWS - 1);
     const keySize = Math.max(
@@ -405,6 +424,26 @@ export class SpellPopup {
     // parchment that destroyed and rebuilt its boxes every cast would be
     // rebuilding them mid-animation.
     const places = problem.jumps.length;
+    // How wide a box can be and still leave room for the next one. At three
+    // jumps this is `BOX_W` and nothing below changes; at six it is not, and
+    // the difference is the whole of what makes a six-digit sum drawable on
+    // a phone.
+    const boxW = Math.max(
+      BOX_MIN_W,
+      Math.min(BOX_W, Math.floor((panelW - PAD * 2) / places) - BOX_GAP),
+    );
+    // And how big the digits in it can be. The widest thing a box ever holds
+    // is the last stop, which is as many digits as the sum has places — so
+    // the type is sized against the number rather than against the box, and
+    // a six-digit answer is the case that decides it.
+    const boxSize = Math.min(
+      BOX_SIZE,
+      Math.floor((boxW - 6) / (String(problem.stops.at(-1) ?? 0).length * CHAR_W)),
+    );
+    // The jump labels sit between two stops, so what they have is the gap
+    // rather than the box: `+100000` is seven characters and the gap at six
+    // places is not seven characters wide at full size.
+    const labelSize = Math.min(LABEL_SIZE, BOX_SIZE);
     // The arcs get taller as they go, so a short line uses the low ones and
     // reserves the height it actually needs. Measuring from ARC_TOP instead
     // left about thirty pixels of empty parchment above a single small arc.
@@ -412,8 +451,8 @@ export class SpellPopup {
     const blockH = arcTop + LINE_GAP + BOX_H;
     const blockTop = contentTop + Math.max(0, (contentBottom - contentTop - blockH) / 2);
     const lineY = Math.round(blockTop + arcTop);
-    const lineLeft = left + PAD + BOX_W / 2;
-    const lineRight = left + panelW - PAD - BOX_W / 2;
+    const lineLeft = left + PAD + boxW / 2;
+    const lineRight = left + panelW - PAD - boxW / 2;
     const spacing = (lineRight - lineLeft) / places;
     // Subtraction runs the other way along the page, and it has to: a number
     // line has smaller numbers to the left, so drawing 988 at the left edge
@@ -432,7 +471,10 @@ export class SpellPopup {
       this.ink.lineBetween(stopX(i), lineY - 4, stopX(i), lineY + 4);
     }
 
-    this.startLabel.setText(String(problem.start)).setPosition(stopX(0), lineY + LINE_GAP);
+    this.startLabel
+      .setText(String(problem.start))
+      .setFontSize(boxSize)
+      .setPosition(stopX(0), lineY + LINE_GAP);
 
     // Curves first, then every head — not one arc at a time. Consecutive
     // jumps share a landing point, so an arc drawn whole would have the next
@@ -469,13 +511,21 @@ export class SpellPopup {
       const active = i === state.index;
 
       const jumpLabel = this.jumpLabels[i];
-      jumpLabel?.setText(`${runsDown(problem) ? "−" : "+"}${problem.jumps[i]}`);
+      const written = `${runsDown(problem) ? "−" : "+"}${problem.jumps[i]}`;
+      jumpLabel?.setText(written);
+      // Shrunk to the space between the two stops it belongs to, so a
+      // `+100000` over a narrow arc does not run into its neighbours.
+      jumpLabel?.setFontSize(
+        Math.max(9, Math.min(labelSize, Math.floor((spacing - 4) / (written.length * CHAR_W)))),
+      );
       jumpLabel?.setPosition((from + to) / 2, lineY - rise - 3);
       jumpLabel?.setColor(solved ? DONE_INK : INK);
 
       const box = this.boxes[i];
       const text = this.boxTexts[i];
+      box?.setSize(boxW, BOX_H);
       box?.setPosition(to, lineY + LINE_GAP + BOX_H / 2);
+      text?.setFontSize(boxSize);
       text?.setPosition(to, lineY + LINE_GAP + BOX_H / 2);
       if (solved) {
         box?.setStrokeStyle(2, DONE_HEX);

@@ -31,9 +31,16 @@ export interface SubtractionProblem extends NumberLine {
   readonly taken: number;
 }
 
+/**
+ * What each amount may be taken from, counted rather than listed.
+ *
+ * The mirror of addition's `Pairs`, and it lost its list of starts for the
+ * same reason: the list is a table of every problem the spell can set, which
+ * at three places nobody noticed and at six places cannot be built. The
+ * weight is a count and the k-th start is arithmetic. See `startsFor`.
+ */
 interface Pairs {
   readonly taken: readonly number[];
-  readonly starts: readonly (readonly number[])[];
   readonly weights: readonly number[];
   readonly total: number;
 }
@@ -72,6 +79,65 @@ function noJumpBorrows(startDigits: readonly number[], takenDigits: readonly num
   return takenDigits.every((digit, at) => digit <= (startDigits[at] ?? 0));
 }
 
+/**
+ * How many starts an amount may be taken from, and what the k-th of them is.
+ *
+ * Two shapes, one per rule, and both closed form — the mirror of addition's,
+ * with the harder rule on the other side.
+ *
+ * **Borrowing** constrains nothing place by place, so what is left is the
+ * run from the smallest number of this width up to the ceiling, with
+ * anything that would land on nought or below cut off the bottom of it.
+ * Contiguous, so the count is a subtraction and the k-th is an addition.
+ *
+ * **Not borrowing** constrains each place on its own — `s >= d` there, and
+ * nowhere else — so the places are independent and the count is their
+ * product. One start is then struck out: the one whose every digit equals
+ * the amount's, which is the amount itself, and which would land on nought.
+ * It is the *smallest* of them, so striking it out is a shift of one, and
+ * the k-th start is the (k+1)-th mixed-radix number.
+ *
+ * The top place needs no exception here. Its digit is at least the amount's,
+ * which is never nought, so a number of the right width comes out for free.
+ */
+function startsFor(
+  places: number,
+  crossing: boolean,
+  amount: number,
+  takenDigits: readonly number[],
+): number {
+  const low = places === 1 ? 1 : 10 ** (places - 1);
+  const ceiling = startCeiling(places, crossing);
+  if (crossing) return Math.max(0, ceiling - Math.max(low, amount + 1) + 1);
+  let count = 1;
+  for (let at = 0; at < places; at++) count *= 10 - (takenDigits[at] ?? 0);
+  // Less the amount itself, which is the one start that leaves nothing.
+  return Math.max(0, count - 1);
+}
+
+/** The k-th start, counting from the smallest. See `startsFor`. */
+function nthStart(
+  places: number,
+  crossing: boolean,
+  amount: number,
+  takenDigits: readonly number[],
+  k: number,
+): number {
+  const low = places === 1 ? 1 : 10 ** (places - 1);
+  if (crossing) return Math.max(low, amount + 1) + k;
+  // Shifted past the amount itself, which is the smallest and is struck out.
+  let rest = k + 1;
+  let start = 0;
+  for (let at = places - 1; at >= 0; at--) {
+    let below = 1;
+    for (let under = at - 1; under >= 0; under--) below *= 10 - (takenDigits[under] ?? 0);
+    const step = Math.floor(rest / below);
+    rest -= step * below;
+    start += ((takenDigits[at] ?? 0) + step) * 10 ** at;
+  }
+  return start;
+}
+
 function pairsFor(places: number, crossing: boolean): Pairs {
   const key = `${places}:${crossing}`;
   const cached = PAIRS.get(key);
@@ -79,9 +145,7 @@ function pairsFor(places: number, crossing: boolean): Pairs {
 
   const low = places === 1 ? 1 : 10 ** (places - 1);
   const high = 10 ** places - 1;
-  const ceiling = startCeiling(places, crossing);
   const taken: number[] = [];
-  const starts: number[][] = [];
   const weights: number[] = [];
 
   for (let amount = low; amount <= high; amount++) {
@@ -90,30 +154,29 @@ function pairsFor(places: number, crossing: boolean): Pairs {
     // number it came from reads as a piece missing rather than as an easy one.
     const takenDigits = digitsOf(amount, places);
     if (takenDigits.some((digit) => digit === 0)) continue;
-
-    const valid: number[] = [];
-    for (let start = low; start <= ceiling; start++) {
-      // Never below one. Nought is a fine answer arithmetically and a poor
-      // one here — the line would end where it has no room to draw a stop,
-      // and "how many are left" is a question about something rather than
-      // nothing.
-      if (start - amount < 1) continue;
-      if (crossing || noJumpBorrows(digitsOf(start, places), takenDigits)) valid.push(start);
-    }
-    if (valid.length === 0) continue;
+    const count = startsFor(places, crossing, amount, takenDigits);
+    if (count === 0) continue;
     taken.push(amount);
-    starts.push(valid);
-    weights.push(valid.length);
+    weights.push(count);
   }
 
   const pairs: Pairs = {
     taken,
-    starts,
     weights,
     total: weights.reduce((sum, weight) => sum + weight, 0),
   };
   PAIRS.set(key, pairs);
   return pairs;
+}
+
+/** `nthStart`, for the test that checks the counting against counting. */
+export function nthStartForTest(
+  places: number,
+  crossing: boolean,
+  amount: number,
+  k: number,
+): number {
+  return nthStart(places, crossing, amount, digitsOf(amount, places), k);
 }
 
 /** How many pairs a rung can draw from. Used by the tests, and worth asking. */
@@ -145,13 +208,30 @@ export function makeSubtractionProblem(
     }
   }
   const amount = pairs.taken[index] as number;
-  const valid = pairs.starts[index] as readonly number[];
-  const start = valid[randInt(rng, 0, valid.length - 1)] as number;
+  // Uniform over the starts this amount leaves, without ever building the
+  // list of them: the k-th is arithmetic. See `nthStart`.
+  const count = pairs.weights[index] as number;
+  const start = nthStart(
+    rung.places,
+    rung.crossing,
+    amount,
+    digitsOf(amount, rung.places),
+    randInt(rng, 0, count - 1),
+  );
   return subtractionFor(start, amount, rung.places);
 }
 
-/** The same problem from a chosen pair — used by tests and worked examples. */
-export function subtractionFor(start: number, taken: number, places = PLACES): SubtractionProblem {
+/**
+ * The same problem from a chosen pair — used by tests and worked examples.
+ *
+ * As wide as what is taken away, for the reason addition's is as wide as its
+ * addend: one jump per digit. See `problemFor`.
+ */
+export function subtractionFor(
+  start: number,
+  taken: number,
+  places = String(taken).length,
+): SubtractionProblem {
   const jumps = Array.from(
     { length: places },
     (_, at) => (Math.floor(taken / 10 ** at) % 10) * 10 ** at,
