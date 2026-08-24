@@ -34,8 +34,10 @@ export const Spell = {
   Portal: "portal",
   /** Multiplication, as rows and columns. Plants a patch in one go. */
   Array: "array",
-  /** Telling the time. Pays out what grew while nobody was playing. */
+  /** Telling the time. Winds the world's clock to wherever you point it. */
   Hourglass: "hourglass",
+  /** Folding a shape in half: the first geometry about a whole figure. */
+  Mirror: "mirror",
 } as const;
 
 export type Spell = (typeof Spell)[keyof typeof Spell];
@@ -46,6 +48,7 @@ export const SPELLS: readonly Spell[] = [
   Spell.Portal,
   Spell.Array,
   Spell.Hourglass,
+  Spell.Mirror,
 ];
 
 /**
@@ -67,9 +70,17 @@ export const TAUGHT_BY: Partial<Record<Spell, string>> = {
   // is the point: the forest has no village and nobody lives there, so a
   // teacher who was a person would have needed a house built round them.
   [Spell.Array]: "great-tree",
-  // Up the mountain, in the dome. The third teacher who is not in the
-  // village, and the furthest from it by construction.
-  [Spell.Hourglass]: "astronomer",
+  // Beside the tower in the city, under the one clock in the world that
+  // shows the hour to everybody at once. A spell about telling the time
+  // belongs with the thing that tells it — which is also why it is no
+  // longer the astronomer's: hers is up a mountain, and the child who wants
+  // to know what o'clock it is is standing in the plaza.
+  [Spell.Hourglass]: "clockmaker",
+  // Up the mountain, in the dome. The astronomer keeps the one instrument
+  // in the game that is about *shape* rather than about quantity, and she
+  // is the teacher furthest from the village by construction — so what she
+  // teaches ought to be the thing least like the arithmetic below.
+  [Spell.Mirror]: "astronomer",
 };
 
 export function knowsSpell(learned: Iterable<string>, spell: Spell): boolean {

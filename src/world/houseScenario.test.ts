@@ -65,6 +65,9 @@ const SIZES = {
   [DecorType.Chair]: { cols: 1, rows: 1 },
   [DecorType.Rug]: { cols: 2, rows: 2 },
   [DecorType.Bookshelf]: { cols: 1, rows: 1 },
+  // The fire, which is furniture now: a stove stands on the floor where a
+  // fireplace was built into the wall.
+  [DecorType.Stove]: { cols: 1, rows: 1 },
 };
 
 /** The arrangement the cottage ships with, in the same cells the sidecar has. */

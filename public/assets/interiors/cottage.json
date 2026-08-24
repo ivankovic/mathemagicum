@@ -63,10 +63,6 @@
     ],
     [
       1,
-      2
-    ],
-    [
-      1,
       6
     ],
     [
@@ -148,13 +144,13 @@
   ],
   "furniture": [
     {
-      "name": "fireplace",
+      "name": "stove",
       "cell": [
         1,
         1
       ],
       "footprint": [
-        2,
+        1,
         1
       ],
       "blocks": true

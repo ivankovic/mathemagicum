@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { CURRENCY } from "../shop/currency";
-import { maxSaleCount } from "../shop/payment";
+import { CURRENCY, coinsFor } from "../shop/currency";
+import { MOST_COUNTER_COINS } from "../shop/tender";
+import { DECOR_TYPES, DecorType, decorItem } from "./decor";
 import { type FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import type { Inventory, ItemType } from "./inventory";
 import { MATERIAL_TYPES, type MaterialType } from "./materials";
@@ -100,11 +101,53 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
   flowerpot: 2,
 };
 
-export const SHOP_STOCK: readonly FixtureType[] = PLACEABLE_FIXTURES;
+/**
+ * What the house is furnished with, priced in crops like everything else.
+ *
+ * The furniture was in the game before it was in the shop: a child could
+ * pick up the bed they were given, carry it and put it down again, but there
+ * was no way to come by a second one. So a room could be rearranged and
+ * never added to, which is half a feature.
+ *
+ * Priced against the garden's: a chair costs what a fence does and a bed
+ * costs what a bench and a scarecrow do together. Nothing here is more than
+ * the lamp, because the lamp is the thing worth saving for.
+ */
+const FURNITURE_COST_IN_CROPS: Record<DecorType, number> = {
+  [DecorType.Chair]: 2,
+  [DecorType.Rug]: 3,
+  [DecorType.Table]: 4,
+  [DecorType.Bookshelf]: 5,
+  [DecorType.Bed]: 6,
+  // The fire costs most, which is the one price here that is about what a
+  // thing *does* rather than how big it is: a room without a stove is a room
+  // with no light in it after dark.
+  [DecorType.Stove]: 8,
+};
 
-export function priceOf(fixture: FixtureType, cropPrice: CropPrice = CROP_PRICE): number {
-  const crops = COST_IN_CROPS[fixture];
-  if (!Number.isFinite(crops)) throw new Error(`${fixture} is not for sale`);
+export const SHOP_STOCK: readonly FixtureType[] = PLACEABLE_FIXTURES;
+export const FURNITURE_STOCK: readonly DecorType[] = DECOR_TYPES;
+
+/**
+ * Anything the store sells.
+ *
+ * One type rather than two because everything downstream of the price — how
+ * many are affordable, what the counter says, what the heading reads — asks
+ * the same question of both, and a parallel set of functions for furniture
+ * would be the same code with a different word in it.
+ */
+export type Buyable = FixtureType | DecorType;
+
+/** Whether this is a piece of furniture rather than a thing for the garden. */
+export function isFurniture(thing: Buyable): thing is DecorType {
+  return (DECOR_TYPES as readonly string[]).includes(thing);
+}
+
+export function priceOf(thing: Buyable, cropPrice: CropPrice = CROP_PRICE): number {
+  const crops = isFurniture(thing)
+    ? FURNITURE_COST_IN_CROPS[thing]
+    : COST_IN_CROPS[thing as FixtureType];
+  if (!Number.isFinite(crops)) throw new Error(`${thing} is not for sale`);
   return crops * cropPrice;
 }
 
@@ -205,14 +248,18 @@ export function sellCrops(
 export function buyStock(
   inventory: Inventory,
   purse: Purse,
-  fixture: FixtureType,
+  thing: Buyable,
   count: number,
   cropPrice: CropPrice = CROP_PRICE,
+  look = 0,
 ): Trade {
   if (!Number.isInteger(count) || count <= 0) return { ok: false, amount: 0 };
-  const price = priceOf(fixture, cropPrice) * count;
+  const price = priceOf(thing, cropPrice) * count;
   if (!purse.spend(price)) return { ok: false, amount: 0 };
-  inventory.add(fixture, count);
+  // What is paid for and what goes in the basket are the same thing for a
+  // fence and are not for a chair: furniture is bought in a colour, and the
+  // colour is part of what she owns rather than a label on it.
+  inventory.add(isFurniture(thing) ? decorItem(thing, look) : thing, count);
   return { ok: true, amount: price };
 }
 
@@ -229,28 +276,47 @@ export function buyStock(
  * purse: a hundred carrots is a hundred coins to count out.
  */
 export function mostBuyable(
-  fixture: FixtureType,
+  thing: Buyable,
   coins: number,
   cropPrice: CropPrice = CROP_PRICE,
 ): number {
-  const each = priceOf(fixture, cropPrice);
+  const each = priceOf(thing, cropPrice);
   const affordable = each > 0 ? Math.floor(coins / each) : MAX_TRADE;
-  return Math.max(1, Math.min(MAX_TRADE, affordable));
+  const room = Math.max(1, Math.min(MAX_TRADE, affordable));
+  // And capped again by what the counter can hold, the same way a sale is
+  // capped by what the shopkeeper can count out of her drawer. Ten lamps is
+  // a sum a purse can afford and forty coins to lay down one at a time.
+  //
+  // Stops at the first count that does not fit rather than the largest that
+  // does, because the quantity picker steps through every number on the way
+  // and a range with a hole in it has a broken step in it.
+  let most = 1;
+  for (let count = 1; count <= room; count++) {
+    if (coinsFor(CURRENCY, each * count).length > MOST_COUNTER_COINS) break;
+    most = count;
+  }
+  return most;
 }
 
 /**
- * And the largest she can sell: what is in the basket, capped by what the
- * shopkeeper can actually count out of her own drawer.
+ * And the largest she can sell: what is in the basket, and nothing else.
  *
- * The second half is `maxSaleCount`'s, and it is the one that surprises: a
- * payment she cannot make in coins is a payment that cannot happen, however
- * many carrots are on the counter.
+ * There were two limits on top of that and both are gone. A flat ten was
+ * the buying limit wearing the wrong hat — a purchase is coins the *child*
+ * lays down one at a time, a sale is counted out by the shopkeeper — and
+ * after that, a limit on how many coins would fit on the table.
+ *
+ * The second one went when large payments started being counted out in
+ * piles rather than coin by coin. Four denominations make at most four
+ * piles however much money there is, so there is no size of sale the table
+ * cannot show and no size a child cannot check: six piles of five ducats is
+ * a multiplication, and a multiplication does not get harder as the number
+ * grows the way counting forty discs does.
  */
 export function mostSellable(
   item: ItemType,
   held: number,
   cropPrice: CropPrice = CROP_PRICE,
 ): number {
-  const stock = Math.max(1, Math.min(MAX_TRADE, held));
-  return maxSaleCount(CURRENCY, sellPriceOf(item, cropPrice), stock);
+  return Math.max(1, held);
 }

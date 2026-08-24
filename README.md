@@ -68,8 +68,9 @@ OUT=../asset-generator/output
 cp $OUT/terrain_atlas/terrain*.{png,json} public/assets/terrain/
 cp $OUT/terrain_cliffs/cliffs*.{png,json} public/assets/cliffs/
 cp $OUT/terrain_buildings/{cottage,barn,tower,schoolhouse}{.json,_sheet.png} public/assets/buildings/
-for c in player player-bun player-trousers player-short \
-         teacher postal-worker shopkeeper villager-0 villager-1 villager-2; do
+for c in player player-bun player-trousers player-short player-broad player-crop \
+         teacher postal-worker shopkeeper geometer astronomer clockmaker \
+         villager-0 villager-1 villager-2; do
   cp "$OUT/terrain_characters/$c.json" "$OUT/terrain_characters/${c}_sheet.png" \
      public/assets/characters/
 done
@@ -91,7 +92,8 @@ for t in grass woodland dirt hilly mountain sand; do
   cp $OUT/terrain_objects/$t{.json,_sheet.png} public/assets/objects/
 done
 cp $OUT/ui/{ui.json,parchment_fill.png,parchment_frame.png}    public/assets/ui/
-cp $OUT/ui/{spellbook.png,rune_add.png,seed_pouch.png,basket.png,crate.png,map_wall.png} public/assets/ui/
+cp $OUT/ui/{spellbook.png,seed_pouch.png,basket.png,crate.png,map_wall.png} public/assets/ui/
+cp $OUT/ui/rune_*.png                                              public/assets/ui/
 cp $OUT/ui/{crop_*.png,item_*.png,coin_*.png}                     public/assets/ui/
 bun test   # src/world/assets.test.ts checks the sync
 ```

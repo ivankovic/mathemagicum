@@ -34,7 +34,6 @@ import {
   readPlans,
   restorePlayer,
   restoreWorld,
-  savedAtOf,
   snapshotGame,
   snapshotPlayer,
   worldBaseline,
@@ -48,15 +47,7 @@ import {
   settingsWithOverrides,
   writeSettings,
 } from "../settings";
-import {
-  COIN_TIERS,
-  CURRENCY,
-  CoinTier,
-  coinTier,
-  totalOf as coinTotal,
-  coinsFor,
-  smallestCoin,
-} from "../shop/currency";
+import { CURRENCY, totalOf as coinTotal, largestCoin } from "../shop/currency";
 import { makeAdditionProblem, movedBy } from "../spells/addition";
 import {
   HARDEST_BRICK_RUNG,
@@ -74,7 +65,16 @@ import {
   recordCast,
   rungAt,
 } from "../spells/difficulty";
-import { HARDEST_CLOCK_RUNG, clockRungAt, hourglassFor, worthCasting } from "../spells/hourglass";
+import {
+  type ClockTime,
+  HARDEST_CLOCK_RUNG,
+  askedOf,
+  asksMinutes,
+  clockRungAt,
+  forwardMinutes,
+  readClock,
+  sandFor,
+} from "../spells/hourglass";
 import { HARDEST_ARRAY_RUNG, arrayProblemFor, arrayRungAt } from "../spells/multiplication";
 import {
   HARDEST_PORTAL_RUNG,
@@ -98,6 +98,7 @@ import {
 } from "../spells/portalTravel";
 import { Spell, knowsSpell, learnSpell } from "../spells/spellbook";
 import { makeSubtractionProblem } from "../spells/subtraction";
+import { axesOf, nextSymmetryRung, symmetryHint, symmetryRungAt } from "../spells/symmetry";
 import { AboutPanel } from "../ui/AboutPanel";
 import { ArrayPopup } from "../ui/ArrayPopup";
 import { BrickPopup } from "../ui/BrickPopup";
@@ -112,8 +113,10 @@ import { OptionsPanel } from "../ui/OptionsPanel";
 import { PatchMenu } from "../ui/PatchMenu";
 import { PicturePanel } from "../ui/PicturePanel";
 import { PortalPanel } from "../ui/PortalPanel";
+import { SandGlass } from "../ui/SandGlass";
 import { ShopPanel } from "../ui/ShopPanel";
 import { SpellPopup } from "../ui/SpellPopup";
+import { SymmetryPopup } from "../ui/SymmetryPopup";
 import { TaskPanel } from "../ui/TaskPanel";
 import {
   UI_SIDECAR_KEY,
@@ -192,6 +195,7 @@ import {
   type Footprints,
   type Placed,
   ROOM_COST,
+  anchorFor,
   arrangementIn,
   blockersFor,
   cellsUnder,
@@ -559,6 +563,17 @@ const WINDOW_LIGHT_RADIUS = WINDOW_PANE_PX * CAMERA_ZOOM;
 const WINDOW_GLOW_COLOR = 0xffb257;
 const WINDOW_GLOW_ALPHA = 0.78;
 const HUD_MARGIN = 8;
+
+/**
+ * The most ducats the purse badge prints before it says "and more".
+ *
+ * Three digits rather than the two every other badge stops at. A child with
+ * a thousand ducats has more money than anything in the shop costs, so the
+ * exact figure has stopped being a number they act on — but ninety-nine is
+ * reached in an afternoon's harvesting, and a purse that read "99+" from
+ * then on would be hiding the one count it exists to show.
+ */
+const MOST_DUCATS_SHOWN = 999;
 /**
  * How far past the screen the *ground* is kept drawn.
  *
@@ -784,6 +799,19 @@ const GEOMETER_ID = "geometer";
  * at all.
  */
 const ASTRONOMER_ID = "astronomer";
+/**
+ * The clockmaker, in the plaza under the city's tower.
+ *
+ * The fifth teacher and the only one who is not in a room. That is the
+ * point of him: a clock tower is the one landmark in the world that a child
+ * walks up to expecting it to tell them something, and it stands in an open
+ * square. Putting the man who explains the hour inside a building beside it
+ * would be putting him where nobody looks.
+ *
+ * He is placed by the city rather than listed here, because where he can
+ * stand depends on where the tower landed — see `city.ts`.
+ */
+const CLOCKMAKER_ID = "clockmaker";
 const LONE_ATTENDANTS: Record<string, string> = {
   "observatory-dome": ASTRONOMER_ID,
 };
@@ -1151,6 +1179,7 @@ export class GameScene extends Phaser.Scene {
   private arrayPopup?: ArrayPopup;
   private brickPopup?: BrickPopup;
   private clockPopup?: ClockPopup;
+  private symmetryPopup?: SymmetryPopup;
   private patchMenu?: PatchMenu<PatchAction>;
   /** The second of the two taps: which colour of a thing to put down. */
   private decorMenu?: PatchMenu<DecorItem>;
@@ -1206,6 +1235,7 @@ export class GameScene extends Phaser.Scene {
   private recentArrayCasts: Recent = [];
   private recentBrickCasts: Recent = [];
   private recentClockCasts: Recent = [];
+  private recentSymmetryCasts: Recent = [];
   /**
    * When the world was last written down before this session started.
    *
@@ -1214,7 +1244,25 @@ export class GameScene extends Phaser.Scene {
    * the answer creeping up to now and pay nothing. Set to null once claimed,
    * because one absence is worth one casting of it.
    */
-  private awayFrom: number | null = null;
+  /**
+   * How far this world's clock has been wound from the real one, in minutes.
+   *
+   * Kept beside the scene rather than read out of the profile each time
+   * because everything that draws — the tint, the windows, the hearth —
+   * asks for the hour every frame. Written back to the profile whenever the
+   * glass moves it; see `worldNow`, which is the only thing that should ever
+   * read it.
+   */
+  private clockOffset = 0;
+  /**
+   * How far the glass has poured *so far*, while the sand is running.
+   *
+   * Kept apart from `clockOffset` so that what is written down is only ever
+   * a settled clock: a page closed halfway through the sand should reopen on
+   * the hour it was wound to, not on the hour it was passing through.
+   */
+  private pouring = 0;
+  private sandGlass?: SandGlass;
   /** How deep the old wood's dusk is right now, eased toward where she is. */
   private dusk = 0;
   /** The timestamp the dusk was last stepped at, for a real-time crossfade. */
@@ -1503,6 +1551,11 @@ export class GameScene extends Phaser.Scene {
     // A child who has not opened this one before starts it from scratch
     // without losing who they are.
     if (!this.anonymous) this.profile = profileIn(this.savedGame, this.profile);
+    // How far this child's glass has already wound the world. Read once,
+    // here, because everything that draws asks for the hour every frame —
+    // and read at all because a clock that snapped back to the wall clock on
+    // the way in would be a spell that undoes itself overnight.
+    this.clockOffset = Math.max(0, this.profile.clockOffset);
     // Everybody on the device, for the nameplates. The child playing is
     // included by way of the store rather than by being appended: a script
     // that jumped straight here has an anonymous profile that was never
@@ -1675,10 +1728,13 @@ export class GameScene extends Phaser.Scene {
       (object) => this.ui(object),
     );
     // The panel runs the counting; the ledger is still the session's.
-    this.shopPanel.onBuy = (fixture, count) => {
-      this.session.buy(fixture, count);
+    this.shopPanel.onBuy = (thing, count, _paid, look) => {
+      this.session.buy(thing, count, look);
       this.refreshCarried();
     };
+    // The shop draws its swatches with the same recolouring the room's own
+    // furniture uses, so a chair on the shelf is the chair she will get.
+    this.shopPanel.lookTexture = (piece, look) => this.decorTexture(piece, look);
     this.shopPanel.onSell = (plant, count) => {
       this.session.sell(plant, count);
       this.refreshCarried();
@@ -1720,6 +1776,12 @@ export class GameScene extends Phaser.Scene {
     this.clockPopup = new ClockPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
+    this.symmetryPopup = new SymmetryPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
+      this.ui(object),
+    );
+    // Above the parchment, because the parchment has closed by the time the
+    // sand runs and what is underneath is the world changing colour.
+    this.sandGlass = new SandGlass(this, MODAL_DEPTH + 10, (object) => this.ui(object));
     this.patchMenu = new PatchMenu<PatchAction>(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
     this.decorMenu = new PatchMenu<DecorItem>(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
     this.portalPanel = new PortalPanel(
@@ -1900,20 +1962,56 @@ export class GameScene extends Phaser.Scene {
        */
       shade: () => ({
         dusk: this.dusk,
-        night: nightTintAlpha(this.dev.hour ?? timeOfDay(new Date())),
+        night: nightTintAlpha(this.hourNow()),
         alpha: this.nightOverlay?.fillAlpha ?? 0,
       }),
       clock: () => {
         const cast = this.clockPopup?.cast;
         if (!cast) return null;
+        const asked = askedOf(cast);
         return {
-          left: cast.problem.left,
-          back: cast.problem.back,
-          hours: cast.problem.hours,
-          entry: cast.entry,
+          from: cast.from,
+          to: cast.to,
+          hours: asked.hours,
+          minutes: asked.minutes,
+          entry: cast.hours,
+          entryMinutes: cast.minutes,
+          box: cast.box,
+          asksMinutes: asksMinutes(cast),
           done: cast.done,
+          // Where the face she drags is, so a script can take hold of a hand.
+          grip: this.clockPopup?.face ?? null,
         };
       },
+      /**
+       * The shape on the mirror parchment, and where it is on the screen.
+       *
+       * The only spell whose answer is a *gesture over a picture*, so the
+       * picture itself has to be published: the corners come out in screen
+       * pixels, and a script works out the fold from them with the game's
+       * own `axesOf` rather than knowing it.
+       */
+      symmetry: () => {
+        const cast = this.symmetryPopup?.cast;
+        if (!cast) return null;
+        return {
+          corners: cast.shape.corners,
+          board: this.symmetryPopup?.board ?? null,
+          axes: axesOf(cast.shape),
+          rung: cast.rung,
+          done: cast.done,
+          missteps: cast.missteps,
+          wrong: cast.wrong,
+          hinting: symmetryHint(cast) !== null,
+        };
+      },
+      // Where the world's clock stands, and how far it has been wound from
+      // the real one. The spell's whole effect, and nothing on screen states
+      // it as a number — the light does, which a script cannot read.
+      worldClock: () => ({
+        hour: this.hourNow(),
+        offset: this.clockOffset,
+      }),
       lamps: () => {
         const observatory = this.observatory;
         if (!observatory) return null;
@@ -2050,7 +2148,7 @@ export class GameScene extends Phaser.Scene {
 
   override update(time: number): void {
     this.frameCounter++;
-    const hour = this.dev.hour ?? timeOfDay(new Date());
+    const hour = this.hourNow();
     if (!this.interior) {
       this.refreshVisibleChunks();
       this.updateNpcs(isDaytime(hour));
@@ -2239,6 +2337,7 @@ export class GameScene extends Phaser.Scene {
     // pieces is placed from the viewport's size.
     this.spellPopup?.layout();
     this.brickPopup?.layout();
+    this.symmetryPopup?.layout();
     this.portalPanel?.layout();
     this.geometryPanel?.layout();
     this.shopPanel?.layout();
@@ -3611,6 +3710,11 @@ export class GameScene extends Phaser.Scene {
           act: () => this.castHourglass(),
           available: () => this.knowsHourglass,
         },
+        {
+          texture: uiTextureKey(UiAsset.RuneMirror),
+          act: () => this.castMirrorSpell(),
+          available: () => this.knowsMirror,
+        },
       ],
       size,
       right: edge,
@@ -3714,23 +3818,27 @@ export class GameScene extends Phaser.Scene {
     // Money, as a button with a badge rather than a line of text in the
     // corner: the coin count belongs beside the things it buys, and the badge
     // says how much without spending a line of the screen on saying it.
-    // Its items are the three kinds of coin rather than the nine
-    // denominations: sorting change by metal is what a child does with a
-    // handful of it before reading the number on any of it, and nine slots
-    // stacked up the side of the screen is a list rather than a purse.
+    // Not a tray at all: a gold coin and how many she has.
+    //
+    // It had slots — one per metal once, then one per coin — and every one
+    // of them did nothing when tapped, because there is nothing to *do* with
+    // a coin from out here. A button that opens a drawer of buttons that do
+    // nothing is worse than no button, since it is the opening that invites
+    // the tap. What a child wants from the corner of the screen is how much
+    // money they have, and that is what the badge already said.
+    //
+    // The breakdown is not lost, it has moved to where it means something:
+    // the shop lays her coins out on the table when there is a price to pay.
     this.purseTray = new IconTray(this, {
-      texture: uiTextureKey(coinIcon(CoinTier.Gold)),
-      items: COIN_TIERS.map((tier) => ({
-        texture: uiTextureKey(coinIcon(tier)),
-        count: () => this.coinsOfTier(tier).length,
-        // Nothing, like the basket's. The badge on the button already says
-        // how many of this coin she has, and the shop counts the purse out
-        // in front of her when there is something to pay for.
-        act: () => {},
-      })),
+      texture: uiTextureKey(coinIcon(largestCoin(CURRENCY))),
+      items: [],
       // Whole units, not the minor ones the purse counts in: a badge reading
-      // "5000" for fifty sun would be a number nobody in the game uses.
+      // "5000" for fifty ducat would be a number nobody in the game uses.
       count: () => Math.floor(this.purse.coins / CURRENCY.minorPerMajor),
+      // Three digits here where everything else stops at two. A basket past
+      // ninety-nine carrots is a basket where the number has stopped
+      // mattering; a purse is the one count where it has not.
+      mostShown: MOST_DUCATS_SHOWN,
       size,
       right: edge + (size + 10) * 4,
       bottom,
@@ -4965,6 +5073,97 @@ export class GameScene extends Phaser.Scene {
    * it lands, the away-time is spent, and the rune says so until there is
    * another absence to claim.
    */
+  /**
+   * What time it is in this child's world, as a timestamp.
+   *
+   * The real clock plus however far the glass has wound it. Everything that
+   * asks the time goes through here — the tint, the villagers' bedtimes, the
+   * lit windows — so that winding the clock moves the whole world and not
+   * just the number on a parchment.
+   *
+   * What deliberately does *not* go through here is how long a child has
+   * been away: an absence is real time, and a world clock wound six hours
+   * forward has not made anybody's evening six hours longer.
+   */
+  private worldNow(): number {
+    return Date.now() + (this.clockOffset + this.pouring) * 60_000;
+  }
+
+  /** The hour the world is at, with the dev seam's override on top. */
+  private hourNow(): number {
+    return this.dev.hour ?? timeOfDay(new Date(this.worldNow()));
+  }
+
+  /**
+   * Wind the world's clock on, and remember that it moved.
+   *
+   * Forward only, which is the spell's own rule rather than a guard: a face
+   * shows twelve hours, so "put the hands there" always means the next time
+   * it will be.
+   */
+  private windClockTo(face: ClockTime, over: number): void {
+    const now = new Date(this.worldNow());
+    // Where the world stands on a twelve-hour face, to the minute — not to
+    // whatever the rung rounds to. The child answered about two rounded
+    // faces; the world lands exactly on the one she pointed at, which is the
+    // difference between "the clock says twenty past" and "the clock says
+    // twenty past, give or take the rounding nobody told her about".
+    const standing = (now.getHours() * 60 + now.getMinutes()) % 720;
+    const forward = (face.hour * 60 + face.minute - standing + 720) % 720;
+    if (forward <= 0) return;
+    // Poured rather than set. The world's light is drawn from the hour every
+    // frame, so running the offset up over the same seconds the sand takes
+    // makes the sky move while she watches — which is the whole reward for
+    // winding it: a child who sets the clock to dusk sees dusk arrive.
+    this.sandGlass?.run(
+      over,
+      (along) => {
+        this.pouring = forward * along;
+      },
+      () => {
+        this.pouring = 0;
+        this.clockOffset += forward;
+        this.saveProfileChange({ clockOffset: this.clockOffset });
+      },
+    );
+    // Nothing to repaint: the sky, the windows and the hearth all ask the
+    // hour every frame, so the world catches up on its own within one.
+  }
+
+  /**
+   * The clockmaker, under the tower.
+   *
+   * Taught for being spoken to, the way the geometer teaches the portal
+   * spell — not earned by an errand, the way the astronomer's is. The two
+   * are different on purpose: an errand is worth setting where the reward
+   * would otherwise remove most of the work from the game, which is true of
+   * the array spell and was true of the lamps, and is not true here. What
+   * the hourglass costs a child is the walk to the city, and the city is a
+   * long way.
+   *
+   * And then he opens the parchment, because a person standing beside a
+   * clock tower who says hello and nothing else is a person who reads as
+   * broken. Talking to him *is* casting it, at the one place in the world
+   * where the hour is written on a wall.
+   */
+  private meetClockmaker(): void {
+    if (this.modalOpen) return;
+    this.joystick?.release();
+    this.closeTrays();
+    const learned = learnSpell(this.profile.learned, Spell.Hourglass);
+    if (learned === this.profile.learned) {
+      this.castHourglass();
+      return;
+    }
+    this.saveProfileChange({ learned });
+    this.spellTray?.refresh();
+    this.showEarned(UiAsset.RuneHourglass);
+    // The rune rises over her head, and *then* the parchment. Opening it at
+    // once would draw a full-screen page over the one moment that says she
+    // has been given something.
+    this.time.delayedCall(EARNED_MS, () => this.castHourglass());
+  }
+
   private castHourglass(): void {
     if (this.modalOpen) return;
     this.spellTray?.setOpen(false);
@@ -4972,59 +5171,60 @@ export class GameScene extends Phaser.Scene {
       this.showRefusalOnPlayer(UiAsset.RuneHourglass);
       return;
     }
-    const away = this.awayFrom;
-    if (away === null) {
-      this.showRefusalOnPlayer(UiAsset.RuneHourglass);
-      return;
-    }
+    // No other gate, and there used to be three: something must have been
+    // planted, the child must have been away, and long enough for the glass
+    // to have anything to give. All three served a payout that is gone, and
+    // between them they made the spell almost uncastable — a child who had
+    // just sat down could never see it work.
     const rung = clockRungAt(this.dev.clockRung ?? this.profile.clockRung);
-    const problem = hourglassFor(away, Date.now(), rung);
-    if (!worthCasting(problem)) {
-      this.showRefusalOnPlayer(UiAsset.RuneHourglass);
-      return;
-    }
-    // Nothing planted is not a question worth asking. The child would read
-    // the clocks, get the answer right, and be told that nothing grew — and
-    // the hours would be spent, because a cast that landed is a cast. Better
-    // to keep them and say what is missing.
-    if (!this.anythingWaiting) {
-      this.showRefusalOnPlayer(UiAsset.SeedPouch);
-      return;
-    }
     this.joystick?.release();
-    this.clockPopup?.open(problem, (result) => {
-      if (result.solved) {
-        this.awayFrom = null;
-        this.ripenNearest(problem.hours);
-      }
+    const from = readClock(this.worldNow(), rung.reading);
+    this.clockPopup?.open(from, rung, (result, to) => {
+      if (result.solved && to) this.windClockTo(to, sandFor(forwardMinutes(from, to)));
       this.noteClockCast(result);
     });
   }
 
   /**
-   * Move on the crops nearest the player, one stage each.
+   * Fold a shape in half.
    *
-   * Nearest, not first-found. Scan order would be invisible and arbitrary,
-   * and a child watching five crops grow with no way to tell why *those*
-   * five is the same complaint as a spell quietly choosing her seed for
-   * her — she can stand where she wants this to land.
+   * The one spell with nothing to type and, for now, nothing to do. What it
+   * *is* — the geometry — is finished; what it *does* to the world is
+   * deliberately still open, so this opens the parchment, judges the line
+   * and moves the ladder, and stops there. A placeholder effect chosen to
+   * have something would be an effect to unpick later.
    */
-  /** Whether anything of hers is in the ground and not yet ripe. */
-  private get anythingWaiting(): boolean {
-    return this.grid.listCrops().some(([, , crop]) => crop.stage !== PlantStage.Mature);
+  private castMirrorSpell(): void {
+    if (this.modalOpen) return;
+    this.spellTray?.setOpen(false);
+    if (!this.knowsMirror) {
+      this.showRefusalOnPlayer(UiAsset.RuneMirror);
+      return;
+    }
+    const rung = symmetryRungAt(this.dev.symmetryRung ?? this.profile.symmetryRung);
+    this.joystick?.release();
+    this.symmetryPopup?.open(this.spellRng, rung, (result) => this.noteMirrorCast(result));
   }
 
-  private ripenNearest(count: number): void {
-    const here = this.session.tile;
-    const waiting = this.grid
-      .listCrops()
-      .filter(([, , crop]) => crop.stage !== PlantStage.Mature)
-      .map(([col, row]) => ({ col, row, far: Math.hypot(col - here.col, row - here.row) }))
-      .sort((a, b) => a.far - b.far)
-      .slice(0, count);
-    for (const at of waiting) this.growCropAt(at.col, at.row);
-    // No count. Every one of them plays its growing animation, which is the
-    // same number said in the only place a child is looking.
+  /**
+   * Let the mirror ladder see how a cast went.
+   *
+   * The one ladder with no band in it. See `nextSymmetryRung`: folding is a
+   * way of looking rather than a fluency, so an older child starts on the
+   * square with everybody else and climbs from there.
+   */
+  private noteMirrorCast(result: CastResult): void {
+    this.recentSymmetryCasts = recordCast(this.recentSymmetryCasts, result);
+    const moved = nextSymmetryRung(this.profile.symmetryRung, this.recentSymmetryCasts);
+    if (moved === this.profile.symmetryRung) return;
+    this.recentSymmetryCasts = [];
+    if (this.dev.symmetryRung !== null) return;
+    this.saveProfileChange({ symmetryRung: moved });
+  }
+
+  /** Whether this child has climbed to the dome and been taught. */
+  private get knowsMirror(): boolean {
+    return knowsSpell([...this.profile.learned, ...this.dev.learned], Spell.Mirror);
   }
 
   /** Let the clock spell's own ladder see how a cast went. */
@@ -5758,7 +5958,16 @@ export class GameScene extends Phaser.Scene {
    *
    * The fourth teacher and the second to set a task. Hers is the smallest of
    * the two: five lamps up the path to her door, so that the way to the one
-   * place in the world that cares about the hour can be walked after dark.
+   * building in the world that is pointed at the sky can be walked after
+   * dark — which is when there is anything up there to point at.
+   *
+   * She used to teach the hourglass, and the errand was argued for on those
+   * grounds: light the path so the place that cares about the hour can be
+   * reached. That spell has gone to the clockmaker in the city, where the
+   * thing that tells everybody the time actually stands. What she teaches
+   * now is the fold, which suits her better — an observatory is where you
+   * are shown that a shape has an order to it, and hers is the only lesson
+   * in the game that is about a figure rather than a quantity.
    *
    * **She supplies the lamps.** They are eight crops each in the store —
    * forty harvests for five, which is eighty number lines and a quest about
@@ -5775,11 +5984,11 @@ export class GameScene extends Phaser.Scene {
     if (!observatory) return;
     const lit = lampsLit(this.worldGrid, observatory);
     if (lit >= observatory.posts.length) {
-      const learned = learnSpell(this.profile.learned, Spell.Hourglass);
+      const learned = learnSpell(this.profile.learned, Spell.Mirror);
       if (learned !== this.profile.learned) {
         this.saveProfileChange({ learned });
         this.spellTray?.refresh();
-        this.showEarned(UiAsset.RuneHourglass);
+        this.showEarned(UiAsset.RuneMirror);
       }
     } else {
       // Topped up to the posts a lamp could go on, never beyond them.
@@ -5802,7 +6011,7 @@ export class GameScene extends Phaser.Scene {
         token: itemIcon(FixtureType.Lamp),
         needed: observatory.posts.length,
         done: lit,
-        reward: UiAsset.RuneHourglass,
+        reward: UiAsset.RuneMirror,
       },
       () => {},
     );
@@ -5997,8 +6206,6 @@ export class GameScene extends Phaser.Scene {
     // game down"; asked later it would find the answer creeping up to now
     // and pay nothing. `?away=` fakes it, because the alternative way to see
     // this spell is to close the game and come back in an hour.
-    this.awayFrom =
-      this.dev.away === null ? savedAtOf(saved) : Date.now() - this.dev.away * 60 * 60 * 1000;
     if (saved) restoreWorld(this.grid, saved.world);
     // What anybody has added to their house. Read after the world rather
     // than with it: a plan is not a thing standing on a tile, it is the
@@ -6140,6 +6347,10 @@ export class GameScene extends Phaser.Scene {
     this.recentArrayCasts = [];
     this.recentClockCasts = [];
     this.recentBrickCasts = [];
+    // Not the mirror window. Every other ladder is scaled to the band, so a
+    // run earned in one says nothing in the next; the folding ladder is the
+    // same six shapes for everybody, and a child who has just found four
+    // folds in a row has found them whatever band they are put in.
     const chosen = bandAt(band);
     this.saveProfileChange({
       band,
@@ -6191,6 +6402,7 @@ export class GameScene extends Phaser.Scene {
     this.portalPanel?.setPhrases(this.words);
     this.geometryPanel?.setPhrases(this.words);
     this.brickPopup?.setPhrases(this.words);
+    this.symmetryPopup?.setPhrases(this.words);
     this.shopPanel?.setPhrases(this.words);
     // The line on screen was written in the old language by whatever the
     // player last did; it would otherwise sit there until they did something
@@ -6205,22 +6417,6 @@ export class GameScene extends Phaser.Scene {
       crate: this.crateTray,
       purse: this.purseTray,
     };
-  }
-
-  /**
-   * The coins of one kind the purse holds.
-   *
-   * Counted out the way the shopkeeper counts, largest first, so what the
-   * button says matches what the counter would put in front of the player.
-   */
-  private coinsOfTier(tier: CoinTier): number[] {
-    // Rounded down to something the coins can actually express. The smallest
-    // coin is one ray and every price is a whole number of them, so this only
-    // ever bites on a purse handed in from outside — and the alternative is a
-    // breakdown that says the purse is empty while the badge says 52.
-    const smallest = smallestCoin(CURRENCY);
-    const payable = this.purse.coins - (this.purse.coins % smallest);
-    return coinsFor(CURRENCY, payable).filter((coin) => coinTier(CURRENCY, coin) === tier);
   }
 
   private closeTrays(): void {
@@ -7304,39 +7500,6 @@ export class GameScene extends Phaser.Scene {
     // about the picture; a thing a child can pick up has to be a thing they
     // can tap, and a texture cannot be tapped.
     this.spawnDecor(px, offsetX, offsetY);
-
-    for (const piece of parts.furniture) {
-      if (!piece.animated) continue;
-      const [anchorRow, anchorCol] = piece.cell;
-      const at = px(anchorCol, anchorRow);
-      const key = growablePieceKey(GROWABLE_ROOM, piece.name);
-      const animKey = growablePieceAnimKey(GROWABLE_ROOM, piece.name);
-      if (!this.anims.exists(animKey)) {
-        this.anims.create({
-          key: animKey,
-          frames: this.anims.generateFrameNumbers(key, {
-            start: 0,
-            end: (parts.piece_sheets[piece.name]?.frame_count ?? 1) - 1,
-          }),
-          frameRate: BUILDING_ANIM_FPS,
-          repeat: -1,
-        });
-      }
-      const fire = this.world(
-        this.add
-          .sprite(offsetX + at.x, offsetY + at.y - parts.piece_rise_px, key)
-          .setOrigin(0, 0)
-          .setDepth(CHUNK_DEPTH + 1),
-      );
-      fire.play(animKey);
-      inside.fires.push(fire);
-      if (piece.light === LightKind.Fire) {
-        this.lightHearthAt({
-          col: anchorCol - inside.origin.col,
-          row: anchorRow - inside.origin.row,
-        });
-      }
-    }
   }
 
   /**
@@ -7347,6 +7510,40 @@ export class GameScene extends Phaser.Scene {
    * is anchored at — a bed is two rows deep, and sorting it by its anchor
    * puts the floor of the row below in front of its own foot.
    */
+  /**
+   * One animated piece of furniture, playing.
+   *
+   * Its own method because building the animation is a five-line ceremony —
+   * the frame count comes out of the sidecar — and because it used to be
+   * done in a loop over the *sidecar's* placements, which is the one place
+   * it cannot be done now that the thing can be carried.
+   */
+  private playPiece(
+    piece: DecorType,
+    x: number,
+    y: number,
+    depth: number,
+  ): Phaser.GameObjects.Sprite {
+    const art = pieceArt(piece);
+    const key = growablePieceKey(GROWABLE_ROOM, art);
+    const animKey = growablePieceAnimKey(GROWABLE_ROOM, art);
+    if (!this.anims.exists(animKey)) {
+      this.anims.create({
+        key: animKey,
+        frames: this.anims.generateFrameNumbers(key, {
+          start: 0,
+          end: (this.growable?.piece_sheets[art]?.frame_count ?? 1) - 1,
+        }),
+        frameRate: BUILDING_ANIM_FPS,
+        repeat: -1,
+      });
+    }
+    const sprite = this.add.sprite(x, y, key).setOrigin(0, 0).setDepth(depth);
+    sprite.play(animKey);
+    this.interior?.fires.push(sprite);
+    return sprite;
+  }
+
   private spawnDecor(
     px: (col: number, row: number) => { x: number; y: number },
     offsetX: number,
@@ -7359,19 +7556,33 @@ export class GameScene extends Phaser.Scene {
     inside.decor = [];
 
     const sizes = this.pieceSizes();
+    this.snuffHearth();
     for (const placed of this.decorIn(inside.house)) {
       const size = sizes[placed.piece] ?? { cols: 1, rows: 1 };
       const at = px(placed.col, placed.row);
+      const art = parts.furniture.find((piece) => piece.name === pieceArt(placed.piece));
+      const x = offsetX + at.x;
+      const y = offsetY + at.y - parts.piece_rise_px;
+      const depth = depthFor((placed.row - inside.origin.row + size.rows) * TILE_SIZE);
+      // A piece that moves is drawn as a sprite and played; everything else
+      // is one picture. Only the stove moves — a fire that stood still would
+      // not read as a fire — and it is drawn *here*, from the arrangement,
+      // because it can be carried and a second pass over the sidecar's own
+      // placements would draw it a second time in the corner it started in.
       const sprite = this.world(
-        this.add
-          .image(
-            offsetX + at.x,
-            offsetY + at.y - parts.piece_rise_px,
-            this.decorTexture(placed.piece, placed.look),
-          )
-          .setOrigin(0, 0)
-          .setDepth(depthFor((placed.row - inside.origin.row + size.rows) * TILE_SIZE)),
+        art?.animated
+          ? this.playPiece(placed.piece, x, y, depth)
+          : this.add
+              .image(x, y, this.decorTexture(placed.piece, placed.look))
+              .setOrigin(0, 0)
+              .setDepth(depth),
       );
+      if (art?.light === LightKind.Fire) {
+        this.lightHearthAt({
+          col: placed.col - inside.origin.col,
+          row: placed.row - inside.origin.row,
+        });
+      }
       // A tile-sized hit area at its foot, the same as a placed fence has:
       // the art of a bed is eighty pixels tall and a tap anywhere on the
       // bedding should reach it, but a tap on the wall behind it should not.
@@ -7498,12 +7709,18 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const ahead = this.session.targetTile();
-    const at: Placed = {
+    // Where a piece of its size goes when she is facing this way — which is
+    // not the tile in front of her unless it is one cell big. See
+    // `anchorFor`: a rug anchored on the facing tile grows back over the
+    // square she is standing on, so it could never be put down above or to
+    // the left of her.
+    const corner = anchorFor(
       piece,
-      look,
-      col: ahead.col + inside.origin.col,
-      row: ahead.row + inside.origin.row,
-    };
+      { col: ahead.col + inside.origin.col, row: ahead.row + inside.origin.row },
+      this.session.facing,
+      this.pieceSizes(),
+    );
+    const at: Placed = { piece, look, col: corner.col, row: corner.row };
     const room = this.decorIn(inside.house);
     const taken = this.spokenFor();
     const standable = (col: number, row: number) =>
@@ -7781,6 +7998,20 @@ export class GameScene extends Phaser.Scene {
             .setOrigin(0.5, 1)
             .setDepth(feet.y),
         );
+        // The one outdoor NPC with a lesson. He drifts about the square the
+        // way everybody out here does, so the tap asks where he is now
+        // rather than where the city put him — the same argument as the
+        // postal worker's, and the same mistake if it is not made.
+        if ((spec.role ?? spec.id) === CLOCKMAKER_ID) {
+          this.watchAttendant(
+            sprite,
+            () => {
+              const npc = this.npcs.find((one) => one.id === spec.id);
+              return { col: npc?.col ?? spec.home.col, row: npc?.row ?? spec.home.row };
+            },
+            () => this.meetClockmaker(),
+          );
+        }
         if (spec.id === POSTAL_WORKER_ID) {
           // He wanders, so the tap asks him where he is now rather than
           // where he was when the world was built.
@@ -8133,6 +8364,7 @@ export class GameScene extends Phaser.Scene {
       // a new parchment goes on it, because everything that reads this asks
       // "is a question already on screen", and a wall is one.
       this.brickPopup?.isOpen === true ||
+      this.symmetryPopup?.isOpen === true ||
       // Mid-crossing: a step from a tile they are no longer standing on.
       this.travelling
     );

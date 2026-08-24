@@ -42,20 +42,20 @@
     }
   },
   "piece_sheets": {
-    "bed": {
-      "file": "cottage_piece_bed.png",
+    "stove": {
+      "file": "cottage_piece_stove.png",
       "frame_width": 32,
-      "frame_height": 80,
-      "frame_count": 1,
-      "columns": 1,
+      "frame_height": 48,
+      "frame_count": 8,
+      "columns": 8,
       "rows": 1,
       "margin": 1,
       "spacing": 2
     },
-    "table": {
-      "file": "cottage_piece_table.png",
+    "rug": {
+      "file": "cottage_piece_rug.png",
       "frame_width": 64,
-      "frame_height": 48,
+      "frame_height": 80,
       "frame_count": 1,
       "columns": 1,
       "rows": 1,
@@ -72,22 +72,22 @@
       "margin": 1,
       "spacing": 2
     },
-    "rug": {
-      "file": "cottage_piece_rug.png",
+    "table": {
+      "file": "cottage_piece_table.png",
       "frame_width": 64,
-      "frame_height": 80,
+      "frame_height": 48,
       "frame_count": 1,
       "columns": 1,
       "rows": 1,
       "margin": 1,
       "spacing": 2
     },
-    "fireplace": {
-      "file": "cottage_piece_fireplace.png",
-      "frame_width": 64,
-      "frame_height": 48,
-      "frame_count": 8,
-      "columns": 8,
+    "bed": {
+      "file": "cottage_piece_bed.png",
+      "frame_width": 32,
+      "frame_height": 80,
+      "frame_count": 1,
+      "columns": 1,
       "rows": 1,
       "margin": 1,
       "spacing": 2
@@ -225,13 +225,13 @@
   },
   "furniture": [
     {
-      "name": "fireplace",
+      "name": "stove",
       "cell": [
         1,
         1
       ],
       "footprint": [
-        2,
+        1,
         1
       ],
       "blocks": true,

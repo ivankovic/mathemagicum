@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { type Rgb, rampPlan } from "../render/recolour";
+import type { Facing } from "./characters";
 import { FABRIC_SLOTS } from "./houses";
 import type { RoomBlocker } from "./interiors";
 import { MaterialType } from "./materials";
@@ -22,12 +23,16 @@ import type { GridPoint } from "./topdown";
  * What the generator ships is the room somebody left; what a child does with
  * it is theirs.
  *
- * **The hearth is not in here.** A fireplace is the one thing in a room that
- * is structural: it is the eight animated frames the room ships for, and it
- * is what lights the house's windows from the road at dusk — `hearthCell`
- * coming back empty is what makes `windowsOf` skip a building entirely. A
- * child who could carry the fire out of their own house would put the lights
- * out in it, at night, with nothing on screen to say why.
+ * **The fire is in here too now**, and it was the one thing that was not.
+ * A fireplace is architecture: set into the wall, with a chimney breast
+ * drawn above its own cell, it was the single object in a room a child was
+ * otherwise free to arrange that could only ever be where it was built —
+ * which reads as a bug rather than as a rule.
+ *
+ * So it is a *stove*: the same fire in a thing that stands on the floor, one
+ * cell rather than two, and ordinary furniture in every other way. It keeps
+ * the eight animated frames, because a fire that did not move would not be
+ * one; what it no longer keeps is the exemption.
  */
 
 export const DecorType = {
@@ -36,6 +41,7 @@ export const DecorType = {
   Chair: "chair",
   Rug: "rug",
   Bookshelf: "bookshelf",
+  Stove: "stove",
 } as const;
 
 export type DecorType = (typeof DecorType)[keyof typeof DecorType];
@@ -57,6 +63,7 @@ const PIECE_ART: Record<DecorType, string> = {
   [DecorType.Chair]: "chair",
   [DecorType.Rug]: "rug",
   [DecorType.Bookshelf]: "bookshelf",
+  [DecorType.Stove]: "stove",
 };
 
 export function pieceArt(decor: DecorType): string {
@@ -198,6 +205,35 @@ export function pieceOn(
 }
 
 /**
+ * Where a piece goes when somebody standing here puts it down.
+ *
+ * Not simply the tile she is facing, which is what this used to be and is
+ * only right for the things that are one cell big. A piece is drawn from its
+ * top-left corner and grows right and down, so a rug two cells square,
+ * anchored on the tile in front of her, covers the tile in front *and the
+ * one she is standing on* — every time she faces up or left. She cannot
+ * stand on her own rug, so it was refused, and the report was exactly that:
+ * the carpet will not go above or to the left of me.
+ *
+ * So the anchor is shifted back by the piece's own size on the two sides
+ * where it would otherwise grow towards her. The rule underneath is the one
+ * a person would say out loud: whatever its size, a thing put down lies in
+ * front of you, starting at the square you are facing and going away.
+ */
+export function anchorFor(
+  piece: DecorType,
+  ahead: GridPoint,
+  facing: Facing,
+  footprints: Footprints,
+): GridPoint {
+  const size = footprints[piece] ?? { cols: 1, rows: 1 };
+  return {
+    col: facing === "left" ? ahead.col - (size.cols - 1) : ahead.col,
+    row: facing === "up" ? ahead.row - (size.rows - 1) : ahead.row,
+  };
+}
+
+/**
  * Whether a piece would stand here: on floor, on nothing else, inside the room.
  *
  * `floor` is asked rather than handed a plan, because the caller has one and
@@ -282,25 +318,19 @@ export function decorFromSave(saved: unknown): Placed[] {
 }
 
 /**
- * The cells the hearth stands on.
+ * Where the fire is in this room, or nothing if nobody has put one down.
  *
- * Not furniture and never moved, so it is nowhere in an arrangement and has
- * to be asked for by name. That is exactly the sort of thing a refactor
- * drops — a fireplace is furniture right up until you notice that carrying
- * it off puts the lights out in the house — so it is one function that
- * everything needing the answer calls.
+ * Read off the arrangement, which it did not used to be: a fireplace was
+ * built into the wall, so the sidecar's own placement was the answer for
+ * ever. A stove is furniture — it can be carried across the room, or out of
+ * it — so the fire is wherever the stove is standing now, and there may not
+ * be one at all.
  */
-export function hearthCells(sidecar: GrowableSidecar): Set<string> {
-  const taken = new Set<string>();
-  for (const piece of sidecar.furniture) {
-    if (piece.light !== "fire") continue;
-    const [row, col] = piece.cell;
-    const [cols, rows] = piece.footprint;
-    for (let dr = 0; dr < rows; dr++) {
-      for (let dc = 0; dc < cols; dc++) taken.add(cellKey(col + dc, row + dr));
-    }
-  }
-  return taken;
+export function fireCells(decor: readonly Placed[], footprints: Footprints): Set<string> {
+  return occupiedCells(
+    decor.filter((piece) => piece.piece === DecorType.Stove),
+    footprints,
+  );
 }
 
 /**
@@ -311,9 +341,10 @@ export function hearthCells(sidecar: GrowableSidecar): Set<string> {
  * placements would go on protecting the corner it used to be in while the
  * floor under the bed came up.
  *
- * The hearth as well, which no arrangement contains. And whoever is standing
- * in the room, because a child who pulled the floor out from under herself
- * would be standing in a wall.
+ * The stove needs no special mention any more: it is in the arrangement like
+ * everything else. What is still not is whoever is standing in the room,
+ * because a child who pulled the floor out from under herself would be
+ * standing in a wall.
  */
 export function protectedCells(
   sidecar: GrowableSidecar,
@@ -321,7 +352,6 @@ export function protectedCells(
   standing?: GridPoint,
 ): Set<string> {
   const taken = occupiedCells(decor, footprintsOf(sidecar));
-  for (const key of hearthCells(sidecar)) taken.add(key);
   if (standing) taken.add(cellKey(standing.col, standing.row));
   return taken;
 }
@@ -348,14 +378,11 @@ export function blockersFor(sidecar: GrowableSidecar, decor: readonly Placed[]):
       blocks: solid.has(pieceArt(placed.piece)),
     };
   });
-  const hearths = sidecar.furniture
-    .filter((piece) => piece.light === "fire")
-    .map((piece) => ({
-      cell: piece.cell as readonly [number, number],
-      footprint: piece.footprint as readonly [number, number],
-      blocks: piece.blocks,
-    }));
-  return [...standing, ...hearths];
+  // No separate list for the fire any more. A fireplace was built into the
+  // wall, so it blocked a cell the arrangement never mentioned; a stove is
+  // in the arrangement like the bed and the chair, and blocks where it
+  // stands rather than where it was first put.
+  return standing;
 }
 
 /**
@@ -369,8 +396,21 @@ export function arrangementIn(
   stored: readonly Placed[] | undefined,
   sidecar: GrowableSidecar | null,
 ): Placed[] {
-  if (stored) return [...stored];
-  return sidecar ? startingDecor(sidecar) : [];
+  const shipped = sidecar ? startingDecor(sidecar) : [];
+  if (!stored) return shipped;
+  const arranged = [...stored];
+  // A room saved before the fire was furniture has no stove in it, and a
+  // child coming back to a house they had already rearranged would find it
+  // dark for ever with nothing on screen to say why. So the fire is put back
+  // where the room shipped it — unless something has since been stood there,
+  // in which case it goes wherever is free, because a stove that overwrote
+  // the bed would be a worse repair than the fault.
+  if (arranged.some((piece) => piece.piece === DecorType.Stove)) return arranged;
+  const fire = shipped.find((piece) => piece.piece === DecorType.Stove);
+  if (!fire) return arranged;
+  const sizes = sidecar ? footprintsOf(sidecar) : {};
+  if (fits(fire, arranged, sizes, () => true)) arranged.push(fire);
+  return arranged;
 }
 
 /**

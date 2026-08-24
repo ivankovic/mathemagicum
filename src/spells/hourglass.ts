@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 /**
- * The hourglass spell: how long were you gone, and what grew while you were.
+ * The hourglass spell: move the world's clock, and say how far you moved it.
  *
  * The fifth spell and the first that is not about a number line, a rectangle
  * or a map. It is about **a clock**, which is arithmetic of a kind nothing
@@ -10,28 +10,40 @@
  * so the answer to "four hours after ten" is two and every instinct a child
  * has built on the number line says twelve.
  *
- * **It is the one spell that pays for time actually passing.** Crops in this
- * game grow only by being cast on; nothing happens while nobody is playing,
- * which is a real absence in a game about a garden. The astronomer's gift is
- * that the world's clock starts counting for you — come back after five
- * hours and five things have moved on, once you can say that it was five.
+ * **It used to be about being away.** The glass showed when the game was put
+ * down and when it was picked up, asked how many hours that was, and paid a
+ * crop an hour. That made the question honest — nobody chose those two times
+ * — and made the spell almost uncastable: it wanted an absence long enough
+ * to matter, something planted and still green, and a child who had just sat
+ * down had none of it. A spell you cannot cast is a spell nobody learns.
  *
- * Which makes the question honest in a way a generated sum cannot be: the two
- * times on the parchment are when this child put the game down and when they
- * picked it up. Nobody chose them.
+ * So it is the other way round now. Cast it whenever you like, take hold of
+ * the hands, and put them where you want the world's clock to be — then say
+ * how far you have just moved it. The question is the same question and the
+ * arithmetic is harder rather than easier, because the child chooses the two
+ * times and has to read both.
  *
- * **The glass reads the hour, not the minute.** Both faces are rounded to
+ * **What it changes is the light, not the garden.** Winding the clock does
+ * not ripen anything. It could: the old spell paid a crop an hour, and
+ * keeping that would have meant a child could wind forward twelve hours over
+ * and over until the whole garden was ripe, which makes the growth spell
+ * optional. What the glass buys is power over the day — make it dusk, make
+ * it noon — and that is worth having on its own.
+ *
+ * **The clock only ever goes forward.** A face has twelve hours on it and a
+ * day has twenty-four, so hands pointing at six mean either dawn or dusk and
+ * the picture cannot say which. Rather than put an am/pm switch on a clock a
+ * five-year-old is learning to read, a dragged time means *the next time it
+ * will be* — which is unambiguous, is what "how far did you move it" already
+ * assumes, and keeps every answer inside the twelve hours the face can show.
+ *
+ * **The glass reads to the rung, not to the minute.** The hands snap to
  * whatever the child's rung can read — the hour at the bottom of the ladder,
- * the half and then the quarter further up — and the span is measured
- * between the rounded times. That is a small lie about the clock and the
- * right one: a clock face a five-year-old is reading *is* rounded to the
- * hour, and a question whose answer is "four hours and thirty-five minutes"
- * is not a question about telling the time.
- *
- * A twelve-hour face cannot tell twelve hours from none, and this does not
- * pretend otherwise: come back exactly half a day later and the glass has
- * nothing to give. Saying so is better than inventing a number the picture
- * does not support.
+ * the half and then the quarter further up — so the answer is always
+ * something the picture actually shows. That is a small lie about a clock
+ * and the right one: a clock face a five-year-old is reading *is* rounded to
+ * the hour, and "four hours and thirty-five minutes" is not a question about
+ * telling the time.
  */
 
 /** How finely a rung's clock is read. */
@@ -42,6 +54,22 @@ export const Reading = {
 } as const;
 
 export type Reading = (typeof Reading)[keyof typeof Reading];
+
+/**
+ * How far apart the marks round the face are, in minutes.
+ *
+ * Twelve of them are drawn on every clock in this game, whatever the rung —
+ * a face with no ticks is not a clock, it is a circle — so twelve is where
+ * the minute hand can go. It used to be able to reach only as far as the
+ * rung's own reading, which on the gentlest face meant it could not move at
+ * all and on the hardest gave it four places out of twelve to stand. A hand
+ * that will not go where the picture says it can is a hand that reads as
+ * broken.
+ *
+ * The *hour* hand is unaffected: it points at an hour, and there are twelve
+ * of those.
+ */
+export const TICK_MINUTES = 5;
 
 /** How many minutes each reading rounds to. */
 const MINUTES: Record<Reading, number> = {
@@ -68,9 +96,9 @@ export interface ClockRung {
  * being asked the same thing about a harder picture, which is the shape
  * every other ladder here has.
  *
- * There is no rung for a bigger span, and deliberately: the span is however
- * long this child happened to be away, and the ladder has no business
- * reaching into that.
+ * The reading does one more job now that the hands are draggable: it is how
+ * far they snap. At the bottom rung a child can only ever point at an hour,
+ * so the answer has no minutes in it and the parchment does not ask for any.
  */
 export const CLOCK_RUNGS: readonly ClockRung[] = [
   { reading: Reading.Hour, numerals: true, hintAfter: 1 },
@@ -94,24 +122,16 @@ export interface ClockTime {
   readonly minute: number;
 }
 
-export interface HourglassProblem {
-  /** When the game was put down, as the glass reads it. */
-  readonly left: ClockTime;
-  /** When it was picked up again. */
-  readonly back: ClockTime;
-  /** Whole hours between the two, which is also what the spell pays. */
-  readonly hours: number;
-  readonly numerals: boolean;
-  readonly hintAfter: number;
-}
-
-/** A timestamp as a clock face shows it, rounded to what the rung can read. */
+/**
+ * A timestamp as a clock face shows it, rounded to what the rung can read.
+ *
+ * Rounded *down*, not to the nearest. A clock that jumped forward past the
+ * hour would show a time that has not happened yet, and a child checking it
+ * against the one on the wall would find the game wrong.
+ */
 export function readClock(at: number, reading: Reading): ClockTime {
   const date = new Date(at);
   const step = MINUTES[reading];
-  // Rounded *down*, not to the nearest. A clock that jumped forward past the
-  // hour would show a time that has not happened yet, and a child checking it
-  // against the one on the wall would find the game wrong.
   const minutes = Math.floor((date.getHours() * 60 + date.getMinutes()) / step) * step;
   return { hour: Math.floor(minutes / 60) % 12, minute: minutes % 60 };
 }
@@ -125,76 +145,246 @@ export function handAngles(at: ClockTime): { hour: number; minute: number } {
 }
 
 /**
- * The question, from two real timestamps.
+ * Whether this move has any minutes in it to ask about.
  *
- * `hours` is the span *between the rounded faces*, so it is always exactly
- * what the picture shows — a child who counts round the dial and a child who
- * subtracts arrive at the same number, and both agree with what the spell
- * then pays out.
+ * Asked of the *move* rather than of the rung, which is what it used to be.
+ * The minute hand can reach any mark on the face now, so whether the answer
+ * has a minutes half depends on where the child put it and not on how hard
+ * their clock is — and a parchment that asked a five-year-old for the
+ * minutes of a move they made in whole hours would be asking them to type
+ * nought.
  */
-export function hourglassFor(leftAt: number, backAt: number, rung: ClockRung): HourglassProblem {
-  const left = readClock(leftAt, rung.reading);
-  const back = readClock(backAt, rung.reading);
-  const minutes = (back.hour * 60 + back.minute - (left.hour * 60 + left.minute) + 720) % 720;
-  return {
-    left,
-    back,
-    hours: Math.floor(minutes / 60),
-    numerals: rung.numerals,
-    hintAfter: Math.max(1, rung.hintAfter),
-  };
-}
-
-/** Whether there is anything to claim at all. */
-export function worthCasting(problem: HourglassProblem): boolean {
-  return problem.hours > 0;
+export function asksMinutes(cast: HourglassCast): boolean {
+  return forwardMinutes(cast.from, cast.to) % 60 !== 0;
 }
 
 /**
- * How far the player has got.
+ * A time snapped to what this rung's face can show.
  *
- * One box, like the array spell's and the portal spell's. This is the third
- * of that shape and the duplication is now worth naming: what all three want
- * is "a number to reach, digits typed toward it, and a count of wrong
- * answers", and only the *drawing* differs. Left as three because pulling it
- * apart means touching two spells that work, their panels and their tests
- * for no change a player could see — but it is the next tidy-up due here,
- * and the fourth copy should not be written.
+ * Both hands together rather than the minute alone: an hour hand halfway
+ * between four and five is what half past four *looks like*, so snapping the
+ * minutes without moving the hour would draw a clock that disagrees with
+ * itself.
+ */
+export function snapTime(at: ClockTime, reading: Reading): ClockTime {
+  const step = MINUTES[reading];
+  const minutes = Math.round((at.hour * 60 + at.minute) / step) * step;
+  const whole = ((minutes % 720) + 720) % 720;
+  return { hour: Math.floor(whole / 60) % 12, minute: whole % 60 };
+}
+
+/**
+ * How far a finger travels for one tick of the clock.
+ *
+ * A feel number, and the only one here. Ten pixels means a comfortable
+ * two-inch sweep turns the clock about an hour and three quarters, and that
+ * an unsteady finger resting on the glass does not walk it round on its own.
+ */
+export const SWIPE_PER_TICK = 10;
+
+/**
+ * How many ticks a swipe of this shape turns the clock.
+ *
+ * Clockwise is down and to the right; anticlockwise is up and to the left.
+ * That is an approximation of going round a dial and it is the right one: a
+ * true rotation has to be measured about the centre of the face, which means
+ * knowing where the finger is rather than where it went, and means a swipe
+ * across the middle of the clock turns it by nothing at all.
+ *
+ * Taking hold of a *hand* was tried first and is what this replaces. The
+ * hands are two pixels wide, there are two of them, and which one a child
+ * had caught depended on how far from the middle they had grabbed — three
+ * ways to get it wrong before anything moves.
+ *
+ * The two directions are added and then flattened, so a diagonal counts once
+ * rather than twice: a finger going down *and* right is going one way round,
+ * not two. A swipe up and to the right is neither, and turns nothing, which
+ * is honest — it is not a direction round a dial.
+ */
+export function swipeTicks(dx: number, dy: number): number {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return 0;
+  const along = (dx + dy) / Math.SQRT2;
+  return Math.trunc(along / SWIPE_PER_TICK);
+}
+
+/**
+ * How far forward round the face from one time to another.
+ *
+ * Forward, always, and never more than the twelve hours a face can hold: the
+ * clock does not go backwards, so quarter past midnight is half an hour
+ * after quarter to — not eleven and a half hours before it.
+ */
+export function forwardMinutes(from: ClockTime, to: ClockTime): number {
+  return (to.hour * 60 + to.minute - (from.hour * 60 + from.minute) + 720) % 720;
+}
+
+/** The same span, said the way the parchment asks for it. */
+export function spanOf(from: ClockTime, to: ClockTime): { hours: number; minutes: number } {
+  const minutes = forwardMinutes(from, to);
+  return { hours: Math.floor(minutes / 60), minutes: minutes % 60 };
+}
+
+/**
+ * How far the player has got: where the hands are, and what they have said.
+ *
+ * Two boxes rather than one, because the answer has two parts — and only one
+ * at the bottom of the ladder, where the face cannot show a time that is not
+ * on the hour and asking for minutes would be asking for nought.
  */
 export interface HourglassCast {
-  readonly problem: HourglassProblem;
-  readonly entry: string;
+  /** What the world's clock said when the parchment opened. */
+  readonly from: ClockTime;
+  /** Where the hands have been put. Starts where they already were. */
+  readonly to: ClockTime;
+  readonly rung: ClockRung;
+  readonly hours: string;
+  readonly minutes: string;
+  /** Which box the digits are going into. */
+  readonly box: "hours" | "minutes";
   readonly done: boolean;
   readonly missteps: number;
   readonly wrong: boolean;
 }
 
-export function beginHourglassCast(problem: HourglassProblem): HourglassCast {
-  return { problem, entry: "", done: false, missteps: 0, wrong: false };
+export function beginHourglassCast(from: ClockTime, rung: ClockRung): HourglassCast {
+  const start = snapTime(from, rung.reading);
+  return {
+    from: start,
+    to: start,
+    rung,
+    hours: "",
+    minutes: "",
+    box: "hours",
+    done: false,
+    missteps: 0,
+    wrong: false,
+  };
 }
 
-export function typeHourDigit(cast: HourglassCast, digit: number): HourglassCast {
+/**
+ * Turn the clock on by this many ticks, or back by them.
+ *
+ * Both hands together, because that is what turning a clock does — the
+ * minute hand sweeps and the hour hand creeps after it. Backwards is allowed
+ * and means what it says on the face: the hands go anticlockwise. What it
+ * does *not* mean is that the world goes backwards. The clock only ever runs
+ * forward, so hands wound back to an hour already gone are pointing at that
+ * hour tomorrow — which is a long move rather than a negative one, and the
+ * sand runs longest for it.
+ */
+export function turnBy(cast: HourglassCast, ticks: number): HourglassCast {
+  if (cast.done || !Number.isFinite(ticks) || ticks === 0) return cast;
+  const minutes = cast.to.hour * 60 + cast.to.minute + Math.trunc(ticks) * TICK_MINUTES;
+  const whole = ((minutes % 720) + 720) % 720;
+  const to = { hour: Math.floor(whole / 60) % 12, minute: whole % 60 };
+  // Anything typed was about the old span, so it goes. A child who turns the
+  // clock after answering has asked a different question.
+  return { ...cast, to, hours: "", minutes: "", box: "hours", wrong: false };
+}
+
+/** The answer the hands are currently asking for. */
+export function askedOf(cast: HourglassCast): { hours: number; minutes: number } {
+  return spanOf(cast.from, cast.to);
+}
+
+/** Whether the hands have been moved at all. */
+export function moved(cast: HourglassCast): boolean {
+  return forwardMinutes(cast.from, cast.to) > 0;
+}
+
+export function typeClockDigit(cast: HourglassCast, digit: number): HourglassCast {
   if (cast.done) return cast;
   if (!Number.isInteger(digit) || digit < 0 || digit > 9) return cast;
-  // A leading zero is dropped: the glass never has nothing to give by the
-  // time this parchment is open, so a zero here can only be a slip.
-  if (cast.entry === "" && digit === 0) return cast;
-  // Two digits, because eleven is as far as a twelve-hour face can count.
-  if (cast.entry.length >= 2) return cast;
-  return { ...cast, entry: cast.entry + String(digit), wrong: false };
+  const typed = cast.box === "hours" ? cast.hours : cast.minutes;
+  // Nought is allowed in both boxes. It used to be refused in the hours on
+  // the argument that the glass never had nothing to give — which stopped
+  // being true when the minute hand could reach every mark on the face, and
+  // "nought hours and twenty minutes" became an ordinary move to make.
+  if (typed.length >= 2) return cast;
+  const next = typed + String(digit);
+  return cast.box === "hours"
+    ? { ...cast, hours: next, wrong: false }
+    : { ...cast, minutes: next, wrong: false };
 }
 
-export function backspaceHour(cast: HourglassCast): HourglassCast {
-  if (cast.done || cast.entry === "") return cast;
-  return { ...cast, entry: cast.entry.slice(0, -1), wrong: false };
+export function backspaceClock(cast: HourglassCast): HourglassCast {
+  if (cast.done) return cast;
+  const typed = cast.box === "hours" ? cast.hours : cast.minutes;
+  if (typed === "") {
+    // Back off the end of the minutes and you are editing the hours again,
+    // which is what a finger reaching for the wrong box means.
+    return cast.box === "minutes" ? { ...cast, box: "hours", wrong: false } : cast;
+  }
+  const next = typed.slice(0, -1);
+  return cast.box === "hours"
+    ? { ...cast, hours: next, wrong: false }
+    : { ...cast, minutes: next, wrong: false };
 }
 
-export function submitHour(cast: HourglassCast): HourglassCast {
-  if (cast.done || cast.entry === "") return cast;
-  if (Number(cast.entry) !== cast.problem.hours) {
-    return { ...cast, entry: "", missteps: cast.missteps + 1, wrong: true };
+/** Move to the other box, where there is one. */
+export function nextBox(cast: HourglassCast): HourglassCast {
+  if (cast.done || !asksMinutes(cast)) return cast;
+  return { ...cast, box: cast.box === "hours" ? "minutes" : "hours", wrong: false };
+}
+
+/**
+ * Say that is the answer.
+ *
+ * On the hours box with minutes still to give, this moves along rather than
+ * judging: a child pressing enter after the hours has finished a number, not
+ * an answer.
+ */
+export function submitClock(cast: HourglassCast): HourglassCast {
+  if (cast.done || !moved(cast)) return cast;
+  if (cast.box === "hours" && asksMinutes(cast)) {
+    return cast.hours === "" ? cast : { ...cast, box: "minutes", wrong: false };
+  }
+  const asked = askedOf(cast);
+  const wantsMinutes = asksMinutes(cast);
+  if (cast.hours === "" || (wantsMinutes && cast.minutes === "")) return cast;
+  const saidHours = Number(cast.hours);
+  const saidMinutes = wantsMinutes ? Number(cast.minutes) : 0;
+  if (saidHours !== asked.hours || saidMinutes !== asked.minutes) {
+    return {
+      ...cast,
+      hours: "",
+      minutes: "",
+      box: "hours",
+      missteps: cast.missteps + 1,
+      wrong: true,
+    };
   }
   return { ...cast, done: true, wrong: false };
+}
+
+/** The shortest and longest the sand runs for, in milliseconds. */
+export const SAND_LEAST_MS = 700;
+export const SAND_MOST_MS = 3000;
+
+/**
+ * How long the sand should run for a move of this many minutes.
+ *
+ * The glass turning is the only thing in the game that says how *big* a
+ * spell was. Every other cast lands in the same instant whatever the answer,
+ * which is right for them — a sum is a sum — but this one moves the world by
+ * an amount the child chose, and a five-minute nudge and a nearly-a-whole-day
+ * heave should not look the same.
+ *
+ * Straight between the two ends rather than curved: the child picked the
+ * number, so the time it takes should be readable back off it. Five minutes
+ * is a flick of sand; the longest move a twelve-hour face can ask for is
+ * three seconds, which is about as long as anybody will watch an animation
+ * before it stops being a reward and starts being a wait.
+ */
+export function sandFor(minutes: number): number {
+  const shortest = TICK_MINUTES;
+  const longest = 720 - TICK_MINUTES;
+  // Only nonsense gets the short answer. An enormous number is not nonsense
+  // — it is a move bigger than a face can hold, and clamping says so.
+  if (Number.isNaN(minutes)) return SAND_LEAST_MS;
+  const held = Math.max(shortest, Math.min(longest, minutes));
+  const along = (held - shortest) / (longest - shortest);
+  return Math.round(SAND_LEAST_MS + along * (SAND_MOST_MS - SAND_LEAST_MS));
 }
 
 /**
@@ -207,7 +397,8 @@ export function submitHour(cast: HourglassCast): HourglassCast {
  * answer.
  */
 export function hourglassHint(cast: HourglassCast): number {
-  const { hours, hintAfter } = cast.problem;
+  const { hours } = askedOf(cast);
+  const hintAfter = Math.max(1, cast.rung.hintAfter);
   if (cast.missteps < hintAfter) return 0;
   return Math.min(Math.max(0, hours - 1), cast.missteps - hintAfter + 1);
 }

@@ -117,13 +117,12 @@ export interface DevOptions {
   /** Hold the hourglass at one rung of the clock ladder. */
   readonly clockRung: number | null;
   /**
-   * How long ago the world was last put down, in hours.
+   * `?symmetryRung=` — which shape the mirror spell puts on the parchment.
    *
-   * The one dev seam that fakes something the *store* would normally say.
-   * Without it the hourglass can only be seen by closing the game, waiting
-   * an hour and opening it again, which is not a thing a screenshot can do.
+   * The one ladder no band touches, so this is the only way to reach the
+   * arrowhead without folding twenty shapes to climb to it.
    */
-  readonly away: number | null;
+  readonly symmetryRung: number | null;
   /**
    * Spells to count as already taught.
    *
@@ -182,8 +181,8 @@ const NONE: DevOptions = {
   portalRung: null,
   arrayRung: null,
   clockRung: null,
+  symmetryRung: null,
   brickRung: null,
-  away: null,
   learned: [],
   hour: null,
   skipTitle: false,
@@ -268,7 +267,7 @@ export function parseDevOptions(search: string): DevOptions {
     arrayRung: number("arrayRung"),
     brickRung: number("brickRung"),
     clockRung: number("clockRung"),
-    away: number("away"),
+    symmetryRung: number("symmetryRung"),
     learned: names(params.get("learned"), ALL_SPELLS),
     hour: number("hour", false),
     skipTitle: params.has("skipTitle"),
@@ -343,6 +342,8 @@ export interface DevHandle {
     most: number;
     owed: number;
     onCounter: number;
+    /** Which colourway is chosen, for a thing that comes in colours. */
+    look: number;
   } | null;
   readonly decor: () => { piece: string; col: number; row: number; look: number }[] | null;
   readonly bricks: () => {
@@ -488,11 +489,53 @@ export interface DevHandle {
    * have to read out of a screenshot.
    */
   readonly clock: () => {
-    left: { hour: number; minute: number };
-    back: { hour: number; minute: number };
+    /** What the world's clock said when the parchment opened. */
+    from: { hour: number; minute: number };
+    /** Where the hands have been dragged to. */
+    to: { hour: number; minute: number };
+    /** The answer those two ask for. */
     hours: number;
+    minutes: number;
     entry: string;
+    entryMinutes: string;
+    box: string;
+    asksMinutes: boolean;
     done: boolean;
+    /** The stretch of parchment a swipe turns the clock on, on screen. */
+    grip: { left: number; top: number; right: number; bottom: number } | null;
+  } | null;
+  /**
+   * The world's clock: what hour it is, and how far the glass has wound it.
+   *
+   * The hourglass spell's whole effect is the light, and light is the one
+   * thing a script cannot read — so the number behind it is stated here.
+   */
+  readonly worldClock: () => { hour: number; offset: number };
+  /**
+   * The shape on the mirror parchment.
+   *
+   * The only spell whose answer is a gesture over a *picture*: there is no
+   * box to type into and no button to press, so the picture is published.
+   * `corners` is the shape as the rules hold it — a unit or so about its own
+   * middle — and `board` says where that lands on the screen, which is what
+   * a script needs to draw a line across it. `axes` is every fold the shape
+   * actually has, worked out by the game rather than assumed by the script.
+   */
+  readonly symmetry: () => {
+    readonly corners: readonly { x: number; y: number }[];
+    readonly board: {
+      centreX: number;
+      centreY: number;
+      reach: number;
+      corners: readonly { x: number; y: number }[];
+    } | null;
+    readonly axes: readonly { angle: number }[];
+    readonly rung: { corners: number; regular: boolean; oblique: boolean; reflex: boolean };
+    readonly done: boolean;
+    readonly missteps: number;
+    readonly wrong: boolean;
+    /** Whether the parchment has started showing the fold. */
+    readonly hinting: boolean;
   } | null;
   /**
    * The astronomer's lamp posts, and how many are lit.

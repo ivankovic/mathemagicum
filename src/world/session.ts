@@ -11,7 +11,7 @@ import type { PlacedObject } from "./objects";
 import { type Crop, HARVEST_YIELD, PlantStage, type PlantType } from "./plants";
 import { sceneryKind } from "./scenery";
 import { type Patch, patchCells } from "./selection";
-import { CROP_PRICE, Purse, type Trade, buyStock, sellCrops } from "./shop";
+import { type Buyable, CROP_PRICE, Purse, type Trade, buyStock, sellCrops } from "./shop";
 import type { GridPoint } from "./topdown";
 
 /**
@@ -572,7 +572,7 @@ export class GameSession {
   }
 
   /** Buy stock, having already counted the money out. */
-  buy(fixture: FixtureType, count = 1): Trade {
-    return buyStock(this.inventory, this.purse, fixture, count, this.cropPrice);
+  buy(thing: Buyable, count = 1, look = 0): Trade {
+    return buyStock(this.inventory, this.purse, thing, count, this.cropPrice, look);
   }
 }

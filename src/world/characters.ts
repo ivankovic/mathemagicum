@@ -55,6 +55,12 @@ const NAMED_ROLES: Record<string, string> = {
   // shape where the geometer's square is a triangle and the schoolteacher's
   // book is an upright block.
   astronomer: "astronomer",
+  // Beside the tower in the city. The fifth teacher, told apart by the one
+  // round thing anybody here carries: a clock face held out flat, where the
+  // book is an upright block, the square a triangle and the spyglass a
+  // horizontal bar. Broad and cropped, which is the one build no other
+  // teacher has, and bare-headed, because all three hats are spoken for.
+  clockmaker: "clockmaker",
 };
 
 /**

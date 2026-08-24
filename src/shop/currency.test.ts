@@ -2,17 +2,16 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
+import { coinIcon } from "../ui/assets";
 import {
-  COIN_TIERS,
   CURRENCY,
-  CoinTier,
   MAJOR_NAME,
   MINOR_NAME,
   MOST_DENOMINATIONS,
-  coinTier,
   coinsFor,
   isPayable,
   smallestCoin,
+  stacksOf,
   totalOf,
 } from "./currency";
 
@@ -21,8 +20,13 @@ describe("the coins", () => {
   // any more: a children's game that shows a euro price and asks for euros on
   // a counter can be read as asking for money. What it keeps is the *shape*
   // of real money, which is the part being taught.
-  test("are a complete 1-2-5 ladder", () => {
-    expect(CURRENCY.denominations).toEqual([1, 2, 5, 10, 20, 50, 100, 200, 500]);
+  // Four rungs of that ladder rather than all nine. Every amount in this
+  // game is a whole number of fifty mites — everything is priced in crops
+  // and a crop fetches 100, 150 or 250 — so the five coins below the fifty
+  // could not come up in any transaction. They were harmless as buttons and
+  // are not harmless as piles on a table a child drags from.
+  test("are four consecutive rungs of a 1-2-5 ladder", () => {
+    expect(CURRENCY.denominations).toEqual([50, 100, 200, 500]);
     for (const coin of CURRENCY.denominations) {
       let head = coin;
       while (head % 10 === 0) head /= 10;
@@ -32,7 +36,7 @@ describe("the coins", () => {
 
   test("are listed smallest first, which coinsFor relies on", () => {
     expect([...CURRENCY.denominations].sort((a, b) => a - b)).toEqual([...CURRENCY.denominations]);
-    expect(smallestCoin(CURRENCY)).toBe(1);
+    expect(smallestCoin(CURRENCY)).toBe(50);
   });
 
   test("run a hundred to the ducat, so the decimal point behaves", () => {
@@ -81,11 +85,16 @@ describe("writing an amount", () => {
 });
 
 describe("what can be paid", () => {
-  test("any whole number of mites, and nothing else", () => {
-    expect(isPayable(CURRENCY, 1)).toBe(true);
+  // A whole number of the *smallest coin*, which is fifty mites now rather
+  // than one. The price table's own test enforces the other half of this:
+  // nothing in the shop may cost 2,75, because nobody could put it down.
+  test("any whole number of the smallest coin, and nothing else", () => {
+    expect(isPayable(CURRENCY, 50)).toBe(true);
     expect(isPayable(CURRENCY, 250)).toBe(true);
+    expect(isPayable(CURRENCY, 1)).toBe(false);
+    expect(isPayable(CURRENCY, 275)).toBe(false);
     expect(isPayable(CURRENCY, 0)).toBe(false);
-    expect(isPayable(CURRENCY, -5)).toBe(false);
+    expect(isPayable(CURRENCY, -50)).toBe(false);
     expect(isPayable(CURRENCY, 2.5)).toBe(false);
   });
 });
@@ -93,11 +102,11 @@ describe("what can be paid", () => {
 describe("counting an amount out", () => {
   test("largest coin first, the way a person does it", () => {
     expect(coinsFor(CURRENCY, 250)).toEqual([200, 50]);
-    expect(coinsFor(CURRENCY, 738)).toEqual([500, 200, 20, 10, 5, 2, 1]);
+    expect(coinsFor(CURRENCY, 1250)).toEqual([500, 500, 200, 50]);
   });
 
   test("what it counts out is what was asked for", () => {
-    for (let minor = 1; minor <= 1000; minor++) {
+    for (let minor = 50; minor <= 20_000; minor += 50) {
       expect(totalOf(coinsFor(CURRENCY, minor))).toBe(minor);
     }
   });
@@ -105,13 +114,14 @@ describe("counting an amount out", () => {
   // Greedy is only the fewest coins because the ladder is 1-2-5; proved here
   // against an exhaustive search rather than asserted.
   test("greedy really is the fewest coins", () => {
+    const step = smallestCoin(CURRENCY);
     const best = [0];
-    for (let minor = 1; minor <= 1000; minor++) {
+    for (let minor = step; minor <= 20_000; minor += step) {
       let fewest = Number.POSITIVE_INFINITY;
       for (const coin of CURRENCY.denominations) {
-        if (coin <= minor) fewest = Math.min(fewest, 1 + (best[minor - coin] as number));
+        if (coin <= minor) fewest = Math.min(fewest, 1 + (best[(minor - coin) / step] as number));
       }
-      best[minor] = fewest;
+      best[minor / step] = fewest;
       expect(coinsFor(CURRENCY, minor).length).toBe(fewest);
     }
   });
@@ -122,22 +132,57 @@ describe("counting an amount out", () => {
   });
 });
 
-describe("which coin a value is drawn as", () => {
-  test("a whole ducat and up is gold, a tenth and up is silver, the rest copper", () => {
-    for (const value of [1, 2, 5]) expect(coinTier(CURRENCY, value)).toBe(CoinTier.Copper);
-    for (const value of [10, 20, 50]) expect(coinTier(CURRENCY, value)).toBe(CoinTier.Silver);
-    for (const value of [100, 200, 500]) expect(coinTier(CURRENCY, value)).toBe(CoinTier.Gold);
+describe("gathering coins into piles", () => {
+  test("one pile per kind, largest first, and every coin in one", () => {
+    const coins = coinsFor(CURRENCY, 6000);
+    const stacks = stacksOf(coins);
+    expect(stacks).toEqual([{ value: 500, count: 12 }]);
+    expect(stacksOf(coinsFor(CURRENCY, 1250))).toEqual([
+      { value: 500, count: 2 },
+      { value: 200, count: 1 },
+      { value: 50, count: 1 },
+    ]);
   });
 
-  // Three faces have to cover every coin, and the ladder has to climb: a
-  // bigger coin never gets a lesser face than a smaller one.
-  test("every coin has a face, and the faces never go backwards", () => {
-    const tiers = CURRENCY.denominations.map((coin) =>
-      COIN_TIERS.indexOf(coinTier(CURRENCY, coin)),
-    );
-    expect(tiers.every((tier) => tier >= 0)).toBe(true);
-    expect(tiers).toEqual([...tiers].sort((a, b) => a - b));
-    expect(new Set(tiers).size).toBe(COIN_TIERS.length);
+  // The piles have to be the same money as the coins, or the check a child
+  // does on them is a check of the wrong sum.
+  test("the piles come to what the coins came to", () => {
+    for (let minor = 50; minor <= 30_000; minor += 50) {
+      const coins = coinsFor(CURRENCY, minor);
+      const summed = stacksOf(coins).reduce((sum, s) => sum + s.value * s.count, 0);
+      expect({ minor, summed }).toEqual({ minor, summed: minor });
+    }
+  });
+
+  test("and there is never a pile of nothing", () => {
+    expect(stacksOf([])).toEqual([]);
+    for (const stack of stacksOf(coinsFor(CURRENCY, 4750))) {
+      expect(stack.count).toBeGreaterThan(0);
+    }
+  });
+
+  // Four coins means at most four piles, however much money there is —
+  // which is why a sale no longer needs a limit at all.
+  test("never more piles than there are kinds of coin", () => {
+    for (let minor = 50; minor <= 100_000; minor += 50) {
+      expect(stacksOf(coinsFor(CURRENCY, minor)).length).toBeLessThanOrEqual(
+        CURRENCY.denominations.length,
+      );
+    }
+  });
+});
+
+describe("which picture a coin is drawn with", () => {
+  // One face per coin, named by what it is worth. It was one per *metal* —
+  // three of them for nine coins — because the value was written on the
+  // button beside the icon. Money is laid out on a table now and there is no
+  // room beside a coin for a caption, so the picture has to carry the whole
+  // of it. Which metal each one is struck from is the art's business, and
+  // lives where the art is drawn.
+  test("every coin has a picture, and no two share one", () => {
+    const faces = CURRENCY.denominations.map(coinIcon);
+    expect(new Set(faces).size).toBe(CURRENCY.denominations.length);
+    expect(faces).toEqual(["coin-50", "coin-100", "coin-200", "coin-500"]);
   });
 });
 

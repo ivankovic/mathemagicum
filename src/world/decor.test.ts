@@ -9,6 +9,7 @@ import {
   DecorType,
   type Placed,
   ROOM_COST,
+  anchorFor,
   arrangementIn,
   blockersFor,
   cellsUnder,
@@ -17,8 +18,8 @@ import {
   decorFromSave,
   decorItem,
   decorToSave,
+  fireCells,
   fits,
-  hearthCells,
   itemParts,
   occupiedCells,
   pieceArt,
@@ -253,9 +254,9 @@ describe("what a room protects and what it blocks", () => {
   const sidecar = {
     furniture: [
       {
-        name: "fireplace",
+        name: "stove",
         cell: [1, 1],
-        footprint: [2, 1],
+        footprint: [1, 1],
         blocks: true,
         animated: true,
         light: "fire",
@@ -273,8 +274,20 @@ describe("what a room protects and what it blocks", () => {
     ],
   } as unknown as GrowableSidecar;
 
-  test("the hearth's cells are known by name, because no arrangement holds them", () => {
-    expect([...hearthCells(sidecar)].sort()).toEqual(["1,1", "2,1"]);
+  // The fire used to be a fact about the *sidecar*: a fireplace was built
+  // into the wall, so where it stood was settled for ever. A stove is
+  // furniture, so the fire is wherever it has been put — and there may be no
+  // fire at all, which a room with a fireplace could never manage.
+  test("the fire is wherever the stove has been put down", () => {
+    const stove: Placed = { piece: DecorType.Stove, col: 4, row: 2, look: 0 };
+    const sizes = { [DecorType.Stove]: { cols: 1, rows: 1 } };
+    expect([...fireCells([stove], sizes)].sort()).toEqual(["4,2"]);
+  });
+
+  test("and a room with no stove in it has no fire", () => {
+    const chair: Placed = { piece: DecorType.Chair, col: 4, row: 2, look: 0 };
+    expect([...fireCells([chair], { [DecorType.Chair]: { cols: 1, rows: 1 } })]).toEqual([]);
+    expect([...fireCells([], {})]).toEqual([]);
   });
 
   /**
@@ -311,15 +324,21 @@ describe("what a room protects and what it blocks", () => {
     expect(guarded.has("1,2")).toBe(false);
   });
 
-  test("the hearth is protected and blocks whatever anybody has rearranged", () => {
-    for (const arrangement of [[], [{ piece: DecorType.Chair, col: 4, row: 4, look: 2 }]]) {
-      const guarded = protectedCells(sidecar, arrangement as Placed[]);
-      expect(guarded.has("1,1")).toBe(true);
-      const fire = blockersFor(sidecar, arrangement as Placed[]).find(
-        (b) => b.cell[0] === 1 && b.cell[1] === 1,
-      );
-      expect(fire?.blocks).toBe(true);
-    }
+  // The fire is furniture now, so it guards and blocks the square it is
+  // standing on — not the one it was built into, which is what a fireplace
+  // did and could never stop doing.
+  test("the stove protects and blocks wherever it has been carried to", () => {
+    const stove: Placed = { piece: DecorType.Stove, col: 4, row: 4, look: 0 };
+    const guarded = protectedCells(sidecar, [stove]);
+    expect(guarded.has("4,4")).toBe(true);
+    const fire = blockersFor(sidecar, [stove]).find((b) => b.cell[0] === 4 && b.cell[1] === 4);
+    expect(fire?.blocks).toBe(true);
+  });
+
+  test("and a room it has been carried out of guards nothing for it", () => {
+    const guarded = protectedCells(sidecar, []);
+    expect(guarded.has("1,1")).toBe(false);
+    expect(blockersFor(sidecar, [])).toEqual([]);
   });
 
   test("and whoever is standing in the room keeps the floor under her feet", () => {
@@ -339,14 +358,46 @@ describe("what a room protects and what it blocks", () => {
     const twice = arrangementIn(undefined, sidecar);
     expect(once).toEqual(twice);
     expect(once[0]).not.toBe(twice[0]);
-    // The hearth is not in it: a child cannot carry the fire out.
-    expect(once.some((p) => p.piece === ("fireplace" as never))).toBe(false);
+    // The fire *is* in it now: a stove is furniture, so it is arranged with
+    // everything else rather than built into the wall behind it.
+    expect(once.some((p) => p.piece === DecorType.Stove)).toBe(true);
   });
 
   test("and a room somebody arranged is theirs, sidecar or no sidecar", () => {
-    const mine: Placed[] = [{ piece: DecorType.Chair, col: 9, row: 9, look: 4 }];
+    const mine: Placed[] = [
+      { piece: DecorType.Chair, col: 9, row: 9, look: 4 },
+      { piece: DecorType.Stove, col: 8, row: 8, look: 0 },
+    ];
     expect(arrangementIn(mine, sidecar)).toEqual(mine);
     expect(arrangementIn(undefined, null)).toEqual([]);
+  });
+
+  /**
+   * A room saved before the fire was furniture has no stove in it.
+   *
+   * Left alone, a child coming back to a house they had already rearranged
+   * would find it dark for ever, with nothing on screen to say why — which
+   * is the exact complaint the old comment here used to defend against by
+   * making the fire unmovable.
+   */
+  test("a room arranged before there was a stove gets its fire back", () => {
+    const old: Placed[] = [{ piece: DecorType.Chair, col: 4, row: 4, look: 0 }];
+    const mended = arrangementIn(old, sidecar);
+    expect(mended.filter((p) => p.piece === DecorType.Stove)).toEqual([
+      { piece: DecorType.Stove, col: 1, row: 1, look: 0 },
+    ]);
+    // And what she had arranged is untouched.
+    expect(mended).toEqual(expect.arrayContaining(old));
+  });
+
+  test("but never on top of something she has since put there", () => {
+    const old: Placed[] = [{ piece: DecorType.Bed, col: 1, row: 1, look: 0 }];
+    expect(arrangementIn(old, sidecar).some((p) => p.piece === DecorType.Stove)).toBe(false);
+  });
+
+  test("and a room that already has one is left exactly as it is", () => {
+    const mine: Placed[] = [{ piece: DecorType.Stove, col: 5, row: 5, look: 2 }];
+    expect(arrangementIn(mine, sidecar)).toEqual(mine);
   });
 });
 
@@ -437,5 +488,81 @@ describe("painting a piece of furniture", () => {
     const plan = colourPlanFor(palette, same);
     // Every entry maps a colour onto itself, so repainting changes no pixel.
     for (const [from, to] of plan) expect(from).toBe(to);
+  });
+});
+
+/**
+ * Where a thing lands when she puts it down.
+ *
+ * Reported as "I can't put the carpet above or to the left of me", and that
+ * is exactly what it was: a piece is drawn from its top-left corner and
+ * grows right and down, so anything bigger than one cell, anchored on the
+ * tile she faces, grew back over the square she was standing on. She cannot
+ * stand on her own rug, so it was refused — silently, in two directions out
+ * of four.
+ */
+describe("putting a piece down in front of you", () => {
+  const sizes = {
+    rug: { cols: 2, rows: 2 },
+    bed: { cols: 1, rows: 2 },
+    chair: { cols: 1, rows: 1 },
+  };
+  const ahead = { col: 5, row: 5 };
+
+  // The whole rule in one sentence: whatever its size, it lies in front of
+  // you — starting at the square you are facing, going away from you.
+  test("never covers the square she is standing on", () => {
+    for (const [piece, standing] of [
+      ["up", { col: 5, row: 6 }],
+      ["down", { col: 5, row: 4 }],
+      ["left", { col: 6, row: 5 }],
+      ["right", { col: 4, row: 5 }],
+    ] as const) {
+      for (const thing of ["rug", "bed", "chair"] as const) {
+        const corner = anchorFor(thing, ahead, piece, sizes);
+        const covered = cellsUnder({ piece: thing, look: 0, ...corner }, sizes);
+        expect({
+          facing: piece,
+          thing,
+          onHer: covered.some((c) => c.col === standing.col && c.row === standing.row),
+        }).toEqual({ facing: piece, thing, onHer: false });
+      }
+    }
+  });
+
+  // And it does cover the square she was pointing at, in every direction —
+  // otherwise it would be "in front of her" by dodging the question.
+  test("but always covers the square she is facing", () => {
+    for (const facing of ["up", "down", "left", "right"] as const) {
+      for (const thing of ["rug", "bed", "chair"] as const) {
+        const corner = anchorFor(thing, ahead, facing, sizes);
+        const covered = cellsUnder({ piece: thing, look: 0, ...corner }, sizes);
+        expect({
+          facing,
+          thing,
+          onIt: covered.some((c) => c.col === ahead.col && c.row === ahead.row),
+        }).toEqual({ facing, thing, onIt: true });
+      }
+    }
+  });
+
+  test("a one-cell thing lands exactly where she pointed, whichever way she faces", () => {
+    for (const facing of ["up", "down", "left", "right"] as const) {
+      expect(anchorFor("chair", ahead, facing, sizes)).toEqual(ahead);
+    }
+  });
+
+  // The two directions that were broken, stated as the numbers they produce.
+  test("a two-by-two shifts back when she faces up or left", () => {
+    expect(anchorFor("rug", ahead, "up", sizes)).toEqual({ col: 5, row: 4 });
+    expect(anchorFor("rug", ahead, "left", sizes)).toEqual({ col: 4, row: 5 });
+    expect(anchorFor("rug", ahead, "down", sizes)).toEqual({ col: 5, row: 5 });
+    expect(anchorFor("rug", ahead, "right", sizes)).toEqual({ col: 5, row: 5 });
+  });
+
+  // A bed is one wide and two tall, so only facing up moves it.
+  test("and a tall thing shifts only for the direction it is tall in", () => {
+    expect(anchorFor("bed", ahead, "up", sizes)).toEqual({ col: 5, row: 4 });
+    expect(anchorFor("bed", ahead, "left", sizes)).toEqual({ col: 5, row: 5 });
   });
 });

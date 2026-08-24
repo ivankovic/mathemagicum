@@ -48,15 +48,29 @@ export interface CurrencyDefinition {
 }
 
 /**
- * The whole ladder, and nothing missing from it.
+ * Four coins: the ones the shop can actually ask for.
  *
- * Real sets have gaps — a country drops its smallest coins to inflation, or
- * stops at two of the major unit because the next one up is a note. Those
- * gaps were worth honouring while the money was real. This money is not, so
- * it gets the complete 1-2-5 run: three coppers, three silvers, three golds,
- * and every price expressible down to the last ray.
+ * It was nine — the complete 1-2-5 run from one mite to five ducats — on the
+ * argument that a full ladder makes every price expressible. Then somebody
+ * counted what the prices are. Everything in the store is priced in *crops*,
+ * a crop fetches 100, 150 or 250 depending on the band, and so **every
+ * amount that changes hands in this game is a whole number of fifty mites.**
+ * The 1, the 2, the 5, the 10 and the 20 could not come up. Five of the nine
+ * coins were furniture.
+ *
+ * That was survivable while paying was a keypad, where an unused button is
+ * only an unused button. It is not survivable now that the coins are piles
+ * on a table a child drags from: five piles that can never be part of any
+ * answer are five wrong turns, and the table has only so much room for a
+ * finger.
+ *
+ * So the ladder is trimmed to the top four rungs rather than rebuilt — these
+ * are still four consecutive steps of the same 1-2-5 run, which is what
+ * keeps counting out a sum greedily give the fewest coins. What is lost is
+ * the ability to price something at 2,75; nothing does, and `isPayable` says
+ * so out loud if anything ever tries.
  */
-const COINS: readonly number[] = [1, 2, 5, 10, 20, 50, 100, 200, 500];
+const COINS: readonly number[] = [50, 100, 200, 500];
 
 const MITES_PER_DUCAT = 100;
 
@@ -98,41 +112,10 @@ export const CURRENCY: CurrencyDefinition = {
 };
 
 /**
- * The three kinds of coin the art draws.
- *
- * A reading aid, not a claim about what any of these is struck from: a child
- * sorting change sorts it by size and colour before reading the number, and
- * three tiers is what a picture can carry.
- */
-export const CoinTier = {
-  Copper: "copper",
-  Silver: "silver",
-  Gold: "gold",
-} as const;
-
-export type CoinTier = (typeof CoinTier)[keyof typeof CoinTier];
-
-export const COIN_TIERS: readonly CoinTier[] = [CoinTier.Copper, CoinTier.Silver, CoinTier.Gold];
-
-/**
- * Which coin a value is drawn as: coppers below a tenth of a sun, gold from
- * a whole one up, silver in between.
- *
- * Stated as fractions of the major unit rather than as a list, so the ladder
- * means the same thing at every level: the gold coins are the ones worth a
- * whole sun or more.
- */
-export function coinTier(currency: CurrencyDefinition, value: number): CoinTier {
-  if (value >= currency.minorPerMajor) return CoinTier.Gold;
-  if (value >= currency.minorPerMajor / 10) return CoinTier.Silver;
-  return CoinTier.Copper;
-}
-
-/**
  * The most coins the money has.
  *
- * The shop's coin pad builds this many buttons once, so it has to come from
- * the coin table rather than from a number typed into the panel: a coin the
+ * The shop's table builds this many piles once, so it has to come from the
+ * coin table rather than from a number typed into the panel: a coin the
  * player cannot put down is a price they cannot reach.
  */
 export const MOST_DENOMINATIONS: number = CURRENCY.denominations.length;
@@ -140,6 +123,11 @@ export const MOST_DENOMINATIONS: number = CURRENCY.denominations.length;
 /** The smallest coin: the unit every price has to be a whole number of. */
 export function smallestCoin(currency: CurrencyDefinition): number {
   return currency.denominations[0] as number;
+}
+
+/** The biggest coin: the face the game shows when it means "money". */
+export function largestCoin(currency: CurrencyDefinition): number {
+  return currency.denominations[currency.denominations.length - 1] as number;
 }
 
 /** Whether an amount can be paid at all with the coins that exist. */
@@ -165,6 +153,32 @@ export function coinsFor(currency: CurrencyDefinition, minor: number): number[] 
     }
   }
   return left === 0 ? coins : [];
+}
+
+export interface Stack {
+  readonly value: number;
+  readonly count: number;
+}
+
+/**
+ * A handful of coins gathered into piles, one per denomination.
+ *
+ * What a pile of money *is* once there is too much of it to count one coin
+ * at a time. Forty coins laid out singly is a picture a child checks by
+ * counting to forty, which is not the exercise and does not work anyway —
+ * the shopkeeper is a coin or two out one time in ten, and one coin missing
+ * from forty is invisible. The same money as "six piles of five ducats" is
+ * checked by multiplying, which is arithmetic that holds at any size.
+ *
+ * Largest first, the order she counts them out in and the order the loose
+ * coins they replace are already in.
+ */
+export function stacksOf(coins: readonly number[]): Stack[] {
+  const counts = new Map<number, number>();
+  for (const coin of coins) counts.set(coin, (counts.get(coin) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort(([a], [b]) => b - a)
+    .map(([value, count]) => ({ value, count }));
 }
 
 /** What a pile of coins comes to. */

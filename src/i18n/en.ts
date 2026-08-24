@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { AnimalKind } from "../world/animals";
+import { DecorType } from "../world/decor";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
 import { MaterialType } from "../world/materials";
 import { PlantStage, PlantType } from "../world/plants";
+import type { Buyable } from "../world/shop";
 import { TerrainType } from "../world/terrain";
 import type { Noun, Phrases } from "./phrases";
 
@@ -49,7 +51,7 @@ const ANIMALS: Record<AnimalKind, Noun> = {
 const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Well]: noun("well"),
   [FixtureType.Fence]: noun("fence"),
-  [FixtureType.Table]: noun("table"),
+  [FixtureType.Table]: noun("garden table", "garden tables"),
   [FixtureType.Lamp]: noun("lamp"),
   [FixtureType.Bench]: noun("bench", "benches"),
   [FixtureType.Scarecrow]: noun("scarecrow"),
@@ -147,9 +149,23 @@ const MATERIALS: Record<MaterialType, Noun> = {
   },
 };
 
-function item(item: ItemType): Noun {
+const FURNITURE: Record<DecorType, Noun> = {
+  [DecorType.Bed]: noun("bed"),
+  // The store already sells a garden table, which is a different thing at a
+  // different size. Same word, two objects — see `PIECE_ART`.
+  [DecorType.Table]: noun("table"),
+  [DecorType.Chair]: noun("chair"),
+  [DecorType.Rug]: noun("rug"),
+  [DecorType.Bookshelf]: noun("bookshelf", "bookshelves"),
+  [DecorType.Stove]: noun("stove"),
+};
+
+function item(item: ItemType | Buyable): Noun {
   return (
     PLANTS[item as PlantType] ??
+    // Before the fixtures, because the store sells a garden table *and* an
+    // indoor one and they are two different objects sharing a word.
+    FURNITURE[item as DecorType] ??
     FIXTURES[item as FixtureType] ??
     MATERIALS[item as MaterialType] ??
     noun(item)
@@ -237,10 +253,19 @@ export const EN: Phrases = {
   brickHintAdd: "Add the two bricks under it.",
   brickHintTakeAway: "Take the brick beside it away from the one above.",
 
+  mirrorTitle: "The fold",
+  mirrorAsk: "Draw the line this shape would fold in half along.",
+  mirrorWrong: "The two halves do not match. Try another line.",
+  mirrorDone: "It folds. The halves land on each other exactly.",
+  mirrorHint: "This one folds here.",
+
   hourglassTitle: "The hourglass",
-  hourglassAsk: "How many hours were you away?",
-  hourglassLeft: "you left",
-  hourglassBack: "you are back",
+  hourglassAsk: "How far are you moving the clock?",
+  hourglassTurnIt: "Swipe round to turn the clock.",
+  hourglassMinutes: "minutes",
+  hourglassHours: "hours",
+  hourglassTo: "move it to",
+  hourglassNow: "it is now",
   hourglassCountOn: (hours) => `Count round the dial: ${hours}, and keep going…`,
   hourglassSolved: (hours) => `${hours} hours. The glass turns.`,
 
@@ -283,12 +308,12 @@ export const EN: Phrases = {
   // quay, and a counter in a harbour warehouse announcing a village is a
   // sign for the wrong building.
   storeTitle: (money) => `Shop — ${money}`,
-  storeFooter: "She buys crops, and sells things to put in your garden.",
+  storeFooter: "She buys crops, and sells things for your garden and your house.",
   sheBuys: "She buys",
   sheSells: "She sells",
-  stockRow: (fixture, price) => `${FIXTURES[fixture]?.bare}\n${price}`,
+  stockRow: (thing, price) => `${EN.item(thing).bare}\n${price}`,
   cropRow: (item, held, price) => `${held} x ${EN.item(item).bare}\n${price} each`,
-  buyTitle: (fixture, count, price) => `${count} x ${FIXTURES[fixture]?.bare} — pay ${price}`,
+  buyTitle: (thing, count, price) => `${count} x ${EN.item(thing).bare} — pay ${price}`,
   sellTitle: (item, count, price) => `${count} x ${EN.item(item).bare} — she owes ${price}`,
   onTheCounter: (total) => `on the counter: ${total}`,
   moreToGo: (amount) => `${amount} more to go.`,
@@ -298,6 +323,7 @@ export const EN: Phrases = {
   paidFor: (fixture, count) => `Paid. ${EN.count(fixture, count)} in your crate.`,
   sheCountsOut: "she counts out:",
   countHerCoins: "Count her coins. Is that the right money?",
+  countHerPiles: "Work out her piles. Is that the right money?",
   back: "back",
   pay: "pay",
   done: "done",

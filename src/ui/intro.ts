@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { CoinTier } from "../shop/currency";
+import { CURRENCY, largestCoin } from "../shop/currency";
 import { FixtureType } from "../world/fixtures";
 import { PlantType } from "../world/plants";
 import { UiAsset, coinIcon, cropIcon, itemIcon } from "./assets";
@@ -53,6 +53,6 @@ export const INTRO_ICONS: Record<IntroBeat, readonly string[]> = {
   [IntroBeat.Seeds]: [UiAsset.SeedPouch, cropIcon(PlantType.Carrot)],
   [IntroBeat.Spell]: [UiAsset.Spellbook, UiAsset.RuneAdd],
   [IntroBeat.Pick]: [cropIcon(PlantType.Sunflower), UiAsset.Basket],
-  [IntroBeat.Store]: [coinIcon(CoinTier.Gold), itemIcon(FixtureType.Fence)],
+  [IntroBeat.Store]: [coinIcon(largestCoin(CURRENCY)), itemIcon(FixtureType.Fence)],
   [IntroBeat.Map]: [UiAsset.MapWall],
 };

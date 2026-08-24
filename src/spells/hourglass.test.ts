@@ -4,196 +4,436 @@
 import { describe, expect, test } from "bun:test";
 import {
   CLOCK_RUNGS,
-  HARDEST_CLOCK_RUNG,
+  type ClockTime,
   Reading,
-  backspaceHour,
+  SAND_LEAST_MS,
+  SAND_MOST_MS,
+  SWIPE_PER_TICK,
+  askedOf,
+  asksMinutes,
+  backspaceClock,
   beginHourglassCast,
   clockRungAt,
+  forwardMinutes,
   handAngles,
-  hourglassFor,
   hourglassHint,
+  moved,
+  nextBox,
   readClock,
-  submitHour,
-  typeHourDigit,
-  worthCasting,
+  sandFor,
+  snapTime,
+  spanOf,
+  submitClock,
+  swipeTicks,
+  turnBy,
+  typeClockDigit,
 } from "./hourglass";
 
-/** A local timestamp, so the clock reads what the wall clock would. */
-const at = (hour: number, minute = 0) => new Date(2026, 0, 5, hour, minute, 0, 0).getTime();
+const HOUR_RUNG = clockRungAt(0);
+const QUARTER_RUNG = clockRungAt(CLOCK_RUNGS.length - 1);
+const at = (hour: number, minute = 0): ClockTime => ({ hour, minute });
 
-describe("reading a clock face", () => {
-  // Down, not to the nearest. A clock that jumped past the hour would show a
-  // time that has not happened yet, and a child checking it against the one
-  // on the wall would find the game wrong.
-  test("rounds down to what the rung can read", () => {
-    expect(readClock(at(9, 58), Reading.Hour)).toEqual({ hour: 9, minute: 0 });
-    expect(readClock(at(9, 58), Reading.Half)).toEqual({ hour: 9, minute: 30 });
-    expect(readClock(at(9, 58), Reading.Quarter)).toEqual({ hour: 9, minute: 45 });
-  });
+/** Every time a face can show, at a given reading. */
+function everyTime(reading: Reading): ClockTime[] {
+  const step = reading === Reading.Hour ? 60 : reading === Reading.Half ? 30 : 15;
+  const times: ClockTime[] = [];
+  for (let minutes = 0; minutes < 720; minutes += step) {
+    times.push({ hour: Math.floor(minutes / 60), minute: minutes % 60 });
+  }
+  return times;
+}
 
-  // A clock face has twelve hours on it, not twenty-four.
-  test("puts the afternoon on the same face as the morning", () => {
-    expect(readClock(at(15), Reading.Hour)).toEqual({ hour: 3, minute: 0 });
-    expect(readClock(at(0), Reading.Hour)).toEqual({ hour: 0, minute: 0 });
-  });
-
-  test("points the hands where a clock points them", () => {
-    expect(handAngles({ hour: 3, minute: 0 })).toEqual({ hour: 90, minute: 0 });
-    expect(handAngles({ hour: 6, minute: 30 })).toEqual({ hour: 195, minute: 180 });
-    // The hour hand creeps: at half past nine it is halfway to ten, which is
-    // the thing that makes a clock hard to read and the reason the harder
-    // rungs put the hands off the numerals.
-    expect(handAngles({ hour: 9, minute: 30 }).hour).toBe(285);
-  });
-});
-
-describe("how long you were gone", () => {
-  test("counts the whole hours between the two faces", () => {
-    const problem = hourglassFor(at(4), at(9), clockRungAt(0));
-    expect(problem.hours).toBe(5);
-    expect(problem.left).toEqual({ hour: 4, minute: 0 });
-    expect(problem.back).toEqual({ hour: 9, minute: 0 });
-  });
-
-  // The thing that makes clock arithmetic its own kind: every instinct a
-  // child has built on the number line says ten plus four is fourteen.
-  test("goes round the dial rather than off the end of it", () => {
-    expect(hourglassFor(at(10), at(14), clockRungAt(0)).hours).toBe(4);
-    expect(hourglassFor(at(23), at(2), clockRungAt(0)).hours).toBe(3);
-  });
-
-  // A twelve-hour face cannot tell half a day from none, and the spell does
-  // not invent a number the picture will not support.
-  test("has nothing to give after exactly half a day, or none at all", () => {
-    expect(worthCasting(hourglassFor(at(4), at(16), clockRungAt(0)))).toBe(false);
-    expect(worthCasting(hourglassFor(at(4, 10), at(4, 50), clockRungAt(0)))).toBe(false);
-    expect(worthCasting(hourglassFor(at(4), at(5), clockRungAt(0)))).toBe(true);
+describe("how far the clock is being moved", () => {
+  test("forward, and never round more than the face can hold", () => {
+    expect(spanOf(at(3), at(7))).toEqual({ hours: 4, minutes: 0 });
+    expect(spanOf(at(9, 30), at(11, 45))).toEqual({ hours: 2, minutes: 15 });
   });
 
   /**
-   * The answer is the span between the *rounded* faces, always. A child who
-   * counts round the dial and a child who subtracts have to arrive at the
-   * same number, and both have to agree with what the spell pays out.
+   * The case a plain subtraction gets wrong, and the reason the spell says
+   * "the next time it will be" rather than putting am and pm on the face.
    */
-  test("matches the picture, whatever the real minutes were", () => {
-    for (const [rungAt, reading] of [
-      [0, Reading.Hour],
-      [2, Reading.Half],
-      [4, Reading.Quarter],
-    ] as const) {
-      const problem = hourglassFor(at(4, 55), at(9, 5), clockRungAt(rungAt));
-      const left = readClock(at(4, 55), reading);
-      const back = readClock(at(9, 5), reading);
-      const minutes = (back.hour * 60 + back.minute - (left.hour * 60 + left.minute) + 720) % 720;
-      expect({ rungAt, hours: problem.hours }).toEqual({ rungAt, hours: Math.floor(minutes / 60) });
+  test("quarter to twelve to quarter past is half an hour, not eleven and a half", () => {
+    expect(spanOf(at(11, 45), at(0, 15))).toEqual({ hours: 0, minutes: 30 });
+  });
+
+  test("standing still is no move at all", () => {
+    for (const time of everyTime(Reading.Quarter)) {
+      expect({ time, span: spanOf(time, time) }).toEqual({ time, span: { hours: 0, minutes: 0 } });
+    }
+  });
+
+  // Whatever the pair, the answer is something a twelve-hour face can show.
+  test("every pair of times asks for less than twelve hours", () => {
+    for (const from of everyTime(Reading.Quarter)) {
+      for (const to of everyTime(Reading.Quarter)) {
+        const span = spanOf(from, to);
+        expect({
+          ok: span.hours >= 0 && span.hours < 12 && span.minutes >= 0 && span.minutes < 60,
+        }).toEqual({ ok: true });
+      }
+    }
+  });
+
+  // The span and the clock have to agree: winding the world on by what the
+  // child said must land the world on the face they pointed at.
+  test("the span is exactly what gets the clock from one face to the other", () => {
+    for (const from of everyTime(Reading.Quarter)) {
+      for (const to of everyTime(Reading.Quarter)) {
+        const span = spanOf(from, to);
+        const landed = (from.hour * 60 + from.minute + span.hours * 60 + span.minutes) % 720;
+        expect({ from, to, landed }).toEqual({ from, to, landed: to.hour * 60 + to.minute });
+      }
     }
   });
 });
 
-describe("the ladder", () => {
-  test("teaches the face, never the span", () => {
-    // Nothing on a rung says how long the child was away — that is theirs.
-    for (const rung of CLOCK_RUNGS) {
-      expect(Object.keys(rung).sort()).toEqual(["hintAfter", "numerals", "reading"]);
-    }
+describe("snapping to what the face can show", () => {
+  test("the hour rung can only ever point at an hour", () => {
+    expect(snapTime(at(4, 20), Reading.Hour)).toEqual(at(4));
+    expect(snapTime(at(4, 40), Reading.Hour)).toEqual(at(5));
   });
 
-  test("takes the numerals away and then puts the hands off them", () => {
-    const fineness: Record<string, number> = { hour: 0, half: 1, quarter: 2 };
-    const step = (reading: string) => fineness[reading] ?? 0;
-    for (const [n, rung] of CLOCK_RUNGS.entries()) {
-      const before = CLOCK_RUNGS[n - 1];
-      if (!before) continue;
-      const harder =
-        step(rung.reading) >= step(before.reading) && rung.hintAfter >= before.hintAfter;
-      expect({ n, harder }).toEqual({ n, harder: true });
-    }
-    expect(CLOCK_RUNGS[0]?.numerals).toBe(true);
-    expect(CLOCK_RUNGS[HARDEST_CLOCK_RUNG]?.numerals).toBe(false);
+  test("and the quarter rung at a quarter", () => {
+    expect(snapTime(at(4, 20), Reading.Quarter)).toEqual(at(4, 15));
+    expect(snapTime(at(4, 38), Reading.Quarter)).toEqual(at(4, 45));
   });
 
-  test("clamps a saved rung that is nonsense", () => {
-    expect(clockRungAt(-3)).toEqual(CLOCK_RUNGS[0] as never);
-    expect(clockRungAt(99)).toEqual(CLOCK_RUNGS[HARDEST_CLOCK_RUNG] as never);
+  // Round the top of the dial rather than off the end of it.
+  test("a time that rounds past twelve comes back to the top", () => {
+    expect(snapTime(at(11, 50), Reading.Hour)).toEqual(at(0));
+  });
+
+  test("whatever it is handed, it hands back a time a clock could show", () => {
+    for (const reading of [Reading.Hour, Reading.Half, Reading.Quarter]) {
+      for (let hour = 0; hour < 12; hour++) {
+        for (let minute = 0; minute < 60; minute++) {
+          const snapped = snapTime({ hour, minute }, reading);
+          expect({
+            reading,
+            ok:
+              snapped.hour >= 0 && snapped.hour < 12 && snapped.minute >= 0 && snapped.minute < 60,
+          }).toEqual({ reading, ok: true });
+        }
+      }
+    }
   });
 });
 
-describe("answering", () => {
-  const problem = hourglassFor(at(4), at(9), clockRungAt(0));
-
-  test("takes the number of hours and finishes", () => {
-    const cast = submitHour(typeHourDigit(beginHourglassCast(problem), 5));
-    expect({ done: cast.done, missteps: cast.missteps }).toEqual({ done: true, missteps: 0 });
+describe("swiping the clock round", () => {
+  // Clockwise is down and to the right. An approximation of going round a
+  // dial, and the right one: a true rotation has to be measured about the
+  // centre of the face, which means a swipe straight across the middle turns
+  // the clock by nothing at all.
+  test("down and to the right turns it forward", () => {
+    expect(swipeTicks(0, 100)).toBeGreaterThan(0);
+    expect(swipeTicks(100, 0)).toBeGreaterThan(0);
+    expect(swipeTicks(70, 70)).toBeGreaterThan(0);
   });
 
-  test("a wrong answer clears the box and never ends the cast", () => {
-    let cast = submitHour(typeHourDigit(beginHourglassCast(problem), 9));
-    expect({ done: cast.done, entry: cast.entry, wrong: cast.wrong }).toEqual({
-      done: false,
-      entry: "",
-      wrong: true,
-    });
-    cast = submitHour(typeHourDigit(cast, 5));
+  test("and up and to the left turns it back", () => {
+    expect(swipeTicks(0, -100)).toBeLessThan(0);
+    expect(swipeTicks(-100, 0)).toBeLessThan(0);
+    expect(swipeTicks(-70, -70)).toBeLessThan(0);
+  });
+
+  // Neither way round the dial, so it turns nothing. Honest rather than
+  // guessing: a finger going up and to the right is not winding anything.
+  test("and a swipe that is neither turns nothing", () => {
+    expect(swipeTicks(100, -100)).toBe(0);
+    expect(swipeTicks(-100, 100)).toBe(0);
+    expect(swipeTicks(0, 0)).toBe(0);
+  });
+
+  // A diagonal is one direction round the dial, not two: added and then
+  // flattened, so it counts about the same as a straight swipe of the same
+  // length rather than half as much again.
+  // A swipe that is *purely* round the dial counts for all of its length; a
+  // straight one down or across is only partly in that direction, and counts
+  // for the part that is. Which is what projecting onto a direction means,
+  // and is why a diagonal of the same length turns the clock further.
+  test("and a diagonal counts for more than a straight swipe as long", () => {
+    expect(swipeTicks(70, 70)).toBeGreaterThan(swipeTicks(0, 99));
+  });
+
+  test("a finger that has barely moved turns nothing at all", () => {
+    for (let pixels = 0; pixels < SWIPE_PER_TICK; pixels++) {
+      expect({ pixels, ticks: swipeTicks(pixels, 0) }).toEqual({ pixels, ticks: 0 });
+    }
+  });
+
+  test("survives nonsense rather than winding the clock off its face", () => {
+    expect(swipeTicks(Number.NaN, 10)).toBe(0);
+    expect(swipeTicks(10, Number.POSITIVE_INFINITY)).toBe(0);
+  });
+});
+
+describe("turning it by ticks", () => {
+  test("forward, five minutes at a time", () => {
+    let cast = beginHourglassCast(at(3), QUARTER_RUNG);
+    cast = turnBy(cast, 1);
+    expect(cast.to).toEqual(at(3, 5));
+    cast = turnBy(cast, 3);
+    expect(cast.to).toEqual(at(3, 20));
+  });
+
+  test("and backwards, which walks the hands anticlockwise", () => {
+    let cast = beginHourglassCast(at(3), QUARTER_RUNG);
+    cast = turnBy(cast, -2);
+    expect(cast.to).toEqual(at(2, 50));
+  });
+
+  /**
+   * Backwards on the face is not backwards in the world. The clock only ever
+   * runs forward, so hands wound back to an hour already gone point at that
+   * hour tomorrow — a long move rather than a negative one.
+   */
+  test("winding back one tick asks for nearly a whole face", () => {
+    let cast = beginHourglassCast(at(3), QUARTER_RUNG);
+    cast = turnBy(cast, -1);
+    expect(askedOf(cast)).toEqual({ hours: 11, minutes: 55 });
+  });
+
+  test("round the top of the dial and out the other side", () => {
+    let cast = beginHourglassCast(at(11, 45), QUARTER_RUNG);
+    cast = turnBy(cast, 3);
+    expect(cast.to).toEqual(at(0));
+  });
+
+  test("however far it is turned, it still reads as a time", () => {
+    for (const ticks of [-500, -143, -1, 0, 1, 143, 500]) {
+      let cast = beginHourglassCast(at(7, 30), QUARTER_RUNG);
+      cast = turnBy(cast, ticks);
+      expect({
+        ticks,
+        ok: cast.to.hour >= 0 && cast.to.hour < 12 && cast.to.minute % 5 === 0,
+      }).toEqual({ ticks, ok: true });
+    }
+  });
+
+  test("turning it again clears what was typed", () => {
+    let cast = beginHourglassCast(at(3), QUARTER_RUNG);
+    cast = turnBy(cast, 12);
+    cast = typeClockDigit(cast, 1);
+    cast = turnBy(cast, 1);
+    expect(cast.hours).toBe("");
+  });
+});
+
+describe("casting it", () => {
+  // Three hours is thirty-six ticks of five minutes.
+  const THREE_HOURS = 36;
+
+  test("opens with the hands where the world's clock has them", () => {
+    const cast = beginHourglassCast(at(7, 20), QUARTER_RUNG);
+    expect(cast.from).toEqual(at(7, 15));
+    expect(cast.to).toEqual(at(7, 15));
+    expect(moved(cast)).toBe(false);
+  });
+
+  // Nothing to answer until the clock has been turned, and nothing to give:
+  // a cast that wound it by nought is a cast that did nothing.
+  test("and will not be finished until it has been turned", () => {
+    let cast = beginHourglassCast(at(7), HOUR_RUNG);
+    cast = typeClockDigit(cast, 0);
+    cast = submitClock(cast);
+    expect(cast.done).toBe(false);
+  });
+
+  test("turned, the span is what it asks for", () => {
+    let cast = beginHourglassCast(at(7), HOUR_RUNG);
+    cast = turnBy(cast, THREE_HOURS);
+    expect(cast.to).toEqual(at(10));
+    expect(askedOf(cast)).toEqual({ hours: 3, minutes: 0 });
+  });
+
+  test("the right answer finishes it", () => {
+    let cast = beginHourglassCast(at(7), HOUR_RUNG);
+    cast = turnBy(cast, THREE_HOURS);
+    cast = typeClockDigit(cast, 3);
+    cast = submitClock(cast);
+    expect(cast.done).toBe(true);
+    expect(cast.missteps).toBe(0);
+  });
+
+  test("a wrong one clears the boxes and is counted", () => {
+    let cast = beginHourglassCast(at(7), HOUR_RUNG);
+    cast = turnBy(cast, THREE_HOURS);
+    cast = typeClockDigit(cast, 5);
+    cast = submitClock(cast);
+    expect(cast.done).toBe(false);
+    expect(cast.wrong).toBe(true);
+    expect(cast.missteps).toBe(1);
+    expect(cast.hours).toBe("");
+  });
+});
+
+describe("the two boxes", () => {
+  const TWO_HOURS = 24;
+
+  // Asked of the move, not of the rung: the clock turns five minutes at a
+  // time at every rung now, so what decides whether the answer has a minutes
+  // half is how far the child turned it.
+  test("a move in whole hours is not asked about its minutes", () => {
+    let cast = beginHourglassCast(at(7), HOUR_RUNG);
+    cast = turnBy(cast, TWO_HOURS);
+    expect(asksMinutes(cast)).toBe(false);
+    cast = turnBy(cast, 3);
+    expect(asksMinutes(cast)).toBe(true);
+  });
+
+  test("and a whole-hour answer needs no minutes to be right", () => {
+    let cast = beginHourglassCast(at(7), HOUR_RUNG);
+    cast = turnBy(cast, TWO_HOURS);
+    cast = typeClockDigit(cast, 2);
+    cast = submitClock(cast);
     expect(cast.done).toBe(true);
   });
 
-  // Eleven is as far as a twelve-hour face can count.
-  test("the box takes two digits and no more", () => {
-    let cast = beginHourglassCast(problem);
-    cast = typeHourDigit(typeHourDigit(typeHourDigit(cast, 1), 1), 1);
-    expect(cast.entry).toBe("11");
+  test("where minutes are asked for, both have to be right", () => {
+    let cast = beginHourglassCast(at(7), QUARTER_RUNG);
+    cast = turnBy(cast, TWO_HOURS + 3);
+    expect(askedOf(cast)).toEqual({ hours: 2, minutes: 15 });
+    cast = typeClockDigit(cast, 2);
+    cast = nextBox(cast);
+    cast = typeClockDigit(cast, 1);
+    cast = typeClockDigit(cast, 5);
+    cast = submitClock(cast);
+    expect(cast.done).toBe(true);
   });
 
-  test("a leading zero is dropped rather than typed", () => {
-    expect(typeHourDigit(beginHourglassCast(problem), 0).entry).toBe("");
+  // Both boxes take a nought. The hours box used to refuse one, on the
+  // argument that the glass never had nothing to give — which stopped being
+  // true when a move of twenty minutes became an ordinary thing to make.
+  test("nought is an answer in either box", () => {
+    let cast = beginHourglassCast(at(7), HOUR_RUNG);
+    cast = turnBy(cast, 4);
+    expect(askedOf(cast)).toEqual({ hours: 0, minutes: 20 });
+    cast = typeClockDigit(cast, 0);
+    expect(cast.hours).toBe("0");
+    cast = nextBox(cast);
+    cast = typeClockDigit(cast, 2);
+    cast = typeClockDigit(cast, 0);
+    cast = submitClock(cast);
+    expect(cast.done).toBe(true);
   });
 
-  test("backspace clears the mark on a wrong box", () => {
-    let cast = submitHour(typeHourDigit(beginHourglassCast(problem), 9));
-    cast = backspaceHour(typeHourDigit(cast, 9));
-    expect({ entry: cast.entry, wrong: cast.wrong }).toEqual({ entry: "", wrong: false });
+  test("enter moves along from the hours rather than judging early", () => {
+    let cast = beginHourglassCast(at(7), QUARTER_RUNG);
+    cast = turnBy(cast, TWO_HOURS + 3);
+    cast = typeClockDigit(cast, 2);
+    cast = submitClock(cast);
+    expect(cast.done).toBe(false);
+    expect(cast.wrong).toBe(false);
+    expect(cast.box).toBe("minutes");
   });
 
-  test("nothing changes once it is solved", () => {
-    const cast = submitHour(typeHourDigit(beginHourglassCast(problem), 5));
-    expect(submitHour(typeHourDigit(cast, 1))).toEqual(cast);
-    expect(backspaceHour(cast)).toEqual(cast);
+  test("backspacing off the front of the minutes goes back to the hours", () => {
+    let cast = beginHourglassCast(at(7), QUARTER_RUNG);
+    cast = turnBy(cast, TWO_HOURS + 3);
+    cast = nextBox(cast);
+    cast = backspaceClock(cast);
+    expect(cast.box).toBe("hours");
   });
 });
 
-describe("the help a stuck child is given", () => {
-  const problem = hourglassFor(at(4), at(9), clockRungAt(0));
+describe("helping a stuck child", () => {
+  const THREE_HOURS = 36;
 
-  test("draws nothing until something is wrong", () => {
-    expect(hourglassHint(beginHourglassCast(problem))).toBe(0);
-  });
-
-  test("walks the hand round one hour per wrong answer", () => {
-    let cast = beginHourglassCast(problem);
-    cast = submitHour(typeHourDigit(cast, 9));
-    expect(hourglassHint(cast)).toBe(1);
-    cast = submitHour(typeHourDigit(cast, 9));
-    expect(hourglassHint(cast)).toBe(2);
-  });
-
-  test("stops one hour short, because the last step is the answer", () => {
-    let cast = beginHourglassCast(problem);
-    for (let n = 0; n < 10; n++) cast = submitHour(typeHourDigit(cast, 9));
-    expect(hourglassHint(cast)).toBe(4);
-  });
-
-  test("has nothing to draw when a single hour is the whole of it", () => {
-    let cast = beginHourglassCast(hourglassFor(at(4), at(5), clockRungAt(0)));
-    for (let n = 0; n < 4; n++) cast = submitHour(typeHourDigit(cast, 9));
+  test("says nothing until one has been got wrong", () => {
+    let cast = beginHourglassCast(at(7), HOUR_RUNG);
+    cast = turnBy(cast, THREE_HOURS);
     expect(hourglassHint(cast)).toBe(0);
   });
 
-  test("waits longer at the top of the ladder", () => {
-    const hard = hourglassFor(at(4), at(9), clockRungAt(HARDEST_CLOCK_RUNG));
-    let cast = beginHourglassCast(hard);
-    cast = submitHour(typeHourDigit(cast, 9));
-    expect(hourglassHint(cast)).toBe(0);
-    cast = submitHour(typeHourDigit(cast, 9));
+  test("then counts one hour of the sweep for each miss", () => {
+    let cast = beginHourglassCast(at(7), HOUR_RUNG);
+    cast = turnBy(cast, THREE_HOURS);
+    cast = typeClockDigit(cast, 9);
+    cast = submitClock(cast);
     expect(hourglassHint(cast)).toBe(1);
+  });
+
+  // It stops one short, because the last step is the answer.
+  test("and never counts the whole way round", () => {
+    let cast = beginHourglassCast(at(7), HOUR_RUNG);
+    cast = turnBy(cast, THREE_HOURS);
+    for (let miss = 0; miss < 8; miss++) {
+      cast = typeClockDigit(cast, 9);
+      cast = submitClock(cast);
+    }
+    expect(hourglassHint(cast)).toBe(askedOf(cast).hours - 1);
+  });
+});
+
+describe("reading the world's clock", () => {
+  test("rounds down, so the game never shows a time that has not happened", () => {
+    const noon = new Date(2026, 0, 1, 12, 55).getTime();
+    expect(readClock(noon, Reading.Hour)).toEqual(at(0));
+    expect(readClock(noon, Reading.Quarter)).toEqual(at(0, 45));
+  });
+
+  test("and gives a face, so the afternoon reads like the morning", () => {
+    const evening = new Date(2026, 0, 1, 19, 0).getTime();
+    expect(readClock(evening, Reading.Hour)).toEqual(at(7));
+  });
+});
+
+describe("what the hands point at", () => {
+  test("twelve is straight up and the hour hand creeps round", () => {
+    expect(handAngles(at(0))).toEqual({ hour: 0, minute: 0 });
+    expect(handAngles(at(3))).toEqual({ hour: 90, minute: 0 });
+    expect(handAngles(at(3, 30)).hour).toBe(105);
+    expect(handAngles(at(0, 15)).minute).toBe(90);
+  });
+});
+
+describe("forwardMinutes", () => {
+  test("is what everything else is built on", () => {
+    expect(forwardMinutes(at(1), at(2))).toBe(60);
+    expect(forwardMinutes(at(2), at(1))).toBe(660);
+    expect(forwardMinutes(at(6), at(6))).toBe(0);
+  });
+});
+
+describe("how long the sand runs", () => {
+  test("a flick for the smallest move the face allows", () => {
+    expect(sandFor(5)).toBe(SAND_LEAST_MS);
+  });
+
+  test("and three seconds for the biggest", () => {
+    expect(sandFor(11 * 60 + 55)).toBe(SAND_MOST_MS);
+  });
+
+  // Straight between the two ends: the child picked the number, so the time
+  // it takes should be readable back off it.
+  test("and in between, in proportion", () => {
+    const middle = sandFor((5 + 715) / 2);
+    expect(middle).toBe(Math.round((SAND_LEAST_MS + SAND_MOST_MS) / 2));
+  });
+
+  test("never shorter than a flick nor longer than three seconds", () => {
+    for (const minutes of [0, 1, 4, 5, 360, 715, 719, 1000, -20]) {
+      const ran = sandFor(minutes);
+      expect({ minutes, ok: ran >= SAND_LEAST_MS && ran <= SAND_MOST_MS }).toEqual({
+        minutes,
+        ok: true,
+      });
+    }
+  });
+
+  // A bigger move never runs for less time than a smaller one.
+  test("and longer for a longer move, without exception", () => {
+    let last = 0;
+    for (let minutes = 5; minutes <= 715; minutes += 5) {
+      const ran = sandFor(minutes);
+      expect({ minutes, rising: ran >= last }).toEqual({ minutes, rising: true });
+      last = ran;
+    }
+  });
+
+  test("survives nonsense rather than running forever", () => {
+    expect(sandFor(Number.NaN)).toBe(SAND_LEAST_MS);
+    expect(sandFor(Number.POSITIVE_INFINITY)).toBe(SAND_MOST_MS);
   });
 });

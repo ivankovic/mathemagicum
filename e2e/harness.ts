@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { type Page, chromium } from "playwright";
+// The game's own feel constant rather than a copy: a harness holding its own
+// idea of how far a swipe goes is a harness that silently stops matching.
+import { SWIPE_PER_TICK, TICK_MINUTES } from "../src/spells/hourglass";
 
 /**
  * Playing the real game, in a real browser, as a test.
@@ -128,17 +131,23 @@ async function listeningOn(): Promise<string | null> {
  * outside the run. See `PORT` for what inheriting cost.
  */
 export async function serve(): Promise<string> {
-  // Dead handles are cleared rather than trusted. Bun kills processes a test
-  // file spawned when that file ends — it says so, in one line, as `killed 1
-  // dangling process` — so the server the first scenario file started is
-  // gone by the time the second one asks for it. Held onto, that handle made
-  // `??=` skip the respawn, and every scenario in the second file failed
-  // waiting thirty seconds for a server nothing was going to start.
-  if (serving && serving.exitCode !== null) {
-    serving = null;
-    origin = null;
-  }
-  if (serving && origin && (await answering(origin))) return origin;
+  // A server per scenario, torn down and started again each time.
+  //
+  // It was one for the whole file, and the ninth scenario in a file stalled
+  // — reproducibly, at the same place, on a machine with nothing else
+  // running. A standalone loop of nothing but page loads had already shown
+  // the same shape: eleven fine and the twelfth never finishing. Whatever
+  // accumulates in a Vite that has served the same heavy page ten times, the
+  // cure is not to find out but to stop asking it to. Vite is ready in about
+  // three hundred milliseconds, against a scenario that takes twelve
+  // seconds, so this is the cheapest hermetic thing available.
+  //
+  // Dead handles are cleared rather than trusted for the same reason they
+  // always were: bun kills processes a test file spawned when that file
+  // ends, and a handle held past that made `??=` skip the respawn.
+  serving?.kill();
+  serving = null;
+  origin = null;
 
   // A clean log, because the port is read back out of it and last run's
   // address is not this run's.
@@ -451,6 +460,39 @@ export class Game {
   }
 
   /**
+   * Drag a coin from a pile onto the counter.
+   *
+   * The shop's paying half is the one thing in this game that is not a tap:
+   * a child takes a coin off a pile and carries it across the table, and
+   * where they let go is the whole of the interaction. A scenario that only
+   * ever tapped would leave the carrying untested, which is most of it.
+   *
+   * Moved in steps rather than teleported, because a pointer that arrives
+   * without travelling is a pointer that never moved — and "did it move" is
+   * exactly what tells a drag from a tap.
+   */
+  async dragCoin(value: number, onto = "shop.counter"): Promise<void> {
+    const ui = await this.ui();
+    const from = ui[`shop.pile.${value}`];
+    const to = ui[onto];
+    if (!from || !to) throw new Error(`no pile ${value} or no ${onto} to drop it on`);
+    await this.drag(from, to);
+  }
+
+  /** Take something from one place on the screen to another, and let go. */
+  async drag(from: { x: number; y: number }, to: { x: number; y: number }): Promise<void> {
+    await this.ask("reaching for it", (page) => page.mouse.move(from.x, from.y));
+    await this.ask("picking it up", (page) => page.mouse.down());
+    for (let step = 1; step <= 4; step++) {
+      const x = from.x + ((to.x - from.x) * step) / 4;
+      const y = from.y + ((to.y - from.y) * step) / 4;
+      await this.ask("carrying it", (page) => page.mouse.move(x, y));
+    }
+    await this.ask("letting go", (page) => page.mouse.up());
+    await this.settle();
+  }
+
+  /**
    * Tap a square relative to where she is standing.
    *
    * What talking to somebody is: they stand on a square beside her, and the
@@ -556,6 +598,73 @@ export class Game {
   }
 
   /**
+   * Swipe the clock round, forward or back, by this many five-minute ticks.
+   *
+   * The hourglass is the one spell whose control is a *gesture*: there is no
+   * button to press, and taking hold of a hand was what this replaced. So
+   * the seam gives the stretch of parchment a swipe counts on, and the rest
+   * is arithmetic — how far a finger has to travel for that many ticks.
+   *
+   * Split into as many passes as it takes, because eleven hours is a great
+   * deal of swiping and the panel is only so wide. A child does the same.
+   */
+  async swipeClock(ticks: number): Promise<void> {
+    if (ticks === 0) return;
+    // Swiped, then checked, then swiped again for whatever is left over.
+    //
+    // The pointer moves in whole pixels and a long turn takes several passes
+    // across the parchment, so a fraction of a tick is lost each time and a
+    // hundred-tick turn came up short. A child would simply keep swiping;
+    // this does the same, rather than the scenario carrying a fudge factor.
+    let left = ticks;
+    for (let go = 0; go < 6 && left !== 0; go++) {
+      const before = await this.clockHands();
+      await this.swipeOnce(left);
+      const after = await this.clockHands();
+      const moved = (after - before + 720) % 720;
+      // Turned back, so what looks like a long way forward is a short way
+      // back — whichever is nearer is what the swipe actually did.
+      const signed = ticks > 0 ? moved : moved - 720;
+      // In minutes, so it converts by minutes-per-tick — not by the pixel
+      // constant, which is a different five entirely.
+      left -= Math.round(signed / TICK_MINUTES);
+    }
+  }
+
+  /** Where the hands stand now, in minutes round the face. */
+  private async clockHands(): Promise<number> {
+    const cast = await this.seam<{ to: { hour: number; minute: number } } | null>("clock");
+    if (!cast) throw new Error("no clock to read");
+    return cast.to.hour * 60 + cast.to.minute;
+  }
+
+  /** One sweep across the parchment, as far as it will go. */
+  private async swipeOnce(ticks: number): Promise<void> {
+    const cast = await this.seam<{
+      grip: { left: number; top: number; right: number; bottom: number } | null;
+    } | null>("clock");
+    const area = cast?.grip;
+    if (!area) throw new Error("no clock to swipe");
+    // Down and to the right is clockwise, so a swipe along the diagonal is
+    // the purest direction there is — and the shortest for a given turn.
+    // Which also means it needs no correction for the angle: the game counts
+    // a diagonal for its whole length.
+    //
+    // Half a tick further than the turn needs, so it lands in the middle of
+    // the band rather than on its edge — the same reason `tapCell` aims at
+    // the middle of a tile rather than its corner.
+    const room = Math.min(area.right - area.left, area.bottom - area.top) - 8;
+    const reach = (Math.abs(ticks) + 0.5) * SWIPE_PER_TICK;
+    const passes = Math.max(1, Math.ceil(reach / room));
+    const step = (reach / passes / Math.SQRT2) * (ticks > 0 ? 1 : -1);
+    const middle = { x: (area.left + area.right) / 2, y: (area.top + area.bottom) / 2 };
+    for (let pass = 0; pass < passes; pass++) {
+      const from = { x: middle.x - step / 2, y: middle.y - step / 2 };
+      await this.drag(from, { x: from.x + step, y: from.y + step });
+    }
+  }
+
+  /**
    * Answer the wall of bricks, one gap at a time.
    *
    * The seam hands over the answer as well as the question, and deliberately:
@@ -607,10 +716,52 @@ export class Game {
    * in the scene's own fields, and a room that survives a reload is a room
    * that reached the store.
    */
-  async reload(): Promise<void> {
-    await this.page.reload({ waitUntil: "domcontentloaded", timeout: SETUP_MS });
+  async reload(seams?: string): Promise<void> {
+    if (seams === undefined) {
+      await this.page.reload({ waitUntil: "domcontentloaded", timeout: SETUP_MS });
+    } else {
+      // Opened again *somewhere else*. `?at=` is the only way across the
+      // world: `standAt` writes a tile into the session and the world does
+      // not stream to meet it, so a jump of four hundred tiles leaves her
+      // standing in her own garden with the number changed. What survives
+      // this is what was written down, which is the same thing `reload`
+      // with no argument is for.
+      const url = new URL(this.page.url());
+      await this.page.goto(`${url.origin}/?skipTitle${seams}`, {
+        waitUntil: "domcontentloaded",
+        timeout: SETUP_MS,
+      });
+    }
     await running(this.page);
     await this.settle(800);
+  }
+
+  /**
+   * Into the barn, and up to the shopkeeper.
+   *
+   * Here rather than in a scenario file because both halves of the shop need
+   * it — buying and selling are two files now, and a walk into a building
+   * copied into each is a walk that gets fixed in one of them.
+   *
+   * She stands at the back of the room and the room is not always laid out
+   * the same way round, so this tries the squares beside the player rather
+   * than assuming one: a tap on the wall behind her opens nothing, which is
+   * a refusal and not a failure.
+   */
+  async goShopping(): Promise<void> {
+    await this.walk("ArrowUp", 1000);
+    await this.walk("ArrowUp", 450);
+    for (const [dCol, dRow] of [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [-1, -1],
+      [1, -1],
+    ] as const) {
+      await this.tapNear(dCol, dRow);
+      if (await this.seam("shop")) return;
+    }
+    throw new Error("could not find the shopkeeper");
   }
 
   /** A picture, for a human reading a failure. */

@@ -2,14 +2,17 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { CURRENCY, isPayable } from "../shop/currency";
+import { CURRENCY, coinsFor, isPayable, stacksOf } from "../shop/currency";
 import { makeOffer } from "../shop/payment";
+import { BANDS } from "../spells/difficulty";
+import { DecorType, decorItem } from "./decor";
 import { FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import { Inventory } from "./inventory";
 import { PLANT_TYPES, PlantType } from "./plants";
 import { createRng } from "./rng";
 import {
   CROP_PRICE,
+  FURNITURE_STOCK,
   MAX_TRADE,
   Purse,
   SHOP_STOCK,
@@ -234,11 +237,18 @@ describe("how many the picker will offer", () => {
     }
   });
 
-  // About the counter rather than the purse: a hundred carrots is a hundred
-  // coins to count out.
+  // About the counter rather than the purse: a hundred fences is a hundred
+  // coins for the *player* to lay down by hand.
   test("and never more than the counter will take", () => {
     expect(mostBuyable(FixtureType.Fence, priceOf(FixtureType.Fence) * 1000)).toBe(MAX_TRADE);
-    expect(mostSellable(PlantType.Carrot, 1000)).toBeLessThanOrEqual(MAX_TRADE);
+  });
+
+  // Selling has no such number, and used to. A sale is counted out by the
+  // shopkeeper rather than by the child, so ten was a rule with no reason
+  // anybody could see — a basket of forty carrots sold four at a time.
+  test("but a whole basket can be sold at once", () => {
+    expect(mostSellable(PlantType.Carrot, 40)).toBe(40);
+    expect(mostSellable(PlantType.Carrot, 40)).toBeGreaterThan(MAX_TRADE);
   });
 
   test("selling is capped by the basket", () => {
@@ -252,12 +262,17 @@ describe("how many the picker will offer", () => {
    * The half that surprises: a payment she cannot make in coins is a payment
    * that cannot happen, however many carrots are on the counter.
    */
-  test("and by what she can actually pay in coins", () => {
-    for (const held of [1, 2, 5, 10]) {
+  test("and by nothing else at all", () => {
+    for (const held of [1, 2, 5, 10, 99, 400]) {
       const most = mostSellable(PlantType.Carrot, held);
-      expect({ held, within: most <= Math.max(1, Math.min(MAX_TRADE, held)) }).toEqual({
+      expect({ held, most }).toEqual({ held, most: Math.max(1, held) });
+      // However big the sale, she lays it out in at most one pile per kind
+      // of coin — which is why there is no ceiling left to hit. Counting
+      // forty discs does not scale; four piles does.
+      const coins = coinsFor(CURRENCY, sellPriceOf(PlantType.Carrot) * most);
+      expect({ held, piles: stacksOf(coins).length <= CURRENCY.denominations.length }).toEqual({
         held,
-        within: true,
+        piles: true,
       });
       // Whatever it comes back with, she really can pay for that many.
       expect(
@@ -272,5 +287,76 @@ describe("how many the picker will offer", () => {
     const cheap = mostBuyable(FixtureType.Fence, 600, 100);
     const dear = mostBuyable(FixtureType.Fence, 600, 250);
     expect(cheap).toBeGreaterThan(dear);
+  });
+});
+
+/**
+ * The furniture the house is filled with, which the shop can now sell.
+ *
+ * It was in the game before it was in the shop: a child could pick up the
+ * bed they were given, carry it and put it down again, but had no way to
+ * come by a second one — so a room could be rearranged and never added to.
+ */
+describe("selling furniture", () => {
+  test("every piece has a price, and it is payable", () => {
+    for (const piece of FURNITURE_STOCK) {
+      for (const band of BANDS) {
+        const price = priceOf(piece, band.cropPrice);
+        expect({ piece, cropPrice: band.cropPrice, payable: isPayable(CURRENCY, price) }).toEqual({
+          piece,
+          cropPrice: band.cropPrice,
+          payable: true,
+        });
+      }
+    }
+  });
+
+  // The same question the garden's things answer, so the counter, the
+  // quantity picker and the heading need no branch for furniture.
+  test("and is bought the same way a fence is", () => {
+    const inventory = new Inventory();
+    const purse = new Purse();
+    purse.earn(priceOf(DecorType.Chair) * 3);
+    const trade = buyStock(inventory, purse, DecorType.Chair, 3);
+    expect(trade.ok).toBe(true);
+    expect(purse.coins).toBe(0);
+  });
+
+  /**
+   * What is paid for and what ends up in the basket are the same thing for a
+   * fence and are not for a chair: furniture is bought *in a colour*, and
+   * the colour is part of what she owns rather than a label on it.
+   */
+  test("but what lands in the basket carries the colour it was bought in", () => {
+    const inventory = new Inventory();
+    const purse = new Purse();
+    purse.earn(priceOf(DecorType.Rug) * 2);
+    buyStock(inventory, purse, DecorType.Rug, 1, CROP_PRICE, 3);
+    buyStock(inventory, purse, DecorType.Rug, 1, CROP_PRICE, 0);
+    expect(inventory.count(decorItem(DecorType.Rug, 3))).toBe(1);
+    expect(inventory.count(decorItem(DecorType.Rug, 0))).toBe(1);
+    // And never under the bare name, which nothing can place.
+    expect(inventory.count(DecorType.Rug as never)).toBe(0);
+  });
+
+  test("a fence still lands under its own name, colour or no colour", () => {
+    const inventory = new Inventory();
+    const purse = new Purse();
+    purse.earn(priceOf(FixtureType.Fence));
+    buyStock(inventory, purse, FixtureType.Fence, 1);
+    expect(inventory.count(FixtureType.Fence)).toBe(1);
+  });
+
+  test("and an empty purse buys nothing at all", () => {
+    const inventory = new Inventory();
+    const purse = new Purse();
+    expect(buyStock(inventory, purse, DecorType.Bed, 1).ok).toBe(false);
+    expect(inventory.count(decorItem(DecorType.Bed, 0))).toBe(0);
+  });
+
+  // Furniture is priced against the garden's rather than on its own scale.
+  test("nothing in the house costs more than the lamp", () => {
+    const dearest = Math.max(...FURNITURE_STOCK.map((piece) => priceOf(piece)));
+    expect(dearest).toBeLessThanOrEqual(priceOf(FixtureType.Lamp));
   });
 });

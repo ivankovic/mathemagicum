@@ -130,17 +130,29 @@ export interface Band {
  * band still opens on `3 + 4`, and the band a child is put in by default
  * still starts them on exactly the sum it used to.
  *
- * **The prices climb now.** They ran 1,00 → 0,50 → 1,50 → 2,50 — a whole
- * coin, then a *half*, then a coin and a half, then two and a half — which
- * taught halves early but meant the second-easiest band paid least of all.
- * Dropping the half makes the ladder 1,00 → 1,50 → 2,50: one coin, one and a
- * half, two and a half, rising with the sums, and still a half in two of the
- * three so the fifty-piece is not a coin a child never meets.
+ * **The prices climb now**, and they climb off the round ducat. They ran
+ * 1,00 → 1,50 → 2,50, and the gentlest of those was the problem: everything
+ * in the shop is priced in *crops*, so quoting a crop at a whole ducat made
+ * every price in the game a whole number of ducats. The fifty-piece could
+ * not come up at all, and four of the eight prices were payable with a
+ * single coin — which is the one thing a paying screen must not be, because
+ * putting one coin down teaches nothing.
+ *
+ * So 1,50 → 2,50 → 3,50. Counted rather than chosen: at 1,50 not one price
+ * in the shop is a single coin and half of them need the fifty, at 3,50 a
+ * purchase runs to three and a half coins on average. Nothing gets easier —
+ * the middle band is what the hardest one used to be.
+ *
+ * The gentlest band is no longer the round one, and that is the deliberate
+ * part. A crop at a whole ducat made money a non-puzzle for a six-year-old,
+ * which was the argument for it; it also made money a non-*thing*, and a
+ * shop where every price is one coin is a shop with no counting in it.
+ * One-fifty is two coins, which is where counting starts.
  */
 export const BANDS: readonly Band[] = [
-  { from: 0, to: 2, cropPrice: 100 },
-  { from: 2, to: 6, cropPrice: 150 },
-  { from: 6, to: HARDEST_RUNG, cropPrice: 250 },
+  { from: 0, to: 2, cropPrice: 150 },
+  { from: 2, to: 6, cropPrice: 250 },
+  { from: 6, to: HARDEST_RUNG, cropPrice: 350 },
 ];
 
 /**

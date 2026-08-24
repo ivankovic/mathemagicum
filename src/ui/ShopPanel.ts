@@ -5,25 +5,30 @@ import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import {
   CURRENCY,
-  CoinTier,
   MOST_DENOMINATIONS,
-  coinTier,
+  type Stack,
   totalOf as coinTotal,
   coinsFor,
+  smallestCoin,
+  stacksOf,
 } from "../shop/currency";
-import { MAX_OFFER_COINS, type Offer, judgeOffer, makeOffer, maxSaleCount } from "../shop/payment";
+import { MISTAKE_MAX_COINS, type Offer, judgeOffer, makeOffer } from "../shop/payment";
+import { type Spot, type TableArea, counterSpots, pileSpots, within } from "../shop/table";
 import {
+  MOST_COUNTER_COINS,
   type Tender,
   addCoin,
   beginTender,
   clearTender,
-  coinCount,
   difference,
   isExact,
   removeCoin,
   tenderTotal,
+  tenderedCoins,
 } from "../shop/tender";
+import { DECOR_LOOKS, DecorType, pieceArt } from "../world/decor";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
+import { GROWABLE_ROOM, growablePieceKey } from "../world/interiors";
 import type { Inventory, ItemType } from "../world/inventory";
 import { MATERIAL_TYPES } from "../world/materials";
 import { PLANT_TYPES } from "../world/plants";
@@ -44,10 +49,12 @@ const SOLD: readonly { item: ItemType; icon: string }[] = [
 ];
 import type { Rng } from "../world/rng";
 import {
+  type Buyable,
   CROP_PRICE,
-  MAX_TRADE,
+  FURNITURE_STOCK,
   type Purse,
   SHOP_STOCK,
+  isFurniture,
   mostBuyable,
   mostSellable,
   priceOf,
@@ -86,20 +93,43 @@ const INK_HEX = 0x4a3422;
 const PAPER_PALE_HEX = 0xf6e8c4;
 const PAPER_HEX = 0xdec694;
 const GOOD_HEX = 0x3d6b2a;
-const ACTIVE_HEX = 0xc8901c;
 
 const TITLE_SIZE = 17;
 const ROW_SIZE = 13;
 const SMALL_SIZE = 12;
 
 const ROW_H = 38;
+/** And the shortest, before an icon and two lines stop being readable. */
+const ROW_MIN_H = 26;
+/** How big one colourway is drawn on the counter. */
+const SWATCH = 34;
 const ROW_GAP = 4;
-const COIN_H = 34;
-/** How big a coin face is drawn: the art is 32px, the button is 34 high. */
-const COIN_ART = 22;
-const COIN_GAP = 5;
+/** The table's own surface: a shade darker than the parchment it sits on. */
+const TABLE_HEX = 0xcbb083;
+/** How many coins are drawn in a pile. A picture of a pile, not a count. */
+const PILE_DEPTH = 4;
+/** The name written under a pile. Smaller than a row: four must fit across. */
+const PILE_NAME_SIZE = 11;
+/** How far each coin in a pile sits above the one under it. */
+const PILE_RISE = 5;
+/** How big a coin is on the table — near enough its own size to stay crisp. */
+const TABLE_COIN = 34;
+/** The value struck on a coin's face, and the ink it is struck in. */
+const COIN_FACE_SIZE = 13;
+const FACE_INK = "#2b1d0d";
+/** How far a finger may wander and still count as a tap rather than a drag. */
+const TAP_SLOP = 6;
 
 type Mode = "menu" | "buy" | "sell";
+
+/**
+ * Everything the store sells, in the order it is listed.
+ *
+ * The garden's things first, because they are what a child meets first and
+ * what the game asks them to build with; the house's after, because a room
+ * to furnish is something you have before you have anything to put in it.
+ */
+const STOCK: readonly Buyable[] = [...SHOP_STOCK, ...FURNITURE_STOCK];
 
 interface Button {
   readonly box: Phaser.GameObjects.Rectangle;
@@ -122,6 +152,7 @@ export class ShopPanel {
   // Menu: one row per crop she will buy, one per thing she sells.
   private readonly sellRows: Button[] = [];
   private readonly buyRows: Button[] = [];
+  private readonly lookRows: Button[] = [];
   private readonly headings: Phaser.GameObjects.Text[] = [];
 
   // Counter: the quantity picker and the coin pad, shared by both games.
@@ -129,20 +160,53 @@ export class ShopPanel {
   private readonly more: Button;
   private readonly quantityLabel: Phaser.GameObjects.Text;
   private readonly runningTotal: Phaser.GameObjects.Text;
-  private readonly coinButtons: Button[] = [];
   /**
-   * Her coins, laid on the counter. Separate from the pad because there is one
-   * pad button per denomination but she can put the same coin down twice, and
-   * because hers are to be counted, not tapped.
+   * The table she pays on: piles to the left, the counter to the right.
+   *
+   * `pileFaces` is a short stack of coins per denomination — a picture of a
+   * pile rather than a count of one, because the piles are a supply she
+   * draws from and not her own hoard. The purse is a single number and
+   * always was; what stops her overpaying is the purse, not the pile
+   * running dry. A pile that emptied would be lying about which.
    */
-  private readonly offerChips: Button[] = [];
+  private readonly tableTop: Phaser.GameObjects.Rectangle;
+  private readonly tableSplit: Phaser.GameObjects.Rectangle;
+  /** Her side of it, drawn paler: the place the coins are meant to end up. */
+  private readonly tableCounter: Phaser.GameObjects.Rectangle;
+  private readonly pileFaces: Phaser.GameObjects.Image[][] = [];
+  private readonly pileLabels: Phaser.GameObjects.Text[] = [];
+  private readonly pileValues: Phaser.GameObjects.Text[] = [];
+  private readonly pileHits: Phaser.GameObjects.Rectangle[] = [];
+  /** The coins she has put down, and the number struck on each. */
+  private readonly counterFaces: {
+    image: Phaser.GameObjects.Image;
+    label: Phaser.GameObjects.Text;
+  }[] = [];
+  /** The one coin in her hand, mid-drag, or nothing. */
+  private carried: {
+    value: number;
+    image: Phaser.GameObjects.Image;
+    label: Phaser.GameObjects.Text;
+  } | null = null;
+  /** Where the carried coin was lifted from, to tell a tap from a drag. */
+  private carriedFrom: Spot | null = null;
+  /** Where the counter half is, so a dropped coin knows whether it landed. */
+  private counterAt: { origin: Spot; area: TableArea } | null = null;
   private readonly confirm: Button;
   private readonly deny: Button;
   private readonly back: Button;
 
   private open = false;
   private mode: Mode = "menu";
-  private chosenFixture: FixtureType | null = null;
+  private chosenBuy: Buyable | null = null;
+  /**
+   * Which colourway of a piece of furniture is being bought.
+   *
+   * Only furniture has one. A fence is a fence; a chair is a chair in a
+   * colour, and the colour is part of what she ends up owning rather than a
+   * label on it — see `buyStock`.
+   */
+  private chosenLook = 0;
   private chosenCrop: ItemType | null = null;
   private quantity = 1;
   private tender: Tender | null = null;
@@ -155,7 +219,7 @@ export class ShopPanel {
   constructor(
     private readonly scene: Phaser.Scene,
     index: UiIndex,
-    depth: number,
+    private readonly depth: number,
     private readonly inventory: Inventory,
     private readonly purse: Purse,
     private words: Phrases,
@@ -183,28 +247,91 @@ export class ShopPanel {
     for (const { item, icon } of SOLD) {
       this.sellRows.push(this.button(uiTextureKey(icon), () => this.startSell(item)));
     }
-    for (const fixture of PLACEABLE_FIXTURES) {
-      this.buyRows.push(this.button(uiTextureKey(itemIcon(fixture)), () => this.startBuy(fixture)));
+    // Everything she sells: the garden's things, then the house's. One list
+    // rather than two shelves, because a child looking for a chair should
+    // not have to know which half of the shop it lives in.
+    for (const thing of STOCK) {
+      const icon = isFurniture(thing)
+        ? growablePieceKey(GROWABLE_ROOM, pieceArt(thing))
+        : uiTextureKey(itemIcon(thing));
+      this.buyRows.push(this.button(icon, () => this.startBuy(thing)));
+    }
+    // One swatch per colourway, shown while a piece of furniture is being
+    // bought. Every colour is offered, which is the opposite of the crate's
+    // chooser — that one offers only what she owns, because offering five
+    // when one is owned would be four taps that do nothing. Here she owns
+    // none of them, so filtering by ownership would sell nothing at all.
+    for (let look = 0; look < DECOR_LOOKS; look++) {
+      this.lookRows.push(
+        this.button(growablePieceKey(GROWABLE_ROOM, pieceArt(DecorType.Chair)), () =>
+          this.chooseLook(look),
+        ),
+      );
     }
 
     this.fewer = this.button(null, () => this.setQuantity(this.quantity - 1));
     this.more = this.button(null, () => this.setQuantity(this.quantity + 1));
     this.quantityLabel = this.own(this.text("", ROW_SIZE, INK).setOrigin(0.5));
     this.runningTotal = this.own(this.text("", ROW_SIZE, INK).setOrigin(0.5));
-    // One button per denomination the widest currency has, so a change of
+    // The table, and the line down it. Drawn rather than left implicit: the
+    // whole instruction is "bring coins across to this side", and a side
+    // nobody drew is a side nobody aims at.
+    this.tableTop = this.own(
+      this.scene.add.rectangle(0, 0, 10, 10, TABLE_HEX).setStrokeStyle(2, INK_HEX),
+    );
+    this.tableSplit = this.own(this.scene.add.rectangle(0, 0, 2, 10, INK_HEX, 0.35));
+    this.tableCounter = this.own(
+      this.scene.add.rectangle(0, 0, 10, 10, PAPER_PALE_HEX, 0.55).setStrokeStyle(1, INK_HEX, 0.4),
+    );
+
+    // One pile per denomination the widest currency has, so a change of
     // currency re-labels them rather than needing more of them.
     for (let i = 0; i < MOST_DENOMINATIONS; i++) {
-      this.coinButtons.push(
-        this.button(
-          uiTextureKey(coinIcon(CoinTier.Copper)),
-          () => this.putDown(this.denomination(i)),
-          () => this.takeBack(this.denomination(i)),
-        ),
+      const stack: Phaser.GameObjects.Image[] = [];
+      for (let layer = 0; layer < PILE_DEPTH; layer++) {
+        stack.push(
+          this.own(this.scene.add.image(0, 0, uiTextureKey(coinIcon(smallestCoin(CURRENCY))))),
+        );
+      }
+      this.pileFaces.push(stack);
+      // The number on the top coin of the pile, for the same reason the
+      // coins on the counter carry one: two of the four are gold and the
+      // same size, and a colour cannot tell a two from a five.
+      this.pileValues.push(this.own(this.text("", COIN_FACE_SIZE, FACE_INK).setOrigin(0.5)));
+      // Small, because four names have to sit side by side under four piles
+      // without touching: "1 ducat" beside "2 ducat" at row size ran them
+      // into one word.
+      this.pileLabels.push(this.own(this.text("", PILE_NAME_SIZE, INK).setOrigin(0.5, 0)));
+      const hit = this.own(
+        this.scene.add
+          .rectangle(0, 0, 10, 10, 0xffffff, 0)
+          .setInteractive({ useHandCursor: true, draggable: true }),
       );
+      hit.on("pointerdown", (pointer: Phaser.Input.Pointer) =>
+        this.takeFromPile(this.denomination(i), pointer),
+      );
+      this.pileHits.push(hit);
     }
-    for (let i = 0; i < MAX_OFFER_COINS; i++) {
-      this.offerChips.push(this.chip(uiTextureKey(coinIcon(CoinTier.Copper))));
+    // As many loose coins as are ever laid out singly, made once. Beyond
+    // that they are gathered into piles, and a pile is drawn by the same
+    // widgets the buying side takes its coins from — so this pool is sized
+    // by what a *payment* holds, plus room for a miscount on top.
+    for (let i = 0; i < MOST_COUNTER_COINS + MISTAKE_MAX_COINS; i++) {
+      const image = this.own(
+        this.scene.add
+          .image(0, 0, uiTextureKey(coinIcon(smallestCoin(CURRENCY))))
+          .setInteractive({ useHandCursor: true }),
+      );
+      const label = this.own(this.text("", COIN_FACE_SIZE, FACE_INK).setOrigin(0.5));
+      image.on("pointerdown", () => this.takeBack(this.counterValueAt(i)));
+      this.counterFaces.push({ image, label });
     }
+    this.carried = null;
+    // The coin in her hand follows the pointer, and lands when she lets go.
+    // On the scene rather than on the coin because a finger that slides off
+    // the coin it picked up is still carrying it.
+    this.scene.input.on("pointermove", this.onPointerMove, this);
+    this.scene.input.on("pointerup", this.onPointerUp, this);
     this.confirm = this.button(null, () => this.onConfirm());
     this.deny = this.button(null, () => this.onDeny());
     this.back = this.button(null, () => this.toMenu());
@@ -239,7 +366,7 @@ export class ShopPanel {
       "shop.close": { x: this.closeButton.box.x, y: this.closeButton.box.y },
     };
     if (this.mode === "menu") {
-      for (const [index, item] of SHOP_STOCK.entries()) {
+      for (const [index, item] of STOCK.entries()) {
         const row = this.buyRows[index];
         if (row) at[`shop.buy.${item}`] = { x: row.box.x, y: row.box.y };
       }
@@ -253,9 +380,22 @@ export class ShopPanel {
     at["shop.more"] = { x: this.more.box.x, y: this.more.box.y };
     at["shop.back"] = { x: this.back.box.x, y: this.back.box.y };
     if (this.mode === "buy") {
+      for (const [look, row] of this.lookRows.entries()) {
+        if (row.box.visible) at[`shop.look.${look}`] = { x: row.box.x, y: row.box.y };
+      }
       for (const [index, value] of CURRENCY.denominations.entries()) {
-        const coin = this.coinButtons[index];
-        if (coin) at[`shop.coin.${value}`] = { x: coin.box.x, y: coin.box.y };
+        const pile = this.pileHits[index];
+        if (pile) at[`shop.pile.${value}`] = { x: pile.x, y: pile.y };
+      }
+      // The half of the table she drags coins onto. A script needs somewhere
+      // to let go as much as somewhere to pick up, and the drop being a
+      // region rather than a button is exactly why it has to be published:
+      // there is nothing on screen for a test to find by name otherwise.
+      if (this.counterAt) {
+        at["shop.counter"] = {
+          x: this.counterAt.origin.x + this.counterAt.area.width / 2,
+          y: this.counterAt.origin.y + this.counterAt.area.height / 2,
+        };
       }
       at["shop.clear"] = { x: this.deny.box.x, y: this.deny.box.y };
       at["shop.pay"] = { x: this.confirm.box.x, y: this.confirm.box.y };
@@ -277,18 +417,39 @@ export class ShopPanel {
     most: number;
     owed: number;
     onCounter: number;
+    look: number;
+    /**
+     * How many piles her money is in, or nought when it is loose coins.
+     *
+     * Which of the two she is showing is a rule — loose while they can be
+     * counted, piles when they cannot — and it is a rule about a drawing,
+     * so there is nothing for a script to read but this.
+     */
+    piles: number;
+    /** What the heading over the counter says, word for word. */
+    title: string;
   } | null {
     if (!this.open) return null;
     return {
       mode: this.mode,
-      item: this.chosenFixture ?? this.chosenCrop ?? null,
+      item: this.chosenBuy ?? this.chosenCrop ?? null,
       quantity: this.quantity,
       most: this.mostTradeable(),
       owed:
-        this.mode === "buy" && this.chosenFixture
-          ? priceOf(this.chosenFixture, this.cropPrice) * this.quantity
+        this.mode === "buy" && this.chosenBuy
+          ? priceOf(this.chosenBuy, this.cropPrice) * this.quantity
           : (this.offer?.owed ?? 0),
       onCounter: this.tender ? tenderTotal(this.tender) : 0,
+      /** Which colourway is chosen, for a thing that comes in colours. */
+      look: this.chosenLook,
+      piles:
+        this.mode === "sell" && this.offer && this.offer.coins.length > MOST_COUNTER_COINS
+          ? stacksOf(this.offer.coins).length
+          : 0,
+      // Read back rather than recomputed, so a scenario can catch the
+      // heading disagreeing with the sum underneath it. Nothing could see
+      // this, and it spent a while saying the wrong price.
+      title: this.title.text,
     };
   }
 
@@ -296,8 +457,6 @@ export class ShopPanel {
     return [
       ...this.sellRows,
       ...this.buyRows,
-      ...this.coinButtons,
-      ...this.offerChips,
       this.fewer,
       this.more,
       this.confirm,
@@ -385,7 +544,7 @@ export class ShopPanel {
 
   private toMenu(): void {
     this.mode = "menu";
-    this.chosenFixture = null;
+    this.chosenBuy = null;
     this.chosenCrop = null;
     this.tender = null;
     this.offer = null;
@@ -393,12 +552,21 @@ export class ShopPanel {
     this.render();
   }
 
-  private startBuy(fixture: FixtureType): void {
+  private startBuy(thing: Buyable): void {
     this.mode = "buy";
-    this.chosenFixture = fixture;
+    this.chosenBuy = thing;
+    // Whatever colour she was last shown, so a second chair matches the
+    // first without her having to choose again.
     this.quantity = 1;
     this.settled = false;
-    this.tender = beginTender(priceOf(fixture, this.cropPrice), this.purse.coins);
+    this.tender = beginTender(priceOf(thing, this.cropPrice), this.purse.coins);
+    this.render();
+  }
+
+  /** Which colourway to buy this piece in: the second of the two taps. */
+  private chooseLook(look: number): void {
+    if (this.settled || this.chosenLook === look) return;
+    this.chosenLook = look;
     this.render();
   }
 
@@ -406,9 +574,17 @@ export class ShopPanel {
     if (this.inventory.count(plant) <= 0) return;
     this.mode = "sell";
     this.chosenCrop = plant;
-    this.quantity = 1;
+    // The whole basket, rather than one of them. Selling has no flat limit
+    // any more, so the picker's range is however many she picked — and
+    // stepping from one up to forty is forty taps to reach the thing
+    // everybody wanted. Coming down from all of them is the rarer wish, and
+    // it is the same two buttons either way.
+    this.quantity = Math.max(1, this.mostTradeable());
     this.settled = false;
-    this.offer = makeOffer(CURRENCY, sellPriceOf(plant, this.cropPrice), this.rng);
+    // For the whole quantity, not for one. It counted out a single crop's
+    // worth while the picker above it said nine, which was fine only while
+    // the picker always opened at one.
+    this.offer = makeOffer(CURRENCY, sellPriceOf(plant, this.cropPrice) * this.quantity, this.rng);
     this.render();
   }
 
@@ -422,9 +598,9 @@ export class ShopPanel {
   private setQuantity(next: number): void {
     if (this.settled) return;
     this.quantity = Math.max(1, Math.min(this.mostTradeable(), next));
-    if (this.mode === "buy" && this.chosenFixture) {
+    if (this.mode === "buy" && this.chosenBuy) {
       this.tender = beginTender(
-        priceOf(this.chosenFixture, this.cropPrice) * this.quantity,
+        priceOf(this.chosenBuy, this.cropPrice) * this.quantity,
         this.purse.coins,
       );
     }
@@ -447,10 +623,186 @@ export class ShopPanel {
     if (this.mode === "sell" && this.chosenCrop) {
       return mostSellable(this.chosenCrop, this.inventory.count(this.chosenCrop), this.cropPrice);
     }
-    if (this.mode === "buy" && this.chosenFixture) {
-      return mostBuyable(this.chosenFixture, this.purse.coins, this.cropPrice);
+    if (this.mode === "buy" && this.chosenBuy) {
+      return mostBuyable(this.chosenBuy, this.purse.coins, this.cropPrice);
     }
     return 1;
+  }
+
+  /**
+   * Pick a coin off a pile and start carrying it.
+   *
+   * A copy off the top rather than the pile itself: the piles are a supply,
+   * so what she lifts is another one of these, and the pile it came from
+   * looks exactly as it did. Refused when there is no room in the purse for
+   * it, and refused silently — a coin that will not lift says what a coin
+   * that lifts and bounces back would say, without the bounce.
+   */
+  private takeFromPile(value: number, pointer: Phaser.Input.Pointer): void {
+    if (this.mode !== "buy" || !this.tender || this.settled || this.carried) return;
+    if (tenderTotal(this.tender) + value > this.tender.purse) return;
+    const image = this.own(
+      this.scene.add.image(pointer.x, pointer.y, uiTextureKey(coinIcon(value))),
+    );
+    const label = this.own(this.text(this.faceOf(value), COIN_FACE_SIZE, FACE_INK).setOrigin(0.5));
+    // Above everything, including the parchment it is being carried across.
+    image
+      .setDisplaySize(TABLE_COIN, TABLE_COIN)
+      .setDepth(this.depth + 4)
+      .setScrollFactor(0)
+      .setVisible(true);
+    label
+      .setPosition(pointer.x, pointer.y)
+      .setDepth(this.depth + 5)
+      .setScrollFactor(0);
+    label.setVisible(true);
+    this.carried = { value, image, label };
+    this.carriedFrom = { x: pointer.x, y: pointer.y };
+  }
+
+  private onPointerMove(pointer: Phaser.Input.Pointer): void {
+    const carried = this.carried;
+    if (!carried) return;
+    carried.image.setPosition(pointer.x, pointer.y);
+    carried.label.setPosition(pointer.x, pointer.y);
+  }
+
+  /**
+   * Let go of the coin.
+   *
+   * It counts if it landed on the counter — and it counts if she never
+   * really moved it at all, because a tap on a pile is a child saying "one
+   * of those" and refusing that would be refusing the easiest way to ask.
+   * Anywhere else and the coin goes back where it came from, which is what
+   * "no, not that one" has to look like.
+   */
+  private onPointerUp(pointer: Phaser.Input.Pointer): void {
+    const carried = this.carried;
+    if (!carried) return;
+    this.carried = null;
+    carried.image.destroy();
+    carried.label.destroy();
+    const from = this.carriedFrom;
+    const tapped = from !== null && Math.hypot(pointer.x - from.x, pointer.y - from.y) <= TAP_SLOP;
+    this.carriedFrom = null;
+    const landed =
+      this.counterAt !== null &&
+      within({ x: pointer.x, y: pointer.y }, this.counterAt.origin, this.counterAt.area);
+    if (landed || tapped) this.putDown(carried.value);
+  }
+
+  /**
+   * Lay a row of coins out on a patch of table.
+   *
+   * The one drawing both halves of the shop use. They were two — a pad of
+   * labelled buttons for her offer, coins on a table for the payment — and
+   * two drawings of the same thing drift apart by the week: the sell screen
+   * was still the old keypad's look a change later, side by side with the
+   * table it was supposed to match.
+   */
+  private layCoins(values: readonly number[], origin: Spot, area: TableArea): void {
+    const { size, spots } = counterSpots(values.length, area, TABLE_COIN);
+    for (const [index, face] of this.counterFaces.entries()) {
+      const value = values[index];
+      const spot = spots[index];
+      if (value === undefined || !spot) continue;
+      const x = origin.x + spot.x;
+      const y = origin.y + spot.y;
+      face.image
+        .setTexture(uiTextureKey(coinIcon(value)))
+        .setDisplaySize(size, size)
+        .setPosition(x, y)
+        .setVisible(true);
+      this.strike(face.label, value, x, y, size);
+    }
+  }
+
+  /**
+   * Lay her money out as piles, one per kind of coin, each saying how many.
+   *
+   * Drawn with the very widgets the buying side takes coins *from*, which is
+   * the point rather than a saving: a pile of five-ducat pieces should look
+   * the same whoever it belongs to, and two drawings of a pile would be two
+   * things to keep in step.
+   */
+  private layStacks(stacks: readonly Stack[], origin: Spot, area: TableArea): void {
+    const spots = pileSpots(stacks.length, area);
+    for (const [index, stack] of stacks.entries()) {
+      const spot = spots[index];
+      const faces = this.pileFaces[index];
+      const label = this.pileLabels[index];
+      if (!spot || !faces || !label) continue;
+      const x = origin.x + spot.x;
+      // Her piles sit a little high, because the count goes underneath them.
+      const base = origin.y + spot.y + 6;
+      // A taller stack for more coins, up to what the widget has: a pile of
+      // twelve that looked like a pile of two would be saying the wrong
+      // thing before the number under it got a chance to say the right one.
+      const drawn = Math.max(2, Math.min(faces.length, stack.count));
+      for (const [layer, face] of faces.entries()) {
+        if (layer >= drawn) continue;
+        face
+          .setTexture(uiTextureKey(coinIcon(stack.value)))
+          .setDisplaySize(TABLE_COIN, TABLE_COIN)
+          .setPosition(x + layer, base - layer * PILE_RISE)
+          .setVisible(true);
+      }
+      const struck = this.pileValues[index];
+      if (struck) this.strike(struck, stack.value, x + (drawn - 1), base - (drawn - 1) * PILE_RISE);
+      // "6 x 5 ducat" — the multiplication written out, because that is the
+      // sum being asked for and a bare "x6" leaves a child to remember what
+      // the coin under it was worth.
+      label
+        .setText(`${stack.count} x ${CURRENCY.coinLabel(stack.value)}`)
+        .setPosition(x, base + TABLE_COIN / 2 - 2)
+        .setVisible(true);
+    }
+  }
+
+  /** What is struck on the nth coin lying on the counter. */
+  private counterValueAt(index: number): number {
+    return this.tender ? (tenderedCoins(this.tender)[index] ?? 0) : 0;
+  }
+
+  /**
+   * The number struck on a coin's face.
+   *
+   * The numeral only, without the unit — a 50-mite piece says "50" and a
+   * two-ducat piece says "2", which is the same restart every mixed-unit
+   * money has and the same one every real coin lives with. What keeps it
+   * honest is that the *size* never restarts: the fifty is the smallest disc
+   * on the table and the five-ducat the largest, so a bigger coin is always
+   * worth more even where its number is smaller.
+   */
+  private faceOf(value: number): string {
+    const label = CURRENCY.coinLabel(value);
+    return label.split(" ")[0] ?? String(value);
+  }
+
+  /**
+   * Strike a value onto a coin.
+   *
+   * Two digits on the smallest disc need smaller type than one digit on the
+   * largest: "50" set at the size "5" is set at overhangs the copper it is
+   * struck on, and a number sitting half on the table is a number a child
+   * reads as belonging to nothing.
+   */
+  private strike(
+    label: Phaser.GameObjects.Text,
+    value: number,
+    x: number,
+    y: number,
+    size = TABLE_COIN,
+  ): void {
+    const face = this.faceOf(value);
+    // Scaled with the coin, because a sale can shrink the coins to fit and a
+    // number that did not shrink with them would sit across two of them.
+    const room = (COIN_FACE_SIZE * size) / TABLE_COIN;
+    label
+      .setText(face)
+      .setFontSize(Math.max(8, Math.round(face.length > 1 ? room - 3 : room)))
+      .setPosition(x, y)
+      .setVisible(true);
   }
 
   private putDown(value: number): void {
@@ -486,14 +838,14 @@ export class ShopPanel {
   }
 
   private payUp(): void {
-    const fixture = this.chosenFixture;
-    if (!fixture || !this.tender || this.settled) return;
+    const thing = this.chosenBuy;
+    if (!thing || !this.tender || this.settled) return;
     if (!isExact(this.tender)) {
       this.render();
       return;
     }
     this.settled = true;
-    this.onBuy?.(fixture, this.quantity, tenderTotal(this.tender));
+    this.onBuy?.(thing, this.quantity, tenderTotal(this.tender), this.chosenLook);
     this.onTrade?.();
     this.render();
   }
@@ -512,7 +864,16 @@ export class ShopPanel {
   private verdict: ReturnType<typeof judgeOffer> | null = null;
 
   /** Set by the scene: what to do once a trade has actually been agreed. */
-  onBuy: ((fixture: FixtureType, count: number, paid: number) => void) | null = null;
+  onBuy: ((thing: Buyable, count: number, paid: number, look: number) => void) | null = null;
+  /**
+   * The picture of one piece in one colourway.
+   *
+   * Asked of the scene rather than worked out here: recolouring a sheet
+   * means a palette, a plan and a cache, all of which the scene already has
+   * for the furniture standing in the room — and two of them would be two
+   * caches of the same pictures under two keys.
+   */
+  lookTexture: ((piece: DecorType, look: number) => string) | null = null;
   onSell: ((item: ItemType, count: number, earned: number) => void) | null = null;
 
   // --- drawing --------------------------------------------------------------
@@ -532,7 +893,13 @@ export class ShopPanel {
     else this.renderCounter(rect);
   }
 
-  private renderMenu(rect: { left: number; top: number; width: number; centreX: number }): void {
+  private renderMenu(rect: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    centreX: number;
+  }): void {
     this.title.setText(this.words.storeTitle(CURRENCY.format(this.purse.coins)));
     this.fitTitle(rect.width - PAD * 2 - 34);
     this.hint.setText(this.words.storeFooter).setColor(INK_DIM);
@@ -542,6 +909,19 @@ export class ShopPanel {
     const rightX = leftX + columnW + PAD;
     const headingY = rect.top + PAD + TITLE_SIZE + 12;
     const firstY = headingY + SMALL_SIZE + 8;
+    // How tall a row can be and still fit the longest of the two columns.
+    //
+    // Worked out rather than written down: the list grew from seven things
+    // to twelve when the shop started selling furniture, and twelve rows at
+    // the old height ran off the bottom of the parchment. A number here
+    // would have to be found again the next time something is added — and
+    // would still be wrong on a short screen, which this now also handles.
+    const rows = Math.max(SOLD.length, STOCK.length);
+    const room = rect.top + rect.height - PAD - SMALL_SIZE - 12 - firstY;
+    const rowH = Math.max(ROW_MIN_H, Math.min(ROW_H, Math.floor(room / rows) - ROW_GAP));
+    // Two lines of type in a shorter row need shorter type, or the price
+    // sits on the border of the row beneath it.
+    const rowSize = rowH < ROW_H - 4 ? ROW_SIZE - 2 : ROW_SIZE;
 
     const [sellHeading, buyHeading] = this.headings as [
       Phaser.GameObjects.Text,
@@ -557,10 +937,11 @@ export class ShopPanel {
       this.place(
         row,
         leftX + columnW / 2,
-        firstY + (ROW_H + ROW_GAP) * index + ROW_H / 2,
+        firstY + (rowH + ROW_GAP) * index + rowH / 2,
         columnW,
-        ROW_H,
+        rowH,
       );
+      row.label.setFontSize(rowSize);
       row.label.setText(
         this.words.cropRow(item, held, CURRENCY.format(sellPriceOf(item, this.cropPrice))),
       );
@@ -568,17 +949,18 @@ export class ShopPanel {
       row.icon?.setAlpha(held > 0 ? 1 : 0.35);
       this.show(row);
     }
-    for (const [index, fixture] of PLACEABLE_FIXTURES.entries()) {
+    for (const [index, fixture] of STOCK.entries()) {
       const row = this.buyRows[index];
       if (!row) continue;
       const affordable = this.purse.coins >= priceOf(fixture, this.cropPrice);
       this.place(
         row,
         rightX + columnW / 2,
-        firstY + (ROW_H + ROW_GAP) * index + ROW_H / 2,
+        firstY + (rowH + ROW_GAP) * index + rowH / 2,
         columnW,
-        ROW_H,
+        rowH,
       );
+      row.label.setFontSize(rowSize);
       row.label.setText(
         this.words.stockRow(fixture, CURRENCY.format(priceOf(fixture, this.cropPrice))),
       );
@@ -596,13 +978,22 @@ export class ShopPanel {
     centreX: number;
   }): void {
     const buying = this.mode === "buy";
+    // `this.cropPrice`, not the module default. This asked `priceOf` for the
+    // price without saying whose, so it got the default — and the default is
+    // one band's price out of three. The heading said 12,50 over a counter
+    // that wanted 17,50, and it had been saying the wrong thing to every
+    // child not on the band whose price happens to match the constant.
+    //
+    // It was invisible for as long as that band was the *hardest* one, which
+    // is where a save from before the bands existed lands: the one setting
+    // most likely to be looked at was the one setting that was right.
     const owed = buying
-      ? priceOf(this.chosenFixture as FixtureType) * this.quantity
+      ? priceOf(this.chosenBuy as Buyable, this.cropPrice) * this.quantity
       : (this.offer?.owed ?? 0);
     const money = CURRENCY.format(owed);
     this.title.setText(
       buying
-        ? this.words.buyTitle(this.chosenFixture as FixtureType, this.quantity, money)
+        ? this.words.buyTitle(this.chosenBuy as Buyable, this.quantity, money)
         : this.words.sellTitle(this.chosenCrop as ItemType, this.quantity, money),
     );
     // German says the same thing in more letters, and the close button is in
@@ -637,32 +1028,122 @@ export class ShopPanel {
     const tender = this.tender;
     if (!tender) return;
     const off = difference(tender);
+    // The colour row, when there is one, sits between the quantity and the
+    // total — so everything below it shifts down by the height of it.
+    const swatches = this.chosenBuy !== null && isFurniture(this.chosenBuy) && !this.settled;
+    const shift = swatches ? SWATCH + 22 : 0;
     this.runningTotal
       .setVisible(true)
-      .setPosition(rect.centreX, pickerY + 34)
+      .setPosition(rect.centreX, pickerY + 34 + shift)
       .setText(this.words.onTheCounter(CURRENCY.format(tenderTotal(tender))))
       .setColor(off === 0 ? INK_GOOD : INK);
 
-    // One button per coin: tap to add, right-click or long-press to take back.
-    const columns = 4;
-    const width = (rect.width - PAD * 2 - COIN_GAP * (columns - 1)) / columns;
-    const top = pickerY + 58;
-    for (const [index, value] of CURRENCY.denominations.entries()) {
-      const button = this.coinButtons[index];
-      if (!button) continue;
-      const x = rect.left + PAD + (width + COIN_GAP) * (index % columns) + width / 2;
-      const y = top + Math.floor(index / columns) * (COIN_H + COIN_GAP) + COIN_H / 2;
-      this.placeCoin(button, x, y, width, value);
-      const held = coinCount(tender, value);
-      button.label.setText(
-        held > 0 ? `${CURRENCY.coinLabel(value)} x${held}` : CURRENCY.coinLabel(value),
-      );
-      button.box.setStrokeStyle(2, held > 0 ? ACTIVE_HEX : INK_HEX);
-      this.show(button);
+    // Which colour, when what she is buying comes in colours. Above the
+    // table, because it is part of choosing the thing rather than part of
+    // paying for it — and because the counter below has to stay where it is
+    // whether or not this row is there.
+    const buying = this.chosenBuy;
+    const colours = buying !== null && isFurniture(buying);
+    for (const [look, row] of this.lookRows.entries()) {
+      if (!colours || this.settled) {
+        row.box.setVisible(false);
+        row.label.setVisible(false);
+        row.icon?.setVisible(false);
+        continue;
+      }
+      const spread = SWATCH + 8;
+      const x = rect.centreX - ((this.lookRows.length - 1) * spread) / 2 + look * spread;
+      // Clear of the quantity picker, which is twenty-eight tall and
+      // centred on `pickerY`.
+      const y = pickerY + 20 + SWATCH / 2;
+      row.box.setSize(SWATCH, SWATCH).setPosition(x, y);
+      row.box.setStrokeStyle(3, look === this.chosenLook ? GOOD_HEX : INK_HEX);
+      row.label.setText("").setPosition(x, y);
+      row.icon
+        ?.setTexture(
+          this.lookTexture?.(buying as DecorType, look) ??
+            growablePieceKey(GROWABLE_ROOM, pieceArt(buying as DecorType)),
+        )
+        .setDisplaySize(SWATCH - 8, SWATCH - 8)
+        .setPosition(x, y);
+      this.show(row);
     }
 
-    const rows = Math.ceil(CURRENCY.denominations.length / columns);
-    const actionY = top + rows * (COIN_H + COIN_GAP) + 16;
+    // The table: piles on the left, an empty half on the right to build the
+    // payment in. Both halves are drawn, because the whole instruction is
+    // "bring some of those over here" and neither noun should be implied.
+    const top = pickerY + 52 + shift;
+    const width = rect.width - PAD * 2;
+    // Tall enough for a pile and its name, and for the coins she can lay
+    // down in rows beside them — and no taller. A table stretched to
+    // whatever room the panel had left put a band of empty wood between the
+    // piles and the coins, which reads as somewhere a coin ought to go.
+    const rows = Math.ceil(MOST_COUNTER_COINS / 4);
+    const height = Math.max(104, rows * (TABLE_COIN + 6) + 20);
+    const left = rect.left + PAD;
+    this.tableTop
+      .setSize(width, height)
+      .setPosition(left + width / 2, top + height / 2)
+      .setVisible(true);
+    // A little over half, because four names have to fit across this side
+    // and the coins she has laid down only need room to be counted.
+    const pilesWidth = Math.round(width * 0.55);
+    this.tableSplit
+      .setSize(2, height - 12)
+      .setPosition(left + pilesWidth, top + height / 2)
+      .setVisible(true);
+
+    const pileArea = { width: pilesWidth, height };
+    for (const [index, value] of CURRENCY.denominations.entries()) {
+      const spot = pileSpots(CURRENCY.denominations.length, pileArea)[index];
+      const stack = this.pileFaces[index];
+      const label = this.pileLabels[index];
+      const hit = this.pileHits[index];
+      if (!spot || !stack || !label || !hit) continue;
+      const x = left + spot.x;
+      // The pile grows upward from its base, so the bottom coin of every
+      // pile sits on one line and the names underneath line up with it.
+      // Centred on the table rather than resting at the foot of it: the
+      // stack rises about as far above this line as the name drops below,
+      // and a base set from the bottom edge printed the names on it.
+      const base = top + height / 2;
+      for (const [layer, face] of stack.entries()) {
+        // Offset up and across, far enough that a stack reads as a stack
+        // rather than as one coin drawn four times.
+        face
+          .setTexture(uiTextureKey(coinIcon(value)))
+          .setDisplaySize(TABLE_COIN, TABLE_COIN)
+          .setPosition(x + layer, base - layer * PILE_RISE)
+          .setVisible(true);
+      }
+      const struck = this.pileValues[index];
+      if (struck) {
+        this.strike(struck, value, x + (PILE_DEPTH - 1), base - (PILE_DEPTH - 1) * PILE_RISE);
+      }
+      label
+        .setText(CURRENCY.coinLabel(value))
+        .setPosition(x, base + TABLE_COIN / 2 - 2)
+        .setVisible(true);
+      hit
+        .setSize(Math.min(pilesWidth / CURRENCY.denominations.length, 64), height - 8)
+        .setPosition(x, top + height / 2)
+        .setVisible(true);
+    }
+
+    // Her side of the table, and where a dropped coin has to land.
+    const counterArea = { width: width - pilesWidth - 14, height: height - 12 };
+    const counterOrigin = { x: left + pilesWidth + 8, y: top + 6 };
+    this.counterAt = { origin: counterOrigin, area: counterArea };
+    this.tableCounter
+      .setSize(counterArea.width, counterArea.height)
+      .setPosition(
+        counterOrigin.x + counterArea.width / 2,
+        counterOrigin.y + counterArea.height / 2,
+      )
+      .setVisible(true);
+    this.layCoins(tenderedCoins(tender), counterOrigin, counterArea);
+
+    const actionY = top + height + 20;
     this.place(this.confirm, rect.centreX + 60, actionY, 110, 30);
     this.confirm.label.setText(this.settled ? this.words.done : this.words.pay);
     this.confirm.box.setStrokeStyle(2, isExact(tender) ? GOOD_HEX : INK_HEX);
@@ -675,7 +1156,7 @@ export class ShopPanel {
 
     if (this.settled) {
       this.hint
-        .setText(this.words.paidFor(this.chosenFixture as FixtureType, this.quantity))
+        .setText(this.words.paidFor(this.chosenBuy as Buyable, this.quantity))
         .setColor(INK_GOOD);
     } else if (tender.owed > tender.purse) {
       this.hint.setText(this.words.tooExpensive).setColor(INK_BAD);
@@ -700,24 +1181,33 @@ export class ShopPanel {
       .setText(this.words.sheCountsOut)
       .setColor(INK_DIM);
 
-    // Her coins, laid out the same way the pad is, so the two read alike.
-    const columns = 4;
-    const width = (rect.width - PAD * 2 - COIN_GAP * (columns - 1)) / columns;
-    const top = pickerY + 58;
-    const shown = Math.min(offer.coins.length, this.offerChips.length);
-    for (let index = 0; index < shown; index++) {
-      const chip = this.offerChips[index];
-      const value = offer.coins[index];
-      if (!chip || value === undefined) continue;
-      const x = rect.left + PAD + (width + COIN_GAP) * (index % columns) + width / 2;
-      const y = top + Math.floor(index / columns) * (COIN_H + COIN_GAP) + COIN_H / 2;
-      this.placeCoin(chip, x, y, width, value);
-      chip.label.setText(CURRENCY.coinLabel(value));
-      this.show(chip);
+    // Her money on the same table the player pays on, and for the same
+    // reason: the thing being asked about is a pile of coins, so a pile of
+    // coins is what should be on screen. No piles down the side of it —
+    // there is nothing here for her to take, only something to check.
+    const top = pickerY + 52;
+    const width = rect.width - PAD * 2;
+    const left = rect.left + PAD;
+    const rows = Math.ceil(MOST_COUNTER_COINS / 4);
+    const height = Math.max(104, rows * (TABLE_COIN + 6) + 20);
+    this.tableTop
+      .setSize(width, height)
+      .setPosition(left + width / 2, top + height / 2)
+      .setVisible(true);
+    const area = { width: width - 16, height: height - 16 };
+    // Loose while there are few enough to count, gathered into piles when
+    // there are not. The line is the same number of coins a payment may
+    // hold: past it, counting stops being the thing being practised — one
+    // coin missing from forty is invisible, and she is a coin or two out one
+    // time in ten. Six piles of five ducats is checked by multiplying, and a
+    // multiplication does not get harder as the pile grows.
+    if (offer.coins.length > MOST_COUNTER_COINS) {
+      this.layStacks(stacksOf(offer.coins), { x: left + 8, y: top + 8 }, area);
+    } else {
+      this.layCoins(offer.coins, { x: left + 8, y: top + 8 }, area);
     }
 
-    const rows = Math.ceil(shown / columns);
-    const actionY = top + Math.max(1, rows) * (COIN_H + COIN_GAP) + 16;
+    const actionY = top + height + 20;
     this.place(this.confirm, rect.centreX + 60, actionY, 110, 30);
     this.confirm.label.setText(this.settled ? this.words.done : this.words.thatsRight);
     this.show(this.confirm);
@@ -730,7 +1220,10 @@ export class ShopPanel {
     if (this.settled && this.verdict) {
       this.hint.setText(this.verdict.message).setColor(this.verdict.right ? INK_GOOD : INK_BAD);
     } else {
-      this.hint.setText(this.words.countHerCoins).setColor(INK_DIM);
+      const piles = offer.coins.length > MOST_COUNTER_COINS;
+      this.hint
+        .setText(piles ? this.words.countHerPiles : this.words.countHerCoins)
+        .setColor(INK_DIM);
     }
   }
 
@@ -764,43 +1257,23 @@ export class ShopPanel {
   }
 
   /** A coin on the counter: it looks like the pad's coins but does nothing. */
-  private chip(texture: string): Button {
-    const box = this.own(
-      this.scene.add.rectangle(0, 0, 10, 10, PAPER_PALE_HEX).setStrokeStyle(2, INK_HEX),
-    );
-    const label = this.own(this.text("", ROW_SIZE, INK).setOrigin(0.5).setAlign("center"));
-    const icon = this.own(this.scene.add.image(0, 0, texture).setDisplaySize(COIN_ART, COIN_ART));
-    return { box, label, icon };
-  }
 
   /** The value of the nth pad button in the currency now in the purse. */
   private denomination(index: number): number {
     return CURRENCY.denominations[index] ?? 0;
   }
 
-  /**
-   * A coin button: face on the left, value beside it.
-   *
-   * Its own placement rather than the row one, because a coin button is a
-   * third the width of a shop row — the row's inset would push "50 Rp." off
-   * the end of it.
-   */
-  private placeCoin(button: Button, x: number, y: number, width: number, value: number): void {
-    button.box.setSize(width, COIN_H).setPosition(x, y);
-    button.icon?.setPosition(x - width / 2 + 15, y);
-    button.label.setPosition(x - width / 2 + 29, y).setOrigin(0, 0.5);
-    this.faceCoin(button, value);
-  }
-
-  /** Point a coin button at the right face for what it is worth. */
-  private faceCoin(button: Button, value: number): void {
-    button.icon?.setTexture(uiTextureKey(coinIcon(coinTier(CURRENCY, value))));
-    button.icon?.setDisplaySize(COIN_ART, COIN_ART);
-  }
-
   private place(button: Button, x: number, y: number, width: number, height: number): void {
     button.box.setSize(width, height).setPosition(x, y);
     if (button.icon) {
+      // Scaled to the row rather than drawn at its own size. The garden's
+      // things are 32-pixel icons and happened to fit; a bed is a piece of
+      // room furniture two tiles tall, and drawn at its own size it covered
+      // the three rows under it.
+      const box = height - 6;
+      const source = button.icon.texture.getSourceImage() as { width: number; height: number };
+      const fit = Math.min(box / (source.width || box), box / (source.height || box), 1);
+      button.icon.setScale(fit);
       button.icon.setPosition(x - width / 2 + 20, y);
       button.label.setPosition(x - width / 2 + 40, y).setOrigin(0, 0.5);
     } else {

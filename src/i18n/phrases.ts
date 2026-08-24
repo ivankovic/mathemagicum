@@ -5,6 +5,7 @@ import type { AnimalKind } from "../world/animals";
 import type { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
 import type { PlantStage, PlantType } from "../world/plants";
+import type { Buyable } from "../world/shop";
 import type { TerrainType } from "../world/terrain";
 
 /**
@@ -51,13 +52,21 @@ export interface Phrases {
 
   plant: (plant: PlantType) => Noun;
   fixture: (fixture: FixtureType) => Noun;
-  item: (item: ItemType) => Noun;
+  /**
+   * The name of anything the player can hold or buy.
+   *
+   * `Buyable` as well as `ItemType`, because a piece of furniture is two
+   * things with two names: `chair~2` is what sits in the basket and `chair`
+   * is what the shop sells. Both have to be nameable, and it is the same
+   * noun either way.
+   */
+  item: (item: ItemType | Buyable) => Noun;
   stage: (stage: PlantStage) => string;
   terrain: (terrain: TerrainType) => string;
   /** Rooms come from the asset sidecars, so this takes the generator's name. */
   room: (room: string) => string;
   /** "3 carrots", "1 cactus" — the plural the message line needs. */
-  count: (item: ItemType, count: number) => string;
+  count: (item: ItemType | Buyable, count: number) => string;
 
   // --- gardening -----------------------------------------------------------
 
@@ -203,14 +212,42 @@ export interface Phrases {
   brickHintAdd: string;
   brickHintTakeAway: string;
 
+  // --- folding a shape in half ---------------------------------------------
+
+  /** Over the shape. */
+  mirrorTitle: string;
+  /**
+   * The rule, said once under the title.
+   *
+   * The hardest line in the game to write, because the word for what is
+   * being asked — "an axis of symmetry" — is a word most children meeting
+   * this will not have been given yet, and giving it here in a caption
+   * teaches nothing. So the caption says what the *fold* does, and the name
+   * is what the astronomer supplies when she teaches the spell.
+   */
+  mirrorAsk: string;
+  /** What a line that does not fold says. Never a scolding. */
+  mirrorWrong: string;
+  /** The line under a shape that folded. */
+  mirrorDone: string;
+  /** The help, when it comes: the fold itself, drawn, and named as such. */
+  mirrorHint: string;
+
   // --- the hourglass spell -------------------------------------------------
 
   hourglassTitle: string;
   /** The question under the two faces. */
   hourglassAsk: string;
+  /** Said while the clock has not been turned: there is no sum yet. */
+  hourglassTurnIt: string;
+  /** Caption under the face that shows what the clock says now. */
+  hourglassNow: string;
+  /** And under the one whose hands she is moving. */
+  hourglassTo: string;
+  /** What the two answer boxes are counting. */
+  hourglassHours: string;
+  hourglassMinutes: string;
   /** Which face is which: when you put it down, and now. */
-  hourglassLeft: string;
-  hourglassBack: string;
   /** The help, once the sweep has been drawn: count on from here. */
   hourglassCountOn: (hours: number) => string;
   hourglassSolved: (hours: number) => string;
@@ -297,19 +334,21 @@ export interface Phrases {
   sheBuys: string;
   sheSells: string;
   /** A row on her side of the counter: what it is and what it costs. */
-  stockRow: (fixture: FixtureType, price: string) => string;
+  stockRow: (thing: Buyable, price: string) => string;
   /** A row on the player's side: how many she has and what each fetches. */
   cropRow: (item: ItemType, held: number, price: string) => string;
-  buyTitle: (fixture: FixtureType, count: number, price: string) => string;
+  buyTitle: (thing: Buyable, count: number, price: string) => string;
   sellTitle: (item: ItemType, count: number, price: string) => string;
   onTheCounter: (total: string) => string;
   moreToGo: (amount: string) => string;
   tooMuch: (amount: string) => string;
   exactlyRight: string;
   tooExpensive: string;
-  paidFor: (fixture: FixtureType, count: number) => string;
+  paidFor: (thing: Buyable, count: number) => string;
   sheCountsOut: string;
   countHerCoins: string;
+  /** The same question, when her money is in piles rather than loose. */
+  countHerPiles: string;
   back: string;
   pay: string;
   done: string;

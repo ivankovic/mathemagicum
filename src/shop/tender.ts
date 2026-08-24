@@ -21,6 +21,22 @@ import { type CurrencyDefinition, isPayable, totalOf } from "./currency";
  * shop is not a place to lose money by being slow.
  */
 
+/**
+ * The most coins a payment may take to count out.
+ *
+ * Past a handful, counting stops being arithmetic and becomes bookkeeping.
+ * Buying was capped only by what the purse held, which was survivable while
+ * paying was a keypad and forty coins was forty taps. They are forty *drags*
+ * now, across a table, and nobody is learning anything by the tenth one.
+ *
+ * Selling has no matching number, and the difference is the point: a sale is
+ * counted out by the shopkeeper rather than by the child, and past this many
+ * coins she gathers them into piles — which is also the line this constant
+ * draws for her. What a child does by hand is bounded; what they are asked
+ * to check is not, because checking piles is multiplication.
+ */
+export const MOST_COUNTER_COINS = 10;
+
 export interface Tender {
   /** What is owed, in minor units. */
   readonly owed: number;

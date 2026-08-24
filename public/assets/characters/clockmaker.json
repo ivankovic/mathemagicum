@@ -1,0 +1,152 @@
+{
+  "sheet": {
+    "file": "clockmaker_sheet.png",
+    "frame_width": 32,
+    "frame_height": 48,
+    "frame_count": 72,
+    "columns": 6,
+    "rows": 12,
+    "margin": 1,
+    "spacing": 2
+  },
+  "character": "clockmaker",
+  "tile_size": 32,
+  "footprint_tiles": {
+    "width": 1,
+    "height": 1
+  },
+  "sprite_offset_px": {
+    "x": 0,
+    "y": -16
+  },
+  "sprite_size_px": {
+    "width": 32,
+    "height": 48
+  },
+  "frame_count": 72,
+  "animations": {
+    "idle_down": {
+      "start": 0,
+      "end": 3,
+      "frame_count": 4
+    },
+    "idle_up": {
+      "start": 6,
+      "end": 9,
+      "frame_count": 4
+    },
+    "idle_left": {
+      "start": 12,
+      "end": 15,
+      "frame_count": 4
+    },
+    "idle_right": {
+      "start": 18,
+      "end": 21,
+      "frame_count": 4
+    },
+    "walk_down": {
+      "start": 24,
+      "end": 27,
+      "frame_count": 4
+    },
+    "walk_up": {
+      "start": 30,
+      "end": 33,
+      "frame_count": 4
+    },
+    "walk_left": {
+      "start": 36,
+      "end": 39,
+      "frame_count": 4
+    },
+    "walk_right": {
+      "start": 42,
+      "end": 45,
+      "frame_count": 4
+    },
+    "plant_down": {
+      "start": 48,
+      "end": 53,
+      "frame_count": 6
+    },
+    "plant_up": {
+      "start": 54,
+      "end": 59,
+      "frame_count": 6
+    },
+    "plant_left": {
+      "start": 60,
+      "end": 65,
+      "frame_count": 6
+    },
+    "plant_right": {
+      "start": 66,
+      "end": 71,
+      "frame_count": 6
+    }
+  },
+  "directions": [
+    "down",
+    "up",
+    "left",
+    "right"
+  ],
+  "palette": {
+    "outline": [
+      58,
+      48,
+      74
+    ],
+    "skin": [
+      243,
+      202,
+      160
+    ],
+    "skin_shade": [
+      208,
+      162,
+      122
+    ],
+    "hair": [
+      186,
+      92,
+      58
+    ],
+    "hair_shade": [
+      142,
+      66,
+      40
+    ],
+    "shirt": [
+      178,
+      132,
+      216
+    ],
+    "shirt_shade": [
+      134,
+      96,
+      172
+    ],
+    "pants": [
+      78,
+      96,
+      92
+    ],
+    "accent": [
+      240,
+      186,
+      90
+    ],
+    "accent_shade": [
+      198,
+      144,
+      58
+    ],
+    "light": [
+      255,
+      250,
+      240
+    ]
+  }
+}

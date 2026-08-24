@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { CURRENCY, coinsFor } from "./currency";
+import { CURRENCY, coinsFor, smallestCoin } from "./currency";
 import {
   addCoin,
   beginTender,
@@ -117,8 +117,8 @@ describe("whether a purchase can be attempted", () => {
 describe("every price can actually be counted out", () => {
   // The invariant the whole minigame rests on: an amount with no coin
   // decomposition is an unwinnable puzzle.
-  test("greedy makes every whole number of mites, up to fifty ducat", () => {
-    for (let owed = 1; owed <= 5000; owed++) {
+  test("greedy makes every payable amount, up to fifty ducat", () => {
+    for (let owed = smallestCoin(CURRENCY); owed <= 5000; owed += smallestCoin(CURRENCY)) {
       const tender = tenderOf(owed, owed, coinsFor(CURRENCY, owed));
       expect({ owed, exact: isExact(tender) }).toEqual({ owed, exact: true });
     }

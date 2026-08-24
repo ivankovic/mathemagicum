@@ -9,6 +9,7 @@ import { type Band, DEFAULT_BAND, bandAt, bandOn, rungInBand } from "../spells/d
 import { HARDEST_CLOCK_RUNG } from "../spells/hourglass";
 import { HARDEST_ARRAY_RUNG } from "../spells/multiplication";
 import { readLearned } from "../spells/spellbook";
+import { HARDEST_SYMMETRY_RUNG } from "../spells/symmetry";
 import { HOME_PLACE, PLACE_NAMES, type PlaceName } from "../world/places";
 import type { PlayerSnapshot } from "./snapshot";
 
@@ -129,6 +130,31 @@ export interface Progress {
    * a clock without numbers on it.
    */
   readonly clockRung: number;
+  /**
+   * How far this child's world clock has been wound from the real one, in
+   * minutes.
+   *
+   * The hourglass spell moves it, and it stays moved — a world that snapped
+   * back to the wall clock the moment the game was put down would make the
+   * spell a thing that undoes itself overnight.
+   *
+   * Minutes rather than hours because the spell can be cast to the quarter,
+   * and always forward: winding is the only way it changes, so this only
+   * grows. A save written before the glass could move anything has none, and
+   * reads as nought — which is a world whose clock is the real one, which is
+   * what those children have.
+   */
+  readonly clockOffset: number;
+  /**
+   * Where the mirror ladder sits: how hard a shape is to fold in half.
+   *
+   * A sixth number, and the one least like the others: every other ladder
+   * asks a child to work something *out*, and this asks them to *see*
+   * something — which is a different skill and moves at its own pace. A
+   * child fluent in three-digit addition may never have been shown that a
+   * shape can fold onto itself.
+   */
+  readonly symmetryRung: number;
   /**
    * Where the bricklaying ladder sits: how hard a wall is to finish.
    *
@@ -291,6 +317,9 @@ export function createProfile(
     portalRung: bandAt(wanted.band).from,
     arrayRung: arrayFloor(bandAt(wanted.band)),
     clockRung: clockFloor(bandAt(wanted.band)),
+    // A new world's clock is the real one until somebody moves it.
+    clockOffset: 0,
+    symmetryRung: 0,
     brickRung: brickFloor(bandAt(wanted.band)),
     // The village, because that is where they live. A portal spell whose
     // first cast has nowhere to go is a spell that looks broken.
@@ -341,6 +370,8 @@ export function freshProgress(bandAt_: number): Progress {
     portalRung: band.from,
     arrayRung: arrayFloor(band),
     clockRung: clockFloor(band),
+    clockOffset: 0,
+    symmetryRung: 0,
     brickRung: brickFloor(band),
     reached: [HOME_PLACE],
     learned: [],
@@ -360,6 +391,34 @@ export function freshProgress(bandAt_: number): Progress {
  */
 function arrayRungInBand(band: Band, rung: number): number {
   return rungInBand(band, rung, HARDEST_ARRAY_RUNG);
+}
+
+/**
+ * A wound clock, read back from a save.
+ *
+ * Whole minutes and never negative: the glass only ever winds forward, so a
+ * negative here is a file somebody edited or a bug that has since been
+ * fixed, and either way a world whose clock runs behind the real one is not
+ * a world this game knows how to be in. Anything unreadable reads as nought,
+ * which is the clock a child who has never cast the spell has.
+ */
+function readOffset(raw: unknown): number {
+  const minutes = Math.trunc(Number(raw ?? 0));
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
+}
+
+/**
+ * And the mirror ladder, which is the one ladder no band opens partway up.
+ *
+ * Every other spell scales its floor to the child's band, because a nine
+ * year old handed single-digit sums has been insulted. Folding is not like
+ * that: it is a way of *looking*, and the oldest child in the game has very
+ * likely never been asked to do it. So everybody starts at the square, and
+ * the ladder is short enough that nobody is kept there long.
+ */
+function readSymmetryRung(raw: unknown): number {
+  const rung = Math.trunc(Number(raw ?? 0));
+  return Number.isFinite(rung) ? Math.max(0, Math.min(HARDEST_SYMMETRY_RUNG, rung)) : 0;
 }
 
 /** The same again, against the clock ladder. */
@@ -460,6 +519,10 @@ export function readProfile(value: unknown): Profile | null {
     // A child saved before the astronomer existed starts it at the bottom of
     // their own band, exactly as a new child does — they have never cast it.
     clockRung: clockRungInBand(bandAt(band), Number(record.clockRung ?? clockFloor(bandAt(band)))),
+    // A child saved before the glass could wind the clock has not wound it.
+    clockOffset: readOffset(record.clockOffset),
+    // A child saved before the astronomer taught folding has never folded.
+    symmetryRung: readSymmetryRung(record.symmetryRung),
     // A child saved before anybody could build a room has never laid a
     // brick: the bottom of their own band, exactly as a new child gets.
     brickRung: brickRungInBand(bandAt(band), Number(record.brickRung ?? brickFloor(bandAt(band)))),

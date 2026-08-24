@@ -32,40 +32,6 @@ export const MISTAKE_IN = 10;
 export const MISTAKE_MIN_COINS = 1;
 export const MISTAKE_MAX_COINS = 3;
 
-/**
- * The most coins she will ever lay on the counter, which is what the shop
- * screen has room to show. Guaranteed by the trade limit above it: ten crops
- * is a sum greedy change makes out of few coins, and a miscount adds at most
- * MISTAKE_MAX_COINS more.
- */
-export const MAX_OFFER_COINS = 12;
-
-/**
- * How many of a thing she can buy at once and still count the money out.
- *
- * A flat limit of ten was fine while the largest coin was worth five of the
- * major unit; it stops being fine the moment the ladder changes, and the
- * ladder has changed once already. So the cap is worked out from the coins
- * rather than written down beside them.
- *
- * Stops at the first count that does not fit rather than the largest that
- * does: the quantity picker steps through every number on the way, so a
- * range with a hole in it is a range with a broken step in it.
- */
-export function maxSaleCount(
-  currency: CurrencyDefinition,
-  unitPrice: number,
-  limit: number,
-): number {
-  const room = MAX_OFFER_COINS - MISTAKE_MAX_COINS;
-  let most = 1;
-  for (let count = 1; count <= limit; count++) {
-    if (coinsFor(currency, unitPrice * count).length > room) break;
-    most = count;
-  }
-  return most;
-}
-
 export interface Offer {
   /** What the player is actually owed. */
   readonly owed: number;
@@ -86,7 +52,16 @@ export interface Offer {
  */
 export function makeOffer(currency: CurrencyDefinition, owed: number, rng: Rng): Offer {
   const right = coinsFor(currency, owed);
-  if (right.length === 0) return { owed, coins: [], total: 0, correct: true };
+  // An amount the coins cannot make is not a payment she got right by
+  // putting nothing down. This said `correct: true`, which was harmless
+  // while every whole number of mites was payable — the only way in was a
+  // fraction. The smallest coin is fifty now, so any amount off the fifty is
+  // unpayable, and the old answer would have had the shopkeeper hand over an
+  // empty counter while the game agreed that was the right money.
+  //
+  // Nothing should ever ask: every price is a whole number of crops and the
+  // price table's own test says so. This is what happens when something does.
+  if (right.length === 0) return { owed, coins: [], total: 0, correct: owed === 0 };
   if (randInt(rng, 1, MISTAKE_IN) !== 1) {
     return { owed, coins: right, total: totalOf(right), correct: true };
   }

@@ -41,6 +41,8 @@ const BADGE_INK = "#4a3422";
 // digits stop being legible on a phone.
 const BADGE_SCALE = 0.4;
 const BADGE_MIN = 18;
+/** Breathing room either side of the number inside its bubble. */
+const BADGE_PAD = 4;
 // Past this the badge would need a third digit and would stop fitting in a
 // corner. A player carrying a hundred of something does not need the exact
 // number; they need to know it is a lot.
@@ -55,11 +57,53 @@ const EMPTY_ALPHA = 0.3;
  * Nothing at all for zero — an empty slot should read as empty, and a "0"
  * badge is a label saying so, which is more ink for less meaning.
  */
-export function badgeLabel(count: number): string | null {
+export function badgeLabel(count: number, most: number = BADGE_MAX): string | null {
   if (!Number.isFinite(count) || count <= 0) return null;
   const whole = Math.floor(count);
   if (whole <= 0) return null;
-  return whole > BADGE_MAX ? `${BADGE_MAX}+` : String(whole);
+  return whole > most ? `${most}+` : String(whole);
+}
+
+export interface Slot {
+  /** How many steps left of the container button this one sits. */
+  readonly column: number;
+  /** How many steps above it. One is the slot directly above. */
+  readonly row: number;
+}
+
+/**
+ * Where the things in a tray go, in steps rather than pixels.
+ *
+ * A tray stacks straight up from its button, which held while the fullest
+ * one had seven things in it. Furniture made the crate twelve, and the top
+ * two went *off the top of the screen* — buttons nobody could reach, which
+ * is the same thing as buttons that do nothing, and is exactly how it was
+ * reported.
+ *
+ * So it wraps. `room` is how many will fit in one column, and past that they
+ * are shared out between columns rather than filling one and spilling into
+ * the next: eleven and a lonely one reads as a mistake, six and six reads as
+ * a tray. Columns go leftward, because the trays live in the bottom-right
+ * corner and there is nothing that way but more screen.
+ *
+ * In steps because this is the part that can be wrong without a browser, and
+ * it is the part that was.
+ */
+export function traySlots(count: number, room: number): Slot[] {
+  if (count <= 0) return [];
+  const fits = Math.max(1, Math.floor(room));
+  const columns = Math.max(1, Math.ceil(count / fits));
+  // Shared out a column at a time rather than poured into them. Thirteen
+  // things in columns of five is five, five and a lonely three; the same
+  // thirteen as five, four and four is a tray somebody arranged.
+  const base = Math.floor(count / columns);
+  const extra = count % columns;
+  const slots: Slot[] = [];
+  for (let column = 0; column < columns; column++) {
+    const tall = base + (column < extra ? 1 : 0);
+    for (let row = 1; row <= tall; row++) slots.push({ column, row });
+  }
+  return slots;
 }
 
 interface Badge {
@@ -67,6 +111,17 @@ interface Badge {
   readonly text: Phaser.GameObjects.Text;
   readonly size: number;
   readonly count: () => number;
+  /**
+   * The corner it is pinned to, kept so the bubble can be resized later.
+   *
+   * A badge was a fixed square, which held while every number in it was two
+   * digits. The purse counts to "999+" now and four characters ran out of
+   * both sides of the square — so the bubble is measured against its label
+   * when the label is set, and it grows leftward from this point so the
+   * corner it is tucked into stays put.
+   */
+  right: number;
+  middle: number;
 }
 
 interface Button {
@@ -119,6 +174,17 @@ export interface IconTrayOptions {
    * something without asking them to open the basket to find out.
    */
   readonly count?: () => number;
+  /**
+   * The largest number the container's badge will print before it gives up
+   * and says "and more".
+   *
+   * Two digits everywhere but the purse. A basket holding more than
+   * ninety-nine carrots is a basket where the exact number has stopped
+   * mattering; money is the one count where it has not, and a purse that
+   * said "99+" from the third harvest onward would be hiding the thing it
+   * exists to show.
+   */
+  readonly mostShown?: number;
   /**
    * Whether the player may use this at all, if that is a thing that changes.
    *
@@ -193,11 +259,24 @@ export class IconTray {
         .setDepth(options.depth + 3);
       options.register(bubble);
       options.register(text);
-      return { box, icon, available, badge: { bubble, text, size: badgeSize, count } };
+      return {
+        box,
+        icon,
+        available,
+        badge: { bubble, text, size: badgeSize, count, right: 0, middle: 0 },
+      };
     };
 
     this.container = make(options.texture, options.size, options.count);
-    this.container.box.on("pointerdown", () => this.setOpen(!this.open));
+    // A tray with nothing in it is not a tray, it is a readout. The purse is
+    // one: it holds money, and money has no slots to pick from — its four
+    // coins were four buttons that did nothing when tapped, which is worse
+    // than no button at all because it invites the tap.
+    if (options.items.length > 0) {
+      this.container.box.on("pointerdown", () => this.setOpen(!this.open));
+    } else {
+      this.container.box.disableInteractive();
+    }
 
     for (const item of options.items) {
       const button = make(item.texture, options.size - 8, item.count, item.available);
@@ -258,16 +337,17 @@ export class IconTray {
     const badge = button.badge;
     // Two ways to be dim and one look for both: nothing of it in the basket,
     // or nobody has taught it yet.
-    const label = badge ? badgeLabel(badge.count()) : "";
+    const label = badge ? badgeLabel(badge.count(), this.options.mostShown) : "";
+    if (badge && label) this.fitBadge(badge, label);
     const allowed = button.available ? button.available() : true;
     button.icon.setAlpha((badge ? label !== "" : true) && allowed ? 1 : EMPTY_ALPHA);
     if (!badge) return;
     badge.bubble.setVisible(visible && label !== null);
     badge.text.setVisible(visible && label !== null);
-    if (label) badge.text.setText(label);
   }
 
   toggle(): void {
+    if (this.options.items.length === 0) return;
     this.setOpen(!this.open);
   }
 
@@ -289,11 +369,15 @@ export class IconTray {
     this.container.box.setPosition(x, y);
     this.container.icon.setPosition(x, y);
     this.placeBadge(this.container, x, y, size);
+    const step = size + GAP;
+    const slots = traySlots(this.items.length, (y - size) / step);
     for (const [index, item] of this.items.entries()) {
-      const itemY = y - (size + GAP) * (index + 1);
-      item.box.setPosition(x, itemY);
-      item.icon.setPosition(x, itemY);
-      this.placeBadge(item, x, itemY, size - 8);
+      const slot = slots[index] as Slot;
+      const itemX = x - slot.column * step;
+      const itemY = y - slot.row * step;
+      item.box.setPosition(itemX, itemY);
+      item.icon.setPosition(itemX, itemY);
+      this.placeBadge(item, itemX, itemY, size - 8);
     }
     // Content last, and here rather than only in the constructor, so a badge
     // can never be made visible before it has been given a position. The
@@ -312,7 +396,24 @@ export class IconTray {
     const badge = button.badge;
     if (!badge) return;
     const offset = (size - badge.size) / 2 - 1;
-    badge.bubble.setPosition(x + offset, y + offset);
-    badge.text.setPosition(x + offset, y + offset);
+    badge.right = x + offset + badge.size / 2;
+    badge.middle = y + offset;
+    badge.bubble.setPosition(x + offset, badge.middle);
+    badge.text.setPosition(x + offset, badge.middle);
+  }
+
+  /**
+   * Widen the bubble to hold what is written in it, and keep its corner.
+   *
+   * Set here rather than at build time because the label is what decides it,
+   * and the label changes with every carrot picked.
+   */
+  private fitBadge(badge: Badge, label: string): void {
+    badge.text.setText(label);
+    const width = Math.max(badge.size, Math.ceil(badge.text.width) + BADGE_PAD * 2);
+    badge.bubble.setSize(width, badge.size);
+    const centre = badge.right - width / 2;
+    badge.bubble.setPosition(centre, badge.middle);
+    badge.text.setPosition(centre, badge.middle);
   }
 }

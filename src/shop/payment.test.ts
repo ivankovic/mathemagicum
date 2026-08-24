@@ -3,17 +3,11 @@
 
 import { describe, expect, test } from "bun:test";
 import { BANDS } from "../spells/difficulty";
+import { PLACEABLE_FIXTURES } from "../world/fixtures";
 import { createRng } from "../world/rng";
-import { CROP_PRICE, MAX_TRADE } from "../world/shop";
-import { CURRENCY, coinsFor, totalOf } from "./currency";
-import {
-  MAX_OFFER_COINS,
-  MISTAKE_IN,
-  MISTAKE_MAX_COINS,
-  judgeOffer,
-  makeOffer,
-  maxSaleCount,
-} from "./payment";
+import { CROP_PRICE, MAX_TRADE, priceOf } from "../world/shop";
+import { CURRENCY, coinsFor, smallestCoin, stacksOf, totalOf } from "./currency";
+import { MISTAKE_IN, MISTAKE_MAX_COINS, judgeOffer, makeOffer } from "./payment";
 
 const SEEDS = Array.from({ length: 400 }, (_, i) => i * 7919 + 11);
 
@@ -76,7 +70,7 @@ describe("counting out a payment", () => {
   // A pile that lost all its coins is no offer at all rather than a wrong
   // one, and a small pile is exactly where taking three away would do it.
   test("she never puts down nothing", () => {
-    for (const owed of [5, 10, 25, 250, 1250]) {
+    for (const owed of [50, 100, 250, 1250]) {
       for (const offer of offers(owed)) {
         expect({ owed, coins: offer.coins.length > 0 }).toEqual({ owed, coins: true });
       }
@@ -84,10 +78,14 @@ describe("counting out a payment", () => {
   });
 
   test("a one-coin payment can only ever be wrong by being too much", () => {
-    const wrong = SEEDS.map((seed) => makeOffer(CURRENCY, 5, createRng(seed))).filter(
-      (o) => !o.correct,
-    );
-    for (const offer of wrong) expect(offer.total).toBeGreaterThan(5);
+    // Fifty, because that is what one coin is now. It was five, which stopped
+    // being a coin when the ladder was trimmed — and the test went on passing
+    // because every offer came back empty and nothing was left to loop over.
+    const one = smallestCoin(CURRENCY);
+    const offers = SEEDS.map((seed) => makeOffer(CURRENCY, one, createRng(seed)));
+    const wrong = offers.filter((o) => !o.correct);
+    expect(wrong.length).toBeGreaterThan(0);
+    for (const offer of wrong) expect(offer.total).toBeGreaterThan(one);
   });
 
   test("the same seed always counts out the same coins", () => {
@@ -96,11 +94,24 @@ describe("counting out a payment", () => {
     );
   });
 
-  // Half a mite is not money. The smallest coin is one, so the only amounts
-  // with no decomposition are the ones that were never whole to begin with.
+  // Half a mite is not money, and neither is seventy-five of them: the
+  // smallest coin is fifty, so anything off the fifty has no decomposition.
   test("an amount the coins cannot make is refused rather than fudged", () => {
     expect(makeOffer(CURRENCY, 2.5, createRng(1)).coins).toEqual([]);
     expect(makeOffer(CURRENCY, 0, createRng(1)).coins).toEqual([]);
+    expect(makeOffer(CURRENCY, 75, createRng(1)).coins).toEqual([]);
+  });
+
+  // And an empty counter is never the right money for something that costs
+  // something. It used to say it was, which would have had the player agree
+  // to be paid nothing and be told they were right to.
+  test("and an empty counter is not called correct", () => {
+    for (const owed of [75, 2.5, 1]) {
+      expect({ owed, correct: makeOffer(CURRENCY, owed, createRng(1)).correct }).toEqual({
+        owed,
+        correct: false,
+      });
+    }
   });
 });
 
@@ -169,46 +180,34 @@ describe("what she actually pays", () => {
   });
 });
 
-describe("what fits on the counter", () => {
-  // The shop screen lays her coins out in a fixed set of slots. If she could
-  // count out more than there are slots, a correct payment would be drawn
-  // short and a child counting it would be right to call it wrong.
-  test("she never puts down more coins than the counter can show", () => {
-    const most = maxSaleCount(CURRENCY, CROP_PRICE, MAX_TRADE);
-    for (let seed = 0; seed < 100; seed++) {
-      const rng = createRng(seed);
-      for (let count = 1; count <= most; count++) {
-        const offer = makeOffer(CURRENCY, CROP_PRICE * count, rng);
-        expect(offer.coins.length).toBeLessThanOrEqual(MAX_OFFER_COINS);
+describe("what she lays on the table", () => {
+  // She used to be limited to what the shop screen had slots for, and the
+  // shop screen had slots because it drew her coins one by one. Past a
+  // handful it draws piles instead — one per kind of coin, each saying how
+  // many — so the only bound left is that there are four kinds of coin.
+  test("however much she owes, it is never more than four piles", () => {
+    for (const owed of [250, 2500, 6000, 24_750, 100_000]) {
+      for (let seed = 0; seed < 50; seed++) {
+        const offer = makeOffer(CURRENCY, owed, createRng(seed));
+        expect({ owed, piles: stacksOf(offer.coins).length }).toEqual({
+          owed,
+          piles: stacksOf(offer.coins).length,
+        });
+        expect(stacksOf(offer.coins).length).toBeLessThanOrEqual(CURRENCY.denominations.length);
       }
     }
   });
 
-  // The picker steps up one at a time, so every count below the cap has to be
-  // sellable too — a cap that skipped a number would be a dead button on it.
-  test("every count up to the cap fits, and the next one does not", () => {
-    const most = maxSaleCount(CURRENCY, CROP_PRICE, MAX_TRADE);
-    expect(most).toBeGreaterThanOrEqual(1);
-    for (let count = 1; count <= most; count++) {
-      expect(coinsFor(CURRENCY, CROP_PRICE * count).length).toBeLessThanOrEqual(
-        MAX_OFFER_COINS - MISTAKE_MAX_COINS,
-      );
+  // The piles have to be the same money as the coins, right or wrong: a
+  // child checking six piles of five ducats is checking her actual offer.
+  test("and the piles are worth what the coins were worth", () => {
+    for (const owed of [250, 6000, 24_750]) {
+      for (let seed = 0; seed < 50; seed++) {
+        const offer = makeOffer(CURRENCY, owed, createRng(seed));
+        const summed = stacksOf(offer.coins).reduce((sum, s) => sum + s.value * s.count, 0);
+        expect({ owed, seed, summed }).toEqual({ owed, seed, summed: offer.total });
+      }
     }
-    if (most < MAX_TRADE) {
-      expect(coinsFor(CURRENCY, CROP_PRICE * (most + 1)).length).toBeGreaterThan(
-        MAX_OFFER_COINS - MISTAKE_MAX_COINS,
-      );
-    }
-  });
-
-  // The cap is worked out from the coins rather than written down beside
-  // them, which is what let the ladder change without anybody having to
-  // remember this number: a set whose largest coin is small needs more of
-  // them, and would sell fewer at a time.
-  test("the cap follows the coins, not a constant", () => {
-    const small: typeof CURRENCY = { ...CURRENCY, denominations: [1, 2, 5, 10, 20, 50] };
-    expect(maxSaleCount(CURRENCY, CROP_PRICE, MAX_TRADE)).toBe(MAX_TRADE);
-    expect(maxSaleCount(small, CROP_PRICE, MAX_TRADE)).toBeLessThan(MAX_TRADE);
   });
 });
 
@@ -260,13 +259,14 @@ describe("counting out at every band", () => {
     }
   });
 
-  test("nothing she counts out overflows the counter, at any band", () => {
+  // However big the basket and whatever a crop is worth, her money goes on
+  // the table as at most one pile per kind of coin. There is no size of sale
+  // that cannot be shown, which is why a sale has no limit any more.
+  test("nothing she counts out overflows the table, at any band", () => {
     for (const price of prices) {
-      const most = maxSaleCount(CURRENCY, price, MAX_TRADE);
-      expect({ price, sellable: most >= 1 }).toEqual({ price, sellable: true });
-      for (let count = 1; count <= most; count++) {
+      for (const count of [1, 3, 10, 40, 99]) {
         for (const offer of offersAt(price * count)) {
-          expect({ price, count, fits: offer.coins.length <= MAX_OFFER_COINS }).toEqual({
+          expect({ price, count, fits: stacksOf(offer.coins).length <= 4 }).toEqual({
             price,
             count,
             fits: true,
@@ -276,14 +276,23 @@ describe("counting out at every band", () => {
     }
   });
 
-  // The gentlest band exists so the money is money rather than a second
-  // puzzle: every price a whole number of ducats, and every price payable.
-  test("the gentlest band prices everything in whole ducats", () => {
+  // The gentlest band used to price everything in whole ducats, so that the
+  // money was money rather than a second puzzle. It also meant the fifty
+  // never came up and four of the eight prices were payable with one coin,
+  // and a price you pay with one coin has no counting in it at all. So what
+  // the gentlest band now guarantees is the opposite: never a single coin,
+  // and never more than three.
+  test("nothing at the gentlest band is paid with a single coin", () => {
     const price = BANDS[0]?.cropPrice ?? 0;
-    expect(price % CURRENCY.minorPerMajor).toBe(0);
-    for (let count = 1; count <= MAX_TRADE; count++) {
-      expect(CURRENCY.format(price * count)).toContain(",00");
+    for (const fixture of PLACEABLE_FIXTURES) {
+      const coins = coinsFor(CURRENCY, priceOf(fixture, price));
+      expect({ fixture, coins: coins.length }).toEqual({
+        fixture,
+        coins: Math.min(3, Math.max(2, coins.length)),
+      });
     }
+    // And what a crop fetches is two coins, which is where counting starts.
+    expect(coinsFor(CURRENCY, price)).toEqual([100, 50]);
   });
 
   test("every band's prices can actually be counted out", () => {

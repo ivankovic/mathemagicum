@@ -5,15 +5,22 @@ import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import { type CastResult, castResult } from "../spells/cast";
 import {
+  type ClockRung,
   type ClockTime,
   type HourglassCast,
-  type HourglassProblem,
-  backspaceHour,
+  SWIPE_PER_TICK,
+  askedOf,
+  asksMinutes,
+  backspaceClock,
   beginHourglassCast,
+  forwardMinutes,
   handAngles,
   hourglassHint,
-  submitHour,
-  typeHourDigit,
+  moved,
+  nextBox,
+  submitClock,
+  turnBy,
+  typeClockDigit,
 } from "../spells/hourglass";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
@@ -103,12 +110,33 @@ export class ClockPopup {
   private readonly numerals: Phaser.GameObjects.Text[] = [];
   private readonly box: Phaser.GameObjects.Rectangle;
   private readonly boxText: Phaser.GameObjects.Text;
+  /** The second answer, where the rung's face can show minutes at all. */
+  private readonly minuteBox: Phaser.GameObjects.Rectangle;
+  private readonly minuteText: Phaser.GameObjects.Text;
+  private readonly units: Phaser.GameObjects.Text[] = [];
+  /**
+   * The stretch of parchment a swipe counts on, and where the finger was.
+   *
+   * Everything above the answer boxes, which is most of the panel — the two
+   * faces and the space round them. Generous on purpose: this replaces
+   * taking hold of a *hand*, which meant catching one of two two-pixel lines
+   * and having the right one chosen by how far from the middle you grabbed.
+   *
+   * `travel` is how far the finger has gone since the last tick was counted,
+   * kept so that a slow drag adds up instead of being rounded away a pixel
+   * at a time.
+   */
+  private swipeArea: { left: number; top: number; right: number; bottom: number } | null = null;
+  private lastAt: { x: number; y: number } | null = null;
+  private travel = 0;
   private readonly keys: PadKey[] = [];
   private readonly closeRect: Phaser.GameObjects.Rectangle;
   private readonly closeText: Phaser.GameObjects.Text;
 
   private state: HourglassCast | null = null;
-  private finish: ((result: CastResult) => void) | null = null;
+  private moveHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
+  private downHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
+  private finish: ((result: CastResult, to: ClockTime | null) => void) | null = null;
   private keyHandler: ((event: KeyboardEvent) => void) | null = null;
 
   constructor(
@@ -142,6 +170,13 @@ export class ClockPopup {
       add.rectangle(0, 0, BOX_W, BOX_H, PAPER_PALE_HEX).setStrokeStyle(3, ACTIVE_HEX),
     );
     this.boxText = this.own(this.label("", BOX_SIZE, INK).setOrigin(0.5));
+    this.minuteBox = this.own(
+      add.rectangle(0, 0, BOX_W, BOX_H, PAPER_PALE_HEX).setStrokeStyle(3, INK_HEX),
+    );
+    this.minuteText = this.own(this.label("", BOX_SIZE, INK).setOrigin(0.5));
+    for (let which = 0; which < 2; which++) {
+      this.units.push(this.own(this.label("", LABEL_SIZE, INK_DIM).setOrigin(0, 0.5)));
+    }
 
     this.buildKeypad();
 
@@ -181,17 +216,43 @@ export class ClockPopup {
     return this.state;
   }
 
+  /**
+   * Where the face she can move is, and how big.
+   *
+   * The one control in this game that is a *picture* rather than a button:
+   * there is nothing in `ui()` for a script to press, and the hand it has to
+   * take hold of is two pixels wide. Same argument as the shop's counter —
+   * a drop area nobody can name is a drop area nobody can test.
+   */
+  get face(): { left: number; top: number; right: number; bottom: number } | null {
+    return this.swipeArea;
+  }
+
   get isOpen(): boolean {
     return this.state !== null;
   }
 
-  open(problem: HourglassProblem, onDone: (result: CastResult) => void): void {
-    this.state = beginHourglassCast(problem);
+  open(
+    from: ClockTime,
+    rung: ClockRung,
+    onDone: (result: CastResult, to: ClockTime | null) => void,
+  ): void {
+    this.state = beginHourglassCast(from, rung);
     this.finish = onDone;
     this.paper.setVisible(true);
     for (const part of this.parts) part.setVisible(true);
     this.keyHandler = (event: KeyboardEvent) => this.onKeyDown(event);
     this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    // On the scene, not on the face: a finger that slides off the clock is
+    // still holding the hand it grabbed, and letting go anywhere lets go.
+    this.moveHandler = (pointer: Phaser.Input.Pointer) => {
+      if (pointer.isDown) this.swing(pointer);
+      else this.lastAt = null;
+    };
+    this.downHandler = (pointer: Phaser.Input.Pointer) => this.grab(pointer);
+    this.scene.input.on("pointerdown", this.downHandler);
+    this.scene.input.on("pointermove", this.moveHandler);
+    this.scene.input.on("pointerup", this.moveHandler);
     this.layout();
   }
 
@@ -200,6 +261,18 @@ export class ClockPopup {
       this.scene.input.keyboard?.off("keydown", this.keyHandler);
       this.keyHandler = null;
     }
+    if (this.moveHandler) {
+      this.scene.input.off("pointermove", this.moveHandler);
+      this.scene.input.off("pointerup", this.moveHandler);
+      this.moveHandler = null;
+    }
+    if (this.downHandler) {
+      this.scene.input.off("pointerdown", this.downHandler);
+      this.downHandler = null;
+    }
+    this.lastAt = null;
+    this.travel = 0;
+    this.swipeArea = null;
     this.state = null;
     this.finish = null;
     this.paper.setVisible(false);
@@ -210,16 +283,28 @@ export class ClockPopup {
   private dismiss(solved: boolean): void {
     const done = this.finish;
     const result = castResult(this.state, solved);
+    // Where she put the hands, read before the state is thrown away. Null
+    // unless the answer was right: a spell that wound the clock for a child
+    // who could not say how far would be a spell with no question in it, and
+    // closing the parchment is not casting it.
+    //
+    // The time itself rather than the span, because the span is measured
+    // between two *rounded* faces and the world is not rounded. Winding by
+    // it would leave the world a few minutes off the time she pointed at —
+    // which nobody would see at the gentlest rung and everybody would at the
+    // hardest.
+    const to = solved && this.state ? this.state.to : null;
     this.close();
-    done?.(result);
+    done?.(result, to);
   }
 
   private onKeyDown(event: KeyboardEvent): void {
     if (!this.state) return;
     if (event.key >= "0" && event.key <= "9") {
-      this.apply(typeHourDigit(this.state, Number(event.key)));
-    } else if (event.key === "Backspace") this.apply(backspaceHour(this.state));
-    else if (event.key === "Enter") this.apply(submitHour(this.state));
+      this.apply(typeClockDigit(this.state, Number(event.key)));
+    } else if (event.key === "Backspace") this.apply(backspaceClock(this.state));
+    else if (event.key === "Enter") this.apply(submitClock(this.state));
+    else if (event.key === "Tab") this.apply(nextBox(this.state));
     else if (event.key === "Escape") this.dismiss(false);
     else return;
     event.preventDefault();
@@ -231,12 +316,49 @@ export class ClockPopup {
     if (next.done) this.scene.time.delayedCall(650, () => this.dismiss(true));
   }
 
+  /**
+   * Take hold of a hand, and swing it.
+   *
+   * The angle is where the finger is rather than where the hand was, so the
+   * hand comes to the finger — a hand that moved by the same amount the
+   * finger did would drift away from it over a long drag.
+   */
+  private grab(pointer: Phaser.Input.Pointer): void {
+    const area = this.swipeArea;
+    if (!area || !this.state) return;
+    if (pointer.x < area.left || pointer.x > area.right) return;
+    if (pointer.y < area.top || pointer.y > area.bottom) return;
+    this.lastAt = { x: pointer.x, y: pointer.y };
+    this.travel = 0;
+  }
+
+  /**
+   * Follow the finger, counting out ticks as it goes.
+   *
+   * Measured as *movement* rather than as position, so the clock turns by
+   * however far the swipe went and keeps turning if it goes round again —
+   * which is what winding something feels like, and what a position-based
+   * reading could not do without knowing where the middle was.
+   */
+  private swing(pointer: Phaser.Input.Pointer): void {
+    const last = this.lastAt;
+    if (!last || !this.state) return;
+    this.travel += (pointer.x - last.x + (pointer.y - last.y)) / Math.SQRT2;
+    this.lastAt = { x: pointer.x, y: pointer.y };
+    const ticks = Math.trunc(this.travel / SWIPE_PER_TICK);
+    if (ticks === 0) return;
+    // What was counted is taken off, so the rest carries into the next move
+    // rather than being thrown away a pixel at a time.
+    this.travel -= ticks * SWIPE_PER_TICK;
+    this.apply(turnBy(this.state, ticks));
+  }
+
   private buildKeypad(): void {
     const press = (label: string) => () => {
       if (!this.state) return;
-      if (label === "OK") this.apply(submitHour(this.state));
-      else if (label === "<") this.apply(backspaceHour(this.state));
-      else this.apply(typeHourDigit(this.state, Number(label)));
+      if (label === "OK") this.apply(submitClock(this.state));
+      else if (label === "<") this.apply(backspaceClock(this.state));
+      else this.apply(typeClockDigit(this.state, Number(label)));
     };
     const rows: (readonly [string, number][])[] = [
       [
@@ -296,7 +418,7 @@ export class ClockPopup {
   private render(): void {
     const state = this.state;
     if (!state) return;
-    const problem = state.problem;
+    const asked = askedOf(state);
     const { width, height } = this.scene.scale;
     const rect = this.paper.layout(width, height);
     const { left, top } = rect;
@@ -353,33 +475,66 @@ export class ClockPopup {
     this.ink.clear();
     for (const numeral of this.numerals) numeral.setVisible(false);
 
-    const shown = state.done ? problem.hours : hourglassHint(state);
-    for (const [side, at] of [problem.left, problem.back].entries()) {
+    const shown = state.done ? asked.hours : hourglassHint(state);
+    for (const [side, at] of [state.from, state.to].entries()) {
       const faceX = centres[side] as number;
-      this.drawFace(faceX, faceY, radius, at, problem.numerals, side);
+      this.drawFace(faceX, faceY, radius, at, state.rung.numerals, side);
       this.captions[side]
-        ?.setText(side === 0 ? this.words.hourglassLeft : this.words.hourglassBack)
+        ?.setText(side === 0 ? this.words.hourglassNow : this.words.hourglassTo)
         .setPosition(faceX, contentTop)
         .setVisible(true);
     }
+    // The right-hand face is the one she takes hold of, so its hit area
+    // follows it. Invisible: the picture under it is the control.
+    // Everything above the answer boxes is swipeable.
+    this.swipeArea = {
+      left: left,
+      top: contentTop - LABEL_SIZE,
+      right: left + innerW,
+      bottom: faceY + radius + 12,
+    };
     // The sweep, over the left-hand face: how far round the hand has been
     // walked so far. Drawn only when the child has asked for it by getting
     // one wrong, and never all the way — the last step is the answer.
     if (shown > 0) {
-      this.drawSweep(centres[0] as number, faceY, radius, problem.left, shown, state.done);
+      this.drawSweep(centres[0] as number, faceY, radius, state.from, shown, state.done);
     }
 
     // --- the answer ---------------------------------------------------------
 
     const boxY = faceY + radius + 16 + BOX_H / 2;
-    this.box.setPosition(cx, boxY);
-    this.boxText.setPosition(cx, boxY);
-    if (state.done) {
-      this.box.setStrokeStyle(3, DONE_HEX);
-      this.boxText.setText(state.entry).setColor(DONE_INK);
-    } else {
-      this.box.setStrokeStyle(3, state.wrong ? WRONG_HEX : ACTIVE_HEX);
-      this.boxText.setText(state.entry === "" ? "_" : state.entry).setColor(INK);
+    const twoBoxes = asksMinutes(state);
+    // One box for the hours, and a second for the minutes where the face can
+    // show any. At the bottom rung the hands only ever point at an hour, so
+    // asking for minutes would be asking a five-year-old to type nought.
+    const boxes: { box: Phaser.GameObjects.Rectangle; text: Phaser.GameObjects.Text }[] = [
+      { box: this.box, text: this.boxText },
+      { box: this.minuteBox, text: this.minuteText },
+    ];
+    const unit = [this.words.hourglassHours, this.words.hourglassMinutes];
+    const spread = twoBoxes ? BOX_W + 46 : 0;
+    for (const [which, pair] of boxes.entries()) {
+      const showing = which === 0 || twoBoxes;
+      pair.box.setVisible(showing);
+      pair.text.setVisible(showing);
+      this.units[which]?.setVisible(showing);
+      if (!showing) continue;
+      const bx = twoBoxes ? cx - spread / 2 + which * spread : cx;
+      pair.box.setPosition(bx, boxY);
+      pair.text.setPosition(bx, boxY);
+      this.units[which]
+        ?.setText(unit[which] as string)
+        .setPosition(bx + BOX_W / 2 + 6, boxY)
+        .setVisible(true);
+      const typed = which === 0 ? state.hours : state.minutes;
+      const here = state.box === (which === 0 ? "hours" : "minutes");
+      if (state.done) {
+        pair.box.setStrokeStyle(3, DONE_HEX);
+        pair.text.setText(typed === "" ? "0" : typed).setColor(DONE_INK);
+      } else {
+        pair.box.setStrokeStyle(3, state.wrong ? WRONG_HEX : here ? ACTIVE_HEX : INK_HEX);
+        pair.text.setText(typed === "" ? (here ? "_" : "") : typed).setColor(INK);
+      }
     }
   }
 
@@ -472,7 +627,10 @@ export class ClockPopup {
   }
 
   private hintLine(state: HourglassCast): string {
-    if (state.done) return this.words.hourglassSolved(state.problem.hours);
+    if (state.done) return this.words.hourglassSolved(askedOf(state).hours);
+    // Nothing to answer until she has moved the hands, so say so rather than
+    // leaving a parchment that looks like it is waiting for a number.
+    if (!moved(state)) return this.words.hourglassTurnIt;
     const shown = hourglassHint(state);
     return shown > 0 ? this.words.hourglassCountOn(shown) : "";
   }

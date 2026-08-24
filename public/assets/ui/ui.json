@@ -47,6 +47,11 @@
       "width": 32,
       "height": 32
     },
+    "rune-mirror": {
+      "file": "rune_mirror.png",
+      "width": 32,
+      "height": 32
+    },
     "seed-pouch": {
       "file": "seed_pouch.png",
       "width": 32,
@@ -147,18 +152,23 @@
       "width": 32,
       "height": 32
     },
-    "coin-copper": {
-      "file": "coin_copper.png",
+    "coin-50": {
+      "file": "coin_50.png",
       "width": 32,
       "height": 32
     },
-    "coin-silver": {
-      "file": "coin_silver.png",
+    "coin-100": {
+      "file": "coin_100.png",
       "width": 32,
       "height": 32
     },
-    "coin-gold": {
-      "file": "coin_gold.png",
+    "coin-200": {
+      "file": "coin_200.png",
+      "width": 32,
+      "height": 32
+    },
+    "coin-500": {
+      "file": "coin_500.png",
       "width": 32,
       "height": 32
     },

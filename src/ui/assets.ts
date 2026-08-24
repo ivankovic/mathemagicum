@@ -13,7 +13,7 @@
  */
 
 import { LANGUAGES, type Language } from "../settings";
-import { COIN_TIERS, type CoinTier } from "../shop/currency";
+import { CURRENCY } from "../shop/currency";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import { MATERIAL_TYPES, type MaterialType } from "../world/materials";
 import { PLANT_TYPES, type PlantType } from "../world/plants";
@@ -44,6 +44,8 @@ export const UiAsset = {
    * object that is only ever about that.
    */
   RuneHourglass: "rune-hourglass",
+  /** The mirror spell: a shape and the fold down the middle of it. */
+  RuneMirror: "rune-mirror",
   SeedPouch: "seed-pouch",
   Basket: "basket",
   Crate: "crate",
@@ -83,9 +85,17 @@ export function cropIcon(plant: PlantType): string {
   return `crop-${plant}`;
 }
 
-/** The face of a coin: one picture per tier, with the value written beside it. */
-export function coinIcon(tier: CoinTier): string {
-  return `coin-${tier}`;
+/**
+ * The face of a coin: one picture for each one there is.
+ *
+ * It used to be one per *metal*, three of them, on the argument that the
+ * value was written on the button beside the icon. Money is laid out on a
+ * table now and there is no room beside a coin for a caption — so with four
+ * coins and three metals, two came out the same gold at the same size, which
+ * is one coin as far as a glance is concerned.
+ */
+export function coinIcon(value: number): string {
+  return `coin-${value}`;
 }
 
 /** The icon for something the store sells, as it appears in the crate. */
@@ -122,7 +132,7 @@ export const UI_ASSETS: readonly string[] = [
   ...Object.values(UiAsset),
   ...PLANT_TYPES.map(cropIcon),
   ...PLACEABLE_FIXTURES.map(itemIcon),
-  ...COIN_TIERS.map(coinIcon),
+  ...CURRENCY.denominations.map(coinIcon),
   ...MATERIAL_TYPES.map(materialIcon),
   ...LANGUAGES.map(flagIcon),
 ];

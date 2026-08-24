@@ -90,6 +90,8 @@ async function tapPlan(game: Game, house: House, col: number, row: number): Prom
 
 /** The crate's tenth slot: seven fixtures, then bed, table, chair. */
 const CHAIR_SLOT = "crate.9";
+/** And the one after it: rug. */
+const RUG_SLOT = "crate.10";
 
 describe("building a room out", () => {
   test(
@@ -311,6 +313,31 @@ describe("furnishing it", () => {
         expect(
           (await game.seam<Piece[]>("decor")).find((one) => one.piece === "chair"),
         ).toMatchObject({ col: 2, row: 3, look: 0 });
+
+        // And the same with a thing that is bigger than one square, facing
+        // the way that used to refuse it. A rug is two cells by two, drawn
+        // from its top-left corner, so anchored on the tile in front of her
+        // it grew back over the square she was standing on — and she cannot
+        // stand on her own rug. It could not be put down above or to the
+        // left of her at all, which is how it was reported.
+        const rug = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "rug");
+        if (!rug) throw new Error("the room she starts in has no rug");
+        await tapPlan(game, house, rug.col, rug.row);
+        await game.settle(600);
+        expect(await game.held("rug~0")).toBe(1);
+
+        // She stands on (3,4) — floor, since row 5 is the doorway — and
+        // faces up at (3,3). Two by two going away from her is (3,2)-(4,3),
+        // so its corner is (3,2) and none of it is under her feet.
+        const under = grid(house, 3, 4);
+        await game.standAt(under.col, under.row, "up");
+        await game.tap("crate");
+        await game.tap(RUG_SLOT);
+        await game.settle(700);
+        expect(await game.held("rug~0")).toBe(0);
+        expect(
+          (await game.seam<Piece[]>("decor")).find((one) => one.piece === "rug"),
+        ).toMatchObject({ col: 3, row: 2 });
       });
     },
     5 * MINUTES,

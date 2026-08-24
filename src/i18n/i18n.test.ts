@@ -52,6 +52,11 @@ function sample(p: Phrases): Record<string, string> {
     brickDone: p.brickDone,
     brickHintAdd: p.brickHintAdd,
     brickHintTakeAway: p.brickHintTakeAway,
+    mirrorTitle: p.mirrorTitle,
+    mirrorAsk: p.mirrorAsk,
+    mirrorWrong: p.mirrorWrong,
+    mirrorDone: p.mirrorDone,
+    mirrorHint: p.mirrorHint,
     arrayHintRows: p.arrayHintRows(6, 2),
 
     titleTagline: p.titleTagline,
@@ -66,8 +71,11 @@ function sample(p: Phrases): Record<string, string> {
 
     hourglassTitle: p.hourglassTitle,
     hourglassAsk: p.hourglassAsk,
-    hourglassLeft: p.hourglassLeft,
-    hourglassBack: p.hourglassBack,
+    hourglassTurnIt: p.hourglassTurnIt,
+    hourglassNow: p.hourglassNow,
+    hourglassTo: p.hourglassTo,
+    hourglassHours: p.hourglassHours,
+    hourglassMinutes: p.hourglassMinutes,
     hourglassCountOn: p.hourglassCountOn(3),
     hourglassSolved: p.hourglassSolved(5),
 
@@ -100,6 +108,7 @@ function sample(p: Phrases): Record<string, string> {
     paidFor: p.paidFor(fence, 3),
     sheCountsOut: p.sheCountsOut,
     countHerCoins: p.countHerCoins,
+    countHerPiles: p.countHerPiles,
     back: p.back,
     pay: p.pay,
     done: p.done,

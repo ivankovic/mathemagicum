@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { AnimalKind } from "../world/animals";
+import { DecorType } from "../world/decor";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
 import { MaterialType } from "../world/materials";
 import { PlantStage, PlantType } from "../world/plants";
+import type { Buyable } from "../world/shop";
 import { TerrainType } from "../world/terrain";
 import type { Noun, Phrases } from "./phrases";
 
@@ -70,7 +72,7 @@ const ANIMALS: Record<AnimalKind, Noun> = {
 const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Well]: noun({ bare: "Brunnen", gender: "m", plural: "Brunnen" }),
   [FixtureType.Fence]: noun({ bare: "Zaun", gender: "m", plural: "Zäune" }),
-  [FixtureType.Table]: noun({ bare: "Tisch", gender: "m", plural: "Tische" }),
+  [FixtureType.Table]: noun({ bare: "Gartentisch", gender: "m", plural: "Gartentische" }),
   [FixtureType.Lamp]: noun({ bare: "Laterne", gender: "f", plural: "Laternen" }),
   [FixtureType.Bench]: noun({ bare: "Bank", gender: "f", plural: "Bänke" }),
   [FixtureType.Scarecrow]: noun({ bare: "Vogelscheuche", gender: "f", plural: "Vogelscheuchen" }),
@@ -177,9 +179,21 @@ const MATERIALS: Record<MaterialType, Noun> = {
   [MaterialType.Stone]: noun({ bare: "Stein", gender: "m", plural: "Steine" }),
 };
 
-function item(item: ItemType): Noun {
+const FURNITURE: Record<DecorType, Noun> = {
+  [DecorType.Bed]: noun({ bare: "Bett", gender: "n", plural: "Betten" }),
+  [DecorType.Table]: noun({ bare: "Tisch", gender: "m", plural: "Tische" }),
+  [DecorType.Chair]: noun({ bare: "Stuhl", gender: "m", plural: "Stühle" }),
+  [DecorType.Rug]: noun({ bare: "Teppich", gender: "m", plural: "Teppiche" }),
+  [DecorType.Bookshelf]: noun({ bare: "Regal", gender: "n", plural: "Regale" }),
+  [DecorType.Stove]: noun({ bare: "Ofen", gender: "m", plural: "Öfen" }),
+};
+
+function item(item: ItemType | Buyable): Noun {
   return (
     PLANTS[item as PlantType] ??
+    // Before the fixtures, because the store sells a garden table *and* an
+    // indoor one and they are two different objects sharing a word.
+    FURNITURE[item as DecorType] ??
     FIXTURES[item as FixtureType] ??
     MATERIALS[item as MaterialType] ??
     noun({ bare: item, ...FALLBACK, plural: item })
@@ -267,10 +281,19 @@ export const DE: Phrases = {
   brickHintAdd: "Zähl die beiden Steine darunter zusammen.",
   brickHintTakeAway: "Zieh den Stein daneben von dem darüber ab.",
 
+  mirrorTitle: "Die Faltlinie",
+  mirrorAsk: "Zeichne die Linie, an der sich diese Form in der Mitte falten lässt.",
+  mirrorWrong: "Die beiden Hälften passen nicht. Versuch eine andere Linie.",
+  mirrorDone: "Sie faltet sich. Die Hälften liegen genau aufeinander.",
+  mirrorHint: "Diese hier faltet sich so.",
+
   hourglassTitle: "Das Stundenglas",
-  hourglassAsk: "Wie viele Stunden warst du fort?",
-  hourglassLeft: "du gingst",
-  hourglassBack: "du bist zurück",
+  hourglassAsk: "Wie weit stellst du die Uhr?",
+  hourglassTurnIt: "Wisch im Kreis, um die Uhr zu drehen.",
+  hourglassMinutes: "Minuten",
+  hourglassHours: "Stunden",
+  hourglassTo: "stell sie auf",
+  hourglassNow: "jetzt ist es",
   hourglassCountOn: (hours) => `Zähl im Kreis weiter: ${hours}, und weiter…`,
   hourglassSolved: (hours) => `${hours} Stunden. Das Glas dreht sich.`,
 
@@ -312,12 +335,12 @@ export const DE: Phrases = {
   deleteGameAsk: "Diesen Spielstand löschen? Die Welt und alles darin sind dann für immer weg.",
 
   storeTitle: (money) => `Laden — ${money}`,
-  storeFooter: "Sie kauft deine Ernte und verkauft Sachen für den Garten.",
+  storeFooter: "Sie kauft deine Ernte und verkauft Sachen für Garten und Haus.",
   sheBuys: "Sie kauft",
   sheSells: "Sie verkauft",
-  stockRow: (fixture, price) => `${FIXTURES[fixture]?.bare}\n${price}`,
+  stockRow: (thing, price) => `${DE.item(thing).bare}\n${price}`,
   cropRow: (item, held, price) => `${held} x ${DE.item(item).bare}\n${price} je`,
-  buyTitle: (fixture, count, price) => `${count} x ${FIXTURES[fixture]?.bare} — zahle ${price}`,
+  buyTitle: (thing, count, price) => `${count} x ${DE.item(thing).bare} — zahle ${price}`,
   sellTitle: (item, count, price) => `${count} x ${DE.item(item).bare} — sie zahlt ${price}`,
   onTheCounter: (total) => `auf dem Tresen: ${total}`,
   moreToGo: (amount) => `Es fehlen noch ${amount}.`,
@@ -327,6 +350,7 @@ export const DE: Phrases = {
   paidFor: (fixture, count) => `Bezahlt. ${DE.count(fixture, count)} im Kasten.`,
   sheCountsOut: "sie zählt ab:",
   countHerCoins: "Zähl ihre Münzen. Stimmt das Geld?",
+  countHerPiles: "Rechne ihre Stapel aus. Stimmt das Geld?",
   back: "zurück",
   pay: "zahlen",
   done: "fertig",

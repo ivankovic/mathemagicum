@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { AnimalKind } from "../world/animals";
+import { DecorType } from "../world/decor";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
 import { MaterialType } from "../world/materials";
 import { PlantStage, PlantType } from "../world/plants";
+import type { Buyable } from "../world/shop";
 import { TerrainType } from "../world/terrain";
 import type { Noun, Phrases } from "./phrases";
 
@@ -103,7 +105,12 @@ const ANIMALS: Record<AnimalKind, Noun> = {
 const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
   [FixtureType.Well]: { one: "bunar", acc: "bunar", few: "bunara", many: "bunara" },
   [FixtureType.Fence]: { one: "ograda", acc: "ogradu", few: "ograde", many: "ograda" },
-  [FixtureType.Table]: { one: "stol", acc: "stol", few: "stola", many: "stolova" },
+  [FixtureType.Table]: {
+    one: "vrtni stol",
+    acc: "vrtni stol",
+    few: "vrtna stola",
+    many: "vrtnih stolova",
+  },
   [FixtureType.Lamp]: {
     one: "svjetiljka",
     acc: "svjetiljku",
@@ -188,9 +195,21 @@ const MATERIALS: Record<MaterialType, Noun> = Object.fromEntries(
 ) as Record<MaterialType, Noun>;
 
 /** The three forms of anything the player can hold. */
-function formsOf(thing: ItemType): HrNoun {
+const FURNITURE_FORMS: Record<DecorType, HrNoun> = {
+  [DecorType.Bed]: { one: "krevet", acc: "krevet", few: "kreveta", many: "kreveta" },
+  [DecorType.Table]: { one: "stol", acc: "stol", few: "stola", many: "stolova" },
+  [DecorType.Chair]: { one: "stolica", acc: "stolicu", few: "stolice", many: "stolica" },
+  [DecorType.Rug]: { one: "tepih", acc: "tepih", few: "tepiha", many: "tepiha" },
+  [DecorType.Bookshelf]: { one: "polica", acc: "policu", few: "police", many: "polica" },
+  [DecorType.Stove]: { one: "peć", acc: "peć", few: "peći", many: "peći" },
+};
+
+function formsOf(thing: ItemType | Buyable): HrNoun {
   return (
     PLANT_FORMS[thing as PlantType] ??
+    // Before the fixtures: the store sells a garden table and an indoor one,
+    // which are two objects sharing a word.
+    FURNITURE_FORMS[thing as DecorType] ??
     FIXTURE_FORMS[thing as FixtureType] ??
     MATERIAL_FORMS[thing as MaterialType] ?? {
       one: thing,
@@ -201,7 +220,7 @@ function formsOf(thing: ItemType): HrNoun {
   );
 }
 
-function item(thing: ItemType): Noun {
+function item(thing: ItemType | Buyable): Noun {
   return noun(formsOf(thing));
 }
 
@@ -353,10 +372,19 @@ export const HR: Phrases = {
   brickHintAdd: "Zbroji dvije cigle ispod nje.",
   brickHintTakeAway: "Oduzmi ciglu do nje od one iznad.",
 
+  mirrorTitle: "Pregib",
+  mirrorAsk: "Nacrtaj crtu po kojoj bi se ovaj lik presavio na pola.",
+  mirrorWrong: "Polovice se ne poklapaju. Probaj drugu crtu.",
+  mirrorDone: "Savija se. Polovice padaju točno jedna na drugu.",
+  mirrorHint: "Ovaj se savija ovdje.",
+
   hourglassTitle: "Pješčani sat",
-  hourglassAsk: "Koliko si sati bio odsutan?",
-  hourglassLeft: "otišao si",
-  hourglassBack: "vratio si se",
+  hourglassAsk: "Za koliko pomičeš sat?",
+  hourglassTurnIt: "Prevuci ukrug da pomakneš sat.",
+  hourglassMinutes: "minuta",
+  hourglassHours: "sati",
+  hourglassTo: "pomakni na",
+  hourglassNow: "sada je",
   hourglassCountOn: (count) => `Broji po brojčaniku: ${count}, pa dalje…`,
   hourglassSolved: (count) => `${hours(count)}. Pješčani sat se okreće.`,
 
@@ -399,12 +427,12 @@ export const HR: Phrases = {
   deleteGameAsk: "Baciti ovu igru? Njezin svijet i sve učinjeno u njemu nestaju zauvijek.",
 
   storeTitle: (money) => `Trgovina — ${money}`,
-  storeFooter: "Otkupljuje plodove, a prodaje stvari za tvoj vrt.",
+  storeFooter: "Otkupljuje plodove, a prodaje stvari za vrt i kuću.",
   sheBuys: "Otkupljuje",
   sheSells: "Prodaje",
-  stockRow: (fixture, price) => `${FIXTURES[fixture]?.bare}\n${price}`,
+  stockRow: (thing, price) => `${item(thing).bare}\n${price}`,
   cropRow: (thing, held, price) => `${held} x ${item(thing).bare}\n${price} po komadu`,
-  buyTitle: (fixture, count, price) => `${count} x ${FIXTURES[fixture]?.bare} — plati ${price}`,
+  buyTitle: (thing, count, price) => `${count} x ${item(thing).bare} — plati ${price}`,
   sellTitle: (thing, count, price) => `${count} x ${item(thing).bare} — duguje ti ${price}`,
   onTheCounter: (total) => `na pultu: ${total}`,
   moreToGo: (amount) => `Fali još ${amount}.`,
@@ -414,6 +442,7 @@ export const HR: Phrases = {
   paidFor: (fixture, count) => `Plaćeno. ${counted(formsOf(fixture), count)} u tvom sanduku.`,
   sheCountsOut: "ona odbrojava:",
   countHerCoins: "Prebroj njezine novčiće. Je li to točan iznos?",
+  countHerPiles: "Izračunaj njezine hrpe. Je li to točan iznos?",
   back: "natrag",
   pay: "plati",
   done: "gotovo",

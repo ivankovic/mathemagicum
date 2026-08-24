@@ -116,8 +116,18 @@ describe("the three bands", () => {
       expect(Number.isInteger(price)).toBe(true);
       expect(price).toBeGreaterThan(0);
     }
-    // The band the game shipped at keeps the price the game shipped with.
-    expect(bandAt(DEFAULT_BAND).cropPrice).toBe(250);
+    // The band a save from before any of this lands on. It used to keep the
+    // exact price the game shipped with; the prices have since moved off the
+    // round ducat so that the shop has counting in it, so what it keeps is
+    // its *place* — the hardest band, which is what that game was.
+    //
+    // A crop is worth more there than it was, and so is everything it buys:
+    // the store prices in crops, so both sides rescale together and a purse
+    // saved under the old prices buys a little less. That is safe here for a
+    // reason the design states out loud — crops regrow and seeds are free,
+    // so the shop is somewhere for the work to go rather than a gate.
+    expect(bandAt(DEFAULT_BAND).cropPrice).toBe(350);
+    expect(DEFAULT_BAND).toBe(BANDS.length - 1);
   });
 
   /**

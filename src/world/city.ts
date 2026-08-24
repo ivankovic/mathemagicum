@@ -53,6 +53,17 @@ const TOWNSFOLK = 8;
 const CITY_SHOPS = 5;
 /** What the person behind a city counter is, whatever their id says. */
 const SHOPKEEPER_ROLE = "shopkeeper";
+/**
+ * And the one person in the city who is not behind a counter.
+ *
+ * He teaches the hourglass, and he stands under the tower because that is
+ * where a spell about telling the time belongs: the clock on the wall is
+ * the only place in the world where the hour is written down for everybody
+ * at once. Out in the square rather than in a room, since a clock tower is
+ * a thing a child walks up to, and a teacher tucked into a building beside
+ * it is a teacher nobody finds.
+ */
+const CLOCKMAKER_ROLE = "clockmaker";
 
 /** How far inside the box the ring road runs, and how wide it is. */
 const RING_INSET = 1;
@@ -472,6 +483,36 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
       indoors: true,
     });
   }
+  // The clockmaker, at the tower's foot. Below it rather than beside it:
+  // the tower's art overhangs five tiles *upwards*, so a person standing to
+  // the north of it is a person drawn behind a wall — and the approach to
+  // the square comes from the south anyway.
+  //
+  // The first clear cell of a short list, worked outwards: the plaza is a
+  // block of open ground but the tower does not always sit the same way in
+  // it, and a person placed on a cell nothing checked would be a person
+  // standing inside a building.
+  if (clockTower) {
+    const beside = [
+      { col: clockTower.col, row: clockTower.row + clockTower.height },
+      { col: clockTower.col + 1, row: clockTower.row + clockTower.height },
+      { col: clockTower.col - 1, row: clockTower.row + clockTower.height - 1 },
+      { col: clockTower.col + clockTower.width, row: clockTower.row + clockTower.height - 1 },
+      { col: clockTower.col - 1, row: clockTower.row + clockTower.height },
+      { col: clockTower.col + clockTower.width, row: clockTower.row + clockTower.height },
+    ];
+    const stands = beside.find((at) => grid.isPassable(at.col, at.row));
+    if (stands) {
+      npcs.push({
+        id: "city-clockmaker",
+        role: CLOCKMAKER_ROLE,
+        homeBuildingId: "",
+        home: stands,
+        indoors: false,
+      });
+    }
+  }
+
   // And some out on the streets. Spread along the ring road rather than
   // scattered at random: the ring is the one run of ground the layout knows
   // is walkable end to end, and people you meet while walking round a city
