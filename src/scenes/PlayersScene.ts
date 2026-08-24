@@ -50,7 +50,7 @@ import {
 } from "../world/characters";
 import { createRng } from "../world/rng";
 import type { CharacterSidecar, SheetLayout } from "../world/spriteSidecar";
-import { devOptions } from "./devHooks";
+import { devOptions, exposeMakingForTests, forgetMakingForTests } from "./devHooks";
 
 /**
  * Who is playing.
@@ -90,6 +90,14 @@ const SWATCH_GAP = 8;
 const ROW_GAP = 26;
 const BODY_CELL = 46;
 const NAME_HEIGHT = 62;
+/**
+ * Air under the character, before the first row of swatches.
+ *
+ * Twelve, until the name box moved off the bottom of the portrait and up
+ * under the heading: the box was the clearance, and without it the word
+ * "Skin" sat on the character's feet.
+ */
+const PORTRAIT_GAP = 24;
 /** The shortest a sum's box may get, whatever the screen leaves for it. */
 const SUMS_HEIGHT = 32;
 /** Air either side of a full-width row, so nothing touches the screen edge. */
@@ -147,6 +155,10 @@ export class PlayersScene extends Phaser.Scene {
 
     this.scale.on(Phaser.Scale.Events.RESIZE, () => this.render());
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
+    // Which of these screens is up, for a scenario that has to drive them.
+    // Nothing here has a name a script can tap, so without this one it is
+    // reduced to clicking at a fraction of the viewport and hoping.
+    exposeMakingForTests({ step: () => this.mode });
 
     // Scripts have no thumbs. `?skipTitle` already means "do not wait at the
     // title card"; it means the same thing here, because a script that got
@@ -399,7 +411,7 @@ export class PlayersScene extends Phaser.Scene {
   /**
    * Step two: who are you.
    *
-   * The portrait, the name box, and the colours — everything that is about
+   * The name box, the portrait and the colours — everything that is about
    * this child rather than about their arithmetic. The preview is the one
    * thing that gives ground when the screen is short: a phone held upright
    * has room for the swatches or for a big character, and the swatches are
@@ -410,16 +422,30 @@ export class PlayersScene extends Phaser.Scene {
     const middle = width / 2;
     let y = this.heading(this.words.makePlayerTitle);
 
+    // The name box first, directly under the heading, and that placement is
+    // load-bearing rather than a matter of taste.
+    //
+    // It is the one HTML input in this game, and on an iPad the software
+    // keyboard takes about half the screen. Under the portrait it sat in the
+    // half the keyboard covers — so Safari scrolled the page up to reveal it
+    // and took the whole game with it, off the top of the screen and with no
+    // way to scroll back. `index.html` stops the scrolling; this stops there
+    // being anything to scroll *for*.
+    //
+    // It reads better this way round too, which is the part that would have
+    // been an argument on its own: a form asks who you are and then what you
+    // look like.
+    this.showNameBox(middle, y);
+    y += NAME_HEIGHT;
+
     const rows = AVATAR_COLOURS.length * (SWATCH + ROW_GAP) + (BODY_CELL + ROW_GAP) + BUTTON_HEIGHT;
-    const room = height - y - NAME_HEIGHT - rows - FOOTER_ROOM;
+    const room = height - y - rows - PORTRAIT_GAP - FOOTER_ROOM;
     const tall = this.bodySheet(this.draft.body)?.frame_height ?? 48;
     const scale = Math.max(1, Math.min(3, Math.floor(room / tall)));
 
     y += tall * scale;
     this.portrait(this.draft, middle, y, 0, scale);
-    y += 12;
-    this.showNameBox(middle, y);
-    y += NAME_HEIGHT;
+    y += PORTRAIT_GAP;
 
     for (const colour of AVATAR_COLOURS) {
       this.swatchRow(colour, middle, y);
@@ -695,6 +721,15 @@ export class PlayersScene extends Phaser.Scene {
       box.addEventListener("keydown", (event) => {
         if (event.key === "Enter") this.finishMaking();
       });
+      // And put the page back if the browser moves it anyway.
+      //
+      // `index.html` pins the body so that iOS has no layout scrolling to
+      // do, which is the fix; this is the belt to its braces, because the
+      // failure it guards against is the game disappearing off the top of an
+      // iPad and there is no way to test the real thing from here. Costs two
+      // listeners and a number comparison.
+      box.addEventListener("focus", () => this.pinPage());
+      box.addEventListener("blur", () => this.pinPage());
       document.body.appendChild(box);
       this.nameBox = box;
       box.focus();
@@ -709,6 +744,25 @@ export class PlayersScene extends Phaser.Scene {
   private hideNameBox(): void {
     this.nameBox?.remove();
     this.nameBox = null;
+    // A stranded offset outlives the input that caused it, so the page is
+    // put back on the way out as well as on the way in.
+    this.pinPage();
+  }
+
+  /**
+   * Undo a scroll the browser did on its own.
+   *
+   * There is nothing on this page to scroll to — the canvas is exactly the
+   * size of the viewport — so any offset at all is the browser having moved
+   * the page to reveal a focused input, and every pixel of it is the game
+   * gone off the top of the screen.
+   */
+  private pinPage(): void {
+    if (typeof window === "undefined") return;
+    const scrolled = window.scrollY !== 0 || window.scrollX !== 0;
+    if (scrolled) window.scrollTo(0, 0);
+    const root = document.scrollingElement;
+    if (root && root.scrollTop !== 0) root.scrollTop = 0;
   }
 
   // --- doing things ----------------------------------------------------------
@@ -803,6 +857,9 @@ export class PlayersScene extends Phaser.Scene {
   private teardown(): void {
     this.hideNameBox();
     this.scale.off(Phaser.Scale.Events.RESIZE);
+    // Taken down with the scene, so a scenario cannot read a step off a
+    // screen that is no longer there and conclude the game never started.
+    forgetMakingForTests();
   }
 
   // --- small helpers ---------------------------------------------------------

@@ -121,7 +121,15 @@ describe("winding the world's clock", () => {
         const after = await game.seam<World>("worldClock");
         expect(face(after).hour).toBe(asked.to.hour);
         expect(after.offset).toBeGreaterThan(0);
-        expect(after.hour).toBeGreaterThan(before.hour);
+        // Forward, allowing for midnight.
+        //
+        // Not `after.hour > before.hour`, which is true for twenty-one hours
+        // of the day and false for the other three: `hour` is the hour *of
+        // the day*, so three hours wound on from ten past nine at night is
+        // ten past midnight — a smaller number, and a day later. Run in the
+        // evening, that assertion failed on a clock that had done exactly
+        // what it was asked.
+        expect((after.hour - before.hour + 24) % 24).toBeGreaterThan(0);
       });
     },
     5 * MINUTES,
@@ -287,7 +295,10 @@ describe("winding the world's clock", () => {
         // arrived, which is the whole of what "pouring" means.
         await game.settle(1200);
         const pouring = await game.seam<World>("worldClock");
-        expect(pouring.hour).toBeGreaterThan(before.hour);
+        // Allowing for midnight, for the reason the first scenario spells
+        // out: this one winds nearly a whole face, so it crosses midnight
+        // from any evening at all.
+        expect((pouring.hour - before.hour + 24) % 24).toBeGreaterThan(0);
         expect(face(pouring).hour).not.toBe(asked.to.hour);
         // And nothing is written down until it settles, so a page closed
         // mid-pour reopens on the hour it was wound to, not one in between.

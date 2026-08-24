@@ -215,6 +215,20 @@ export interface Opening {
   readonly players?: readonly Record<string, unknown>[];
   /** The world to open. Pinned so a scenario means the same thing twice. */
   readonly seed?: number;
+  /**
+   * Stop at the screens *before* the game, rather than skipping past them.
+   *
+   * `?skipTitle` exists because a script has no thumbs and a grid of faces
+   * is a wait moved one screen later — which is right for every scenario
+   * about playing, and useless for the three screens that make a player.
+   * Those had no browser coverage at all, which is how a keyboard could
+   * carry the whole game off the top of an iPad without anything noticing.
+   *
+   * A scenario opened this way gets no `__mathemagicum`: the handle belongs
+   * to the game scene and the game scene has not started. What it gets is a
+   * canvas and the DOM, which is what these screens are made of.
+   */
+  readonly onboarding?: boolean;
 }
 
 /**
@@ -285,7 +299,7 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
     // enough to put its handle out, which it cannot do until its assets are
     // in, so this is the stricter signal as well as the more patient one.
     await Promise.race([
-      page.goto(`${at}/?skipTitle${opening.seams ?? ""}`, {
+      page.goto(`${at}/?${opening.onboarding ? "" : "skipTitle"}${opening.seams ?? ""}`, {
         waitUntil: "domcontentloaded",
         timeout: SETUP_MS,
       }),
@@ -296,7 +310,17 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
     // recoloured, and on a machine with other work on it that has been
     // measured at forty-five seconds. Everything after this point is cheap,
     // and is held to `ANSWER_MS` instead.
-    await Promise.race([bounded("the scene to start running", running(page), SETUP_MS), lost]);
+    await Promise.race([
+      bounded(
+        "the scene to start running",
+        // The onboarding screens never put the handle out — see `onboarding`
+        // — so what readiness means there is a canvas with something drawn
+        // on it.
+        opening.onboarding ? drawn(page) : running(page),
+        SETUP_MS,
+      ),
+      lost,
+    ]);
     await Promise.race([act(game), lost]);
     // Nothing throws on the way past. A scenario that passes while the
     // console fills with errors is a scenario that will pass through the
@@ -371,9 +395,73 @@ async function running(page: Page): Promise<void> {
   );
 }
 
+/**
+ * The screens before the game are up: a canvas, sized and painted.
+ *
+ * No handle to wait for — that belongs to the game scene. What can be waited
+ * on is the canvas existing at a real size, which is what the loading bar and
+ * the title card and the three making-a-player steps all draw onto.
+ */
+async function drawn(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      const canvas = document.querySelector("canvas");
+      return Boolean(canvas && canvas.width > 0 && canvas.height > 0);
+    },
+    null,
+    { timeout: SETUP_MS },
+  );
+  await page.waitForTimeout(2500);
+}
+
 /** A child playing, as a scenario can drive her. */
 export class Game {
   constructor(private readonly page: Page) {}
+
+  /**
+   * The tab itself, for the one thing that is not the game.
+   *
+   * The name box is a real HTML input over the canvas — deliberately, so a
+   * child gets their own tablet's keyboard — and where it lands is a fact
+   * about the *page* that no dev seam can state. Everything else should go
+   * through the methods below.
+   */
+  get tab(): Page {
+    return this.page;
+  }
+
+  /**
+   * Which of the screens before the game is up, once one of them is.
+   *
+   * The title card puts nothing out, so this waits for the players scene and
+   * then answers `list`, `tongue`, `who`, `sums` or `remove` — which is what
+   * lets a scenario drive those screens by *what they are showing* rather
+   * than by clicking at a fraction of the viewport and hoping.
+   */
+  async making(): Promise<string> {
+    return this.ask("which making screen is up", (page) =>
+      page.evaluate(() => {
+        const handle = (globalThis as never as Record<string, { step: () => string } | undefined>)
+          .__mathemagicum_making;
+        return handle ? handle.step() : "";
+      }),
+    );
+  }
+
+  /** Wait until one of those screens is showing what it was asked for. */
+  async waitForStep(step: string): Promise<void> {
+    await this.ask(`the ${step} screen`, (page) =>
+      page.waitForFunction(
+        (wanted) => {
+          const handle = (globalThis as never as Record<string, { step: () => string } | undefined>)
+            .__mathemagicum_making;
+          return handle?.step() === wanted;
+        },
+        step,
+        { timeout: ANSWER_MS },
+      ),
+    );
+  }
 
   /**
    * Anything asked of the page, held to `ANSWER_MS`.
@@ -421,6 +509,26 @@ export class Game {
   /** Where the buttons are, by name. */
   ui(): Promise<Record<string, { x: number; y: number }>> {
     return this.seam("ui");
+  }
+
+  /**
+   * Which square she is standing on.
+   *
+   * Read *inside* the page, which is the whole reason this exists rather
+   * than `seam("session")`: the session is a class instance and `tile` is a
+   * getter on its prototype, so what comes back across the wire is an object
+   * with the fields but not the accessor — `undefined`, silently, in a
+   * scenario that looked like it was asking the right question.
+   */
+  where(): Promise<{ col: number; row: number }> {
+    return this.ask("where she is standing", (page) =>
+      page.evaluate(() => {
+        const handle = (globalThis as never as Record<string, Record<string, unknown>>)
+          .__mathemagicum;
+        const session = handle.session as { tile: { col: number; row: number } };
+        return { col: session.tile.col, row: session.tile.row };
+      }),
+    );
   }
 
   /** Press a button. False if it is not on screen, which a caller may want. */

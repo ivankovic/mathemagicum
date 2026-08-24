@@ -623,3 +623,33 @@ export function exposeForTests(handle: DevHandle): void {
   if (!import.meta.env.DEV) return;
   (globalThis as unknown as Record<string, unknown>)[HANDLE_KEY] = handle;
 }
+
+/** What the screens before the game will say about themselves. */
+export interface MakingHandle {
+  /** Which screen is up: the faces, one of the three steps, or the card. */
+  readonly step: () => string;
+}
+
+const MAKING_KEY = "__mathemagicum_making";
+
+/**
+ * The same seam, for the screens *before* the game.
+ *
+ * Its own handle rather than a corner of `DevHandle`, because the two are
+ * never up at the same time and nothing on this one is about a world. What
+ * it is for is the same thing: these screens are drawn on a canvas and have
+ * nothing a script can name, so a scenario driving them was reduced to
+ * clicking at a fraction of the viewport and hoping the last one landed.
+ * That is how the making-a-player screens ended up with no coverage at all,
+ * and how a keyboard could carry the whole game off the top of an iPad
+ * without anything noticing.
+ */
+export function exposeMakingForTests(handle: MakingHandle): void {
+  if (!import.meta.env.DEV) return;
+  (globalThis as unknown as Record<string, unknown>)[MAKING_KEY] = handle;
+}
+
+export function forgetMakingForTests(): void {
+  if (!import.meta.env.DEV) return;
+  (globalThis as unknown as Record<string, unknown>)[MAKING_KEY] = undefined;
+}

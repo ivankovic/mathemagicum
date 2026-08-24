@@ -142,11 +142,16 @@ describe("planting one", () => {
     "as many as she likes, and they are there tomorrow",
     async () => {
       await play({ seams: "&hour=12&freezeNpcs&flowers=all" }, async (game) => {
-        // Two, in two directions. One would prove nothing about there being
-        // no seed to run out of.
-        for (const facing of ["ArrowDown", "ArrowUp"]) {
-          await game.press(facing);
-          await game.settle(300);
+        // Two, in two places. One would prove nothing about there being no
+        // seed to run out of.
+        //
+        // Stood rather than walked between them: a step is a tween, and a
+        // scenario that planted the second one while she was still finishing
+        // the first step aimed at the square she had just planted — which is
+        // refused, correctly, and looks exactly like running out of seeds.
+        const here = await game.where();
+        for (const step of [0, 2]) {
+          await game.standAt(here.col + step, here.row, "down");
           await game.tap("seeds");
           await game.tap("seeds.7");
           await game.settle(350);
