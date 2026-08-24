@@ -3,9 +3,10 @@
 
 import { type AnchorPlacements, type AreaPlacement, placeAnchors } from "./anchors";
 import { type CityLayout, layoutCity } from "./city";
-import { ensureConnectivity } from "./connectivity";
+import { ensureConnectivity, floodFillReachable } from "./connectivity";
 import { type HighCorner, WORLD_HIGH_CORNER, elevationAt } from "./elevation";
 import { type Grove, growGrove } from "./enchantedForest";
+import { type WildSpot, wildFlowerObject, wildSpots } from "./flowers";
 import { WorldGrid } from "./grid";
 import { type HarbourLayout, layoutHarbour } from "./harbour";
 import { type Observatory, layoutObservatory } from "./observatory";
@@ -43,6 +44,15 @@ export interface GeneratedWorld {
    * could not find one.
    */
   observatory: Observatory | null;
+  /**
+   * The three flowers growing wild, one of each kind.
+   *
+   * Handed back rather than left for a caller to hunt for on the grid: what
+   * a scenario and a map both want is *where they are*, and finding that by
+   * scanning a quarter of a million cells for an object whose name starts
+   * with "wild-" is the sort of thing that works until somebody renames it.
+   */
+  wildFlowers: readonly WildSpot[];
   // Which corner the world slopes down from. Everything else about the
   // layout follows from it, so it is worth handing back rather than making
   // callers infer it from the terrain.
@@ -176,6 +186,17 @@ export function generateWorld(width: number, height: number, seed: number): Gene
   // a route the pass above just opened.
   sealRampEdges(grid, reservedBoxes);
 
+  // Last of all, and after the connectivity pass on purpose.
+  //
+  // A flower is a quest that can be finished or a quest that cannot, and the
+  // difference is one seed in a hundred — which is the worst shape a failure
+  // has, because it works every time anybody looks. Placed before the carve,
+  // one could land behind water the pass never opened; placed on any old
+  // passable cell, one could land inside the city walls. So they go on cells
+  // the flood fill has just proved are walkable from the player's own front
+  // door, which is the same thing the game means by "reachable".
+  const wildFlowers = sowWildFlowers(grid, rng, village.playerDoorstep, reservedBoxes);
+
   return {
     grid,
     anchors,
@@ -185,6 +206,61 @@ export function generateWorld(width: number, height: number, seed: number): Gene
     harbour,
     city,
     observatory,
+    wildFlowers,
     highCorner,
   };
+}
+
+/**
+ * Put the three wild flowers somewhere a child can walk to.
+ *
+ * **Out in the world, not in the settlements.** A flower found in the
+ * village square is a flower found on the way to the shop, and the whole of
+ * what these reward is having gone somewhere. The reserved boxes are the
+ * five story areas, and skipping them puts the flowers in the country
+ * between.
+ *
+ * **They do not block.** Everything else standing on a cell out here is
+ * something to walk around; a flower is something to walk *into*, and one
+ * that stopped a child dead in a meadow would read as a rock drawn wrong.
+ * It also means one can never close a route the connectivity pass just
+ * opened, which is what makes it safe to run this after that pass.
+ */
+function sowWildFlowers(
+  grid: WorldGrid,
+  rng: ReturnType<typeof createRng>,
+  from: GridPoint,
+  reserved: readonly AreaPlacement[],
+): readonly WildSpot[] {
+  const reachable = floodFillReachable(grid, from);
+  const inside = (col: number, row: number) =>
+    reserved.some(
+      (box) =>
+        col >= box.col && col < box.col + box.width && row >= box.row && row < box.row + box.height,
+    );
+  const open: GridPoint[] = [];
+  for (let row = 0; row < grid.height; row++) {
+    for (let col = 0; col < grid.width; col++) {
+      if (reachable[row * grid.width + col] !== 1) continue;
+      if (grid.getObjectAt(col, row)) continue;
+      if (grid.getPlant(col, row)) continue;
+      if (inside(col, row)) continue;
+      open.push({ col, row });
+    }
+  }
+  const spots = wildSpots(rng, open);
+  for (const spot of spots) {
+    grid.placeObject({
+      id: `wild-flower-${spot.flower}`,
+      type: wildFlowerObject(spot.flower),
+      col: spot.col,
+      row: spot.row,
+      width: 1,
+      height: 1,
+      blocksMovement: false,
+      anchorCol: spot.col,
+      anchorRow: spot.row,
+    });
+  }
+  return spots;
 }

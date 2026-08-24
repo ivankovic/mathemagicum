@@ -43,6 +43,15 @@ export interface PatchChoice<TAction extends string> {
   readonly action: TAction;
   /** The texture of the rune this choice casts. */
   readonly rune: string;
+  /**
+   * Which frame of it, for a texture that holds more than one picture.
+   *
+   * The flowers need it: their five colours are five runs of frames on one
+   * sheet, so the five buttons are five frames of a single texture rather
+   * than five textures. Everything else here is its own picture and leaves
+   * this alone.
+   */
+  readonly frame?: number;
 }
 
 interface Row {
@@ -90,7 +99,7 @@ export class PatchMenu<TAction extends string> {
     const size = RUNE + PAD * 2;
     const built: { row: Row; action: TAction }[] = [];
     for (const choice of choices) {
-      const rune = add.image(0, 0, choice.rune).setDisplaySize(RUNE, RUNE);
+      const rune = add.image(0, 0, choice.rune, choice.frame).setDisplaySize(RUNE, RUNE);
       const box = add
         .rectangle(0, 0, size, size, FILL, FILL_ALPHA)
         .setStrokeStyle(2, STROKE, 0.9)

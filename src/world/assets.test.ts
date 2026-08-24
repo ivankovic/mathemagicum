@@ -8,8 +8,16 @@ import { LANGUAGES } from "../settings";
 import { UI_ASSETS, UiAsset, type UiIndex, flagIcon, uiEntry } from "../ui/assets";
 import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, DOOR_STATES, ROLE_SPRITES } from "./buildings";
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
+import { floodFillReachable, isReachable } from "./connectivity";
 import { EFFECT_TYPES, effectAnimKey, effectSidecarKey } from "./effects";
 import { FIXTURE_TYPES, fixtureFor } from "./fixtures";
+import {
+  FLOWER_LOOKS,
+  FLOWER_TYPES,
+  flowerFrames,
+  wildFlowerFor,
+  wildFlowerObject,
+} from "./flowers";
 import { buildInteriorGrid, interiorAttendantCell, interiorDoor } from "./interiors";
 import { INTERIOR_ROOMS, hearthCell, interiorFor } from "./interiors";
 import { LANDMARK_OVERHANG, LANDMARK_TYPES, landmarkFor } from "./landmarks";
@@ -469,6 +477,61 @@ describe("the shipped crops", () => {
   });
 });
 
+/**
+ * The three flowers, which ship beside the fixtures and are not fixtures.
+ *
+ * `FLOWER_LOOKS` is stated in the game as well as shipped in the sidecar,
+ * because the colour chooser has to offer the colours before any art has
+ * loaded. Two places that have to agree is one place that can drift, and
+ * this is where they are held together.
+ */
+describe("the shipped flowers", () => {
+  const sidecars = new Map(
+    FLOWER_TYPES.map((f) => [f, readJson<FixtureSidecar>("fixtures", `${f}.json`)]),
+  );
+
+  test("ship every colour a child can plant them in", () => {
+    for (const [name, sidecar] of sidecars) {
+      expect({ name, looks: sidecar.looks }).toEqual({ name, looks: FLOWER_LOOKS });
+      expect({ name, count: sidecar.frame_count }).toEqual({
+        name,
+        count: FLOWER_LOOKS * sidecar.frames_per_look,
+      });
+      const sheet = sidecar.sheet;
+      if (!sheet) throw new Error(`${name} has no sheet`);
+      expect(existsSync(join(ASSETS, "fixtures", sheet.file))).toBe(true);
+    }
+  });
+
+  // A look past the end of the sheet draws nothing at all, silently.
+  test("and every frame those colours use is on the sheet", () => {
+    for (const [name, sidecar] of sidecars) {
+      for (let look = 0; look < FLOWER_LOOKS; look++) {
+        for (const frame of flowerFrames(look, sidecar.frames_per_look)) {
+          expect({ name, look, inSheet: frame < sidecar.frame_count }).toEqual({
+            name,
+            look,
+            inSheet: true,
+          });
+        }
+      }
+    }
+  });
+
+  // Drawn on the same canvas as everything else that stands on a cell, so
+  // the renderer needs no special case to put one on the ground.
+  test("and stand on their cell like anything else does", () => {
+    for (const sidecar of sidecars.values()) {
+      expect(sidecar.tile_size).toBe(TILE_SIZE);
+      expect(sidecar.footprint_tiles).toEqual({ width: 1, height: 1 });
+      expect(sidecar.sprite_size_px.width).toBe(TILE_SIZE);
+      const overhang = sidecar.sprite_size_px.height - TILE_SIZE;
+      expect(overhang).toBeGreaterThan(0);
+      expect(sidecar.sprite_offset_px).toEqual({ x: 0, y: -overhang });
+    }
+  });
+});
+
 describe("the shipped fixtures", () => {
   const sidecars = new Map(
     FIXTURE_TYPES.map((f) => [f, readJson<FixtureSidecar>("fixtures", `${f}.json`)]),
@@ -494,6 +557,27 @@ describe("the shipped fixtures", () => {
     }
   });
 
+  /**
+   * Every fixture comes in one colour. The flowers are not fixtures.
+   *
+   * They are drawn by the same generator module and shipped into the same
+   * folder, which is why this is the file that checks it — but they are
+   * their own type in the game, so a flower turning up in `FIXTURE_TYPES`
+   * would mean the store could sell one and the crate could hold one.
+   */
+  test("come in one colour each", () => {
+    for (const [name, sidecar] of sidecars) {
+      expect({ name, looks: sidecar.looks }).toEqual({ name, looks: 1 });
+      expect({ name, count: sidecar.frame_count }).toEqual({
+        name,
+        count: sidecar.looks * sidecar.frames_per_look,
+      });
+    }
+    for (const flower of FLOWER_TYPES) {
+      expect((FIXTURE_TYPES as readonly string[]).includes(flower)).toBe(false);
+    }
+  });
+
   test("block the cell they stand on", () => {
     for (const sidecar of sidecars.values()) {
       expect(sidecar.blocked_cells_relative_to_anchor).toEqual([[0, 0]]);
@@ -516,10 +600,13 @@ describe("every object the village places", () => {
       const asFixture = fixtureFor(object.type);
       const asScenery = sceneryKind(object.type);
       const asLandmark = landmarkFor(object.type);
+      // And the fifth kind: a flower growing wild, which is drawn from a
+      // fixture sheet without being a fixture.
+      const asWildFlower = wildFlowerFor(object.type);
       kinds.add(object.type);
       expect({
         type: object.type,
-        hasArt: Boolean(asBuilding ?? asFixture ?? asScenery ?? asLandmark),
+        hasArt: Boolean(asBuilding ?? asFixture ?? asScenery ?? asLandmark ?? asWildFlower),
       }).toEqual({
         type: object.type,
         hasArt: true,
@@ -530,6 +617,43 @@ describe("every object the village places", () => {
     expect([...kinds].some((t) => sceneryKind(t))).toBe(true);
     expect([...kinds].some((t) => fixtureFor(t))).toBe(true);
     expect([...kinds].some((t) => landmarkFor(t))).toBe(true);
+    expect([...kinds].some((t) => wildFlowerFor(t))).toBe(true);
+  });
+
+  /**
+   * Every world grows all three, and grows them where they can be got to.
+   *
+   * The one property of this feature no unit test of `flowers.ts` can see:
+   * that module chooses between cells it is handed, and whether *those* are
+   * reachable is a fact about the world the generator built. A flower behind
+   * water is a quest that cannot be finished, and it would only happen on
+   * some seeds — which is a bug that passes every check anybody runs.
+   */
+  test("and grows all three flowers where a child can reach them", () => {
+    for (const seed of [1, 5, 12345, 777, 2026]) {
+      const world = generateWorld(220, 220, seed);
+      expect({ seed, kinds: world.wildFlowers.map((one) => one.flower) }).toEqual({
+        seed,
+        kinds: [...FLOWER_TYPES],
+      });
+      const reachable = floodFillReachable(world.grid, world.village.playerDoorstep);
+      for (const spot of world.wildFlowers) {
+        expect({ seed, spot, reachable: isReachable(reachable, world.grid, spot) }).toEqual({
+          seed,
+          spot,
+          reachable: true,
+        });
+        // And standing on the cell the world says it is on.
+        const object = world.grid.getObjectAt(spot.col, spot.row);
+        expect({ seed, type: object?.type ?? null }).toEqual({
+          seed,
+          type: wildFlowerObject(spot.flower),
+        });
+        // Walked into rather than round: a flower that stopped a child dead
+        // in a meadow would read as a rock drawn wrong.
+        expect({ seed, blocks: object?.blocksMovement }).toEqual({ seed, blocks: false });
+      }
+    }
   });
 });
 

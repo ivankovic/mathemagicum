@@ -84,7 +84,10 @@ done
 for p in carrot sunflower cactus tomato pepper wheat; do
   cp $OUT/terrain_plants/$p{.json,_sheet.png} public/assets/plants/
 done
-for f in well fence fence-side table lamp gate stall; do
+for f in well fence fence-side table lamp gate stall bench scarecrow flowerpot \
+         fence-corner gate-side gate-side-lower glowcap \
+         city-wall city-wall-side city-gate city-gate-side \
+         tulip daisy bellflower; do
   cp $OUT/terrain_fixtures/$f{.json,_sheet.png} public/assets/fixtures/
 done
 cp $OUT/terrain_effects/plus{.json,_sheet.png} public/assets/effects/
@@ -94,7 +97,7 @@ done
 cp $OUT/ui/{ui.json,parchment_fill.png,parchment_frame.png}    public/assets/ui/
 cp $OUT/ui/{spellbook.png,seed_pouch.png,basket.png,crate.png,map_wall.png} public/assets/ui/
 cp $OUT/ui/rune_*.png                                              public/assets/ui/
-cp $OUT/ui/{crop_*.png,item_*.png,coin_*.png}                     public/assets/ui/
+cp $OUT/ui/{crop_*.png,item_*.png,coin_*.png,flower_*.png}         public/assets/ui/
 bun test   # src/world/assets.test.ts checks the sync
 ```
 

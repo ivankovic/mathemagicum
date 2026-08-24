@@ -148,6 +148,15 @@ export interface LandmarkSidecar extends SpriteSidecar {
 // A built prop standing on one cell, which it blocks.
 export interface FixtureSidecar extends SpriteSidecar {
   fixture: string;
+  /**
+   * How many colourways the sheet holds, and how long each one's run is.
+   *
+   * One for every fixture but the flowers, which are the only ones a child
+   * picks the colour of. Colourway-major: a look's frames are consecutive,
+   * so playing one is a slice rather than a stride. See `flowerFrames`.
+   */
+  looks: number;
+  frames_per_look: number;
 }
 
 // A spell landing on a tile. Blocks nothing and is never walked round; the

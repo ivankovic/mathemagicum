@@ -1,15 +1,15 @@
 {
   "sheet": {
-    "file": "city-wall-side_sheet.png",
+    "file": "daisy_sheet.png",
     "frame_width": 32,
-    "frame_height": 72,
-    "frame_count": 8,
-    "columns": 8,
+    "frame_height": 48,
+    "frame_count": 40,
+    "columns": 40,
     "rows": 1,
     "margin": 1,
     "spacing": 2
   },
-  "fixture": "city-wall-side",
+  "fixture": "daisy",
   "tile_size": 32,
   "footprint_tiles": {
     "width": 1,
@@ -23,13 +23,13 @@
   ],
   "sprite_offset_px": {
     "x": 0,
-    "y": -40
+    "y": -16
   },
   "sprite_size_px": {
     "width": 32,
-    "height": 72
+    "height": 48
   },
-  "frame_count": 8,
-  "looks": 1,
+  "frame_count": 40,
+  "looks": 5,
   "frames_per_look": 8
 }

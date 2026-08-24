@@ -154,6 +154,7 @@ describe("the list of players", () => {
     clockRung: 0,
     clockOffset: 0,
     symmetryRung: 0,
+    found: [],
     brickRung: 0,
     reached: ["village"],
     learned: [],

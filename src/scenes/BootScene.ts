@@ -15,6 +15,7 @@ import { CLIFF_ATLAS_KEY } from "../world/cliffAtlas";
 import { DECK_SHEET_KEY, DECK_SIDECAR_KEY, type DeckSidecar } from "../world/decking";
 import { EFFECT_TYPES, effectSheetKey, effectSidecarKey } from "../world/effects";
 import { FIXTURE_TYPES, fixtureSheetKey, fixtureSidecarKey } from "../world/fixtures";
+import { FLOWER_TYPES, flowerSheetKey, flowerSidecarKey } from "../world/flowers";
 import { WALL_MASKS } from "../world/growableRoom";
 import {
   GROWABLE_ROOM,
@@ -132,6 +133,13 @@ export class BootScene extends Phaser.Scene {
     for (const fixture of FIXTURE_TYPES) {
       this.load.json(fixtureSidecarKey(fixture), `${this.base()}assets/fixtures/${fixture}.json`);
     }
+    // Beside the fixtures, because that is the folder the generator draws
+    // them into — and not among them, because a flower is not a fixture:
+    // nothing buys one, nothing carries one in a crate, and they are the
+    // only art in there that comes in five colours.
+    for (const flower of FLOWER_TYPES) {
+      this.load.json(flowerSidecarKey(flower), `${this.base()}assets/fixtures/${flower}.json`);
+    }
     for (const landmark of LANDMARK_TYPES) {
       this.load.json(
         landmarkSidecarKey(landmark),
@@ -227,6 +235,10 @@ export class BootScene extends Phaser.Scene {
     for (const fixture of FIXTURE_TYPES) {
       const sidecar = this.cache.json.get(fixtureSidecarKey(fixture)) as FixtureSidecar | undefined;
       this.queueSheet(fixtureSheetKey(fixture), "fixtures", fixture, sidecar?.sheet);
+    }
+    for (const flower of FLOWER_TYPES) {
+      const sidecar = this.cache.json.get(flowerSidecarKey(flower)) as FixtureSidecar | undefined;
+      this.queueSheet(flowerSheetKey(flower), "fixtures", flower, sidecar?.sheet);
     }
     for (const kind of SCENERY_KINDS) {
       const sidecar = this.cache.json.get(scenerySidecarKey(kind)) as ObjectSidecar | undefined;
@@ -436,6 +448,10 @@ export class BootScene extends Phaser.Scene {
     for (const fixture of FIXTURE_TYPES) {
       const sidecar = this.cache.json.get(fixtureSidecarKey(fixture)) as FixtureSidecar;
       expected.push([fixture, fixtureSheetKey(fixture), sidecar.frame_count]);
+    }
+    for (const flower of FLOWER_TYPES) {
+      const sidecar = this.cache.json.get(flowerSidecarKey(flower)) as FixtureSidecar;
+      expected.push([flower, flowerSheetKey(flower), sidecar.frame_count]);
     }
     for (const kind of SCENERY_KINDS) {
       const sidecar = this.cache.json.get(scenerySidecarKey(kind)) as ObjectSidecar;

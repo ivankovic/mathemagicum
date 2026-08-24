@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { SPELLS } from "../spells/spellbook";
+import { FLOWER_TYPES } from "../world/flowers";
 import type { GameSession } from "../world/session";
 
 /**
@@ -142,6 +143,15 @@ export interface DevOptions {
    */
   readonly learned: readonly string[];
   /**
+   * `?flowers=all`, or a comma-separated list of them.
+   *
+   * The only way a script reaches the planting side of this at all: the
+   * flowers grow wild somewhere on a five-hundred-square world, and walking
+   * to one is minutes of pathfinding to prove something the world generator
+   * already has its own tests for.
+   */
+  readonly flowers: readonly string[];
+  /**
    * Pin the clock, in hours.
    *
    * The day-night cycle follows the player's own wall clock, which is right
@@ -194,6 +204,7 @@ const NONE: DevOptions = {
   symmetryRung: null,
   brickRung: null,
   learned: [],
+  flowers: [],
   hour: null,
   skipTitle: false,
   at: null,
@@ -235,6 +246,9 @@ export function names(raw: string | null, everything: readonly string[]): readon
  * ones a script could not reach.
  */
 export const ALL_SPELLS: readonly string[] = SPELLS;
+
+/** And what `?flowers=all` expands to: every one there is to find. */
+export const ALL_FLOWERS: readonly string[] = FLOWER_TYPES;
 
 /** The sentinel `?reached=all` expands to, kept out of `places` for testing. */
 export const ALL_PLACES: readonly string[] = [
@@ -280,6 +294,7 @@ export function parseDevOptions(search: string): DevOptions {
     clockRung: number("clockRung"),
     symmetryRung: number("symmetryRung"),
     learned: names(params.get("learned"), ALL_SPELLS),
+    flowers: names(params.get("flowers"), FLOWER_TYPES),
     hour: number("hour", false),
     skipTitle: params.has("skipTitle"),
     at: tile(params.get("at")),
@@ -522,6 +537,19 @@ export interface DevHandle {
    * thing a script cannot read — so the number behind it is stated here.
    */
   readonly worldClock: () => { hour: number; offset: number };
+  /**
+   * The three wild flowers, what this child has found, and what she planted.
+   *
+   * Where they grow is drawn from the world's seed out of every cell the
+   * connectivity pass proved walkable, so it is a different answer in every
+   * world and there is nothing a script could hard-code. This is how a
+   * scenario walks to one.
+   */
+  readonly flowers: () => {
+    readonly wild: readonly { flower: string; col: number; row: number }[];
+    readonly found: readonly string[];
+    readonly planted: readonly { flower: string; look: number; col: number; row: number }[];
+  };
   /**
    * The shape on the mirror parchment.
    *

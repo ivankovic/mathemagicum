@@ -15,6 +15,7 @@
 import { LANGUAGES, type Language } from "../settings";
 import { CURRENCY } from "../shop/currency";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
+import { FLOWER_TYPES, type FlowerType } from "../world/flowers";
 import { MATERIAL_TYPES, type MaterialType } from "../world/materials";
 import { PLANT_TYPES, type PlantType } from "../world/plants";
 
@@ -104,6 +105,18 @@ export function itemIcon(fixture: FixtureType): string {
 }
 
 /**
+ * The button for one flower.
+ *
+ * Its own naming rather than `itemIcon`'s, because a flower is not an item:
+ * nothing sells one and nothing carries one. What it shares with a crop is
+ * that it goes in the seed pouch, which is why it is drawn to be told apart
+ * from one.
+ */
+export function flowerIcon(flower: FlowerType): string {
+  return `flower-${flower}`;
+}
+
+/**
  * The flag that stands for a language.
  *
  * The chooser is the one screen a child meets before they can read the
@@ -132,6 +145,7 @@ export const UI_ASSETS: readonly string[] = [
   ...Object.values(UiAsset),
   ...PLANT_TYPES.map(cropIcon),
   ...PLACEABLE_FIXTURES.map(itemIcon),
+  ...FLOWER_TYPES.map(flowerIcon),
   ...CURRENCY.denominations.map(coinIcon),
   ...MATERIAL_TYPES.map(materialIcon),
   ...LANGUAGES.map(flagIcon),

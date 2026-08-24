@@ -124,6 +124,7 @@ import {
   type UiIndex,
   coinIcon,
   cropIcon,
+  flowerIcon,
   itemIcon,
   materialIcon,
   uiTextureKey,
@@ -233,6 +234,23 @@ import {
   fixtureSidecarKey,
   isPlaceable,
 } from "../world/fixtures";
+import {
+  FLOWER_LOOKS,
+  FLOWER_TYPES,
+  type FlowerType,
+  type PlantedFlower,
+  type WildSpot,
+  findFlower,
+  flowerAnimKey,
+  flowerFrames,
+  flowerObject,
+  flowerParts,
+  flowerSheetKey,
+  flowerSidecarKey,
+  hasFound,
+  wildFlowerFor,
+  wildLook,
+} from "../world/flowers";
 import type { WorldGrid } from "../world/grid";
 import {
   type PlanPatch,
@@ -1179,10 +1197,16 @@ export class GameScene extends Phaser.Scene {
   private arrayPopup?: ArrayPopup;
   private brickPopup?: BrickPopup;
   private clockPopup?: ClockPopup;
+  private readonly flowerSidecars = new Map<FlowerType, FixtureSidecar>();
+  /** Every flower on screen, by the cell it stands on. */
+  private readonly flowerSprites = new Map<string, Phaser.GameObjects.Sprite>();
+  /** Which colour the seed pouch will plant next, per flower. */
+  private flowerLook: Partial<Record<FlowerType, number>> = {};
   private symmetryPopup?: SymmetryPopup;
   private patchMenu?: PatchMenu<PatchAction>;
   /** The second of the two taps: which colour of a thing to put down. */
   private decorMenu?: PatchMenu<DecorItem>;
+  private flowerMenu?: PatchMenu<PlantedFlower>;
   /**
    * The array spell, part way through being aimed.
    *
@@ -1443,6 +1467,8 @@ export class GameScene extends Phaser.Scene {
   private city!: CityLayout;
   private observatory: Observatory | null = null;
   private harbourFront: HarbourLayout | null = null;
+  /** Where the three wild flowers grew, for a script that has to walk to one. */
+  private wildFlowers: readonly WildSpot[] = [];
   private worldPixelWidth = 0;
   private worldPixelHeight = 0;
   // Everything drawn outdoors and everything drawn indoors, so entering a
@@ -1570,6 +1596,7 @@ export class GameScene extends Phaser.Scene {
     this.city = world.city;
     this.observatory = world.observatory;
     this.harbourFront = world.harbour;
+    this.wildFlowers = world.wildFlowers;
     this.session = new GameSession({ grid: world.grid, start: this.startFor(world) });
     // What the generator made, remembered before the child's own world is
     // laid over it — the diff that gets saved is the difference between the
@@ -1784,6 +1811,9 @@ export class GameScene extends Phaser.Scene {
     this.sandGlass = new SandGlass(this, MODAL_DEPTH + 10, (object) => this.ui(object));
     this.patchMenu = new PatchMenu<PatchAction>(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
     this.decorMenu = new PatchMenu<DecorItem>(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
+    this.flowerMenu = new PatchMenu<PlantedFlower>(this, TOUCH_UI_DEPTH, (object) =>
+      this.ui(object),
+    );
     this.portalPanel = new PortalPanel(
       this,
       uiIndex,
@@ -2005,6 +2035,22 @@ export class GameScene extends Phaser.Scene {
           hinting: symmetryHint(cast) !== null,
         };
       },
+      /**
+       * The three wild flowers, and which of them this child has found.
+       *
+       * Where they grow is chosen from the world's seed out of every cell
+       * the connectivity pass proved walkable, so it is a different answer
+       * in every world and there is nothing a script could hard-code. This
+       * is how a scenario walks to one.
+       */
+      flowers: () => ({
+        wild: this.wildFlowers,
+        found: [...this.foundFlowers],
+        planted: this.worldGrid.listObjects().flatMap((object) => {
+          const parts = flowerParts(object.type);
+          return parts ? [{ ...parts, col: object.col, row: object.row }] : [];
+        }),
+      }),
       // Where the world's clock stands, and how far it has been wound from
       // the real one. The spell's whole effect, and nothing on screen states
       // it as a number — the light does, which a script cannot read.
@@ -2798,6 +2844,7 @@ export class GameScene extends Phaser.Scene {
     this.registerInteriorAnims();
     this.registerPlantAnims();
     this.registerFixtureAnims();
+    this.registerFlowerAnims();
     this.registerSceneryAnims();
     this.registerLandmarkAnims();
     this.readDecking();
@@ -2884,6 +2931,35 @@ export class GameScene extends Phaser.Scene {
         frameRate: LANDMARK_ANIM_FPS,
         repeat: -1,
       });
+    }
+  }
+
+  /**
+   * One looping sway per flower per colour.
+   *
+   * Five animations each rather than one, because the sheet holds five
+   * colourways end to end and a look is a *slice* of it. Registered up front
+   * for every colour whether or not this child has found the flower: an
+   * animation is a table entry, and building one the moment a child taps a
+   * colour would be building it during the tap.
+   */
+  private registerFlowerAnims(): void {
+    for (const flower of FLOWER_TYPES) {
+      const sidecar = this.cache.json.get(flowerSidecarKey(flower)) as FixtureSidecar | undefined;
+      if (!sidecar) throw new Error(`missing sidecar for flower "${flower}"`);
+      this.flowerSidecars.set(flower, sidecar);
+      for (let look = 0; look < FLOWER_LOOKS; look++) {
+        const key = flowerAnimKey(flower, look);
+        if (this.anims.exists(key)) continue;
+        this.anims.create({
+          key,
+          frames: this.anims.generateFrameNumbers(flowerSheetKey(flower), {
+            frames: flowerFrames(look, sidecar.frames_per_look),
+          }),
+          frameRate: FIXTURE_ANIM_FPS,
+          repeat: -1,
+        });
+      }
     }
   }
 
@@ -3665,15 +3741,28 @@ export class GameScene extends Phaser.Scene {
       texture: uiTextureKey(UiAsset.SeedPouch),
       // One button per crop, in the order the keyboard's number keys pick
       // them, so the two ways in agree about which is the first seed.
-      items: PLANT_TYPES.map((plant, index) => ({
-        texture: uiTextureKey(cropIcon(plant)),
-        act: () => {
-          // Picking a seed here is also what the number keys pick, so the
-          // two routes never disagree about which crop Space would plant.
-          this.selectedPlantIndex = index;
-          this.tryPlant();
-        },
-      })),
+      items: [
+        ...PLANT_TYPES.map((plant, index) => ({
+          texture: uiTextureKey(cropIcon(plant)),
+          act: () => {
+            // Picking a seed here is also what the number keys pick, so the
+            // two routes never disagree about which crop Space would plant.
+            this.selectedPlantIndex = index;
+            this.tryPlant();
+          },
+        })),
+        // And the flowers, after the crops so no crop's position moves.
+        //
+        // Drawn dimmed until this child has walked into the wild one, rather
+        // than left out — the same offer the spellbook makes with its
+        // unlearned runes, and for the same reason: a pouch with a gap in it
+        // says there is something to find.
+        ...FLOWER_TYPES.map((flower) => ({
+          texture: uiTextureKey(flowerIcon(flower)),
+          act: () => this.plantFlower(flower),
+          available: () => this.hasFoundFlower(flower),
+        })),
+      ],
       size,
       right: edge + size + 10,
       bottom,
@@ -6126,6 +6215,12 @@ export class GameScene extends Phaser.Scene {
     for (const [index, at] of (this.decorMenu?.buttonPositions() ?? []).entries()) {
       positions[`colour.${index}`] = at;
     }
+    // Its own prefix, not `colour`: the two choosers are never open at once,
+    // but a script that tapped `colour.3` and got whichever one happened to
+    // be up would be a script that passed for the wrong reason.
+    for (const [index, at] of (this.flowerMenu?.buttonPositions() ?? []).entries()) {
+      positions[`bloom.${index}`] = at;
+    }
     for (const [index, at] of (this.patchMenu?.buttonPositions() ?? []).entries()) {
       positions[`patch.${index}`] = at;
     }
@@ -6427,6 +6522,7 @@ export class GameScene extends Phaser.Scene {
 
   private closeTrays(): void {
     for (const tray of Object.values(this.trays())) tray?.setOpen(false);
+    this.flowerMenu?.close();
     // And the array spell's marker, if one is half drawn. State surviving a
     // transition is this codebase's recurring bug — scenery across a portal,
     // a tray behind a popup, the great tree's own cell — and a rectangle
@@ -7040,6 +7136,21 @@ export class GameScene extends Phaser.Scene {
   // type the village places resolves here, so this is unreachable in
   // practice and provably so.
   private spawnNonBuilding(object: PlacedObject): void {
+    // Flowers first, and both kinds of them: a wild one is picked and a
+    // planted one is dug up, which is two different taps on two objects
+    // drawn from the same sheet.
+    const wild = wildFlowerFor(object.type);
+    if (wild) {
+      this.spawnFlower(object, wild, wildLook(wild), () => this.pickWildFlower(object, wild));
+      return;
+    }
+    const planted = flowerParts(object.type);
+    if (planted) {
+      this.spawnFlower(object, planted.flower, planted.look, () =>
+        this.digUpFlower(object.col, object.row),
+      );
+      return;
+    }
     const fixture = fixtureFor(object.type);
     if (fixture) {
       const sidecar = this.fixtureSidecars.get(fixture);
@@ -7634,6 +7745,174 @@ export class GameScene extends Phaser.Scene {
     if (!parts || !wanted || !sheet || look === 0) return source;
     const plan = colourPlanFor(parts.palette, wanted);
     return repaintedSheet(this, source, `${source}~${look}`, plan, sheet);
+  }
+
+  /**
+   * One flower on the ground, wild or planted.
+   *
+   * The same sprite either way — it is the same flower — and what differs is
+   * only what a tap on it does. Drawn *behind* everything else that stands
+   * on a cell, because a flower is ankle-high and a fence is not: a bloom
+   * painted over a fence post would look like it was growing out of it.
+   */
+  private spawnFlower(
+    object: PlacedObject,
+    flower: FlowerType,
+    look: number,
+    onTap: () => void,
+  ): Phaser.GameObjects.Sprite {
+    const sidecar = this.flowerSidecars.get(flower);
+    if (!sidecar) throw new Error(`no art loaded for flower "${flower}"`);
+    const sprite = this.spawnFootprintSprite(
+      object,
+      sidecar,
+      flowerSheetKey(flower),
+      flowerAnimKey(flower, look),
+    );
+    const frame = sprite.frame;
+    sprite.setInteractive(
+      new Phaser.Geom.Rectangle(0, frame.realHeight - TILE_SIZE, TILE_SIZE, TILE_SIZE),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    sprite.on("pointerdown", () => {
+      if (this.pointerIsSpokenFor) return;
+      onTap();
+    });
+    this.flowerSprites.set(tileKey(object.col, object.row), sprite);
+    return sprite;
+  }
+
+  /**
+   * Walk into a wild one and it is yours — the kind of it, for ever.
+   *
+   * The one reward in this game for having *gone somewhere*. No sum, no
+   * money, no errand: three plants grow wild on a five-hundred-square world
+   * and a child has to find them.
+   *
+   * The wild plant stays where it is. Picking it would make the world a
+   * little emptier every time somebody explored it, and would mean a second
+   * child on the same tablet could never find that one at all.
+   */
+  private pickWildFlower(object: PlacedObject, flower: FlowerType): void {
+    if (this.modalOpen) return;
+    if (stepsToSpeak(this.session.tile, { col: object.col, row: object.row }) > 1) {
+      this.markRefusal(object.col, object.row);
+      this.markTooFar(object.col, object.row);
+      return;
+    }
+    const found = findFlower(this.profile.found, flower);
+    if (found === this.profile.found) {
+      // Already hers. Say what it is rather than nothing, which is what
+      // every other thing in the world does when it is tapped.
+      this.showEarned(flowerIcon(flower));
+      return;
+    }
+    this.saveProfileChange({ found });
+    this.seedTray?.refresh();
+    this.showEarned(flowerIcon(flower));
+    this.playGesture(PLANT);
+  }
+
+  /** Take a planted one back out of the ground. */
+  private digUpFlower(col: number, row: number): void {
+    if (this.modalOpen) return;
+    if (stepsToSpeak(this.session.tile, { col, row }) > 1) {
+      this.markRefusal(col, row);
+      this.markTooFar(col, row);
+      return;
+    }
+    this.worldGrid.removeObjectAt(col, row);
+    const key = tileKey(col, row);
+    this.flowerSprites.get(key)?.destroy();
+    this.flowerSprites.delete(key);
+    this.playGesture(PLANT);
+    this.paintSockets();
+  }
+
+  private get foundFlowers(): readonly string[] {
+    return [...this.profile.found, ...this.dev.flowers];
+  }
+
+  private hasFoundFlower(flower: FlowerType): boolean {
+    return hasFound(this.foundFlowers, flower);
+  }
+
+  /**
+   * Plant one, in a colour she picks.
+   *
+   * Two taps, like putting furniture down: what, and then which colour. The
+   * order is the same one the store settled on — a child decides what they
+   * are doing and then goes and does it — and it means the five colours are
+   * offered as five pictures of the flower rather than as a colour chart.
+   *
+   * Unlike furniture there is nothing to own. Finding the wild one earns the
+   * *kind*, so every colour is always on offer and a bed can be as long as
+   * she likes: a child who walked to the far side of the world for a tulip
+   * has earned tulips.
+   */
+  private plantFlower(flower: FlowerType): void {
+    if (this.modalOpen) return;
+    this.seedTray?.setOpen(false);
+    if (!this.hasFoundFlower(flower)) {
+      this.showRefusalOnPlayer(flowerIcon(flower));
+      return;
+    }
+    const above = this.screenOfPoint(this.player.x, this.player.y - TILE_SIZE);
+    this.decorMenu?.close();
+    this.flowerMenu?.openAt(
+      above,
+      Array.from({ length: FLOWER_LOOKS }, (_, look) => ({
+        action: flowerObject(flower, look),
+        rune: flowerSheetKey(flower),
+        frame: look * (this.flowerSidecars.get(flower)?.frames_per_look ?? 1),
+      })),
+      (item) => {
+        this.flowerMenu?.close();
+        const parts = flowerParts(item);
+        if (parts) this.putFlowerDown(parts.flower, parts.look);
+      },
+    );
+  }
+
+  /**
+   * Into the ground in front of her, where a seed would go.
+   *
+   * The same square planting uses, so "where does it go" is one answer for
+   * everything a child puts in the earth. Refused on anything already
+   * occupied — including by another flower, because two on one cell would be
+   * one drawn over the other and only the top one tappable.
+   */
+  private putFlowerDown(flower: FlowerType, look: number): void {
+    const ahead = this.session.facingTile();
+    if (!this.worldGrid.inBounds(ahead.col, ahead.row)) {
+      this.showRefusalOnPlayer(flowerIcon(flower));
+      return;
+    }
+    const free =
+      this.worldGrid.isPassable(ahead.col, ahead.row) &&
+      !this.worldGrid.getObjectAt(ahead.col, ahead.row) &&
+      !this.worldGrid.getPlant(ahead.col, ahead.row);
+    if (!free) {
+      this.markRefusal(ahead.col, ahead.row);
+      return;
+    }
+    const object: PlacedObject = {
+      id: `flower-${ahead.col}-${ahead.row}`,
+      type: flowerObject(flower, look),
+      col: ahead.col,
+      row: ahead.row,
+      width: 1,
+      height: 1,
+      // Walked among, not walked around. A bed of flowers a child could not
+      // cross would be a wall they planted themselves.
+      blocksMovement: false,
+      anchorCol: ahead.col,
+      anchorRow: ahead.row,
+    };
+    this.worldGrid.placeObject(object);
+    this.spawnFlower(object, flower, look, () => this.digUpFlower(ahead.col, ahead.row));
+    this.playGesture(PLANT);
+    this.paintSockets();
   }
 
   /**

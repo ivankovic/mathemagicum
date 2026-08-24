@@ -10,6 +10,7 @@ import { HARDEST_CLOCK_RUNG } from "../spells/hourglass";
 import { HARDEST_ARRAY_RUNG } from "../spells/multiplication";
 import { readLearned } from "../spells/spellbook";
 import { HARDEST_SYMMETRY_RUNG } from "../spells/symmetry";
+import { readFound } from "../world/flowers";
 import { HOME_PLACE, PLACE_NAMES, type PlaceName } from "../world/places";
 import type { PlayerSnapshot } from "./snapshot";
 
@@ -155,6 +156,15 @@ export interface Progress {
    * shape can fold onto itself.
    */
   readonly symmetryRung: number;
+  /**
+   * Which flowers this child has walked into, and may now plant.
+   *
+   * A set of names, like `learned`, and for the same reason: what is locked
+   * is behind *having been somewhere*, never behind being good at
+   * arithmetic. A name that is not one of the three is dropped on the way
+   * in — it can only have come from a different build.
+   */
+  readonly found: readonly string[];
   /**
    * Where the bricklaying ladder sits: how hard a wall is to finish.
    *
@@ -320,6 +330,7 @@ export function createProfile(
     // A new world's clock is the real one until somebody moves it.
     clockOffset: 0,
     symmetryRung: 0,
+    found: [],
     brickRung: brickFloor(bandAt(wanted.band)),
     // The village, because that is where they live. A portal spell whose
     // first cast has nowhere to go is a spell that looks broken.
@@ -372,6 +383,7 @@ export function freshProgress(bandAt_: number): Progress {
     clockRung: clockFloor(band),
     clockOffset: 0,
     symmetryRung: 0,
+    found: [],
     brickRung: brickFloor(band),
     reached: [HOME_PLACE],
     learned: [],
@@ -523,6 +535,7 @@ export function readProfile(value: unknown): Profile | null {
     clockOffset: readOffset(record.clockOffset),
     // A child saved before the astronomer taught folding has never folded.
     symmetryRung: readSymmetryRung(record.symmetryRung),
+    found: readFound(record.found),
     // A child saved before anybody could build a room has never laid a
     // brick: the bottom of their own band, exactly as a new child gets.
     brickRung: brickRungInBand(bandAt(band), Number(record.brickRung ?? brickFloor(bandAt(band)))),
