@@ -2029,6 +2029,8 @@ export class GameScene extends Phaser.Scene {
           board: this.symmetryPopup?.board ?? null,
           axes: axesOf(cast.shape),
           rung: cast.rung,
+          // The rung says what a shape *may* have; this is what it got.
+          drawn: cast.shape.corners.length,
           done: cast.done,
           missteps: cast.missteps,
           wrong: cast.wrong,

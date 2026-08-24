@@ -57,11 +57,46 @@ describe("the shapes the spell makes", () => {
     }
   });
 
-  test("and has exactly the corners its rung asked for", () => {
+  test("and has one of the corner counts its rung allows", () => {
     for (let rung = 0; rung <= HARDEST_SYMMETRY_RUNG; rung++) {
       const wanted = symmetryRungAt(rung).corners;
       for (const shape of shapesAt(rung)) {
-        expect({ rung, corners: shape.corners.length }).toEqual({ rung, corners: wanted });
+        expect({ rung, allowed: wanted.includes(shape.corners.length) }).toEqual({
+          rung,
+          allowed: true,
+        });
+      }
+    }
+  });
+
+  /**
+   * And it is not the same shape every time.
+   *
+   * The bug a playtest reported in one line: "the folding spell is always a
+   * square." A regular shape has nothing to vary — no lean, no nudged
+   * corners, every radius one — so a rung that named a single corner count
+   * drew the identical picture on every cast, for ever. The lopsided rungs
+   * were fine and hid it.
+   */
+  test("and is not the same shape on every cast", () => {
+    for (let rung = 0; rung <= HARDEST_SYMMETRY_RUNG; rung++) {
+      const drawings = new Set(
+        shapesAt(rung).map((shape) =>
+          shape.corners.map((c) => `${c.x.toFixed(3)},${c.y.toFixed(3)}`).join(" "),
+        ),
+      );
+      expect({ rung, many: drawings.size > 1 }).toEqual({ rung, many: true });
+    }
+  });
+
+  // Which is not the same as saying every rung is *unpredictable*: the
+  // gentle ones keep their fold upright, and that is a property of the rung
+  // rather than of the drawing.
+  test("and an upright rung stays upright however it is turned", () => {
+    for (const rung of [0, 1, 2, 3]) {
+      for (const shape of shapesAt(rung)) {
+        const upright = axesOf(shape).some((axis) => Math.abs(axis.angle) < 1e-6);
+        expect({ rung, upright }).toEqual({ rung, upright: true });
       }
     }
   });
@@ -80,9 +115,16 @@ describe("the shapes the spell makes", () => {
   // The shapes a child meets first are the ones with several right answers,
   // so a line drawn roughly down the middle is likely to be one of them.
   test("a shape with equal corners folds every way it should", () => {
-    expect(axesOf(makeShape(createRng(1), symmetryRungAt(0))).length).toBe(4);
-    expect(axesOf(makeShape(createRng(1), symmetryRungAt(1))).length).toBe(3);
-    expect(axesOf(makeShape(createRng(1), symmetryRungAt(3))).length).toBe(6);
+    // A regular polygon has as many folds as it has corners, whichever of
+    // its rung's counts it happened to be drawn with.
+    for (const rung of [0, 1, 3]) {
+      for (const shape of shapesAt(rung)) {
+        expect({ rung, axes: axesOf(shape).length }).toEqual({
+          rung,
+          axes: shape.corners.length,
+        });
+      }
+    }
   });
 
   // And the ones at the top have exactly one, which is the whole difficulty:

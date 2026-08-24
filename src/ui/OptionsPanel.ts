@@ -45,7 +45,16 @@ import { UiAsset, type UiIndex, flagIcon, uiTextureKey } from "./assets";
  */
 
 const PANEL_MAX_W = 420;
-const PANEL_MAX_H = 344;
+/**
+ * Tall enough for a row that has taken a second line.
+ *
+ * Three hundred and forty-four was right while every row was one line of
+ * three or fewer. A fourth band made the sums row wrap on a phone held
+ * upright — and at that height it missed the room to do so by six pixels, so
+ * it stayed on one line and the six-digit sum ran out of its own button
+ * instead. The panel is not padding: what it holds grew.
+ */
+const PANEL_MAX_H = 400;
 const PANEL_MIN_W = 280;
 const PANEL_MIN_H = 290;
 
@@ -59,12 +68,20 @@ const TITLE_SIZE = 17;
 const ROW_SIZE = 13;
 /** The smallest a row's words may be set before they stop being words. */
 const ROW_SIZE_MIN = 8;
+/**
+ * How far a row's words may be shrunk before it wraps instead.
+ *
+ * Below about three quarters, a sum stops being something a parent can read
+ * across a kitchen table — and reading it is the entire job of these
+ * buttons. Past that the row takes another line rather than another point
+ * off the type.
+ */
+const NARROWEST = 0.75;
 const SMALL_SIZE = 12;
 
 const BUTTON_H = 32;
 const BUTTON_GAP = 6;
 /** A heading and the row of buttons under it, plus air before the next one. */
-const ROW_HEIGHT = SMALL_SIZE + 8 + BUTTON_H + 18;
 /** How big the map and the two answers are drawn on their buttons. */
 const ICON = 22;
 /** Between a flag and the name of the language it stands for. */
@@ -389,7 +406,13 @@ export class OptionsPanel {
     this.place(this.closeButton, rect.left + rect.width - PAD - 14, rect.top + PAD + 10, 28, 24);
     this.show(this.closeButton);
 
-    this.row(
+    // Each row starts where the last one ended rather than at a multiple of
+    // one height: a row that wraps onto two lines is taller than a row that
+    // does not, and the rows below it have to come down with it. Stacked by
+    // multiplication instead, the sums landed on top of the languages the
+    // moment either of them needed a second line.
+    const AFTER_ROW = 18;
+    let below = this.row(
       rect,
       rect.top + PAD + TITLE_SIZE + 18,
       0,
@@ -399,14 +422,20 @@ export class OptionsPanel {
       this.settings.language,
     );
 
-    this.row(
+    // The lowest the sums may reach: what the world row and the button
+    // under it need, measured back from the foot of the panel rather than
+    // guessed.
+    const aboutTop = rect.top + rect.height - PAD - BUTTON_H;
+    const worldNeeds = AFTER_ROW + SMALL_SIZE + 8 + BUTTON_H;
+    below = this.row(
       rect,
-      rect.top + PAD + TITLE_SIZE + 18 + ROW_HEIGHT,
+      below + AFTER_ROW,
       1,
       this.words.sumsHeading,
       this.bandChoices,
       BANDS.map((_, index) => index),
       this.band,
+      aboutTop - AFTER_ROW - worldNeeds,
     );
 
     // Where the price of a crop used to be stated. That was a fact about
@@ -423,7 +452,7 @@ export class OptionsPanel {
     this.aboutButton.label.setText(this.words.aboutButton);
     this.show(this.aboutButton);
 
-    this.worldRow(rect, rect.top + PAD + TITLE_SIZE + 18 + ROW_HEIGHT * 2);
+    this.worldRow(rect, below + AFTER_ROW);
   }
 
   /**
@@ -493,6 +522,7 @@ export class OptionsPanel {
     buttons: Choice[],
     values: readonly T[],
     chosen: T,
+    floor = Number.POSITIVE_INFINITY,
   ): number {
     const label = this.headings[slot];
     label
@@ -502,7 +532,31 @@ export class OptionsPanel {
 
     const y = top + SMALL_SIZE + 8;
     const count = Math.max(1, values.length);
-    const width = (rect.width - PAD * 2 - BUTTON_GAP * (count - 1)) / count;
+    // How many fit on a line, and how many lines that takes.
+    //
+    // Four sums side by side on a phone gave each of them sixty-five pixels
+    // to hold `557269 + 168594`, which is fifteen characters — so the
+    // six-digit band ran out of both ends of its own button. Type alone
+    // could not save it: shrunk to fit, that label would be five pixels
+    // tall and the row would be four illegible smudges.
+    //
+    // So a row that cannot hold its widest label at a readable size goes
+    // onto two lines instead. Two lines of two is the same four choices with
+    // twice the width each, which is enough at every size this runs at.
+    const room = rect.width - PAD * 2;
+    const widest = Math.max(0, ...buttons.slice(0, count).map((one) => one.label.width));
+    const abreast = (many: number) => (room - BUTTON_GAP * (many - 1)) / many;
+    const tooTight = widest > 0 && abreast(count) < widest * NARROWEST + LABEL_GAP * 2;
+    // And only if there is room for the second line. A phone held sideways
+    // gives this panel three hundred pixels of height for a title, three
+    // rows and a button, and a row that took an extra line there pushed the
+    // last row straight through the button underneath it. Where it will not
+    // fit, the words are shrunk as they were before — smaller than is ideal,
+    // but on screen and inside their own box.
+    const wrapped = y + BUTTON_H * 2 + BUTTON_GAP <= floor;
+    const perLine = tooTight && wrapped ? Math.max(1, Math.ceil(count / 2)) : count;
+    const lines = Math.ceil(count / perLine);
+    const width = abreast(perLine);
     // One decision for the whole row, not one per button. A third language
     // makes every button a third narrower, and the three names are not the
     // same length — asked one at a time, the short ones keep their word and
@@ -523,20 +577,28 @@ export class OptionsPanel {
     // twice the width of `5 + 2`, and set at one size the two of them either
     // overflow the panel or waste three quarters of it.
     const shown = buttons.slice(0, count).filter((button) => !this.iconOf.get(button.box)?.beside);
-    const widest = Math.max(0, ...shown.map((button) => button.label.width));
-    const room = width - LABEL_GAP * 2;
+    const longest = Math.max(0, ...shown.map((button) => button.label.width));
+    const fits = width - LABEL_GAP * 2;
     const size =
-      widest > room ? Math.max(ROW_SIZE_MIN, Math.floor((ROW_SIZE * room) / widest)) : ROW_SIZE;
+      longest > fits ? Math.max(ROW_SIZE_MIN, Math.floor((ROW_SIZE * fits) / longest)) : ROW_SIZE;
     for (const [i, value] of values.entries()) {
       const button = buttons[i];
       if (!button) continue;
       if (!this.iconOf.get(button.box)?.beside) button.label.setFontSize(size);
-      const x = rect.left + PAD + (width + BUTTON_GAP) * i + width / 2;
-      this.place(button, x, y + BUTTON_H / 2, width, BUTTON_H, tight);
+      const line = Math.floor(i / perLine);
+      const at = i % perLine;
+      // Each line is centred rather than left-aligned, so an odd count over
+      // two lines does not leave the last button hanging off one side.
+      const onThisLine = Math.min(perLine, count - line * perLine);
+      const span = onThisLine * width + BUTTON_GAP * (onThisLine - 1);
+      const left = rect.left + PAD + (room - span) / 2;
+      const x = left + (width + BUTTON_GAP) * at + width / 2;
+      const middle = y + line * (BUTTON_H + BUTTON_GAP) + BUTTON_H / 2;
+      this.place(button, x, middle, width, BUTTON_H, tight);
       button.box.setStrokeStyle(2, value === chosen ? CHOSEN_HEX : INK_HEX);
       this.show(button);
     }
-    return y + BUTTON_H;
+    return y + lines * BUTTON_H + (lines - 1) * BUTTON_GAP;
   }
 
   private choice(text: string, onTap: () => void): Choice {

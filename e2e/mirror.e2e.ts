@@ -36,7 +36,8 @@ interface Board {
 interface Seen {
   board: Board | null;
   axes: { angle: number }[];
-  rung: { corners: number; regular: boolean; oblique: boolean; reflex: boolean };
+  rung: { corners: number[]; regular: boolean; oblique: boolean; reflex: boolean };
+  drawn: number;
   done: boolean;
   missteps: number;
   wrong: boolean;
@@ -212,7 +213,9 @@ describe("folding a shape in half", () => {
         // No `?symmetryRung=`: the seam holds the ladder still on purpose,
         // so a scenario about climbing it must not be using one.
         const first = await castMirror(game);
-        expect(first.rung.corners).toBe(SYMMETRY_RUNGS[0]?.corners);
+        expect(first.rung.corners).toEqual([...(SYMMETRY_RUNGS[0]?.corners ?? [])]);
+        // And the shape it actually drew is one of the ones that rung allows.
+        expect(SYMMETRY_RUNGS[0]?.corners.includes(first.drawn)).toBe(true);
 
         let seen: Seen = first;
         for (let cast = 0; cast < 4; cast++) {
@@ -222,7 +225,7 @@ describe("folding a shape in half", () => {
         }
 
         const climbed = await castMirror(game);
-        expect(climbed.rung.corners).toBe(SYMMETRY_RUNGS[1]?.corners);
+        expect(climbed.rung.corners).toEqual([...(SYMMETRY_RUNGS[1]?.corners ?? [])]);
       });
     },
     5 * MINUTES,

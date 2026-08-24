@@ -569,7 +569,14 @@ export interface DevHandle {
       corners: readonly { x: number; y: number }[];
     } | null;
     readonly axes: readonly { angle: number }[];
-    readonly rung: { corners: number; regular: boolean; oblique: boolean; reflex: boolean };
+    readonly rung: {
+      corners: readonly number[];
+      regular: boolean;
+      oblique: boolean;
+      reflex: boolean;
+    };
+    /** How many corners the shape on the parchment actually has. */
+    readonly drawn: number;
     readonly done: boolean;
     readonly missteps: number;
     readonly wrong: boolean;

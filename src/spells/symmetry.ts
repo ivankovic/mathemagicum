@@ -52,8 +52,21 @@ export interface Axis {
 
 /** How hard a shape is to fold, and what makes it so. */
 export interface SymmetryRung {
-  /** How many corners the shape has. */
-  readonly corners: number;
+  /**
+   * How many corners the shape may have — one of these, drawn per cast.
+   *
+   * A list rather than a number, and that is a bug fix rather than a
+   * flourish. A *regular* shape has nothing else left to vary: no lean, no
+   * nudged corners, every radius one. So a rung that named a single count
+   * produced the same drawing on every cast for ever — a child at the first
+   * rung folded the identical square every time they cast the spell, which
+   * is what a playtest reported in those words.
+   *
+   * What each rung holds together is its *property* — all corners alike, or
+   * an odd count, or lopsided — because that is the lesson. The count is
+   * free to move inside it.
+   */
+  readonly corners: readonly number[];
   /** Whether every corner is alike, which gives a shape many folds. */
   readonly regular: boolean;
   /** Whether the fold leans rather than running straight up the page. */
@@ -78,12 +91,22 @@ export interface SymmetryRung {
  * corner rather than between two of them.
  */
 export const SYMMETRY_RUNGS: readonly SymmetryRung[] = [
-  { corners: 4, regular: true, oblique: false, reflex: false, hintAfter: 1 },
-  { corners: 3, regular: true, oblique: false, reflex: false, hintAfter: 1 },
-  { corners: 4, regular: false, oblique: false, reflex: false, hintAfter: 1 },
-  { corners: 6, regular: true, oblique: false, reflex: false, hintAfter: 1 },
-  { corners: 5, regular: false, oblique: true, reflex: false, hintAfter: 2 },
-  { corners: 7, regular: false, oblique: true, reflex: true, hintAfter: 2 },
+  // All corners alike, an even count: many folds, and one of them upright
+  // through two opposite corners. The gentlest thing this spell can ask.
+  { corners: [4, 6], regular: true, oblique: false, reflex: false, hintAfter: 1 },
+  // Alike, but an odd count — so the fold runs through a corner at one end
+  // and the middle of an edge at the other, which is the thing being taught.
+  { corners: [3, 5], regular: true, oblique: false, reflex: false, hintAfter: 1 },
+  // Lopsided: exactly one fold, still upright.
+  { corners: [4, 5], regular: false, oblique: false, reflex: false, hintAfter: 1 },
+  // Alike again and more of them. Overlapping the first rung at six, which
+  // is deliberate and is how every ladder in this game overlaps: the step
+  // between two rungs should be a nudge.
+  { corners: [6, 8], regular: true, oblique: false, reflex: false, hintAfter: 1 },
+  // Lopsided *and* leaning: one fold, and not up the page.
+  { corners: [5, 6], regular: false, oblique: true, reflex: false, hintAfter: 2 },
+  // And one corner turned back on itself, which is the hardest to see.
+  { corners: [6, 7], regular: false, oblique: true, reflex: true, hintAfter: 2 },
 ];
 
 export const HARDEST_SYMMETRY_RUNG = SYMMETRY_RUNGS.length - 1;
@@ -229,8 +252,52 @@ export function foldsAlong(shape: Shape, from: Point, to: Point): Axis | null {
  * and whether one corner turns back on itself.
  */
 export function makeShape(rng: Rng, rung: SymmetryRung): Shape {
-  const corners = Math.max(3, rung.corners);
-  const lean = rung.oblique ? (randInt(rng, 1, 5) * Math.PI) / 12 : 0;
+  // A lopsided shape is drawn again if it came out symmetric by accident.
+  //
+  // The rung means "exactly one fold", and that is the whole of its
+  // difficulty — there is no drawing a line near the middle and hoping. But
+  // the corners are nudged and the radii drawn at random, and about one
+  // shape in a hundred lands on a rhombus or a kite: a second fold nobody
+  // asked for, on the rung whose point is that there is only one.
+  //
+  // Checked rather than argued away, because the argument is a probability
+  // and the check is `axesOf`. Bounded, and it keeps the last one either
+  // way: a shape with two folds is an easy puzzle, not a broken one, and
+  // looping for ever to avoid it would be the worse failure.
+  if (!rung.regular) {
+    let shape = oneShape(rng, rung);
+    for (let again = 0; again < 8 && axesOf(shape).length > 1; again++) {
+      shape = oneShape(rng, rung);
+    }
+    return shape;
+  }
+  return oneShape(rng, rung);
+}
+
+function oneShape(rng: Rng, rung: SymmetryRung): Shape {
+  const choices = rung.corners.length > 0 ? rung.corners : [4];
+  const corners = Math.max(3, choices[randInt(rng, 0, choices.length - 1)] as number);
+  // How far the whole shape is turned.
+  //
+  // A leaning rung turns it by an arbitrary twelfth, which is the point of
+  // that rung: the fold no longer runs up the page. An upright one turns it
+  // by a multiple of π/n, which is the one step that maps a regular shape's
+  // folds onto themselves — so a square may be drawn as a square or as a
+  // diamond, and either way one of its folds is still vertical.
+  //
+  // Without this a regular shape had no variation left in it at all. Two
+  // orientations is not many; it is two more than one, and the corner count
+  // above is where the rest of the variety comes from.
+  //
+  // And only a *regular* shape may be turned. A lopsided one has exactly one
+  // fold, put at nought by the way it is built, and turning it by a twelfth
+  // or an nth moves that fold off the vertical just as surely as leaning it
+  // would — which is the difference between this rung and the one above it.
+  const lean = rung.oblique
+    ? (randInt(rng, 1, 5) * Math.PI) / 12
+    : rung.regular
+      ? (randInt(rng, 0, 1) * Math.PI) / corners
+      : 0;
   const odd = corners % 2 === 1;
   // Corners are placed by angle round the middle, measured from straight up.
   // A shape symmetric about that line has either one corner on it — the top,
