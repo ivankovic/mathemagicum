@@ -307,6 +307,11 @@ describe("furnishing it", () => {
         await game.standAt(standing.col, standing.row, "down");
         await game.tap("crate");
         await game.tap(CHAIR_SLOT);
+        // Armed, not placed. Furniture goes down the way a spell is cast
+        // now — pick it up, then tap the square — so the chair waits over
+        // her head until she says where.
+        expect(await game.seam("armed")).toBe("chair~0");
+        await tapPlan(game, house, 2, 3);
         await game.settle(700);
 
         expect(await game.held("chair~0")).toBe(0);
@@ -333,6 +338,10 @@ describe("furnishing it", () => {
         await game.standAt(under.col, under.row, "up");
         await game.tap("crate");
         await game.tap(RUG_SLOT);
+        expect(await game.seam("armed")).toBe("rug~0");
+        // The square in front of her, which for a piece two cells across is
+        // the near corner of where it lands rather than the whole of it.
+        await tapPlan(game, house, 3, 3);
         await game.settle(700);
         expect(await game.held("rug~0")).toBe(0);
         expect(
@@ -382,6 +391,11 @@ describe("furnishing it", () => {
         await game.standAt(standing.col, standing.row, "down");
         await game.tap("crate");
         await game.tap(CHAIR_SLOT);
+        // Armed, not placed. Furniture goes down the way a spell is cast
+        // now — pick it up, then tap the square — so the chair waits over
+        // her head until she says where.
+        expect(await game.seam("armed")).toBe("chair~0");
+        await tapPlan(game, house, 2, 3);
         await game.settle(700);
         expect(
           (await game.seam<Piece[]>("decor")).find((one) => one.piece === "chair"),
@@ -419,20 +433,41 @@ describe("coming back tomorrow", () => {
         if (!wanted) throw new Error("nowhere to build");
         await game.tapCell(wanted.col, wanted.row);
         await game.solveWall();
+        // The wall's parchment has to be gone before anything else is
+        // tapped: while a modal is up the crate will not open and a piece
+        // will not lift, and both refusals are silent.
+        await game.settle(900);
 
+        // The room *after* building, not before it. Plan coordinates are
+        // measured from the room's origin, and growing a room can move that
+        // origin — so every tap aimed through the old one lands a square or
+        // two off, silently, which is what was happening here.
+        const grown = await game.seam<House>("house");
         const chair = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "chair");
         if (!chair) throw new Error("no chair");
-        await tapPlan(game, before, chair.col, chair.row);
+        await tapPlan(game, grown, chair.col, chair.row);
         await game.settle(600);
-        const standing = grid(before, 2, 2);
+        // Said out loud, because this scenario went on to check the floor
+        // and the reload and never once looked at whether the chair had
+        // moved — so a pickup that quietly did nothing passed it.
+        expect(await game.held("chair~0")).toBe(1);
+        const standing = grid(grown, 2, 2);
         await game.standAt(standing.col, standing.row, "down");
         await game.tap("crate");
         await game.tap(CHAIR_SLOT);
+        // Armed, not placed. Furniture goes down the way a spell is cast
+        // now — pick it up, then tap the square — so the chair waits over
+        // her head until she says where.
+        expect(await game.seam("armed")).toBe("chair~0");
+        await tapPlan(game, grown, 2, 3);
         await game.settle(700);
 
         const built = (await game.seam<House>("house")).floor.slice().sort();
         const furnished = await game.seam<Piece[]>("decor");
         expect(built.length).toBe(before.floor.length + 1);
+        // And it went where she put it, which is the half of "the chair she
+        // moved" that was never checked.
+        expect(furnished.find((one) => one.piece === "chair")).toMatchObject({ col: 2, row: 3 });
 
         await game.reload();
         const back = await goHome(game);

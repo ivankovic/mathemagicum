@@ -121,6 +121,9 @@ describe("planting one", () => {
         );
 
         await game.tap("bloom.3");
+        // Armed rather than planted: the colour chosen, and now the square.
+        expect(await game.seam("armed")).toBe("tulip~3");
+        await game.tapNear(0, 1);
         await game.settle(700);
         const seen = await game.seam<Flowers>("flowers");
         expect(seen.planted).toHaveLength(1);
@@ -156,6 +159,7 @@ describe("planting one", () => {
           await game.tap("seeds.7");
           await game.settle(350);
           await game.tap("bloom.0");
+          await game.tapNear(0, 1);
           await game.settle(600);
         }
         const before = await game.seam<Flowers>("flowers");

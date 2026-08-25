@@ -1092,6 +1092,45 @@ interface ActiveChunk {
 // docs/WORLD_GENERATION.md — story area interiors and stitching, steps
 // 7-8, aren't built yet, so anchor areas are just plain passable ground
 // for now).
+/**
+ * What is lit over her head, waiting for a square.
+ *
+ * A spell or a thing to put down, in one type, because they are one
+ * question: *what, and then where*. The colour is part of a decor piece and
+ * of a flower because a chair is a green chair before it is anywhere — the
+ * chooser runs before the arming, so what waits over her head is the thing
+ * she will actually see on the floor.
+ */
+type Armed =
+  | { kind: "spell"; spell: Spell }
+  | { kind: "seed"; plant: PlantType }
+  | { kind: "fixture"; fixture: FixtureType }
+  | { kind: "decor"; piece: DecorType; look: number }
+  | { kind: "flower"; flower: FlowerType; look: number };
+
+/**
+ * One name for whatever is lit, for comparing and for a script to read.
+ *
+ * A spell answers with its own name and nothing else, which is what keeps
+ * `armed` the seam it has always been: the scenarios that assert `"growth"`
+ * were written before any of this and are not about it.
+ */
+function armedTag(what: Armed | null): string | null {
+  if (!what) return null;
+  switch (what.kind) {
+    case "spell":
+      return what.spell;
+    case "seed":
+      return what.plant;
+    case "fixture":
+      return what.fixture;
+    case "decor":
+      return decorItem(what.piece, what.look);
+    default:
+      return flowerObject(what.flower, what.look);
+  }
+}
+
 export class GameScene extends Phaser.Scene {
   private grid!: WorldGrid;
   private originX = 0;
@@ -1243,7 +1282,7 @@ export class GameScene extends Phaser.Scene {
    * portal and the hourglass do not take one, and the array spell has three
    * states of its own and keeps them in `marking`.
    */
-  private armed: Spell | null = null;
+  private armed: Armed | null = null;
   /** The rune hanging over her head while a spell waits for a tap. */
   private armedRune?: Phaser.GameObjects.Image;
   /** The square she is pointing at, and the ground an armed spell may reach. */
@@ -1870,7 +1909,7 @@ export class GameScene extends Phaser.Scene {
     exposeForTests({
       session: this.session,
       ui: () => this.uiPositions(),
-      armed: () => this.armed,
+      armed: () => armedTag(this.armed),
       grove: () => ({ col: this.grove.doorstep.col, row: this.grove.doorstep.row }),
       stats: () => ({
         fps: Math.round(this.game.loop.actualFps),
@@ -3761,8 +3800,10 @@ export class GameScene extends Phaser.Scene {
           act: () => {
             // Picking a seed here is also what the number keys pick, so the
             // two routes never disagree about which crop Space would plant.
+            // The keyboard still plants where she stands; a tap arms the
+            // seed and waits for a square.
             this.selectedPlantIndex = index;
-            this.tryPlant();
+            this.arm({ kind: "seed", plant }, uiTextureKey(cropIcon(plant)));
           },
         })),
         // And the flowers, after the crops so no crop's position moves.
@@ -3884,7 +3925,7 @@ export class GameScene extends Phaser.Scene {
       items: PLACEABLE_FIXTURES.map((fixture) => ({
         texture: uiTextureKey(itemIcon(fixture)),
         count: () => this.inventory.count(fixture),
-        act: () => this.placeFixture(fixture),
+        act: () => this.armFixture(fixture),
       })).concat(
         // Furniture goes in the crate with everything else a player puts
         // down: it is the same verb and it should live in the same place.
@@ -4313,7 +4354,7 @@ export class GameScene extends Phaser.Scene {
     // The rune hangs over her head for as long as the spell is armed. It is
     // the whole of "mark out the ground": a spell that is waiting for a tap
     // and says nothing is a spell that looks like it did not fire.
-    this.raiseArmedRune(UiAsset.RuneTimes);
+    this.raiseArmedRune(uiTextureKey(UiAsset.RuneTimes));
     this.paintPatch();
   }
 
@@ -4341,19 +4382,36 @@ export class GameScene extends Phaser.Scene {
    * a rune moving over the player is what *earning* one looks like.
    */
   private armSpell(spell: Spell, rune: string): void {
+    this.arm({ kind: "spell", spell }, uiTextureKey(rune));
+  }
+
+  /**
+   * Light something over her head and rule off the ground it can go on.
+   *
+   * One path for a spell and for a thing to put down, which is the whole of
+   * this change: they were two interfaces for one question. A spell asked
+   * *what, then where*; a seed and a fence and a chair asked *stand in the
+   * right place, then what* — which is the ordering a playtest had already
+   * rejected once for the spells, for the reason it fails here too. Lining a
+   * character up with a square is a thing an adult does without noticing and
+   * a six-year-old cannot do at all.
+   *
+   * Tapping the same thing again puts it out.
+   */
+  private arm(what: Armed, texture: string, frame?: number): void {
     if (this.modalOpen) return;
-    this.spellTray?.setOpen(false);
-    // One spell waiting at a time. Arming the minus while the array is out
-    // for a corner would leave two things wanting the same tap.
+    this.closeTrays();
+    // One thing waiting at a time. Arming a seed while the array spell is
+    // out for a corner would leave two things wanting the same tap.
     this.stopMarking();
-    const same = this.armed === spell;
+    const same = armedTag(this.armed) === armedTag(what);
     this.disarm();
     if (same) return;
-    this.armed = spell;
+    this.armed = what;
     // A stick still held when the rune lights never sends its release, and
     // she walks on while the ground she is choosing from slides away.
     this.joystick?.release();
-    this.raiseArmedRune(rune);
+    this.raiseArmedRune(texture, frame);
     this.paintAim();
   }
 
@@ -4375,16 +4433,30 @@ export class GameScene extends Phaser.Scene {
    * twice.
    */
   private castArmedAt(worldX: number, worldY: number): void {
-    const spell = this.armed;
-    if (!spell) return;
+    const held = this.armed;
+    if (!held) return;
     const at = this.toGrid(worldX, worldY);
     if (!withinReach(this.session.tile, at)) {
       this.markTooFar(at.col, at.row);
       return;
     }
     this.disarm();
-    if (spell === Spell.Growth) this.growthCastAt(at);
-    else this.clearingCastAt(at);
+    if (held.kind === "spell") {
+      if (held.spell === Spell.Growth) this.growthCastAt(at);
+      else this.clearingCastAt(at);
+      return;
+    }
+    // Everything else goes in the ground, and everything that goes in the
+    // ground already works on `targetTile` — the square she has pointed at,
+    // or the one she is facing if she has not. So putting a thing down on a
+    // tapped square is *pointing at it first*, and none of the four routes
+    // below has to know this happened.
+    this.session.aimAt(at);
+    this.paintAim();
+    if (held.kind === "seed") this.plantSeed(held.plant);
+    else if (held.kind === "fixture") this.placeFixture(held.fixture);
+    else if (held.kind === "decor") this.putDecorDown(held.piece, held.look);
+    else this.putFlowerDown(held.flower, held.look);
   }
 
   /** Put the marker away, whatever state it was in. */
@@ -5727,10 +5799,19 @@ export class GameScene extends Phaser.Scene {
    * and a mark that stayed where the spell was cast would be a mark about a
    * square she is no longer near.
    */
-  private raiseArmedRune(rune_: string): void {
+  /**
+   * The thing that is lit, over her head, breathing.
+   *
+   * Takes a *texture key* rather than a UI asset's name, because what is
+   * lit is no longer always a rune out of the interface atlas: a chair is a
+   * repainted furniture sheet and a flower is one frame of a fixture sheet.
+   * It used to wrap its argument in `uiTextureKey`, which is right for four
+   * callers and silently wrong for the two that hand it a sheet.
+   */
+  private raiseArmedRune(texture: string, frame?: number): void {
     this.armedRune?.destroy();
     const rune = this.world(
-      this.add.image(0, 0, uiTextureKey(rune_)).setDisplaySize(RESULT_ICON, RESULT_ICON),
+      this.add.image(0, 0, texture, frame).setDisplaySize(RESULT_ICON, RESULT_ICON),
     );
     this.armedRune = rune;
     this.tweens.add({
@@ -6701,9 +6782,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tryPlant(): void {
-    if (this.modalOpen) return;
     const plant = PLANT_TYPES[this.selectedPlantIndex] ?? PLANT_TYPES[0];
-    if (!plant) return;
+    if (plant) this.plantSeed(plant);
+  }
+
+  /** One seed, into whichever square `targetTile` says. */
+  private plantSeed(plant: PlantType): void {
+    if (this.modalOpen) return;
 
     const result = this.session.plant(plant);
     this.report(result, cropIcon(plant));
@@ -7909,7 +7994,7 @@ export class GameScene extends Phaser.Scene {
       (item) => {
         this.flowerMenu?.close();
         const parts = flowerParts(item);
-        if (parts) this.putFlowerDown(parts.flower, parts.look);
+        if (parts) this.armFlower(parts.flower, parts.look);
       },
     );
   }
@@ -7923,7 +8008,11 @@ export class GameScene extends Phaser.Scene {
    * one drawn over the other and only the top one tappable.
    */
   private putFlowerDown(flower: FlowerType, look: number): void {
-    const ahead = this.session.facingTile();
+    // `targetTile`, not `facingTile`: the square she pointed at, falling
+    // back to the one she faces. Every other thing that goes in the ground
+    // already worked that way, and this one did not — so an armed flower
+    // would have been planted in front of her wherever she tapped.
+    const ahead = this.session.targetTile();
     if (!this.worldGrid.inBounds(ahead.col, ahead.row)) {
       this.showRefusalOnPlayer(flowerIcon(flower));
       return;
@@ -7979,7 +8068,7 @@ export class GameScene extends Phaser.Scene {
     }
     // A chooser of one is not a choice — the same rule the spell menu keeps.
     if (owned.length === 1) {
-      this.putDecorDown(piece, only);
+      this.armDecor(piece, only);
       return;
     }
     const above = this.screenOfPoint(this.player.x, this.player.y - TILE_SIZE);
@@ -7992,9 +8081,38 @@ export class GameScene extends Phaser.Scene {
       (item) => {
         this.decorMenu?.close();
         const parts = itemParts(item);
-        if (parts) this.putDecorDown(parts.piece, parts.look);
+        // The colour is chosen *before* the square, so what waits over her
+        // head is the chair she will actually see on the floor rather than
+        // a chair-shaped promise.
+        if (parts) this.armDecor(parts.piece, parts.look);
       },
     );
+  }
+
+  /** A fixture, lit and waiting for a square. */
+  private armFixture(fixture: FixtureType): void {
+    if (this.inventory.count(fixture) <= 0) {
+      this.showRefusalOnPlayer(itemIcon(fixture));
+      return;
+    }
+    this.arm({ kind: "fixture", fixture }, uiTextureKey(itemIcon(fixture)));
+  }
+
+  /** A piece of furniture, in the colour she picked, waiting for a square. */
+  private armDecor(piece: DecorType, look: number): void {
+    this.arm({ kind: "decor", piece, look }, this.decorTexture(piece, look));
+  }
+
+  /**
+   * A flower, in the colour she picked, waiting for a square.
+   *
+   * Lit as the *sheet's* frame for that colour rather than as the pouch
+   * button, so the thing over her head is the flower she is about to plant
+   * and not a picture of the kind of flower it is.
+   */
+  private armFlower(flower: FlowerType, look: number): void {
+    const per = this.flowerSidecars.get(flower)?.frames_per_look ?? 1;
+    this.arm({ kind: "flower", flower, look }, flowerSheetKey(flower), look * per);
   }
 
   /**

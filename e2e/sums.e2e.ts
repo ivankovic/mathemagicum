@@ -45,12 +45,14 @@ function jumpsOf(line: Line): number[] {
 
 /** Plant something, then grow it: the number line opens on a crop. */
 async function castGrowth(game: Game): Promise<Line> {
+  // A seed is armed and then aimed, the same two taps a spell takes: pick
+  // it up, then say which square.
   await game.tap("seeds");
   await game.tap("seeds.0");
+  await game.tapNear(0, 1);
   await game.settle(500);
   await game.tap("spellbook");
   await game.tap("spellbook.0");
-  // She faces down, so the seed went into the square below her.
   await game.tapNear(0, 1);
   await game.settle(700);
   const line = await game.seam<Line | null>("spell");
