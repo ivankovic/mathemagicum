@@ -2,7 +2,15 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { MAX_NIGHT_ALPHA, isDaytime, nightTintAlpha, timeOfDay } from "./time";
+import {
+  MAX_NIGHT_ALPHA,
+  OPENS_AT,
+  SHUTS_AT,
+  isOpenHours,
+  nightTintAlpha,
+  opensIn,
+  timeOfDay,
+} from "./time";
 
 describe("timeOfDay", () => {
   test("reads local hours/minutes/seconds as a fractional hour", () => {
@@ -12,21 +20,76 @@ describe("timeOfDay", () => {
   });
 });
 
-describe("isDaytime", () => {
+/**
+ * When the village is open, which is not the same as when it is light.
+ *
+ * The hours people keep rather than the hours the sun keeps: villagers start
+ * for home at six with the sun still up, and the shops are shut well before
+ * dark. The tint has its own pair of hours and they are deliberately not
+ * these — see the test below that holds them apart.
+ */
+describe("the opening hours", () => {
   const cases: [number, boolean][] = [
     [0, false],
     [5, false],
-    [6, true],
+    [7.99, false],
+    [OPENS_AT, true],
     [12, true],
-    [19.9, true],
-    [20, false],
+    [17.99, true],
+    [SHUTS_AT, false],
+    [19.9, false],
     [23, false],
   ];
   for (const [hour, expected] of cases) {
     test(`hour ${hour} -> ${expected}`, () => {
-      expect(isDaytime(hour)).toBe(expected);
+      expect(isOpenHours(hour)).toBe(expected);
     });
   }
+});
+
+describe("how long a shut door stays shut", () => {
+  test("is nothing at all while it is open", () => {
+    expect(opensIn(OPENS_AT)).toBe(0);
+    expect(opensIn(12)).toBe(0);
+    expect(opensIn(SHUTS_AT - 0.01)).toBe(0);
+  });
+
+  // Two ways to be shut, and the difference is midnight. Before opening it
+  // is a wait until this morning; after closing it is a wait until the next
+  // one, which is the longer of the two and the one a child meets.
+  test("counts to this morning before dawn and to the next after dusk", () => {
+    expect(opensIn(6)).toBe(2);
+    expect(opensIn(0)).toBe(OPENS_AT);
+    expect(opensIn(SHUTS_AT)).toBe(24 - SHUTS_AT + OPENS_AT);
+    expect(opensIn(23)).toBe(9);
+  });
+
+  // Never negative and never more than a whole day, whatever it is handed.
+  test("and is a wait somebody could actually sit through", () => {
+    for (let hour = 0; hour < 24; hour += 0.25) {
+      expect(opensIn(hour)).toBeGreaterThanOrEqual(0);
+      expect(opensIn(hour)).toBeLessThanOrEqual(24);
+    }
+  });
+});
+
+/**
+ * The village keeps its own hours, and the sky keeps the sun's.
+ *
+ * Stated as a test because the two were the same pair of numbers, and the
+ * cheap way to move the curfew would have been to move `SUNRISE` and
+ * `SUNSET` — which would have quietly dragged the light with it and made
+ * the world dark at six in the evening in high summer.
+ */
+describe("the light and the opening hours are not the same thing", () => {
+  test("it is broad daylight when the shops shut", () => {
+    expect(nightTintAlpha(SHUTS_AT)).toBe(0);
+  });
+
+  test("and still dark when they open", () => {
+    expect(nightTintAlpha(OPENS_AT)).toBe(0);
+    expect(nightTintAlpha(5)).toBeGreaterThan(0);
+  });
 });
 
 describe("nightTintAlpha", () => {

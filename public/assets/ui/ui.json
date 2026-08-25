@@ -102,6 +102,11 @@
       "width": 16,
       "height": 16
     },
+    "mark-night": {
+      "file": "mark_night.png",
+      "width": 16,
+      "height": 16
+    },
     "flag-en": {
       "file": "flag_en.png",
       "width": 33,

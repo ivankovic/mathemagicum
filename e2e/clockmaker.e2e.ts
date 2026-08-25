@@ -5,6 +5,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { play, shutDown } from "./harness";
 
 const MINUTES = 60_000;
+/** An hour at which everyone else has gone home. See the scenario below. */
+const NIGHT = 22;
 
 // The dev server goes when this file is done with it, which is safe because
 // `run.ts` gives every scenario file a process of its own.
@@ -45,7 +47,17 @@ describe("learning to wind the clock", () => {
     async () => {
       // Nowhere near him, and nothing learned but the portal spell — which
       // is the state a child is in when they first reach the city.
-      await play({ seams: "&learned=portal&freezeNpcs" }, async (game) => {
+      // Pinned to the middle of the night on purpose.
+      //
+      // The village keeps hours now — everybody else walks home at six and
+      // the doors lock — and he is the one person exempt from it: a
+      // clockmaker beside the clock, at all hours. That is a character note
+      // and it is also load-bearing, because the spell he teaches is what a
+      // child uses to get past a shut door. Unpinned this passed every
+      // afternoon while proving nothing about the exemption at all.
+      await play({ seams: `&learned=portal&freezeNpcs&hour=${NIGHT}` }, async (game) => {
+        // Shut, and he is still out in it.
+        expect((await game.seam<{ open: boolean }>("openHours")).open).toBe(false);
         const npcs = await game.seam<Record<string, { col: number; row: number }>>("npcs");
         const stands = npcs["city-clockmaker"];
         if (!stands) throw new Error("nobody is keeping the city's clock");
@@ -64,7 +76,9 @@ describe("learning to wind the clock", () => {
         // where the tower landed in the plaza, so it is read off the world
         // and handed back to the world as `?at=`.
         await game.press("Escape");
-        await game.reload(`&learned=portal&freezeNpcs&at=${stands.col},${stands.row + 1}`);
+        await game.reload(
+          `&learned=portal&freezeNpcs&hour=${NIGHT}&at=${stands.col},${stands.row + 1}`,
+        );
         await game.tapNear(0, -1);
         // Long enough for the rune to rise over her head and the parchment
         // to follow it.

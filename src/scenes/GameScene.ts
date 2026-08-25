@@ -380,8 +380,9 @@ import {
 import {
   MAX_NIGHT_ALPHA,
   NIGHT_TINT_COLOR,
-  isDaytime,
+  isOpenHours,
   nightTintAlpha,
+  opensIn,
   timeOfDay,
 } from "../world/time";
 import {
@@ -830,6 +831,8 @@ const ASTRONOMER_ID = "astronomer";
  * stand depends on where the tower landed — see `city.ts`.
  */
 const CLOCKMAKER_ID = "clockmaker";
+/** His id in the world, which the city gives him. See `keepsNoCurfew`. */
+const CITY_CLOCKMAKER_ID = "city-clockmaker";
 const LONE_ATTENDANTS: Record<string, string> = {
   "observatory-dome": ASTRONOMER_ID,
 };
@@ -2053,6 +2056,15 @@ export class GameScene extends Phaser.Scene {
           return parts ? [{ ...parts, col: object.col, row: object.row }] : [];
         }),
       }),
+      inside: () => {
+        const room = this.interior;
+        return room ? { room: room.room, building: room.house ?? null } : null;
+      },
+      openHours: () => ({
+        open: this.villageIsOpen,
+        hour: this.hourNow(),
+        opensIn: opensIn(this.hourNow()),
+      }),
       // Where the world's clock stands, and how far it has been wound from
       // the real one. The spell's whole effect, and nothing on screen states
       // it as a number — the light does, which a script cannot read.
@@ -2199,7 +2211,7 @@ export class GameScene extends Phaser.Scene {
     const hour = this.hourNow();
     if (!this.interior) {
       this.refreshVisibleChunks();
-      this.updateNpcs(isDaytime(hour));
+      this.updateNpcs(isOpenHours(hour));
       // Called from here rather than from inside `updateNpcs`, which returns
       // early on `?freezeNpcs` — and did so before it ever reached the
       // animals, so with that seam set their hunger clocks stopped as well as
@@ -5756,6 +5768,32 @@ export class GameScene extends Phaser.Scene {
    * started, arriving. Nothing else in the game needs saying at that moment
    * — she taps the book and the rune she has been looking at is lit.
    */
+  /**
+   * An icon that rises over her head and fades.
+   *
+   * Says *why*, and nothing about yes or no. `showEarned` is this with a
+   * meaning attached — a spell handed over — and the curfew needed the
+   * picture without the meaning: a moon over a shut door is the reason, and
+   * the cross on the door itself is the refusal. Calling `showEarned` for it
+   * worked and read, in the code, as the village awarding a child the night.
+   */
+  private floatMark(icon: string): void {
+    const mark = this.world(
+      this.add
+        .image(this.player.x, this.player.y - TILE_SIZE, uiTextureKey(icon))
+        .setDisplaySize(RESULT_ICON, RESULT_ICON)
+        .setDepth(this.player.depth + 1),
+    );
+    this.tweens.add({
+      targets: mark,
+      y: mark.y - RESULT_RISE,
+      alpha: 0,
+      duration: EARNED_MS,
+      ease: "Quad.easeOut",
+      onComplete: () => mark.destroy(),
+    });
+  }
+
   private showEarned(rune: string): void {
     const mark = this.world(
       this.add
@@ -8061,6 +8099,31 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Whether the village is up: doors unlocked, people in the street.
+   *
+   * Read off the world's clock rather than the wall clock, which is the
+   * whole reason this is worth having at all. A child who finds the shop
+   * shut can wind the glass forward to morning and walk back in — the
+   * hourglass stops being a spell about arithmetic and becomes the way you
+   * get into a building.
+   */
+  private get villageIsOpen(): boolean {
+    return isOpenHours(this.hourNow());
+  }
+
+  /**
+   * A shut door, said in a picture.
+   *
+   * A cross on the door, which is what every other refusal in this game
+   * looks like, and a moon over her head, which is the part that says
+   * *why*. A door that only said no would be a door a child taps again.
+   */
+  private refuseForTheNight(building: BuildingRuntime): void {
+    this.markRefusal(building.doorCol, building.doorRow);
+    this.floatMark(UiAsset.MarkNight);
+  }
+
   private enterInterior(building: BuildingRuntime): void {
     // Nothing marked out survives a doorway. The marker lives in the world
     // layer, which is hidden while a room is on screen, and the patch it
@@ -8069,6 +8132,16 @@ export class GameScene extends Phaser.Scene {
     const room = interiorFor(building.sprite);
     if (room === GROWABLE_ROOM && this.growable) {
       this.enterGrowableRoom(building);
+      return;
+    }
+    // After her own house, never before it.
+    //
+    // The growable room is the one a child lives in, and it is reached
+    // through this very function — so a curfew checked at the top of it
+    // would lock her out of her own front door at seven in the evening.
+    // Everything past this line is somebody else's building.
+    if (!this.villageIsOpen) {
+      this.refuseForTheNight(building);
       return;
     }
     const sidecar = this.interiorSidecars.get(room);
@@ -8330,6 +8403,26 @@ export class GameScene extends Phaser.Scene {
       });
   }
 
+  /**
+   * Who is still out after the village has shut.
+   *
+   * The clockmaker, and only him. It reads as a character note — the one
+   * person in the city who is always up, because the clock is — and it is
+   * load-bearing for a reason that has nothing to do with charm.
+   *
+   * He teaches the hourglass, and the hourglass is what a child uses to get
+   * past a shut door: wind the glass to morning and the village opens. A
+   * teacher of that spell who himself went home at six would be a lock whose
+   * key was on the other side of it.
+   *
+   * It does not undo the whole knot — the geometer is indoors and teaches
+   * the portal spell, so an evening-only player still has a long walk to
+   * this man rather than a short cast. See the note on `villageIsOpen`.
+   */
+  private keepsNoCurfew(npc: NpcRuntime): boolean {
+    return npc.id === CITY_CLOCKMAKER_ID;
+  }
+
   private updateNpcs(daytime: boolean): void {
     // `?freezeNpcs` holds everyone on their home tile. A wandering villager
     // is a position no script can know: a test that read where the shopkeeper
@@ -8356,7 +8449,7 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       npc.nextStepAt = now + Phaser.Math.Between(NPC_STEP_MIN_MS, NPC_STEP_MAX_MS);
-      if (daytime) this.npcWanderStep(npc);
+      if (daytime || this.keepsNoCurfew(npc)) this.npcWanderStep(npc);
       else this.npcRetreatStep(npc);
     }
   }

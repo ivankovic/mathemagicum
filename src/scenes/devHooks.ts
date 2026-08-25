@@ -538,6 +538,23 @@ export interface DevHandle {
    */
   readonly worldClock: () => { hour: number; offset: number };
   /**
+   * Whether the village is up: doors unlocked, people in the street.
+   *
+   * Its own seam rather than something a script infers from a door that
+   * refused it. A scenario that read "I could not get in" and called that
+   * closed would pass just as well if the door had moved.
+   */
+  readonly openHours: () => { open: boolean; hour: number; opensIn: number };
+  /**
+   * Which building she is standing inside, or null for out of doors.
+   *
+   * `house` answers this for her *own* house and only for that, because it
+   * carries the room's plan and only a growable room has one. A scenario
+   * about a shut shop needs the plain question, and reading a null plan as
+   * "she is outside" would have passed whether or not she got in.
+   */
+  readonly inside: () => { room: string; building: string | null } | null;
+  /**
    * The three wild flowers, what this child has found, and what she planted.
    *
    * Where they grow is drawn from the world's seed out of every cell the

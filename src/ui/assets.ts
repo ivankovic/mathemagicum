@@ -72,6 +72,8 @@ export const UiAsset = {
   ThoughtBubble: "thought-bubble",
   /** What goes in it while an animal is asking: a crop, then this. */
   MarkQuestion: "mark-question",
+  /** A crescent moon: what a door that is shut for the night says. */
+  MarkNight: "mark-night",
   /** And what goes in it for a moment after it has been fed. */
   MarkGlad: "mark-glad",
   /** The two halves of *are you sure*, for the one thing that asks twice. */
