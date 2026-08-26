@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import type { AnchorPlacements, AreaPlacement } from "../world/anchors";
 import { floodFillReachable, isReachable } from "../world/connectivity";
 import { areaCentre, minimapPoint, minimapSize } from "../world/minimap";
+import { createRng } from "../world/rng";
 import type { GridPoint } from "../world/topdown";
 import { generateWorld } from "../world/worldGenerator";
 import { castResult } from "./cast";
@@ -32,9 +33,11 @@ import {
   portalRungAt,
   portalStops,
   readingOf,
+  ruleAt,
   stonesAlong,
   submitPortal,
   typePortalDigit,
+  zoomsFor,
 } from "./portal";
 
 function box(col: number, row: number, size = 24): AreaPlacement {
@@ -367,24 +370,98 @@ describe("casting it", () => {
   });
 });
 
+describe("the ruler moves", () => {
+  /**
+   * The band, stated as a rule rather than as a list.
+   *
+   * A fifth either side. What this is really guarding is the ladder: the
+   * rungs are ordered by how big a number they ask for, and a zoom set wide
+   * enough to make one rung ask the next one's numbers would be a ladder
+   * that no longer climbs.
+   */
+  test("every ruler a rung may be drawn with is within a fifth of its own", () => {
+    for (const rung of PORTAL_RUNGS) {
+      const zooms = zoomsFor(rung);
+      expect(zooms).toContain(rung.league);
+      for (const league of zooms) {
+        expect({ league, ok: league >= rung.league * 0.8 }).toEqual({ league, ok: true });
+        expect({ league, ok: league <= rung.league * 1.2 }).toEqual({ league, ok: true });
+      }
+    }
+  });
+
+  // And a league nobody set a band for stays where it is, rather than being
+  // given a made-up one.
+  test("a league with no band of its own does not move", () => {
+    const odd = { ...RUNG, league: 37 };
+    expect(zoomsFor(odd)).toEqual([37]);
+    expect(ruleAt(odd, createRng(1)).league).toBe(37);
+  });
+
+  test("ruling a map only ever picks one of that rung's own rulers", () => {
+    const rung = portalRungAt(0);
+    const drawn = new Set<number>();
+    const rng = createRng(7);
+    for (let go = 0; go < 200; go++) drawn.add(ruleAt(rung, rng).league);
+    // Every one of them is a ruler this rung owns...
+    for (const league of drawn) expect(zoomsFor(rung)).toContain(league);
+    // ...and over two hundred casts it has reached for all of them, which is
+    // the half that a `ruleAt` returning a constant would pass without.
+    expect(drawn.size).toBe(zoomsFor(rung).length);
+  });
+
+  // Everything else about the rung is left alone. The zoom is the ruler and
+  // nothing but: a cast that came back on a different tier would be a
+  // different question, not the same one measured differently.
+  test("and changes nothing else about the rung", () => {
+    const rung = portalRungAt(HARDEST_PORTAL_RUNG);
+    const ruled = ruleAt(rung, createRng(3));
+    expect(ruled.tier).toBe(rung.tier);
+    expect(ruled.origin).toBe(rung.origin);
+  });
+});
+
 describe("in a world the generator actually made", () => {
-  // Every named place, at every rung, has a distance a child can be asked
-  // for. A rung that produced a zero, or a number too big for its ruler,
-  // would be one no child could ever answer.
-  test("every journey at every rung has an answer worth asking", () => {
+  // Every named place, at every rung and on every ruler that rung may be
+  // drawn with, has a distance a child can be asked for. A rung that
+  // produced a zero, or a number too big for its ruler, would be one no
+  // child could ever answer.
+  //
+  // The zooms are walked here rather than in a test of their own because
+  // generating a world is most of a second and these five are already
+  // standing: a ruler that only works on the league it was named after is a
+  // ruler this spell now reaches for anyway.
+  test("every journey at every rung and every zoom has an answer worth asking", () => {
+    // How often a journey comes out the same number whatever the map is
+    // ruled at, which is the thing the zooms exist to prevent.
+    let same = 0;
+    let journeys = 0;
     for (const seed of [1, 2, 3, 4, 5]) {
       const { grid, anchors, playerStart } = generateWorld(500, 500, seed);
       expect(grid.width).toBe(500);
       for (const stop of portalStops(anchors, ["village"], playerStart)) {
         if (stop.here) continue;
         for (const [index, rung] of PORTAL_RUNGS.entries()) {
-          const journey = journeyTo(stop.place, playerStart, stop.area, rung);
-          const at = { seed, place: stop.place, rung: index };
-          expect({ ...at, ok: journey.answer > 0 }).toEqual({ ...at, ok: true });
-          expect({ ...at, ok: journey.answer < 1000 }).toEqual({ ...at, ok: true });
+          const answers = zoomsFor(rung).map(
+            (league) => journeyTo(stop.place, playerStart, stop.area, { ...rung, league }).answer,
+          );
+          for (const answer of answers) {
+            const at = { seed, place: stop.place, rung: index };
+            expect({ ...at, ok: answer > 0 }).toEqual({ ...at, ok: true });
+            expect({ ...at, ok: answer < 1000 }).toEqual({ ...at, ok: true });
+          }
+          journeys++;
+          if (new Set(answers).size === 1) same++;
         }
       }
     }
+    // Most of them move. Not all: at the coarsest rulers the answers are
+    // single digits, and a fifth either side of a ruler that reads "four"
+    // sometimes still reads four. Measured at one in nine across five
+    // worlds, so a quarter is a bound that says "most" without pinning the
+    // generator's exact output into a test.
+    expect(journeys).toBeGreaterThan(100);
+    expect(same / journeys).toBeLessThan(0.25);
     // Five whole worlds, and generating one is most of a second. It sat just
     // under the default limit and tipped over it whenever the machine was
     // busy, which is a flake rather than a failure — the coverage is worth

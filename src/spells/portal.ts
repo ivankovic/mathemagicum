@@ -3,6 +3,7 @@
 
 import type { AnchorPlacements, AreaPlacement } from "../world/anchors";
 import { areaCentre, markedPlaces } from "../world/minimap";
+import { type Rng, randInt } from "../world/rng";
 import type { GridPoint } from "../world/topdown";
 
 /**
@@ -38,6 +39,20 @@ import type { GridPoint } from "../world/topdown";
  * and the sums carry. So one instrument covers a five-year-old counting
  * stones and a nine-year-old squaring numbers, and nothing about the map or
  * the journey has to change to move between them.
+ *
+ * **And the dial is a band rather than a notch.** A rung names a league, but
+ * the map is ruled a little coarser or a little finer each time it is opened
+ * — see `ruleAt`. Without that the spell has one fatal property: the places
+ * are where the generator put them and the ruler never moves, so the
+ * distance from the village to the harbour is the same number this
+ * afternoon as it was this morning and will be tomorrow. A child does not
+ * have to measure a thing they have measured once. They only have to
+ * remember it, which is the exact opposite of what a measuring spell is for.
+ *
+ * The scale is *printed on the map* — "one mark = forty-five paces" — so
+ * this is not the game moving the goalposts behind a child's back. It is the
+ * instrument saying what it is worth this time, which is what a real map
+ * does and what makes it worth reading.
  */
 
 /** What the child is asked to do. */
@@ -94,6 +109,55 @@ export const HARDEST_PORTAL_RUNG = PORTAL_RUNGS.length - 1;
 export function portalRungAt(index: number): PortalRung {
   const at = Math.max(0, Math.min(HARDEST_PORTAL_RUNG, Math.trunc(index)));
   return PORTAL_RUNGS[at] as PortalRung;
+}
+
+/**
+ * What one mark may be worth, on a map ruled for a rung of this league.
+ *
+ * A fifth either side of the rung's own, and the rung's own among them. The
+ * width is the whole argument and it is a compromise between two things
+ * pulling opposite ways: wide enough that the answer really moves, narrow
+ * enough that the rung still means what its name says. A fifth measured out
+ * against five generated worlds gives a different number for about nine
+ * journeys in ten while leaving the biggest answer a rung can ask a quarter
+ * larger than it was — a sum within ten stays a sum within ten.
+ *
+ * Kept as a table rather than a field on `PortalRung` so that a rung is
+ * still three plain facts anybody can write down in a test, which is what
+ * the teacher's worked example and half of `portal.test.ts` do.
+ *
+ * Anything not in here rules at its own league and does not move. That is
+ * the right answer for a league nobody set a band for — a made-up band would
+ * be a difficulty nobody chose.
+ */
+const ZOOMS: Record<number, readonly number[]> = {
+  50: [40, 45, 50, 55, 60],
+  25: [20, 22, 25, 28, 30],
+  10: [8, 9, 10, 11, 12],
+};
+
+/** Every ruler this rung's map may be drawn with. */
+export function zoomsFor(rung: PortalRung): readonly number[] {
+  return ZOOMS[rung.league] ?? [rung.league];
+}
+
+/**
+ * Rule the map, this time.
+ *
+ * Drawn once when the parchment opens rather than once per destination,
+ * because a map has *one* ruler down its side: a child who looked at two
+ * places and found the scale had changed between them would be reading an
+ * instrument that lies. The panel takes the rung this returns and never
+ * looks at the league again.
+ *
+ * The teacher does not call this. Her worked example is the same example
+ * every time on purpose — a lesson that came out differently on the second
+ * telling would be a lesson a child could not go back to.
+ */
+export function ruleAt(rung: PortalRung, rng: Rng): PortalRung {
+  const zooms = zoomsFor(rung);
+  const league = zooms[randInt(rng, 0, zooms.length - 1)] ?? rung.league;
+  return { ...rung, league };
 }
 
 /**

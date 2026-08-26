@@ -82,6 +82,7 @@ import {
   placeAt,
   portalRungAt,
   portalStops,
+  ruleAt,
 } from "../spells/portal";
 import {
   PORTAL_CLOSE_MS,
@@ -5026,7 +5027,10 @@ export class GameScene extends Phaser.Scene {
     this.portalPanel?.openOn(
       stops,
       at,
-      portalRungAt(this.dev.portalRung ?? this.profile.portalRung),
+      // Ruled afresh each time the map is opened. The places do not move and
+      // the ruler used not to either, which made the distance to the harbour
+      // a thing to remember rather than a thing to measure. See `ruleAt`.
+      ruleAt(portalRungAt(this.dev.portalRung ?? this.profile.portalRung), this.spellRng),
       (result, journey) => {
         if (journey) this.travelThrough(journey);
         this.notePortalCast(result);
