@@ -253,11 +253,11 @@ export const EN: Phrases = {
   brickHintAdd: "Add the two bricks under it.",
   brickHintTakeAway: "Take the brick beside it away from the one above.",
 
-  mirrorTitle: "The fold",
-  mirrorAsk: "Draw the line this shape would fold in half along.",
-  mirrorWrong: "The two halves do not match. Try another line.",
-  mirrorDone: "It folds. The halves land on each other exactly.",
-  mirrorHint: "This one folds here.",
+  mirrorTitle: "The mirror",
+  mirrorAsk: "Colour the squares that make both sides of the line match.",
+  mirrorWrong: "Not that one. Look across the line.",
+  mirrorDone: "Both sides match. That is a mirror.",
+  mirrorHint: "This square is one of them.",
 
   hourglassTitle: "The hourglass",
   hourglassAsk: "How far are you moving the clock?",

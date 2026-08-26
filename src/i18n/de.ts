@@ -281,11 +281,11 @@ export const DE: Phrases = {
   brickHintAdd: "Zähl die beiden Steine darunter zusammen.",
   brickHintTakeAway: "Zieh den Stein daneben von dem darüber ab.",
 
-  mirrorTitle: "Die Faltlinie",
-  mirrorAsk: "Zeichne die Linie, an der sich diese Form in der Mitte falten lässt.",
-  mirrorWrong: "Die beiden Hälften passen nicht. Versuch eine andere Linie.",
-  mirrorDone: "Sie faltet sich. Die Hälften liegen genau aufeinander.",
-  mirrorHint: "Diese hier faltet sich so.",
+  mirrorTitle: "Der Spiegel",
+  mirrorAsk: "Male die Felder aus, damit beide Seiten der Linie gleich sind.",
+  mirrorWrong: "Das nicht. Schau über die Linie.",
+  mirrorDone: "Beide Seiten sind gleich. Das ist ein Spiegel.",
+  mirrorHint: "Dieses Feld ist eines davon.",
 
   hourglassTitle: "Das Stundenglas",
   hourglassAsk: "Wie weit stellst du die Uhr?",

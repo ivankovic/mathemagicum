@@ -98,7 +98,7 @@ import {
 } from "../spells/portalTravel";
 import { Spell, knowsSpell, learnSpell } from "../spells/spellbook";
 import { makeSubtractionProblem } from "../spells/subtraction";
-import { axesOf, nextSymmetryRung, symmetryHint, symmetryRungAt } from "../spells/symmetry";
+import { nextSymmetryRung, symmetryHint, symmetryRungAt } from "../spells/symmetry";
 import { AboutPanel } from "../ui/AboutPanel";
 import { ArrayPopup } from "../ui/ArrayPopup";
 import { BrickPopup } from "../ui/BrickPopup";
@@ -368,6 +368,7 @@ import {
   footprintBottomY,
   spriteOrigin,
 } from "../world/spriteSidecar";
+import type { TerrainType } from "../world/terrain";
 import {
   DUAL_OFFSET,
   DUAL_ORIGIN,
@@ -377,6 +378,13 @@ import {
   frameFor,
   variationFor,
 } from "../world/terrainAtlas";
+import {
+  CopyRefusal,
+  type PaintedTiles,
+  type Painting,
+  planCopy,
+  readPainted,
+} from "../world/terrainCopy";
 import {
   MAX_NIGHT_ALPHA,
   NIGHT_TINT_COLOR,
@@ -680,6 +688,17 @@ export const PatchAction = {
    * floor is as good an example of that as planting nine carrots.
    */
   Build: "build",
+  /**
+   * Copy the whole block somewhere else, ground and all.
+   *
+   * The mirror spell's effect, taken from one square to a rectangle of them.
+   * It is here rather than being a mode of the mirror spell for the reason
+   * building is here: from the child's side this is a *choice about a
+   * patch*, and what the times spell contributes is the block — doing a
+   * thing to many squares without doing it many times, which is the whole
+   * of what multiplication is for.
+   */
+  Copy: "copy",
 } as const;
 
 export type PatchAction = (typeof PatchAction)[keyof typeof PatchAction];
@@ -696,6 +715,7 @@ const SPELL_RUNES: Record<PatchAction, string> = {
   [PatchAction.Grow]: UiAsset.RuneAdd,
   [PatchAction.Clear]: UiAsset.RuneMinus,
   [PatchAction.Build]: UiAsset.RuneAdd,
+  [PatchAction.Copy]: UiAsset.RuneMirror,
 };
 
 /** The marker drawn over ground the player has marked out. */
@@ -1242,6 +1262,31 @@ export class GameScene extends Phaser.Scene {
   private readonly flowerSidecars = new Map<FlowerType, FixtureSidecar>();
   /** Every flower on screen, by the cell it stands on. */
   private readonly flowerSprites = new Map<string, Phaser.GameObjects.Sprite>();
+  /**
+   * Ground the mirror spell has moved, by the tile it moved it onto.
+   *
+   * Kept here rather than diffed out of the grid on every save: terrain is a
+   * quarter of a million tiles and this spell is the only thing that paints,
+   * so it can say what it did instead of the save working it out.
+   */
+  private readonly painted = new Map<string, TerrainType>();
+  /**
+   * The source square the mirror spell is waiting to copy, if she has picked
+   * one. The spell wants two taps — from here, to there — and this is the
+   * half-way point between them.
+   */
+  private mirrorFrom: readonly GridPoint[] | null = null;
+  /**
+   * The rectangle the times spell drew, when the copy is a block.
+   *
+   * Null for a single square. What it decides is whether a multiplication is
+   * asked after the mirror's own puzzle: the times spell always asks the
+   * spell it is multiplying first and its own sum second, and this is how
+   * the copy knows it is being multiplied at all.
+   */
+  private mirrorPatch: Patch | null = null;
+  /** The copy the mirror's puzzle is standing in front of, once planned. */
+  private mirrorPaint: readonly Painting[] | null = null;
   /** Which colour the seed pouch will plant next, per flower. */
   private flowerLook: Partial<Record<FlowerType, number>> = {};
   private symmetryPopup?: SymmetryPopup;
@@ -2056,23 +2101,24 @@ export class GameScene extends Phaser.Scene {
         };
       },
       /**
-       * The shape on the mirror parchment, and where it is on the screen.
+       * The grid on the mirror parchment, and where it is on the screen.
        *
-       * The only spell whose answer is a *gesture over a picture*, so the
-       * picture itself has to be published: the corners come out in screen
-       * pixels, and a script works out the fold from them with the game's
-       * own `axesOf` rather than knowing it.
+       * The only spell whose answer is a *tap on a picture*: there is no box
+       * to type into and no button with a name. So the grid is published —
+       * where it is drawn, which squares came with it, and which ones are
+       * still wanted — and a script taps the squares the game itself worked
+       * out rather than ones it guessed.
        */
       symmetry: () => {
         const cast = this.symmetryPopup?.cast;
         if (!cast) return null;
         return {
-          corners: cast.shape.corners,
-          board: this.symmetryPopup?.board ?? null,
-          axes: axesOf(cast.shape),
-          rung: cast.rung,
-          // The rung says what a shape *may* have; this is what it got.
-          drawn: cast.shape.corners.length,
+          size: cast.size,
+          axis: cast.axis,
+          given: [...cast.given],
+          wanted: [...cast.wanted],
+          filled: [...cast.filled],
+          board: this.symmetryPopup?.where ?? null,
           done: cast.done,
           missteps: cast.missteps,
           wrong: cast.wrong,
@@ -4325,11 +4371,19 @@ export class GameScene extends Phaser.Scene {
    * the rectangle is drawn, which is before any sum has been asked.
    */
   private openSpellChoice(): void {
-    const choices = (
-      this.interior?.plan
-        ? [PatchAction.Build, PatchAction.Clear]
-        : [PatchAction.Grow, PatchAction.Clear]
-    ).map((action) => ({ action, rune: uiTextureKey(SPELL_RUNES[action]) }));
+    // Copying is offered outdoors and only to a child who has been taught
+    // the mirror spell: it is that spell's effect, and the times spell is
+    // what makes it a block rather than a square. Indoors there is no ground
+    // to move — a floor is a floor — so it is not on the menu there.
+    const outdoors = this.interior?.plan
+      ? [PatchAction.Build, PatchAction.Clear]
+      : this.knowsMirror
+        ? [PatchAction.Grow, PatchAction.Clear, PatchAction.Copy]
+        : [PatchAction.Grow, PatchAction.Clear];
+    const choices = outdoors.map((action) => ({
+      action,
+      rune: uiTextureKey(SPELL_RUNES[action]),
+    }));
     // A menu of one is not a choice. Indoors there is only the plus rune to
     // pick, so picking it is a tap that asks a child to confirm a decision
     // the game already made for them.
@@ -4443,6 +4497,7 @@ export class GameScene extends Phaser.Scene {
     this.disarm();
     if (held.kind === "spell") {
       if (held.spell === Spell.Growth) this.growthCastAt(at);
+      else if (held.spell === Spell.Mirror) this.mirrorTapAt(at);
       else this.clearingCastAt(at);
       return;
     }
@@ -4739,6 +4794,10 @@ export class GameScene extends Phaser.Scene {
    * built from the patch, so an action with nothing to do was never offered.
    */
   private patchIsWorthCasting(patch: Patch, action: PatchAction): boolean {
+    // Every square of ground can be copied, so there is nothing here to
+    // find nothing in. Whether it will *go* where she puts it is a question
+    // about the far end, and it is asked there.
+    if (action === PatchAction.Copy) return true;
     const offer = this.patchOffers(patch).find((each) => each.action === action);
     if (offer && offer.cells.length > 0) return true;
     // Indoors there are two ways to have nothing to do, and they want
@@ -4772,6 +4831,19 @@ export class GameScene extends Phaser.Scene {
   private beginPatchCast(patch: Patch, action: PatchAction): void {
     if (!this.patchIsWorthCasting(patch, action)) return;
     this.joystick?.release();
+    // Copying needs one thing none of the others do: somewhere to put it.
+    // So it steps out here to ask, and comes back in at `castOnce` with the
+    // far corner chosen — after which it is an ordinary patch cast, the
+    // mirror's puzzle first and the multiplication second, like every other
+    // action on this menu.
+    if (action === PatchAction.Copy) {
+      this.mirrorFrom = patchCells(patch);
+      this.mirrorPatch = patch;
+      this.stopMarking();
+      // Lit and waiting for the far corner, exactly as a single square is.
+      this.armSpell(Spell.Mirror, UiAsset.RuneMirror);
+      return;
+    }
     // **The spell once, then the multiplication.** A child casts the thing
     // they are about to do many times over, once, by hand — and only then is
     // asked how many times. That order is the spell's whole argument:
@@ -4797,6 +4869,10 @@ export class GameScene extends Phaser.Scene {
    * nothing else, and closing a panel was never one either.
    */
   private castOnce(action: PatchAction, done: (worked: boolean) => void): void {
+    if (action === PatchAction.Copy) {
+      this.openMirrorPuzzle(done);
+      return;
+    }
     if (action === PatchAction.Build) {
       // The brick wall, which is the addition spell indoors. One wall for
       // the whole room, not one per square — that is what the times spell
@@ -4872,6 +4948,14 @@ export class GameScene extends Phaser.Scene {
         this.clearAt(at.col, at.row);
         done++;
       }
+    } else if (action === PatchAction.Copy) {
+      // Planned before either parchment opened, and held since: the ground
+      // it was measured against has not moved, and re-planning here would
+      // be measuring a second time and hoping for the same answer.
+      const paint = this.mirrorPaint ?? [];
+      this.paintGround(paint);
+      done += paint.length;
+      this.mirrorPaint = null;
     } else if (action === PatchAction.Build) {
       // Worked out once, in the coordinates that hold now, and laid in one
       // go. Laying them one at a time would move the origin under the patch
@@ -4889,7 +4973,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Cast the portal spell: choose a place on the map, then say how far it is.  /**
    * Cast the portal spell: choose a place on the map, then say how far it is.
    *
    * Cast from anywhere out of doors, and from nowhere indoors — the map on
@@ -5361,24 +5444,189 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Fold a shape in half.
+   * The mirror spell: take the ground from there and put it here.
    *
-   * The one spell with nothing to type and, for now, nothing to do. What it
-   * *is* — the geometry — is finished; what it *does* to the world is
-   * deliberately still open, so this opens the parchment, judges the line
-   * and moves the ladder, and stops there. A placeholder effect chosen to
-   * have something would be an effect to unpick later.
+   * The same verb as the puzzle it asks. A child who has just made one half
+   * of a picture match the other makes one half of the *world* match
+   * another, which is the design's rule that a spell's effect mirrors its
+   * mathematics — kept for the fifth spell as it was for the first four.
+   *
+   * Two taps, and this is the only spell that wants two: *from* and *to*.
+   * Everything else in the game acts on one square, so there is no existing
+   * shape to borrow; what there is instead is the arming, which already
+   * means "lit and waiting for a tap", and it simply waits twice.
    */
   private castMirrorSpell(): void {
     if (this.modalOpen) return;
-    this.spellTray?.setOpen(false);
     if (!this.knowsMirror) {
+      this.spellTray?.setOpen(false);
       this.showRefusalOnPlayer(UiAsset.RuneMirror);
       return;
     }
-    const rung = symmetryRungAt(this.dev.symmetryRung ?? this.profile.symmetryRung);
+    // Both, and the second one matters: a child who chose *copy* off the
+    // times menu, marked out a block and then thought better of it and
+    // reached for the mirror rune itself would otherwise still be carrying
+    // the block — and would be asked a multiplication about a rectangle she
+    // had walked away from, for a copy of one square.
+    this.mirrorFrom = null;
+    this.mirrorPatch = null;
+    this.armSpell(Spell.Mirror, UiAsset.RuneMirror);
+  }
+
+  /**
+   * One tap of the mirror spell: the first says from, the second says to.
+   *
+   * The rune stays lit between them, which is what says the spell is still
+   * asking. A child who taps once and wanders off has changed nothing.
+   */
+  private mirrorTapAt(at: GridPoint): void {
+    if (!this.mirrorFrom) {
+      // The ground she is copying. Refused here rather than at the far end,
+      // so a child pointing at the sea is told so before she has chosen
+      // anywhere to put it.
+      if (!this.worldGrid.inBounds(at.col, at.row)) return;
+      const check = planCopy(this.worldGrid, [at], { col: at.col + 1, row: at.row });
+      if (!check.ok && check.why === CopyRefusal.NotGround) {
+        this.markRefusal(at.col, at.row);
+        return;
+      }
+      this.mirrorFrom = [at];
+      // Lit again, because the spell has not been spent — it has been half
+      // answered, and the ring round her has to stay up for the second half.
+      this.armSpell(Spell.Mirror, UiAsset.RuneMirror);
+      this.markSource(at);
+      return;
+    }
+    this.openMirrorFor(this.mirrorFrom, at);
+  }
+
+  /**
+   * The puzzle, and the copy that follows it if she gets it right.
+   *
+   * Planned before the parchment opens rather than after it closes: a child
+   * who has just coloured in a whole grid and is then told the ground would
+   * not go there has been made to work for nothing.
+   */
+  private openMirrorFor(source: readonly GridPoint[], anchor: GridPoint): void {
+    const plan = planCopy(this.worldGrid, source, anchor);
+    if (!plan.ok) {
+      this.markRefusal(plan.at.col, plan.at.row);
+      // The source stays chosen, so a near miss costs one more tap rather
+      // than the whole spell.
+      return;
+    }
+    const patch = this.mirrorPatch;
+    this.mirrorFrom = null;
+    this.mirrorPatch = null;
+    this.mirrorPaint = plan.paint;
+    this.disarm();
     this.joystick?.release();
-    this.symmetryPopup?.open(this.spellRng, rung, (result) => this.noteMirrorCast(result));
+    if (!patch) {
+      // One square: the mirror's own puzzle and nothing else.
+      this.openMirrorPuzzle((worked) => {
+        if (worked) this.paintGround(plan.paint);
+        this.mirrorPaint = null;
+      });
+      return;
+    }
+    // A block: the spell once, and then how many times — which is the order
+    // every other action on the times menu is asked in, and the whole of
+    // what that spell is for.
+    this.castOnce(PatchAction.Copy, (worked) => {
+      if (!worked) {
+        this.mirrorPaint = null;
+        return;
+      }
+      this.askTheMultiplication(patch, PatchAction.Copy);
+    });
+  }
+
+  /** The mirror's grid, and whether she finished it. */
+  private openMirrorPuzzle(done: (worked: boolean) => void): void {
+    const rung = symmetryRungAt(this.dev.symmetryRung ?? this.profile.symmetryRung);
+    this.symmetryPopup?.open(this.spellRng, rung, (result) => {
+      this.noteMirrorCast(result);
+      done(result.solved);
+    });
+  }
+
+  /** A ring round the square she is copying, while the spell waits. */
+  private markSource(at: GridPoint): void {
+    const feet = this.toFeet(at.col, at.row);
+    const ring = this.world(
+      this.add
+        .rectangle(feet.x, feet.y - TILE_SIZE / 2, TILE_SIZE, TILE_SIZE)
+        .setStrokeStyle(3, PATCH_EDGE, 1)
+        .setFillStyle(PATCH_EDGE, 0.15)
+        .setDepth(feet.y),
+    );
+    this.tweens.add({
+      targets: ring,
+      alpha: 0,
+      duration: ARMED_PULSE_MS * 4,
+      onComplete: () => ring.destroy(),
+    });
+  }
+
+  /** What the mirror spell has moved, for the save. */
+  private paintedTiles(): PaintedTiles {
+    return [...this.painted].flatMap((entry) => {
+      const [col, row] = entry[0].split(",").map(Number);
+      if (col === undefined || row === undefined) return [];
+      return [[col, row, entry[1]] as const];
+    });
+  }
+
+  /**
+   * Put the ground down, and make the world show it.
+   *
+   * Two halves, and the second is the one that is not obvious. Terrain is
+   * baked into chunk-sized textures, and the atlas ships a finished tile for
+   * every way four *corners* can meet — so changing one square changes the
+   * picture of the squares around it too. Dropping the textures that cover
+   * them is what redraws it: they are rebuilt from the grid on the next
+   * frame, which is the same path a chunk walked into from off screen takes.
+   */
+  private paintGround(paint: readonly { at: GridPoint; terrain: TerrainType }[]): void {
+    if (paint.length === 0) return;
+    for (const { at, terrain } of paint) {
+      this.worldGrid.setTerrain(at.col, at.row, terrain);
+      this.painted.set(tileKey(at.col, at.row), terrain);
+    }
+    // One square wider on every side, because a corner is shared with the
+    // neighbours: a tile whose own terrain did not change is still drawn
+    // differently once the ground beside it has.
+    const cols = paint.map((one) => one.at.col);
+    const rows = paint.map((one) => one.at.row);
+    this.redrawGround({
+      minCol: Math.min(...cols) - 1,
+      minRow: Math.min(...rows) - 1,
+      maxCol: Math.max(...cols) + 1,
+      maxRow: Math.max(...rows) + 1,
+    });
+    this.autosave();
+  }
+
+  /** Throw away the baked ground over a range, so it is drawn again. */
+  private redrawGround(range: {
+    minCol: number;
+    minRow: number;
+    maxCol: number;
+    maxRow: number;
+  }): void {
+    for (const chunk of chunksCoveringTileRange(
+      range,
+      this.worldGrid.width,
+      this.worldGrid.height,
+      0,
+    )) {
+      const key = chunkKey(chunk);
+      const entry = this.activeChunks.get(key);
+      if (!entry) continue;
+      entry.texture.destroy();
+      this.activeChunks.delete(key);
+      this.despawnSceneryIn(key);
+    }
   }
 
   /**
@@ -6429,6 +6677,18 @@ export class GameScene extends Phaser.Scene {
     // and pay nothing. `?away=` fakes it, because the alternative way to see
     // this spell is to close the game and come back in an hour.
     if (saved) restoreWorld(this.grid, saved.world);
+    // And what the mirror spell moved, *kept* as well as put back.
+    //
+    // Restoring it onto the grid is not enough, and the way that fails is
+    // quiet: the save is written from this map whole, so a world that came
+    // back with the ground moved but with nothing remembering that it had
+    // been would write itself down again four seconds later with the moving
+    // forgotten. The copy is there all afternoon and gone in the morning,
+    // which is the worst shape a save bug has.
+    this.painted.clear();
+    for (const [col, row, terrain] of readPainted(saved?.world?.painted)) {
+      this.painted.set(tileKey(col, row), terrain);
+    }
     // What anybody has added to their house. Read after the world rather
     // than with it: a plan is not a thing standing on a tile, it is the
     // shape of a room behind a door.
@@ -6477,6 +6737,7 @@ export class GameScene extends Phaser.Scene {
       now,
       this.savedPlans(),
       this.savedDecor(),
+      this.paintedTiles(),
     );
     // And this child's own things, which nobody else's game may touch. Kept
     // separate all the way down: a shared purse would let one child spend

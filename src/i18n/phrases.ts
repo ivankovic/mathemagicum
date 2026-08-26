@@ -212,25 +212,25 @@ export interface Phrases {
   brickHintAdd: string;
   brickHintTakeAway: string;
 
-  // --- folding a shape in half ---------------------------------------------
+  // --- the mirror -----------------------------------------------------------
 
-  /** Over the shape. */
+  /** Over the grid. */
   mirrorTitle: string;
   /**
    * The rule, said once under the title.
    *
-   * The hardest line in the game to write, because the word for what is
-   * being asked — "an axis of symmetry" — is a word most children meeting
-   * this will not have been given yet, and giving it here in a caption
-   * teaches nothing. So the caption says what the *fold* does, and the name
-   * is what the astronomer supplies when she teaches the spell.
+   * The hardest line here to write, because the word for what is being asked
+   * — "an axis of symmetry" — is one most children meeting this have not
+   * been given yet, and giving it in a caption teaches nothing. So the
+   * caption says what to *do*, and the name is what the astronomer supplies
+   * when she teaches the spell.
    */
   mirrorAsk: string;
-  /** What a line that does not fold says. Never a scolding. */
+  /** What a square that is not part of the answer says. Never a scolding. */
   mirrorWrong: string;
-  /** The line under a shape that folded. */
+  /** The line under a finished grid. */
   mirrorDone: string;
-  /** The help, when it comes: the fold itself, drawn, and named as such. */
+  /** The help, when it comes: one square, outlined, and named as one. */
   mirrorHint: string;
 
   // --- the hourglass spell -------------------------------------------------

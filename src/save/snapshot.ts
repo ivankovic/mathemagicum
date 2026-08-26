@@ -7,6 +7,7 @@ import { ITEM_TYPES, type ItemType } from "../world/inventory";
 import type { PlacedObject } from "../world/objects";
 import { PLANT_STAGES, PLANT_TYPES, type PlantStage, type PlantType } from "../world/plants";
 import type { GameSession } from "../world/session";
+import { type PaintedTiles, readPainted } from "../world/terrainCopy";
 import type { GridPoint } from "../world/topdown";
 
 /**
@@ -47,6 +48,17 @@ export interface WorldSnapshot {
   readonly placed: readonly PlacedObject[];
   /** Generated objects the player took away, by the tile they stood on. */
   readonly cleared: readonly (readonly [number, number])[];
+  /**
+   * Ground the mirror spell moved: the tile, and what it is now.
+   *
+   * A list of what changed rather than a difference against the world as
+   * generated, which is what everything else here is. Terrain is a quarter
+   * of a million tiles and comparing them all to find the four she painted
+   * would be a quarter of a million comparisons on every autosave — and the
+   * mirror spell is the only thing in the game that paints, so it can simply
+   * say what it did.
+   */
+  readonly painted?: PaintedTiles;
   /**
    * The floor plan of every house somebody has added a room to, by building.
    *
@@ -167,6 +179,7 @@ export function snapshotWorld(
   baseline: WorldBaseline,
   plans: Readonly<Record<string, readonly string[]>> = {},
   decor: Readonly<Record<string, readonly string[]>> = {},
+  painted: PaintedTiles = [],
 ): WorldSnapshot {
   const placed: PlacedObject[] = [];
   const standing = new Map<string, string>();
@@ -188,6 +201,7 @@ export function snapshotWorld(
     cleared,
     ...(Object.keys(plans).length > 0 ? { plans } : {}),
     ...(Object.keys(decor).length > 0 ? { decor } : {}),
+    ...(painted.length > 0 ? { painted } : {}),
   };
 }
 
@@ -219,12 +233,13 @@ export function snapshotGame(
   savedAt: number,
   plans: Readonly<Record<string, readonly string[]>> = {},
   decor: Readonly<Record<string, readonly string[]>> = {},
+  painted: PaintedTiles = [],
 ): GameSnapshot {
   return {
     snapshotVersion: SNAPSHOT_VERSION,
     generatorVersion: GENERATOR_VERSION,
     seed,
-    world: snapshotWorld(grid, baseline, plans, decor),
+    world: snapshotWorld(grid, baseline, plans, decor, painted),
     savedAt,
   };
 }
@@ -293,6 +308,11 @@ export function restoreWorld(grid: WorldGrid, world: WorldSnapshot | undefined):
     if (isPlacedObject(object) && grid.inBounds(object.col, object.row)) {
       grid.placeObject(object);
     }
+  }
+  // Before the crops and after the objects, which is the order they were
+  // laid down in: ground first, then what stands on it.
+  for (const [col, row, terrain] of readPainted(world.painted)) {
+    if (grid.inBounds(col, row)) grid.setTerrain(col, row, terrain);
   }
   for (const entry of world.crops ?? []) {
     const [col, row, plant, stage] = entry;

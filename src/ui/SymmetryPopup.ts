@@ -5,16 +5,13 @@ import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import { type CastResult, castResult } from "../spells/cast";
 import {
-  type Axis,
-  type Point,
+  type Cell,
+  MirrorAxis,
   type SymmetryCast,
   type SymmetryRung,
   beginSymmetryCast,
-  dragLine,
-  middleOf,
-  reachOf,
-  releaseLine,
-  startLine,
+  cellKey,
+  fillCell,
   symmetryHint,
 } from "../spells/symmetry";
 import type { Rng } from "../world/rng";
@@ -22,33 +19,29 @@ import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
 
 /**
- * The parchment a shape is folded on.
+ * The parchment the mirror spell is worked on.
  *
- * The fourth spell parchment and the first with no keypad on it. Every other
- * spell here ends in a number typed into a box; this one ends in a *line*,
- * and there is nothing to type because the answer is not a quantity. A child
- * who has found the fold has found it by looking at the shape, and the only
- * honest way to say so is to draw it.
+ * A grid, a line ruled through the middle of it, and some squares already
+ * coloured. Tapping a square colours it; the cast finishes when the picture
+ * is the same on both sides of the line.
  *
- * **One space, not two.** `symmetry.ts` works in a unit square about the
- * origin and states every tolerance as a share of the shape's own size, so
- * it is perfectly happy to be handed a shape in one scale and a line in
- * another — and gives nonsense when it is. Everything crossing this boundary
- * goes through `toScreen` and `toShape`, for drawing *and* for the pointer,
- * so the rules only ever see the space they were written in.
+ * **A tap is on a square or it is on another square.** That is the whole
+ * reason this is a grid and not the drawing it replaced. Judging a dragged
+ * line needs a tolerance, and a tolerance is either tight enough to tell a
+ * child with an unsteady finger they are wrong when they are right, or loose
+ * enough to accept a line vaguely down the middle. There is nothing here to
+ * forgive, so nothing has to be.
  *
- * **The line is drawn where she drew it.** Not snapped to the nearest axis
- * while her finger is down: a line that jumped onto the answer as it got
- * close would be answering for her, and the tolerance in `foldsAlong` is
- * what forgives an unsteady hand — silently, while she is drawing. Only
- * once it *has* folded does the parchment draw the true fold in its place,
- * which is not a correction but the thing she found, said exactly.
+ * **The working stays on the page.** A wrong square is refused rather than
+ * coloured, so everything showing is either the picture she was given or an
+ * answer she got right — and a half-finished grid is a half-finished
+ * thought, which is what she should be looking at.
  */
 
 const PANEL_MAX_W = 460;
-const PANEL_MAX_H = 460;
+const PANEL_MAX_H = 470;
 const PANEL_MIN_W = 280;
-const PANEL_MIN_H = 320;
+const PANEL_MIN_H = 330;
 
 const INK = "#4a3422";
 const INK_DIM = "#8a6a48";
@@ -60,52 +53,39 @@ const PAPER_HEX = 0xdec694;
 const WRONG_HEX = 0xa8321e;
 const DONE_HEX = 0x3d6b2a;
 
-// The shape: a solid figure rather than an outline, because a fold is about
-// the whole of it and an outline invites looking only at the edges.
-const SHAPE_HEX = 0x7fa4c8;
-const SHAPE_EDGE_HEX = 0x3f5f80;
-// The line under her finger, before it is judged.
-const DRAWN_HEX = 0x4a3422;
+/** An empty square: paler than the parchment, so the grid reads as a grid. */
+const EMPTY_HEX = 0xf2e6c8;
+/** The picture she was handed. */
+const GIVEN_HEX = 0x4f7fae;
+/** And the squares she has put in, told apart from it by colour. */
+const FILLED_HEX = 0x63a95c;
+/** The line, which is the thing the whole puzzle is about. */
+const AXIS_HEX = 0xc8901c;
 
 const TITLE_SIZE = 20;
 const ASK_SIZE = 12;
 const HINT_SIZE = 12;
 
-/**
- * How much of the drawing square the shape fills.
- *
- * Short of the edge on purpose: a fold has to be drawn *through* the shape
- * and off both ends of it, and a shape drawn to the edge of its box would
- * leave nowhere to start the line but on top of itself.
- */
-const SHAPE_FILL = 0.72;
-
-/** How long the finished fold and the hint run, as a share of the shape. */
-const AXIS_OVERHANG = 1.35;
-
-/**
- * How long the folded shape is left on the parchment.
- *
- * Longer than the wall's beat, because there is more to look at: the answer
- * to this spell is a *picture* of the shape with its fold drawn on it, and a
- * child who found it deserves a moment with the thing they found rather than
- * a parchment that vanishes the instant they let go.
- */
-const FOLDED_BEAT_MS = 1100;
+/** Air between two squares, so a run of them is countable. */
+const CELL_GAP = 2;
+/** How long a wrong square stays lit before the grid forgets it. */
+const WRONG_MS = 450;
+/** A beat on the finished picture before the parchment goes. */
+const DONE_BEAT_MS = 900;
 
 type PanelPart = Phaser.GameObjects.GameObject &
   Phaser.GameObjects.Components.Depth &
   Phaser.GameObjects.Components.ScrollFactor &
   Phaser.GameObjects.Components.Visible;
 
-/** Where the shape is on the screen, so a script can aim at it. */
+/** Where the grid is on the screen, so a script can aim at a square. */
 export interface Board {
-  readonly centreX: number;
-  readonly centreY: number;
-  /** One unit of shape space, in screen pixels. */
-  readonly reach: number;
-  /** The shape's corners, in screen pixels and in order round the outline. */
-  readonly corners: readonly Point[];
+  readonly left: number;
+  readonly top: number;
+  /** One square, including the gap that follows it. */
+  readonly step: number;
+  readonly cell: number;
+  readonly size: number;
 }
 
 export class SymmetryPopup {
@@ -122,29 +102,25 @@ export class SymmetryPopup {
   private finish: ((result: CastResult) => void) | null = null;
   private keyHandler: ((event: KeyboardEvent) => void) | null = null;
   private downHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
-  private moveHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
-  private upHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
-
-  /** Where the drawing square is, worked out afresh on every render. */
-  private centre: Point = { x: 0, y: 0 };
-  private scale = 1;
-  private drawing = false;
+  private upHandler: (() => void) | null = null;
   /**
    * Whether a press was already down when this parchment opened.
    *
    * Phaser hands the tray button its `pointerdown` first and *then* emits
-   * the scene-wide one, so the very tap that casts the spell arrives at the
-   * stroke handler a moment after it registers — and its `pointerup`
-   * completed a line of no length, which is not a fold. A child who cast the
-   * spell was told they had got it wrong before the shape had finished being
-   * drawn, and at every rung whose `hintAfter` is one, was handed the answer
-   * with it. So that press is swallowed whole, down and up.
+   * the scene-wide one, so the very tap that casts the spell arrives here a
+   * moment after this handler registers — and would colour a square she
+   * never chose. Asked of the pointer rather than assumed, so a cast that
+   * did not come from a tap leaves nothing to swallow.
    *
-   * Asked of the pointer rather than assumed: a cast that did not come from
-   * a tap — a key, or a teacher's line of dialogue — leaves nothing to
-   * swallow, and swallowing anyway would eat the child's first real stroke.
+   * Cleared when that press *lifts*, not by the next one. Clearing it on the
+   * next `pointerdown` swallowed the child's own first square every single
+   * time: the press that opened the parchment never came back here, so the
+   * flag was still up when she reached for the grid.
    */
   private swallow = false;
+  private forget: Phaser.Time.TimerEvent | null = null;
+
+  private board: Board = { left: 0, top: 0, step: 1, cell: 1, size: 1 };
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -196,35 +172,26 @@ export class SymmetryPopup {
   }
 
   /**
-   * Where the shape sits on the screen.
+   * Where the grid sits on the screen.
    *
-   * Published for the same reason the clock's face is: a script driving this
-   * spell has to drag a line across a *picture*, and there is no button on
-   * it to press. Handed the corners in screen pixels, a scenario can work
-   * out the fold with the game's own `axesOf` and draw it — which is the
-   * same discipline as reading a price off the counter rather than knowing
-   * it.
+   * Published for the same reason the clock's face is: the answer to this
+   * spell is a tap on a *picture*, and there is no button on it with a name.
+   * Handed the grid's corner and the size of a square, a scenario can reach
+   * any square — and *which* squares to tap comes out of the cast, which the
+   * game worked out rather than the script guessing.
    */
-  get board(): Board | null {
-    if (!this.state) return null;
-    return {
-      centreX: this.centre.x,
-      centreY: this.centre.y,
-      reach: this.scale,
-      corners: this.state.shape.corners.map((corner) => this.toScreen(corner)),
-    };
+  get where(): Board | null {
+    return this.state ? this.board : null;
   }
 
   get isOpen(): boolean {
     return this.state !== null;
   }
 
-  /** Put a shape on the parchment. */
+  /** Put a grid on the parchment. */
   open(rng: Rng, rung: SymmetryRung, onDone: (result: CastResult) => void): void {
     this.state = beginSymmetryCast(rng, rung);
     this.finish = onDone;
-    this.drawing = false;
-    this.swallow = this.scene.input.activePointer.isDown;
     this.paper.setVisible(true);
     for (const part of this.parts) part.setVisible(true);
 
@@ -235,14 +202,16 @@ export class SymmetryPopup {
     };
     this.scene.input.keyboard?.on("keydown", this.keyHandler);
 
-    // On the scene rather than on a hit area: the line is drawn freehand
-    // over a picture, and a zone big enough to catch every stroke would
-    // swallow the close button sitting on top of it.
-    this.downHandler = (pointer) => this.begin(pointer);
-    this.moveHandler = (pointer) => this.extend(pointer);
-    this.upHandler = () => this.finishLine();
+    // One handler on the scene rather than a hit area per square: a grid of
+    // forty-nine interactive rectangles is forty-nine objects to build,
+    // place and tear down every cast, and the arithmetic that turns a point
+    // into a square is three lines.
+    this.swallow = this.scene.input.activePointer.isDown;
+    this.downHandler = (pointer) => this.press(pointer);
+    this.upHandler = () => {
+      this.swallow = false;
+    };
     this.scene.input.on("pointerdown", this.downHandler);
-    this.scene.input.on("pointermove", this.moveHandler);
     this.scene.input.on("pointerup", this.upHandler);
     this.scene.input.on("pointerupoutside", this.upHandler);
 
@@ -256,15 +225,14 @@ export class SymmetryPopup {
       this.keyHandler = null;
     }
     if (this.downHandler) this.scene.input.off("pointerdown", this.downHandler);
-    if (this.moveHandler) this.scene.input.off("pointermove", this.moveHandler);
     if (this.upHandler) {
       this.scene.input.off("pointerup", this.upHandler);
       this.scene.input.off("pointerupoutside", this.upHandler);
     }
     this.downHandler = null;
-    this.moveHandler = null;
     this.upHandler = null;
-    this.drawing = false;
+    this.forget?.remove();
+    this.forget = null;
     this.swallow = false;
     this.state = null;
     this.finish = null;
@@ -290,44 +258,35 @@ export class SymmetryPopup {
     done?.(result);
   }
 
-  // --- the gesture ---------------------------------------------------------
+  // --- the tap -------------------------------------------------------------
 
-  private begin(pointer: Phaser.Input.Pointer): void {
+  private press(pointer: Phaser.Input.Pointer): void {
+    // Left alone rather than cleared: the press that opened this is still
+    // down, and it is its *lift* that ends the swallowing.
     if (this.swallow) return;
-    if (!this.state || this.state.done) return;
-    // The close button is a button; a stroke starting on it is a tap on it.
+    const state = this.state;
+    if (!state || state.done) return;
+    // The close button is a button; a press on it is a tap on it.
     if (this.overClose(pointer)) return;
-    this.drawing = true;
-    this.state = startLine(this.state, this.toShape(pointer.x, pointer.y));
-    this.render();
-  }
-
-  private extend(pointer: Phaser.Input.Pointer): void {
-    if (!this.drawing || !this.state) return;
-    this.state = dragLine(this.state, this.toShape(pointer.x, pointer.y));
-    this.render();
-  }
-
-  /**
-   * Let go, and see whether it folds.
-   *
-   * Not called `release`: that is what the rules call the step, and a method
-   * of that name here would read as releasing the popup.
-   */
-  private finishLine(): void {
-    if (this.swallow) {
-      this.swallow = false;
-      return;
-    }
-    if (!this.drawing || !this.state) return;
-    this.drawing = false;
-    const next = releaseLine(this.state);
+    const cell = this.cellAt(pointer.x, pointer.y);
+    if (!cell) return;
+    const next = fillCell(state, cell);
     this.state = next;
     this.render();
+    if (next.wrong) {
+      // Lit for a moment and then forgotten, so the grid goes back to
+      // showing only the picture and her own working.
+      this.forget?.remove();
+      this.forget = this.scene.time.delayedCall(WRONG_MS, () => {
+        if (!this.state?.wrong) return;
+        this.state = { ...this.state, wrong: null };
+        this.render();
+      });
+      return;
+    }
     if (!next.done) return;
-    // A beat on the folded shape, its two halves shown landing on each
-    // other, before the parchment goes.
-    this.scene.time.delayedCall(FOLDED_BEAT_MS, () => this.dismiss(true));
+    // A beat on the finished picture, both halves matching, before it goes.
+    this.scene.time.delayedCall(DONE_BEAT_MS, () => this.dismiss(true));
   }
 
   private overClose(pointer: Phaser.Input.Pointer): boolean {
@@ -338,14 +297,13 @@ export class SymmetryPopup {
     );
   }
 
-  // --- the one boundary between the two spaces -----------------------------
-
-  private toScreen(point: Point): Point {
-    return { x: this.centre.x + point.x * this.scale, y: this.centre.y + point.y * this.scale };
-  }
-
-  private toShape(x: number, y: number): Point {
-    return { x: (x - this.centre.x) / this.scale, y: (y - this.centre.y) / this.scale };
+  /** Which square a point is on, or nothing if it is off the grid. */
+  private cellAt(x: number, y: number): Cell | null {
+    const { left, top, step, size } = this.board;
+    const col = Math.floor((x - left) / step);
+    const row = Math.floor((y - top) / step);
+    if (col < 0 || row < 0 || col >= size || row >= size) return null;
+    return { col, row };
   }
 
   // --- drawing -------------------------------------------------------------
@@ -375,105 +333,91 @@ export class SymmetryPopup {
       .setWordWrapWidth(innerW)
       .setPosition(cx, hintTop);
 
-    // The drawing square: whatever is left between the caption and the line
-    // under it, squared off so a shape is never drawn oval.
-    const boardTop = this.ask.y + this.ask.height + 10;
-    const boardBottom = hintTop - 10;
-    const side = Math.max(40, Math.min(innerW, boardBottom - boardTop));
-    this.centre = { x: cx, y: Math.round((boardTop + boardBottom) / 2) };
-    // `makeShape` builds within one unit of the origin, but a lopsided shape
-    // is not centred on that origin — so the scale is taken from the shape's
-    // own reach about its own middle, and the drawing is nudged so that
-    // middle lands in the middle of the square. Without this a shape with a
-    // long spike sits off to one side of its box.
-    const middle = middleOf(state.shape);
-    this.scale = ((side / 2) * SHAPE_FILL) / reachOf(state.shape);
-    this.centre = {
-      x: this.centre.x - middle.x * this.scale,
-      y: this.centre.y - middle.y * this.scale,
+    // The grid takes whatever the caption and the line under it leave, and
+    // it is square: an oblong grid would put the corner mirror at an angle
+    // the arithmetic does not have.
+    const boardTop = this.ask.y + this.ask.height + 12;
+    const boardBottom = hintTop - 12;
+    const room = Math.max(60, Math.min(innerW, boardBottom - boardTop));
+    const step = Math.max(8, Math.floor(room / state.size));
+    const span = step * state.size;
+    this.board = {
+      left: Math.round(cx - span / 2),
+      top: Math.round(boardTop + (boardBottom - boardTop - span) / 2),
+      step,
+      cell: step - CELL_GAP,
+      size: state.size,
     };
 
-    this.ink.clear();
-    this.paintShape(state);
-    this.paintFold(state);
-    this.paintDrawn(state);
+    this.paintGrid(state, span);
   }
 
-  private paintShape(state: SymmetryCast): void {
-    const corners = state.shape.corners.map((corner) => this.toScreen(corner));
-    const first = corners[0];
-    if (!first) return;
-    this.ink.fillStyle(SHAPE_HEX, 1);
-    this.ink.lineStyle(3, SHAPE_EDGE_HEX, 1);
-    this.ink.beginPath();
-    this.ink.moveTo(first.x, first.y);
-    for (const corner of corners.slice(1)) this.ink.lineTo(corner.x, corner.y);
-    this.ink.closePath();
-    this.ink.fillPath();
-    this.ink.strokePath();
-  }
+  private paintGrid(state: SymmetryCast, span: number): void {
+    const g = this.ink;
+    const { left, top, step, cell, size } = this.board;
+    g.clear();
 
-  /** The fold, once it is found or once the parchment gives it away. */
-  private paintFold(state: SymmetryCast): void {
-    const axis = symmetryHint(state);
-    if (!axis) return;
-    const [from, to] = this.axisEnds(state, axis);
-    if (state.done) {
-      this.ink.lineStyle(4, DONE_HEX, 1);
-      this.ink.lineBetween(from.x, from.y, to.x, to.y);
-      return;
+    const given = new Set(state.given);
+    const filled = new Set(state.filled);
+    const shown = symmetryHint(state);
+
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const key = cellKey({ col, row });
+        const x = left + col * step;
+        const y = top + row * step;
+        const colour = given.has(key)
+          ? GIVEN_HEX
+          : filled.has(key)
+            ? FILLED_HEX
+            : state.wrong === key
+              ? WRONG_HEX
+              : EMPTY_HEX;
+        g.fillStyle(colour, 1);
+        g.fillRect(x, y, cell, cell);
+        g.lineStyle(1, INK_HEX, 0.35);
+        g.strokeRect(x, y, cell, cell);
+        // The one square the grid is giving away, outlined rather than
+        // coloured: she still puts it in herself.
+        if (shown === key) {
+          g.lineStyle(3, DONE_HEX, 1);
+          g.strokeRect(x + 1, y + 1, cell - 2, cell - 2);
+        }
+      }
     }
-    // The hint is dashed, so a line the parchment drew never looks like one
-    // she drew. A child who has been shown the fold still has to draw it.
-    this.dash(from, to, DONE_HEX);
-  }
 
-  /** The line under her finger, while it is being drawn. */
-  private paintDrawn(state: SymmetryCast): void {
-    if (state.done || !state.from || !state.to) return;
-    const from = this.toScreen(state.from);
-    const to = this.toScreen(state.to);
-    this.ink.lineStyle(3, DRAWN_HEX, 0.85);
-    this.ink.lineBetween(from.x, from.y, to.x, to.y);
-  }
-
-  /** Where a fold enters and leaves the drawing square. */
-  private axisEnds(state: SymmetryCast, axis: Axis): [Point, Point] {
-    const middle = this.toScreen(middleOf(state.shape));
-    // The same convention as `reflect`: the angle is measured from straight
-    // up and turns clockwise, and screen y grows downwards.
-    const dx = Math.sin(axis.angle);
-    const dy = -Math.cos(axis.angle);
-    const run = this.scale * reachOf(state.shape) * AXIS_OVERHANG;
-    return [
-      { x: middle.x - dx * run, y: middle.y - dy * run },
-      { x: middle.x + dx * run, y: middle.y + dy * run },
-    ];
-  }
-
-  private dash(from: Point, to: Point, colour: number): void {
-    const span = Math.hypot(to.x - from.x, to.y - from.y);
-    if (span < 1) return;
-    const step = 10;
-    this.ink.lineStyle(3, colour, 1);
-    for (let at = 0; at < span; at += step * 2) {
-      const a = at / span;
-      const b = Math.min(1, (at + step) / span);
-      this.ink.lineBetween(
-        from.x + (to.x - from.x) * a,
-        from.y + (to.y - from.y) * a,
-        from.x + (to.x - from.x) * b,
-        from.y + (to.y - from.y) * b,
-      );
-    }
+    this.paintAxis(state, span);
   }
 
   /**
-   * The line under the shape.
+   * The line, drawn over the squares.
    *
-   * Silent until something has happened. The caption above already says what
-   * to do, and a running commentary under a shape nobody has touched yet
-   * would be the parchment talking to itself.
+   * Over rather than between them, because it is not a gap in the picture —
+   * it is the thing the picture has to match across, and it runs *through*
+   * squares whenever the grid has an odd number of them.
+   */
+  private paintAxis(state: SymmetryCast, span: number): void {
+    const g = this.ink;
+    const { left, top } = this.board;
+    const middle = span / 2;
+    g.lineStyle(3, AXIS_HEX, 1);
+    if (state.axis === MirrorAxis.Down) {
+      g.lineBetween(left + middle, top - 6, left + middle, top + span + 6);
+      return;
+    }
+    if (state.axis === MirrorAxis.Across) {
+      g.lineBetween(left - 6, top + middle, left + span + 6, top + middle);
+      return;
+    }
+    g.lineBetween(left - 6, top - 6, left + span + 6, top + span + 6);
+  }
+
+  /**
+   * The line under the grid.
+   *
+   * Silent until something has happened. The caption above says what to do,
+   * and a running commentary under a grid nobody has touched yet would be
+   * the parchment talking to itself.
    */
   private hintLine(state: SymmetryCast): string {
     if (state.done) return this.words.mirrorDone;
@@ -482,10 +426,10 @@ export class SymmetryPopup {
   }
 
   /**
-   * What colour the line under the shape is written in.
+   * What colour that line is written in.
    *
-   * Red only while it is saying "not that one". Once the parchment has given
-   * the fold away the line is help rather than a verdict, and help in the
+   * Red only while it is saying "not that one". Once the grid has given a
+   * square away the line is help rather than a verdict, and help in the
    * wrong-answer colour reads as a second telling-off.
    */
   private hintColour(state: SymmetryCast): string {

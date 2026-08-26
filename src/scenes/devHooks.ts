@@ -568,36 +568,24 @@ export interface DevHandle {
     readonly planted: readonly { flower: string; look: number; col: number; row: number }[];
   };
   /**
-   * The shape on the mirror parchment.
+   * The grid on the mirror parchment.
    *
-   * The only spell whose answer is a gesture over a *picture*: there is no
-   * box to type into and no button to press, so the picture is published.
-   * `corners` is the shape as the rules hold it — a unit or so about its own
-   * middle — and `board` says where that lands on the screen, which is what
-   * a script needs to draw a line across it. `axes` is every fold the shape
-   * actually has, worked out by the game rather than assumed by the script.
+   * The only spell whose answer is a tap on a *picture*: no box to type into
+   * and no button with a name. `given` is the picture she was handed and
+   * `wanted` the squares still missing, both as `"col,row"`; `board` says
+   * where the grid is drawn, which is what turns one of those into a tap.
    */
   readonly symmetry: () => {
-    readonly corners: readonly { x: number; y: number }[];
-    readonly board: {
-      centreX: number;
-      centreY: number;
-      reach: number;
-      corners: readonly { x: number; y: number }[];
-    } | null;
-    readonly axes: readonly { angle: number }[];
-    readonly rung: {
-      corners: readonly number[];
-      regular: boolean;
-      oblique: boolean;
-      reflex: boolean;
-    };
-    /** How many corners the shape on the parchment actually has. */
-    readonly drawn: number;
+    readonly size: number;
+    readonly axis: string;
+    readonly given: readonly string[];
+    readonly wanted: readonly string[];
+    readonly filled: readonly string[];
+    readonly board: { left: number; top: number; step: number; cell: number; size: number } | null;
     readonly done: boolean;
     readonly missteps: number;
-    readonly wrong: boolean;
-    /** Whether the parchment has started showing the fold. */
+    readonly wrong: string | null;
+    /** Whether the grid has started giving a square away. */
     readonly hinting: boolean;
   } | null;
   /**

@@ -372,11 +372,11 @@ export const HR: Phrases = {
   brickHintAdd: "Zbroji dvije cigle ispod nje.",
   brickHintTakeAway: "Oduzmi ciglu do nje od one iznad.",
 
-  mirrorTitle: "Pregib",
-  mirrorAsk: "Nacrtaj crtu po kojoj bi se ovaj lik presavio na pola.",
-  mirrorWrong: "Polovice se ne poklapaju. Probaj drugu crtu.",
-  mirrorDone: "Savija se. Polovice padaju točno jedna na drugu.",
-  mirrorHint: "Ovaj se savija ovdje.",
+  mirrorTitle: "Zrcalo",
+  mirrorAsk: "Oboji polja tako da obje strane crte budu jednake.",
+  mirrorWrong: "Ne to. Pogledaj preko crte.",
+  mirrorDone: "Obje su strane jednake. To je zrcalo.",
+  mirrorHint: "Ovo je polje jedno od njih.",
 
   hourglassTitle: "Pješčani sat",
   hourglassAsk: "Za koliko pomičeš sat?",
