@@ -394,9 +394,23 @@ export interface Phrases {
   // --- the shop ------------------------------------------------------------
 
   storeTitle: (money: string) => string;
-  storeFooter: string;
-  sheBuys: string;
-  sheSells: string;
+  /**
+   * What she does, over the shop's two columns.
+   *
+   * By name rather than by pronoun, and that is the whole reason these take
+   * an argument. There are seven shops in the world and one apron: the
+   * village's, five in the city and two on the quay, all drawn with the same
+   * sheet and all selling from the same list. Before this, walking into any
+   * of them got a panel headed "She buys", which said nothing about which of
+   * them you were in — the counter was the only shop in the game that could
+   * not tell you whose it was.
+   *
+   * The name lands in the **nominative** in all three languages, which is
+   * what keeps one table of names workable in a language that declines them.
+   */
+  keeperBuys: (keeper: string) => string;
+  keeperSells: (keeper: string) => string;
+  storeFooter: (keeper: string) => string;
   /** A row on her side of the counter: what it is and what it costs. */
   stockRow: (thing: Buyable, price: string) => string;
   /** A row on the player's side: how many she has and what each fetches. */

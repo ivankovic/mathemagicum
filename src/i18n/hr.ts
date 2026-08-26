@@ -6,6 +6,7 @@ import { DecorType } from "../world/decor";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
 import { MaterialType } from "../world/materials";
+import { NAMED_PEOPLE } from "../world/names";
 import { PlantStage, PlantType } from "../world/plants";
 import type { Buyable } from "../world/shop";
 import { TerrainType } from "../world/terrain";
@@ -202,6 +203,19 @@ const FURNITURE_FORMS: Record<DecorType, HrNoun> = {
   [DecorType.Rug]: { one: "tepih", acc: "tepih", few: "tepiha", many: "tepiha" },
   [DecorType.Bookshelf]: { one: "polica", acc: "policu", few: "police", many: "polica" },
   [DecorType.Stove]: { one: "peć", acc: "peć", few: "peći", many: "peći" },
+  // Sudoper is the kitchen's and umivaonik the washroom's — the same split
+  // German makes, and the washstand below is the other half of it.
+  [DecorType.Sink]: { one: "sudoper", acc: "sudoper", few: "sudopera", many: "sudopera" },
+  [DecorType.Dresser]: { one: "kredenac", acc: "kredenac", few: "kredenca", many: "kredenaca" },
+  [DecorType.Kettle]: { one: "kotlić", acc: "kotlić", few: "kotlića", many: "kotlića" },
+  [DecorType.Bath]: { one: "kada", acc: "kadu", few: "kade", many: "kada" },
+  [DecorType.Washstand]: {
+    one: "umivaonik",
+    acc: "umivaonik",
+    few: "umivaonika",
+    many: "umivaonika",
+  },
+  [DecorType.Privy]: { one: "zahod", acc: "zahod", few: "zahoda", many: "zahoda" },
 };
 
 function formsOf(thing: ItemType | Buyable): HrNoun {
@@ -269,13 +283,11 @@ const PLACE_NAMES: Record<string, string> = {
 };
 
 const INTRO_HR: Record<string, string> = {
-  seeds: "Ovo je tvoj vrt. Uzmi sjeme iz vrećice i past će u zemlju na polje ispred tebe.",
-  spell:
-    "Sjeme ovdje ne raste samo od sebe. Otvori čarobnjačku knjigu, baci runu + na njega i riješi zadatak. Dva bacanja i plod je zreo. Učiteljica u školi pokazat će ti kako, ako je pitaš.",
+  seeds: `Ja sam ${NAMED_PEOPLE["postal-worker"]}, poštar. Ovo je tvoj vrt. Uzmi sjeme iz vrećice i past će u zemlju na polje ispred tebe.`,
+  spell: `Sjeme ovdje ne raste samo od sebe. Otvori čarobnjačku knjigu, baci runu + na njega i riješi zadatak. Dva bacanja i plod je zreo. ${NAMED_PEOPLE.teacher} u školi pokazat će ti kako, ako je pitaš.`,
   pick: "Dodirni zreo plod da ga ubereš. Ide ti u košaru, a na polju naraste novi.",
-  store:
-    "Trgovkinja u štaglju otkupljuje što ubereš, a prodaje ograde, stolove i svjetiljke za vrt. Novac brojiš sam — a ona se zna i prevariti.",
-  map: "U kuli, na zidu, visi karta cijeloga svijeta. Dodirni je kad god želiš vidjeti gdje si — a geometar ispod nje naučit će te čaroliju za putovanje.",
+  store: `${NAMED_PEOPLE.shopkeeper} u štaglju otkupljuje što ubereš, a prodaje ograde, stolove i svjetiljke za vrt. Novac brojiš sam — a ona se zna i prevariti.`,
+  map: `U kuli, na zidu, visi karta cijeloga svijeta. Dodirni je kad god želiš vidjeti gdje si — a ${NAMED_PEOPLE.geometer} ispod nje naučit će te čaroliju za putovanje.`,
 };
 
 /** `1 sat`, `2 sata`, `5 sati`. */
@@ -442,9 +454,9 @@ export const HR: Phrases = {
   deleteGameAsk: "Baciti ovu igru? Njezin svijet i sve učinjeno u njemu nestaju zauvijek.",
 
   storeTitle: (money) => `Trgovina — ${money}`,
-  storeFooter: "Otkupljuje plodove, a prodaje stvari za vrt i kuću.",
-  sheBuys: "Otkupljuje",
-  sheSells: "Prodaje",
+  storeFooter: (keeper) => `${keeper} otkupljuje plodove, a prodaje stvari za vrt i kuću.`,
+  keeperBuys: (keeper) => `${keeper} otkupljuje`,
+  keeperSells: (keeper) => `${keeper} prodaje`,
   stockRow: (thing, price) => `${item(thing).bare}\n${price}`,
   cropRow: (thing, held, price) => `${held} x ${item(thing).bare}\n${price} po komadu`,
   buyTitle: (thing, count, price) => `${count} x ${item(thing).bare} — plati ${price}`,

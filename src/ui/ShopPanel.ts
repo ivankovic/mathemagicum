@@ -26,7 +26,7 @@ import {
   tenderTotal,
   tenderedCoins,
 } from "../shop/tender";
-import { DECOR_LOOKS, DecorType, pieceArt } from "../world/decor";
+import { DECOR_LOOKS, DecorType, pieceArt, takesAColour } from "../world/decor";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import { GROWABLE_ROOM, growablePieceKey } from "../world/interiors";
 import type { Inventory, ItemType } from "../world/inventory";
@@ -52,7 +52,9 @@ import {
   type Buyable,
   CROP_PRICE,
   FURNITURE_STOCK,
+  MOST_PER_SHELF,
   type Purse,
+  SHELVES,
   SHOP_STOCK,
   isFurniture,
   mostBuyable,
@@ -104,6 +106,20 @@ const ROW_MIN_H = 26;
 /** How big one colourway is drawn on the counter. */
 const SWATCH = 34;
 const ROW_GAP = 4;
+/**
+ * The shelf tabs: as wide as they are tall, and no bigger than this.
+ *
+ * A cap rather than a share of the column, because four square buttons that
+ * grew with a wide parchment would be four very large pictures of a fence.
+ * The gap is the rows' own, so the tabs sit in the same rhythm as what is
+ * under them.
+ */
+// Tight around the art rather than generous: a piece is drawn on a 32-pixel
+// cell and is drawn here at 1:1, because pixel art at nine tenths of its own
+// size is pixel art with some rows thinner than others. A bigger button would
+// only be more empty parchment around the same picture.
+const TAB_MAX_W = 38;
+const TAB_GAP = ROW_GAP;
 /** The table's own surface: a shade darker than the parchment it sits on. */
 const TABLE_HEX = 0xcbb083;
 /** How many coins are drawn in a pile. A picture of a pile, not a count. */
@@ -128,6 +144,10 @@ type Mode = "menu" | "buy" | "sell";
  * The garden's things first, because they are what a child meets first and
  * what the game asks them to build with; the house's after, because a room
  * to furnish is something you have before you have anything to put in it.
+ *
+ * Kept, though nothing draws it as one column any more — it is what the
+ * shelves are checked against, so that a thing which exists, has a price and
+ * has a noun in three languages cannot end up on no shelf at all.
  */
 const STOCK: readonly Buyable[] = [...SHOP_STOCK, ...FURNITURE_STOCK];
 
@@ -153,6 +173,16 @@ export class ShopPanel {
   private readonly sellRows: Button[] = [];
   private readonly buyRows: Button[] = [];
   private readonly lookRows: Button[] = [];
+  /**
+   * The shelf tabs, and which of them is out.
+   *
+   * The stock outgrew a single column — see `SHELVES`. The rows below are
+   * built once, to the length of the longest shelf, and re-pointed at
+   * whichever shelf is showing; a set of buttons per shelf would be four
+   * times the objects for a panel that only ever draws one of them.
+   */
+  private readonly tabs: Button[] = [];
+  private shelf = 0;
   private readonly headings: Phaser.GameObjects.Text[] = [];
 
   // Counter: the quantity picker and the coin pad, shared by both games.
@@ -212,6 +242,8 @@ export class ShopPanel {
   private tender: Tender | null = null;
   private offer: Offer | null = null;
   private settled = false;
+  /** Whose counter this is. Set as it opens; see `open_`. */
+  private keeper = "";
   private onClose: (() => void) | null = null;
   private onTrade: (() => void) | null = null;
   private keyHandler: ((event: KeyboardEvent) => void) | null = null;
@@ -247,14 +279,33 @@ export class ShopPanel {
     for (const { item, icon } of SOLD) {
       this.sellRows.push(this.button(uiTextureKey(icon), () => this.startSell(item)));
     }
-    // Everything she sells: the garden's things, then the house's. One list
-    // rather than two shelves, because a child looking for a chair should
-    // not have to know which half of the shop it lives in.
-    for (const thing of STOCK) {
-      const icon = isFurniture(thing)
-        ? growablePieceKey(GROWABLE_ROOM, pieceArt(thing))
-        : uiTextureKey(itemIcon(thing));
-      this.buyRows.push(this.button(icon, () => this.startBuy(thing)));
+    // Everything she sells, a shelf at a time. It was one column, on the
+    // argument that a child looking for a chair should not have to know
+    // which half of the shop it lives in — which held at seven things and
+    // does not at eighteen, because the eighteenth is drawn underneath the
+    // footer. See `SHELVES`.
+    //
+    // One row per position rather than one per thing: the row is re-pointed
+    // at whatever stands there on the shelf that is out, which is why the
+    // handler asks at the time of the tap rather than closing over a thing.
+    for (let at = 0; at < MOST_PER_SHELF; at++) {
+      // Built with a picture on it, and repainted at every render. A button
+      // made with no texture has no icon *object*, and `setTexture` on a
+      // thing that does not exist is not an error — it is a shelf of rows
+      // with the prices right and nothing to look at.
+      const placeholder = SHELVES[0]?.stock[0];
+      this.buyRows.push(
+        this.button(placeholder === undefined ? null : this.iconFor(placeholder), () => {
+          const thing = this.onShelf()[at];
+          if (thing !== undefined) this.startBuy(thing);
+        }),
+      );
+    }
+    // And the tabs. Each carries one of its own things as its picture — much
+    // of the audience cannot read, and four words would be the one place in
+    // the game where finding what you want required it.
+    for (const [at, shelf] of SHELVES.entries()) {
+      this.tabs.push(this.button(this.iconFor(shelf.icon), () => this.showShelf(at)));
     }
     // One swatch per colourway, shown while a piece of furniture is being
     // bought. Every colour is offered, which is the opposite of the crate's
@@ -366,9 +417,16 @@ export class ShopPanel {
       "shop.close": { x: this.closeButton.box.x, y: this.closeButton.box.y },
     };
     if (this.mode === "menu") {
-      for (const [index, item] of STOCK.entries()) {
+      // Only what is on the shelf that is out. A script that wants a bath
+      // has to turn to the washroom first, exactly as a child does — and a
+      // position reported for something not on screen would be a tap that
+      // silently bought whatever was there instead.
+      for (const [index, item] of this.onShelf().entries()) {
         const row = this.buyRows[index];
         if (row) at[`shop.buy.${item}`] = { x: row.box.x, y: row.box.y };
+      }
+      for (const [index, tab] of this.tabs.entries()) {
+        at[`shop.shelf.${index}`] = { x: tab.box.x, y: tab.box.y };
       }
       for (const [index, plant] of PLANT_TYPES.entries()) {
         const row = this.sellRows[index];
@@ -507,8 +565,18 @@ export class ShopPanel {
 
   // --- opening and closing -------------------------------------------------
 
-  open_(onClose: () => void, onTrade?: () => void): void {
+  /**
+   * Opened behind a particular counter.
+   *
+   * One panel serves every shop in the world — there are seven of them and
+   * they are all the same shop with a different woman in it — so who is
+   * standing there is told to it as it opens rather than built into it. It
+   * is also the only thing that differs: the stock, the prices and the
+   * arithmetic are the same wherever you buy.
+   */
+  open_(keeper: string, onClose: () => void, onTrade?: () => void): void {
     this.open = true;
+    this.keeper = keeper;
     this.onClose = onClose;
     this.onTrade = onTrade ?? null;
     this.paper.setVisible(true);
@@ -902,7 +970,7 @@ export class ShopPanel {
   }): void {
     this.title.setText(this.words.storeTitle(CURRENCY.format(this.purse.coins)));
     this.fitTitle(rect.width - PAD * 2 - 34);
-    this.hint.setText(this.words.storeFooter).setColor(INK_DIM);
+    this.hint.setText(this.words.storeFooter(this.keeper)).setColor(INK_DIM);
 
     const columnW = (rect.width - PAD * 3) / 2;
     const leftX = rect.left + PAD;
@@ -916,7 +984,10 @@ export class ShopPanel {
     // the old height ran off the bottom of the parchment. A number here
     // would have to be found again the next time something is added — and
     // would still be wrong on a short screen, which this now also handles.
-    const rows = Math.max(SOLD.length, STOCK.length);
+    // The taller of the two columns, and her side now carries a row of tabs
+    // above its stock — so the budget is the shelf, plus the tabs, against
+    // the basket's list.
+    const rows = Math.max(SOLD.length, MOST_PER_SHELF + 1);
     const room = rect.top + rect.height - PAD - SMALL_SIZE - 12 - firstY;
     const rowH = Math.max(ROW_MIN_H, Math.min(ROW_H, Math.floor(room / rows) - ROW_GAP));
     // Two lines of type in a shorter row need shorter type, or the price
@@ -927,8 +998,14 @@ export class ShopPanel {
       Phaser.GameObjects.Text,
       Phaser.GameObjects.Text,
     ];
-    sellHeading.setText(this.words.sheBuys).setVisible(true).setPosition(leftX, headingY);
-    buyHeading.setText(this.words.sheSells).setVisible(true).setPosition(rightX, headingY);
+    sellHeading
+      .setText(this.words.keeperBuys(this.keeper))
+      .setVisible(true)
+      .setPosition(leftX, headingY);
+    buyHeading
+      .setText(this.words.keeperSells(this.keeper))
+      .setVisible(true)
+      .setPosition(rightX, headingY);
 
     for (const [index, { item }] of SOLD.entries()) {
       const row = this.sellRows[index];
@@ -949,14 +1026,45 @@ export class ShopPanel {
       row.icon?.setAlpha(held > 0 ? 1 : 0.35);
       this.show(row);
     }
-    for (const [index, fixture] of STOCK.entries()) {
-      const row = this.buyRows[index];
-      if (!row) continue;
+    // The tabs, in a row across the top of her side of the counter. Square,
+    // and sized off the column rather than off a constant, so four of them
+    // divide the width they have instead of running past it.
+    const tabW = Math.min(
+      TAB_MAX_W,
+      Math.floor((columnW - TAB_GAP * (SHELVES.length - 1)) / SHELVES.length),
+    );
+    const tabY = firstY + tabW / 2 - TAB_GAP;
+    for (const [at, tab] of this.tabs.entries()) {
+      this.placeTab(tab, rightX + tabW / 2 + at * (tabW + TAB_GAP), tabY, tabW);
+      // The one that is out is the one drawn in full. Dimming the others is
+      // the whole of "you are here" — a highlight box would be a second
+      // thing on a button that already has a picture on it.
+      tab.box.setStrokeStyle(2, INK_HEX, at === this.shelf ? 1 : 0.35);
+      tab.icon?.setAlpha(at === this.shelf ? 1 : 0.4);
+      this.show(tab);
+    }
+
+    const shelfTop = tabY + tabW / 2 + TAB_GAP * 2;
+    const stock = this.onShelf();
+    for (const [index, row] of this.buyRows.entries()) {
+      const fixture = stock[index];
+      // A shelf shorter than the longest leaves rows over. They are hidden
+      // rather than drawn empty: an outlined box with nothing in it reads as
+      // a thing that failed to load.
+      if (!fixture) {
+        this.hide(row);
+        continue;
+      }
       const affordable = this.purse.coins >= priceOf(fixture, this.cropPrice);
+      // The picture *before* the placing, and the order is load-bearing:
+      // `place` scales the icon to the row out of the texture's own size, so
+      // a texture swapped afterwards is drawn at whatever scale the last one
+      // wanted. On a phone that put a two-cell bed over the row beneath it.
+      row.icon?.setTexture(this.iconFor(fixture)).setAlpha(affordable ? 1 : 0.35);
       this.place(
         row,
         rightX + columnW / 2,
-        firstY + (rowH + ROW_GAP) * index + rowH / 2,
+        shelfTop + (rowH + ROW_GAP) * index + rowH / 2,
         columnW,
         rowH,
       );
@@ -965,7 +1073,6 @@ export class ShopPanel {
         this.words.stockRow(fixture, CURRENCY.format(priceOf(fixture, this.cropPrice))),
       );
       row.label.setColor(affordable ? INK : INK_DIM);
-      row.icon?.setAlpha(affordable ? 1 : 0.35);
       this.show(row);
     }
   }
@@ -1030,7 +1137,14 @@ export class ShopPanel {
     const off = difference(tender);
     // The colour row, when there is one, sits between the quantity and the
     // total — so everything below it shifts down by the height of it.
-    const swatches = this.chosenBuy !== null && isFurniture(this.chosenBuy) && !this.settled;
+    // Furniture that can be painted. A bath is tin and a kettle is copper —
+    // there is no wood and no cloth in either, so a colourway swaps nothing
+    // and five swatches under one is five taps that all do the same thing.
+    const swatches =
+      this.chosenBuy !== null &&
+      isFurniture(this.chosenBuy) &&
+      takesAColour(this.chosenBuy as DecorType) &&
+      !this.settled;
     const shift = swatches ? SWATCH + 22 : 0;
     this.runningTotal
       .setVisible(true)
@@ -1043,7 +1157,7 @@ export class ShopPanel {
     // paying for it — and because the counter below has to stay where it is
     // whether or not this row is there.
     const buying = this.chosenBuy;
-    const colours = buying !== null && isFurniture(buying);
+    const colours = buying !== null && isFurniture(buying) && takesAColour(buying as DecorType);
     for (const [look, row] of this.lookRows.entries()) {
       if (!colours || this.settled) {
         row.box.setVisible(false);
@@ -1258,6 +1372,31 @@ export class ShopPanel {
 
   /** A coin on the counter: it looks like the pad's coins but does nothing. */
 
+  /** What stands on the shelf that is out. */
+  private onShelf(): readonly Buyable[] {
+    return SHELVES[this.shelf]?.stock ?? [];
+  }
+
+  /** The picture of a thing, wherever its art happens to live. */
+  private iconFor(thing: Buyable): string {
+    return isFurniture(thing)
+      ? growablePieceKey(GROWABLE_ROOM, pieceArt(thing))
+      : uiTextureKey(itemIcon(thing));
+  }
+
+  /**
+   * Turn to another shelf.
+   *
+   * Nothing else changes: the same purse, the same basket, the same half of
+   * the counter on the left. A shelf is where a thing is kept, not a mode
+   * the shop is in — which is why this does not leave the menu.
+   */
+  private showShelf(at: number): void {
+    if (at === this.shelf || !SHELVES[at]) return;
+    this.shelf = at;
+    this.render();
+  }
+
   /** The value of the nth pad button in the currency now in the purse. */
   private denomination(index: number): number {
     return CURRENCY.denominations[index] ?? 0;
@@ -1281,10 +1420,40 @@ export class ShopPanel {
     }
   }
 
+  /**
+   * A tab: square, and its picture in the middle of it.
+   *
+   * Not `place`, which lays a row out — icon to the left, price to the right
+   * of it. A tab has no words on it at all, so an icon set twenty pixels in
+   * from the left edge of a forty-pixel button sits against the border.
+   */
+  private placeTab(button: Button, x: number, y: number, size: number): void {
+    button.box.setSize(size, size).setPosition(x, y);
+    const icon = button.icon;
+    if (!icon) return;
+    const box = size - 8;
+    const source = icon.texture.getSourceImage() as { width: number; height: number };
+    // **Fitted by width and stood on the floor of the button.** Fitting by
+    // both was the obvious thing and it drew a kettle four pixels across: a
+    // piece of furniture is drawn on a canvas half again as tall as its own
+    // cell, so that it has somewhere to reach into, and most of that canvas
+    // is empty air above it. Fitting the air is fitting the wrong thing.
+    const fit = Math.min(box / (source.width || box), 1);
+    icon.setScale(fit);
+    icon.setPosition(x, y + size / 2 - 4 - (source.height * fit) / 2);
+  }
+
   private show(button: Button): void {
     button.box.setVisible(true);
     button.label.setVisible(true);
     button.icon?.setVisible(true);
+  }
+
+  /** The other way round, for a shelf shorter than the longest. */
+  private hide(button: Button): void {
+    button.box.setVisible(false);
+    button.label.setVisible(false);
+    button.icon?.setVisible(false);
   }
 
   private text(value: string, size: number, color: string): Phaser.GameObjects.Text {

@@ -544,6 +544,51 @@ records — cleared scenery and planted crops. So it survives a reload without
 a single new field on the player, and it cannot drift out of step with the
 ground it is about.
 
+##### The camera pulls out while a patch is being drawn
+
+**A reach you cannot see is not a reach.** The spell lets a child draw ten
+squares across. At the world's own zoom ten squares are 640 screen pixels and
+an iPhone is 390 of them, so the far corner of anything but a small rectangle
+was simply not on the screen — and a playtest came back with children who
+could only ever mark one row or one column.
+
+It bites hardest **indoors**, which is where it was reported. A cottage fills
+a phone from wall to wall, and the squares this spell *builds* on are the ones
+beyond those walls: the ground a child was being asked to draw round was the
+one part of the room they could not see at all.
+
+So while a patch is being drawn the camera pulls out far enough to hold the
+whole reach, and goes back the moment it is not. **On a desktop nothing
+happens** — the reach already fits at the world's own zoom — which is the
+half of it worth stating, because a fix for phones that quietly halved every
+other screen would be a worse bug than the one it fixed.
+
+**Whole zooms only.** The renderer is built on every world pixel landing on a
+whole number of screen ones; a fractional zoom shimmers. So it picks the
+largest whole zoom that fits rather than the exact one that would, and never
+goes below 1 — under that a tile is sixteen pixels and a finger is not. On a
+phone that lands on 1, which is half of the world's usual 2. The playtest
+asked for "25%"; that is a solution rather than a requirement, and taken
+literally it is eight-pixel tiles, which is unreadable pixel art in a game
+for children who cannot yet read words either. The requirement in the report
+is *let them pick more than one row*, and the number that satisfies it is the
+one the reach asks for.
+
+**It is the same fix outdoors**, and it is applied there too. The report said
+"in the house" because that is where the children hit it, but a ten-square
+patch does not fit on a phone in a garden either, and gating the fix to
+interiors would leave the same child stuck at the same wall one wall further
+out.
+
+Two things follow a zoom and neither follows it by itself. A room's camera
+bounds are worked out from the view in *world* pixels — the viewport divided
+by the zoom — so a room framed at one zoom and shown at another is framed
+wrong, which indoors is precisely where this fires. And the lights are drawn
+in screen pixels "at the world zoom", which was a distinction without a
+difference until the zoom moved: left alone, a lamp in a cottage at night
+would visibly swell the moment a child armed the times rune. Both are handled
+where the zoom is changed rather than at either call site.
+
 #### The hourglass spell — telling the time (implemented)
 
 **Action:** two clock faces on the parchment — when you put the game down and
@@ -638,6 +683,48 @@ game that is legibly about coming back after dark, and the dome is the one
 place in the world that cares what hour it is. The child does the thing the
 spell is about before the spell exists.
 
+##### And the dome is open at night
+
+Every door in the world used to keep the same hours: unlocked at eight,
+locked at six. On the village that is right — those are the hours *people*
+keep, which is why they are deliberately not the hours the sun keeps. On the
+observatory it was absurd. The one building in the world whose entire purpose
+is the night sky was open all afternoon and locked at dusk, and the woman
+inside it was at a spyglass in broad daylight.
+
+**So it keeps the hours of the thing it looks at**: open at dusk, shut after
+dawn. An hour either side of the light rather than on it, for exactly the
+reason the village opens after sunrise — these are a person's hours, and
+somebody who watches the sky is at the eyepiece before the last of the light
+has gone and still there when the first of it comes back.
+
+It makes the errand above mean what it always said it meant. "Lighting a path
+is the one chore in the game that is legibly about coming back after dark"
+was written of a dome you could walk into at noon. Now the lamps are lit for
+a climb that has to be made in the dark, and the reward for making it is a
+spell about the hour.
+
+**And it gives the hourglass a second direction to turn.** Winding the glass
+forward to morning is how a child gets past a shut village; winding it on to
+midnight is how she gets into the dome. The village and the dome are never
+both open, so the glass is not a key to one door — it is the choice of which
+door.
+
+They are not exact opposites, though, and that is on purpose: for an hour
+after the village locks up the sky is not dark yet, and in that hour
+everything is shut. The gap is the difference between the hours people keep
+and the hours the sun keeps, and it is the same gap that has always been
+there — it is simply visible now that something is on the other side of it.
+
+**A shut door says which way it is shut.** Every refusal in this game is a
+cross on the door and a picture saying why, and the picture was a crescent
+moon. A moon on the dome at noon would be telling a child *come back when it
+is dark* in the same picture the village uses to say *everybody is asleep*.
+So there is a sun as well, and the door shows whichever of the two is the
+reason. It is read off the hours the door keeps rather than from a list of
+which buildings are odd, so a building that changed its hours cannot end up
+with the wrong picture on it.
+
 ### How big everything is
 
 Measured in **people**: a character is 32 px of drawn ink, which is exactly
@@ -645,16 +732,23 @@ one tile, and that is the ruler the whole world is read against.
 
 | | | | |
 |---|---|---|---|
-| chicken | 0.56 | broadleaf tree | 1.69 |
-| sunflower | 0.31 | conifer | 1.88 |
-| beach rock | 0.47 | mountain spire | 1.78 |
-| boulder | 0.72 | schoolhouse | 3.28 |
+| chicken | 0.56 | broadleaf tree | 1.28–1.97 |
+| sunflower | 0.31 | conifer | 1.41–1.88 |
+| beach rock | 0.31–0.69 | mountain spire | 1.25–1.88 |
+| boulder | 0.41–0.88 | schoolhouse | 3.28 |
 | fence | 0.50 | cottage | 3.62 |
 | | | townhouse | 4.88 |
 | | | the great ship | 5.66 |
 | **player** | **1.00** | barn | 3.50 |
 | well | 1.06 | observatory dome | 3.69 |
 | | | tower | 6.22 |
+
+**The built things are single numbers and the grown things are ranges**, which
+is the difference between a thing there is one of and a thing there are forty
+thousand of. A cottage is 3.62 people because there are seven cottages and
+they are the same cottage; a conifer is anything from 1.41 to 1.88 because a
+wood has saplings in it and it has old growth. See "A wood is not one tree"
+below — the ranges are new, and they are new for a reason worth reading.
 
 It had drifted, and the drift was invisible because every asset class has its
 own tests and each was internally consistent. A boulder stood one and a half
@@ -689,6 +783,85 @@ silhouette cue that says somebody up there looks at things.
 
 `tests/test_scale.py` in the generator pins the whole ladder, including the
 relation that started it: every tree is shorter than every house.
+
+### A wood is not one tree
+
+World generation puts down about **forty thousand conifers** on a 500×500 map
+and a couple of thousand of everything else, so nine impassable objects in ten
+in the whole world are the same sprite. The generator had always known this —
+it renders several distinct individuals per terrain precisely because "one
+silhouette repeated that often reads as wallpaper" — and it shipped a wood
+that was, in a screenshot, one tree tiled across the entire screen.
+
+Three things were wrong, and the obvious one was the least of them.
+
+**More individuals did not help.** Going from four to twelve produced twelve
+trees that were, side by side on a strip, indistinguishable. At this size a
+conifer is a stack of triangles, and a stack of triangles two pixels wider is
+the same stack of triangles — so no amount of widening the shape ranges was
+ever going to break up a formation. This is the part that had to be seen
+rather than reasoned about: the strip of twelve is what settled it.
+
+**Every tree was the same colour.** Woodland ground is emerald and the fir
+above it was the same hue a few steps down, so tree and ground shared a
+colour and a wood came out as one green field with a texture on it. Each
+species now carries several complete colourways — four conifers, four
+broadleaves, three shades of dead wood, three stones — and an individual wears
+one of them, cycled on the instance index. Twelve is a whole multiple of every
+one of those counts, which is what makes the cycle hand each colour out the
+same number of times rather than rolling five trees the same green.
+
+*Complete* ramps rather than per-channel jitter, because a palette here is the
+dark, the lit face and the highlight of one material, and moving those apart
+unshades an object instead of recolouring it.
+
+They are chosen the way the original ramps were: against the ground the thing
+stands on. A conifer that drifted toward the emerald under it would not read
+as a different tree, it would read as a tree that vanished. So the four are
+spread across hue *and* value — the original deep teal fir, a blue spruce, a
+warm pine that separates from the emerald by leaning the other way rather than
+by going darker, and a near-black old fir that gives a flat green field the
+one thing it had none of, which is depth.
+
+The broadleaves include a **copper beech**, and it is the one worth arguing
+for. A deep russet on yellow-green grass separates further than any of the
+greens do — the opposite side of the wheel rather than a few steps down it —
+and a copper beech is that colour in June. It is read as a species and not as
+weather on purpose: this world has a day and a night in it but no seasons, and
+a field of half-autumn trees would be saying something the rest of the game
+never says. A brighter autumn yellow was tried first and read as a tree that
+was dying.
+
+**And the size band was a band on the species.** Every conifer in the world
+stood 1.75 people give or take a hat, so a wood had a level rather than a
+skyline. It is a band on the *individual* now. The ceiling has not moved — it
+is the roofline, and nothing the ground grows may come near a house — but the
+floor came down to just over the player's own height, which is the least that
+can be called a tree rather than a bush. That is the whole reason the table
+above has ranges in it.
+
+**Rock gets less of this than wood, deliberately.** A wood is many trees of
+many kinds; a hillside is one rock broken up, so stone has three shades of
+itself rather than four species, and they are spread on value rather than hue
+— all three have to keep working on slate mountain, lime hilly and golden sand
+at once, and hue is already doing that job. A field of harlequin boulders
+would read as a bug.
+
+**A big boulder is a small boulder drawn larger.** Widening each mass in a
+rock cluster independently was the obvious way to get both sizes and it was
+wrong: the masses stopped overlapping, so a boulder came out as two rocks with
+a notch between them instead of as one lump, and a hillside of those read as
+litter. The roll is on the cluster as a whole and the arrangement inside it is
+left exactly as it was.
+
+None of this cost the game anything to draw. The sprite count is unchanged —
+the same trees stand on the same tiles — and what changed is which frame of a
+sheet each one shows. The six sheets together grew from 35KB to 101KB.
+
+**What variety cannot fix is density.** The densest wood in the default world
+is 391 trees in a 24×18 window — about nine tiles in ten — and at that packing
+it still reads as texture rather than as individual trees, whatever colour
+they are. That is world generation's business and not the art's.
 
 ### Nothing casts a shadow
 
@@ -774,6 +947,64 @@ Its worked example is the middle rectangle its rung can set, never a square:
 a square turned round is indistinguishable from a square, and the last page
 would have nothing to show.
 
+### Everybody has a name
+
+The people in the world used to be their jobs. The welcome said *the
+shopkeeper*, *the teacher*, *the geometer*; the shop panel said *she buys*.
+That reads as a village of functions rather than of people, and in one place
+it had stopped working altogether: there are **seven shops** in the world now
+— the village's, five in the city, two on the quay — and they share one
+apron, one room, one stock and one set of sentences. Walking into any of them
+got a panel headed "She buys". Nothing anywhere told a child which shop they
+were standing in.
+
+So everyone is somebody. Six parts are named by hand — Bruno the postman,
+Lena the schoolteacher, Anton the geometer, Mira the village shopkeeper, Vera
+the astronomer, Emil the clockmaker — and everybody else is handed a name
+from a list: the women behind the other counters from one, the villagers,
+townsfolk and quayside folk from another.
+
+**The names are the same in every language**, which is the argument the coins
+already make: a name is a proper noun, and two siblings on one tablet playing
+in two languages should not be calling the same person different things. It
+also means one table rather than three, and no way for somebody to lose their
+name in a translation.
+
+That has a cost in Croatian, where names decline, and the cost is paid in the
+*sentences* rather than in the names. Every line that uses one is written to
+want the nominative — "Mira buys", not "sell to Mira" — which is why the shop
+panel names her over her two columns rather than in its title. A title reading
+*Mira's shop* would need a possessive built from an arbitrary name in three
+grammars; a heading reading *Mira buys* needs none in any of them.
+
+**They are handed out in cast order, not hashed from an id.** The same
+reasoning that decides which villager wears which face: a world always
+produces its people in the same order from the same seed, so walking the list
+gives somebody the same name every time their world is rebuilt — and, unlike
+a hash, it cannot give two of them the same one. That is not a theoretical
+worry. A city shop's id carries the number of the *block* it landed on, which
+is drawn at random and sparse, so anything modular over it would put two
+Klaras in one city on some seeds and leave nothing to tell them apart.
+
+**Every shopkeeper is a woman**, and that is a decision rather than an
+accident. The shop's sentences say *she* — she owes you this, she counts it
+out, she is wrong one time in ten — and they are one set of sentences shared
+by every counter in the world. One sheet, one pronoun, one list of names that
+agrees with it. A shopkeeper who read as a man would need those lines written
+twice in three languages to buy nothing a player can see.
+
+**The names stay off the nameplates.** A cottage's plate shows a face, or the
+question mark that means *nobody has answered this* — and it shows a face
+because much of the audience cannot read. Sixteen pixels of somebody's name
+beside their door would help nobody who needed the plate in the first place.
+Names belong where the game was already writing a sentence: the welcome, and
+the shop.
+
+Two of the six are named and not yet spoken of. The astronomer and the
+clockmaker have their lessons but no line that says who they are, so Vera and
+Emil are in the table waiting for one. That is the right way round — a name
+added with the sentence that needs it is a name chosen to fit the sentence.
+
 ### What grows where
 
 **Six crops**: carrot, sunflower, tomato, pepper, wheat and cactus. Five of
@@ -850,6 +1081,10 @@ tint is no longer the whole story of night — see "Night, and what is lit" but 
 [`WORLD_GENERATION.md`](WORLD_GENERATION.md#day-night-cycle) for the
 fuller brainstorm.
 
+It also gates **doors**, and not every door the same way. The village keeps
+one pair of hours and the observatory keeps the other — see "And the dome is
+open at night".
+
 ### Economy
 
 The village store is the first half of it, and the only half that exists:
@@ -862,6 +1097,65 @@ Villager requests, the design's intended way to *earn* money, are not
 built, so selling a harvest is currently the only income. That is why the
 shop buys produce at all: the loop has to close somewhere, and this is the
 shortest honest path from doing the maths to seeing something for it.
+
+### Shelves, and the things a child asked for
+
+**The children asked for a kitchen and a bathroom.** A playtest came back
+wanting things to buy for the *house* rather than for the garden, and named
+the two rooms every cottage has and this one did not. The room already had a
+stove in it; what it had not got was anywhere to wash a plate or a child.
+
+So there are six more pieces of furniture: a sink, a dresser and a kettle for
+the kitchen, and a bath, a washstand and a privy for the washroom. All drawn
+out of the same nineteen palette slots as everything else in a room, which is
+the constraint that keeps them part of the set rather than a bolt-on — a tin
+bath is the metal ramp, a dresser is the wood ramp, and the crockery and the
+linen are the paper and the cloth the shelves and the beds already use.
+Nothing here needed a colour the room did not have, and a piece that had
+would have been the wrong piece.
+
+**The bath is empty**, and that is a decision rather than an omission. There
+is no blue in a room's palette, so water would have to be drawn in the metal
+ramp — which is a bath with a lighter bottom, and reads as a clean bath
+rather than a full one. An empty tub is a thing a child fills in their own
+head.
+
+**And the privy is a wooden box with the lid up.** Drawn as the thing it was
+in a cottage, closer to a chest than to porcelain, because that is both what
+belongs in this room's vocabulary and what keeps it from being the only piece
+of furniture in the game a table of six-year-olds cannot look past.
+
+#### The shop grew shelves
+
+One column stopped working. The counter listed everything the shop sold in a
+single run — seven things, then twelve, and eighteen with the kitchen and the
+washroom in it. The rows shrink to fit until they hit a floor, and after that
+they simply run off the bottom of the parchment; the footer was already
+underneath the last of them before any of this was added.
+
+So the stock is sorted onto **four shelves** — the garden, the room, the
+kitchen, the washroom — and one is shown at a time. None is longer than
+seven, which is what the parchment holds at a row height a child can read.
+
+**The shelves are named by a picture.** Each tab carries one of its own
+things as its icon: a fence, a chair, a stove, a washstand. Much of the
+audience cannot read, and a row of four words would be the one place in the
+game where finding what you want required it — the same argument the flags on
+the language chooser make, and the marks on a shut door.
+
+The tab that is out is the one drawn in full and the others are dimmed. That
+is the whole of *you are here*: a highlight box would be a second thing on a
+button that already has a picture on it.
+
+**Each tab's picture is a piece that stands in one cell.** A tab is a square;
+a bed is drawn two cells tall and a bath two cells wide, and either of them
+shrunk into a square is a stripe rather than a picture of anything. So the
+room's tab is a chair and the washroom's is a washstand, and a test says so —
+it is exactly the sort of thing that would be quietly broken by somebody
+choosing a nicer-looking icon later.
+
+**Turning to another shelf is not a mode.** The same purse, the same basket,
+the same half of the counter on the left. A shelf is where a thing is kept.
 
 ### Several children, one device
 

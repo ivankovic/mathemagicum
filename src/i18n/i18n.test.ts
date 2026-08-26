@@ -7,6 +7,7 @@ import { INTRO_BEATS, IntroBeat } from "../ui/intro";
 import { AnimalKind } from "../world/animals";
 import { FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import { INTERIOR_ROOMS } from "../world/interiors";
+import { NAMED_PEOPLE } from "../world/names";
 import { PLANT_STAGES, PLANT_TYPES, PlantStage, PlantType } from "../world/plants";
 import { TERRAIN_TYPES } from "../world/terrain";
 import { DE } from "./de";
@@ -93,9 +94,9 @@ function sample(p: Phrases): Record<string, string> {
     sponsorLink: p.sponsorLink,
 
     storeTitle: p.storeTitle("50,00 kn"),
-    storeFooter: p.storeFooter,
-    sheBuys: p.sheBuys,
-    sheSells: p.sheSells,
+    storeFooter: p.storeFooter(NAMED_PEOPLE.shopkeeper),
+    keeperBuys: p.keeperBuys(NAMED_PEOPLE.shopkeeper),
+    keeperSells: p.keeperSells(NAMED_PEOPLE.shopkeeper),
     stockRow: p.stockRow(fence, "5,00 kn"),
     cropRow: p.cropRow(carrot, 3, "2,50 kn"),
     buyTitle: p.buyTitle(fence, 3, "15,00 kn"),

@@ -6,6 +6,7 @@ import { DecorType } from "../world/decor";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
 import { MaterialType } from "../world/materials";
+import { NAMED_PEOPLE } from "../world/names";
 import { PlantStage, PlantType } from "../world/plants";
 import type { Buyable } from "../world/shop";
 import { TerrainType } from "../world/terrain";
@@ -150,14 +151,11 @@ const PLACE_NAMES: Record<string, string> = {
 // Der Rundgang, Seite für Seite. Nach IntroBeat geschlüsselt, damit eine neue
 // Seite in jeder Sprache auffällt und nicht leer bleibt.
 const INTRO_DE: Record<string, string> = {
-  seeds:
-    "Das da ist dein Garten. Nimm ein Saatkorn aus dem Beutel — es kommt auf das Feld, vor dem du stehst.",
-  spell:
-    "Von allein wächst hier nichts. Öffne das Zauberbuch, sprich die +-Rune darauf und löse die Aufgabe. Zweimal, dann ist die Pflanze reif. Die Lehrerin in der Schule zeigt dir, wie es geht.",
+  seeds: `Ich bin ${NAMED_PEOPLE["postal-worker"]}, der Postbote. Das da ist dein Garten. Nimm ein Saatkorn aus dem Beutel — es kommt auf das Feld, vor dem du stehst.`,
+  spell: `Von allein wächst hier nichts. Öffne das Zauberbuch, sprich die +-Rune darauf und löse die Aufgabe. Zweimal, dann ist die Pflanze reif. ${NAMED_PEOPLE.teacher} in der Schule zeigt dir, wie es geht.`,
   pick: "Tipp auf eine reife Pflanze, um sie zu pflücken. Sie wandert in deinen Korb und wächst nach.",
-  store:
-    "Die Händlerin in der Scheune kauft deine Ernte und verkauft Zäune, Tische und Laternen für den Garten. Das Geld zählst du selbst ab — und sie verzählt sich auch mal.",
-  map: "Im Turm hängt an der Wand eine Karte der ganzen Welt. Tipp jederzeit darauf, um zu sehen, wo du bist — und der Geometer darunter bringt dir einen Zauber fürs Reisen bei.",
+  store: `${NAMED_PEOPLE.shopkeeper} in der Scheune kauft deine Ernte und verkauft Zäune, Tische und Laternen für den Garten. Das Geld zählst du selbst ab — und sie verzählt sich auch mal.`,
+  map: `Im Turm hängt an der Wand eine Karte der ganzen Welt. Tipp jederzeit darauf, um zu sehen, wo du bist — und ${NAMED_PEOPLE.geometer} darunter bringt dir einen Zauber fürs Reisen bei.`,
 };
 
 /**
@@ -186,6 +184,15 @@ const FURNITURE: Record<DecorType, Noun> = {
   [DecorType.Rug]: noun({ bare: "Teppich", gender: "m", plural: "Teppiche" }),
   [DecorType.Bookshelf]: noun({ bare: "Regal", gender: "n", plural: "Regale" }),
   [DecorType.Stove]: noun({ bare: "Ofen", gender: "m", plural: "Öfen" }),
+  // Spüle rather than Waschbecken: the kitchen one and the washroom one are
+  // two different words in German where English leans on one, and the
+  // washstand below is the other.
+  [DecorType.Sink]: noun({ bare: "Spüle", gender: "f", plural: "Spülen" }),
+  [DecorType.Dresser]: noun({ bare: "Küchenschrank", gender: "m", plural: "Küchenschränke" }),
+  [DecorType.Kettle]: noun({ bare: "Kessel", gender: "m", plural: "Kessel" }),
+  [DecorType.Bath]: noun({ bare: "Badewanne", gender: "f", plural: "Badewannen" }),
+  [DecorType.Washstand]: noun({ bare: "Waschtisch", gender: "m", plural: "Waschtische" }),
+  [DecorType.Privy]: noun({ bare: "Plumpsklo", gender: "n", plural: "Plumpsklos" }),
 };
 
 function item(item: ItemType | Buyable): Noun {
@@ -350,9 +357,9 @@ export const DE: Phrases = {
   deleteGameAsk: "Diesen Spielstand löschen? Die Welt und alles darin sind dann für immer weg.",
 
   storeTitle: (money) => `Laden — ${money}`,
-  storeFooter: "Sie kauft deine Ernte und verkauft Sachen für Garten und Haus.",
-  sheBuys: "Sie kauft",
-  sheSells: "Sie verkauft",
+  storeFooter: (keeper) => `${keeper} kauft deine Ernte und verkauft Sachen für Garten und Haus.`,
+  keeperBuys: (keeper) => `${keeper} kauft`,
+  keeperSells: (keeper) => `${keeper} verkauft`,
   stockRow: (thing, price) => `${DE.item(thing).bare}\n${price}`,
   cropRow: (item, held, price) => `${held} x ${DE.item(item).bare}\n${price} je`,
   buyTitle: (thing, count, price) => `${count} x ${DE.item(thing).bare} — zahle ${price}`,

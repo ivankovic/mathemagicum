@@ -6,6 +6,7 @@ import { DecorType } from "../world/decor";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
 import { MaterialType } from "../world/materials";
+import { NAMED_PEOPLE } from "../world/names";
 import { PlantStage, PlantType } from "../world/plants";
 import type { Buyable } from "../world/shop";
 import { TerrainType } from "../world/terrain";
@@ -121,14 +122,11 @@ const PLACE_NAMES: Record<string, string> = {
 // four fields, so a beat added to the tour fails the coverage test in every
 // language instead of silently showing an empty page in one of them.
 const INTRO_EN: Record<string, string> = {
-  seeds:
-    "That is your garden. Take a seed from the pouch and it goes into the ground on the tile you are facing.",
-  spell:
-    "Seeds do not grow on their own here. Open the spellbook, cast the + rune on one, and answer the sum. Two casts and it is ripe. The teacher in the school will show you how, if you ask her.",
+  seeds: `I am ${NAMED_PEOPLE["postal-worker"]}, the postman. That is your garden. Take a seed from the pouch and it goes into the ground on the tile you are facing.`,
+  spell: `Seeds do not grow on their own here. Open the spellbook, cast the + rune on one, and answer the sum. Two casts and it is ripe. ${NAMED_PEOPLE.teacher} in the school will show you how, if you ask her.`,
   pick: "Tap a ripe crop to pick it. It goes in your basket, and it grows back.",
-  store:
-    "The shopkeeper in the barn buys what you pick, and sells fences, tables and lamps for the garden. You count the coins out yourself — she is not always right, mind.",
-  map: "There is a map of the whole world on the wall in the tower. Tap it any time you want to see where you are — and the geometer under it will teach you a spell for getting about.",
+  store: `${NAMED_PEOPLE.shopkeeper} in the barn buys what you pick, and sells fences, tables and lamps for the garden. You count the coins out yourself — she is not always right, mind.`,
+  map: `There is a map of the whole world on the wall in the tower. Tap it any time you want to see where you are — and ${NAMED_PEOPLE.geometer} under it will teach you a spell for getting about.`,
 };
 
 const MATERIALS: Record<MaterialType, Noun> = {
@@ -158,6 +156,12 @@ const FURNITURE: Record<DecorType, Noun> = {
   [DecorType.Rug]: noun("rug"),
   [DecorType.Bookshelf]: noun("bookshelf", "bookshelves"),
   [DecorType.Stove]: noun("stove"),
+  [DecorType.Sink]: noun("sink"),
+  [DecorType.Dresser]: noun("dresser"),
+  [DecorType.Kettle]: noun("kettle"),
+  [DecorType.Bath]: noun("bath"),
+  [DecorType.Washstand]: noun("washstand"),
+  [DecorType.Privy]: noun("privy"),
 };
 
 function item(item: ItemType | Buyable): Noun {
@@ -323,9 +327,9 @@ export const EN: Phrases = {
   // quay, and a counter in a harbour warehouse announcing a village is a
   // sign for the wrong building.
   storeTitle: (money) => `Shop — ${money}`,
-  storeFooter: "She buys crops, and sells things for your garden and your house.",
-  sheBuys: "She buys",
-  sheSells: "She sells",
+  storeFooter: (keeper) => `${keeper} buys crops, and sells things for your garden and your house.`,
+  keeperBuys: (keeper) => `${keeper} buys`,
+  keeperSells: (keeper) => `${keeper} sells`,
   stockRow: (thing, price) => `${EN.item(thing).bare}\n${price}`,
   cropRow: (item, held, price) => `${held} x ${EN.item(item).bare}\n${price} each`,
   buyTitle: (thing, count, price) => `${count} x ${EN.item(thing).bare} — pay ${price}`,

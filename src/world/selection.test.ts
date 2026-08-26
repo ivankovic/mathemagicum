@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   PATCH_REACH,
+  markingZoom,
   patchArea,
   patchBetween,
   patchCells,
@@ -100,5 +101,71 @@ describe("whether a patch is worth casting on", () => {
   test("a single row is", () => {
     expect(patchIsCastable(patchBetween({ col: 1, row: 1 }, { col: 5, row: 1 }, WORLD))).toBe(true);
     expect(patchIsCastable(patchBetween({ col: 1, row: 1 }, { col: 1, row: 2 }, WORLD))).toBe(true);
+  });
+});
+
+/**
+ * How far out the camera pulls while a patch is being drawn.
+ *
+ * The numbers here are real screens rather than round ones, because the bug
+ * this fixes was a real screen: a child on an iPhone could mark one row and
+ * nothing wider.
+ */
+describe("markingZoom", () => {
+  const TILE = 32;
+  const NORMAL = 2;
+  const PHONE = { width: 390, height: 844 };
+  const DESKTOP = { width: 1000, height: 760 };
+
+  test("leaves a desktop exactly as it was", () => {
+    // The whole reach already fits at the world's own zoom, so this must not
+    // touch it. A fix for phones that quietly halved every other screen
+    // would be a worse bug than the one it fixed.
+    expect(markingZoom(DESKTOP, TILE, NORMAL)).toBe(NORMAL);
+  });
+
+  test("pulls a phone out until the whole reach fits", () => {
+    expect(markingZoom(PHONE, TILE, NORMAL)).toBe(1);
+    expect(PATCH_REACH * TILE * markingZoom(PHONE, TILE, NORMAL)).toBeLessThanOrEqual(PHONE.width);
+  });
+
+  test("whatever it picks, a patch of the full reach fits across", () => {
+    for (const width of [320, 390, 414, 768, 1000, 1440]) {
+      for (const height of [480, 568, 760, 844, 1024]) {
+        const zoom = markingZoom({ width, height }, TILE, NORMAL);
+        const needed = PATCH_REACH * TILE * zoom;
+        const shorter = Math.min(width, height);
+        // Either it fits, or the screen is too small for any whole zoom to
+        // make it fit and we are at the floor rather than below it.
+        expect({ width, height, ok: needed <= shorter || zoom === 1 }).toEqual({
+          width,
+          height,
+          ok: true,
+        });
+      }
+    }
+  });
+
+  test("is always a whole number, and never more than the world's own", () => {
+    for (let width = 200; width <= 2000; width += 7) {
+      const zoom = markingZoom({ width, height: width }, TILE, NORMAL);
+      expect(Number.isInteger(zoom)).toBe(true);
+      expect(zoom).toBeGreaterThanOrEqual(1);
+      expect(zoom).toBeLessThanOrEqual(NORMAL);
+    }
+  });
+
+  test("never goes below 1, however small the screen", () => {
+    // Sixteen-pixel tiles are not a target a finger can hit, so there is a
+    // floor and a very small screen sits on it rather than under it.
+    expect(markingZoom({ width: 120, height: 120 }, TILE, NORMAL)).toBe(1);
+  });
+
+  test("the short side is what decides it", () => {
+    // A patch is up to ten squares *either* way, so a wide, short screen is
+    // governed by its height.
+    expect(markingZoom({ width: 2000, height: 390 }, TILE, NORMAL)).toBe(
+      markingZoom({ width: 390, height: 2000 }, TILE, NORMAL),
+    );
   });
 });

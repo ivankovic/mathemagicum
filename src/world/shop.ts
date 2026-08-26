@@ -4,7 +4,7 @@
 import { CURRENCY, coinsFor } from "../shop/currency";
 import { MOST_COUNTER_COINS } from "../shop/tender";
 import { DECOR_TYPES, DecorType, decorItem } from "./decor";
-import { type FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
+import { FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import type { Inventory, ItemType } from "./inventory";
 import { MATERIAL_TYPES, type MaterialType } from "./materials";
 import { PLANT_TYPES, type PlantType } from "./plants";
@@ -123,10 +123,94 @@ const FURNITURE_COST_IN_CROPS: Record<DecorType, number> = {
   // thing *does* rather than how big it is: a room without a stove is a room
   // with no light in it after dark.
   [DecorType.Stove]: 8,
+
+  // --- the kitchen and the washroom ---------------------------------------
+  //
+  // Priced on the same ladder rather than on a new one: the small things a
+  // room is dressed with sit with the chair and the rug, and the two a child
+  // will save for — the dresser and the bath — sit with the bed. Nothing
+  // here passes the stove, which stays the most expensive thing in the house
+  // because it is the one that lights it.
+  [DecorType.Kettle]: 2,
+  [DecorType.Washstand]: 3,
+  [DecorType.Privy]: 3,
+  [DecorType.Sink]: 5,
+  [DecorType.Dresser]: 6,
+  // The bath is two cells wide, and the only piece here that is. It is also
+  // the one a child asked for first, so it is worth saving for and not worth
+  // saving for a fortnight.
+  [DecorType.Bath]: 7,
 };
 
 export const SHOP_STOCK: readonly FixtureType[] = PLACEABLE_FIXTURES;
 export const FURNITURE_STOCK: readonly DecorType[] = DECOR_TYPES;
+
+/**
+ * The shop's shelves, and what stands on each.
+ *
+ * **One list stopped working.** The counter showed everything the shop sold
+ * in a single column, which was seven things, then twelve, and then — when a
+ * playtest asked for a kitchen and a washroom — eighteen. The rows shrink to
+ * fit until they hit a floor and after that they simply run off the bottom
+ * of the parchment; the footer was already underneath the last of them
+ * before any of this was added.
+ *
+ * So the stock is sorted onto shelves and one shelf is shown at a time.
+ * Four of them, none longer than seven, which is what the parchment holds
+ * comfortably at a readable row height.
+ *
+ * **The shelves are named by a picture**, not by a word — the tabs carry one
+ * of their own things as an icon. Much of the audience cannot read, and a
+ * row of four labels would be the one place in the game where finding what
+ * you want required it. That also means the order matters: the garden is
+ * first because it is what a child meets first, and the rooms follow in the
+ * order a house is furnished.
+ */
+export interface Shelf {
+  /** Which of its own things stands on the tab. */
+  readonly icon: Buyable;
+  readonly stock: readonly Buyable[];
+}
+
+export const SHELVES: readonly Shelf[] = [
+  {
+    icon: FixtureType.Fence,
+    stock: SHOP_STOCK,
+  },
+  {
+    // The chair rather than the bed, and the reason is the tab rather than
+    // the room: a tab is a square, and a bed is drawn two cells tall — shrunk
+    // to fit a square it is a stripe. Every icon here is a piece that stands
+    // in one cell, so it is drawn as itself.
+    icon: DecorType.Chair,
+    stock: [DecorType.Bed, DecorType.Table, DecorType.Chair, DecorType.Rug, DecorType.Bookshelf],
+  },
+  {
+    // The stove, which was in the house shelf's territory and belongs here:
+    // it is the thing you cook on, and it is the piece the kettle sits on.
+    icon: DecorType.Stove,
+    stock: [DecorType.Stove, DecorType.Sink, DecorType.Dresser, DecorType.Kettle],
+  },
+  {
+    // And the washstand rather than the bath, for the same reason: the bath
+    // is the one piece in the house two cells wide.
+    icon: DecorType.Washstand,
+    stock: [DecorType.Bath, DecorType.Washstand, DecorType.Privy],
+  },
+];
+
+/** The longest a shelf may be, which is what the parchment can draw. */
+export const MOST_PER_SHELF = 7;
+
+/** Whether a piece stands in a single cell — see the notes on the icons. */
+export function isOneCell(thing: Buyable): boolean {
+  return (
+    thing !== DecorType.Bed &&
+    thing !== DecorType.Table &&
+    thing !== DecorType.Rug &&
+    thing !== DecorType.Bath
+  );
+}
 
 /**
  * Anything the store sells.

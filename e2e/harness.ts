@@ -229,7 +229,27 @@ export interface Opening {
    * canvas and the DOM, which is what these screens are made of.
    */
   readonly onboarding?: boolean;
+  /**
+   * How big the screen is, when the scenario is *about* how big the screen
+   * is.
+   *
+   * Everything else opens at 1000x760, which is a desktop and is what the
+   * suite has always assumed. That assumption is exactly why a phone-shaped
+   * bug could not be seen from here: the array spell asks a child to draw a
+   * rectangle up to ten squares across, and at the world's zoom ten squares
+   * are wider than an iPhone. Nothing in this file could show that.
+   */
+  readonly viewport?: { readonly width: number; readonly height: number };
 }
+
+/**
+ * The narrowest screen the game is meant to work on.
+ *
+ * An iPhone in portrait, in CSS pixels. Not the very smallest phone ever
+ * made — the point is a real device a child is handed, and this is the one
+ * the playtest that asked for the zoom was run on.
+ */
+export const PHONE = { width: 390, height: 844 } as const;
 
 /**
  * Open the game, play, and put it away.
@@ -254,7 +274,7 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
   const browser = await bounded("a browser to start", chromium.launch(), SETUP_MS);
   const context = await bounded(
     "a browser window",
-    browser.newContext({ viewport: { width: 1000, height: 760 } }),
+    browser.newContext({ viewport: { ...(opening.viewport ?? { width: 1000, height: 760 }) } }),
     SETUP_MS,
   );
   await context.addInitScript(
@@ -870,6 +890,46 @@ export class Game {
       if (await this.seam("shop")) return;
     }
     throw new Error("could not find the shopkeeper");
+  }
+
+  /**
+   * Find a thing in the shop and tap it, turning shelves until it is there.
+   *
+   * The stock is on four shelves now, so `tap("shop.buy.chair")` only lands
+   * while the shelf holding chairs is out — which is right for a child and
+   * an ambush for a scenario that has always been able to reach the whole
+   * list at once.
+   *
+   * Turned to rather than looked up: the mapping from thing to shelf is the
+   * game's business and a scenario that copied it here would be a scenario
+   * that quietly stopped meaning anything the day a bath moved rooms.
+   * Answers false if it is nowhere, which is what a thing off every shelf
+   * would look like.
+   */
+  async shopFor(thing: string): Promise<boolean> {
+    if (await this.tap(`shop.buy.${thing}`)) return true;
+    for (let shelf = 0; ; shelf++) {
+      if (!(await this.tap(`shop.shelf.${shelf}`))) return false;
+      await this.settle(150);
+      if (await this.tap(`shop.buy.${thing}`)) return true;
+    }
+  }
+
+  /**
+   * Where the camera is pulled to.
+   *
+   * The array spell moves it on a small screen, and nothing else in the game
+   * ever has — so this exists for the scenarios about that, and reads it off
+   * the live camera rather than off a constant a test could get wrong.
+   */
+  zoomNow(): Promise<number> {
+    return this.ask("the camera's zoom", (page) =>
+      page.evaluate(() => {
+        const handle = (globalThis as never as Record<string, Record<string, unknown>>)
+          .__mathemagicum;
+        return (handle.zoom as () => number)();
+      }),
+    );
   }
 
   /** A picture, for a human reading a failure. */

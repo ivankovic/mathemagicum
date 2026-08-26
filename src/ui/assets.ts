@@ -74,6 +74,15 @@ export const UiAsset = {
   MarkQuestion: "mark-question",
   /** A crescent moon: what a door that is shut for the night says. */
   MarkNight: "mark-night",
+  /**
+   * And a sun, for the one door that is shut the other way round.
+   *
+   * The observatory keeps the hours of what it looks at, so it is locked in
+   * the afternoon and open at midnight. One picture could not do both: a
+   * moon on a dome at noon would be telling a child *come back at night* in
+   * the same breath the village uses to say *everyone is asleep*.
+   */
+  MarkDay: "mark-day",
   /** And what goes in it for a moment after it has been fed. */
   MarkGlad: "mark-glad",
   /** The two halves of *are you sure*, for the one thing that asks twice. */

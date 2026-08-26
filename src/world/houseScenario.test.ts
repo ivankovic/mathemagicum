@@ -68,6 +68,14 @@ const SIZES = {
   // The fire, which is furniture now: a stove stands on the floor where a
   // fireplace was built into the wall.
   [DecorType.Stove]: { cols: 1, rows: 1 },
+  // The kitchen and the washroom. One cell each but the bath, which is a
+  // thing you lie down in.
+  [DecorType.Sink]: { cols: 1, rows: 1 },
+  [DecorType.Dresser]: { cols: 1, rows: 1 },
+  [DecorType.Kettle]: { cols: 1, rows: 1 },
+  [DecorType.Bath]: { cols: 2, rows: 1 },
+  [DecorType.Washstand]: { cols: 1, rows: 1 },
+  [DecorType.Privy]: { cols: 1, rows: 1 },
 };
 
 /** The arrangement the cottage ships with, in the same cells the sidecar has. */

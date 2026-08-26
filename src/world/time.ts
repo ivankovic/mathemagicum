@@ -41,8 +41,51 @@ export const NIGHT_TINT_COLOR = 0x0a1a3a;
 export const OPENS_AT = 8;
 export const SHUTS_AT = 18;
 
-export function isOpenHours(hour: number): boolean {
-  return hour >= OPENS_AT && hour < SHUTS_AT;
+/**
+ * The hours a door keeps: open at `opensAt`, shut again at `shutsAt`.
+ *
+ * A pair rather than two loose numbers because there is more than one set of
+ * them now — see `STARGAZING_HOURS` — and a function that took two numbers
+ * would let a caller hand it one building's opening and another's closing.
+ */
+export interface OpeningHours {
+  readonly opensAt: number;
+  readonly shutsAt: number;
+}
+
+/** What the village keeps. Shops, school, post office, every front door. */
+export const VILLAGE_HOURS: OpeningHours = { opensAt: OPENS_AT, shutsAt: SHUTS_AT };
+
+/**
+ * And what the observatory keeps, which is the other way round.
+ *
+ * An astronomer works when there is something to look at. A dome that was
+ * open all afternoon and locked at dusk had the one building in the world
+ * whose whole purpose is the night sky keeping a greengrocer's hours — and
+ * it made a nonsense of what is inside it, which is somebody at a spyglass.
+ *
+ * **It opens at dusk and shuts after dawn**, an hour either side of the
+ * light rather than on it, for the same reason the village opens after
+ * sunrise: these are the hours a *person* keeps, and somebody who watches
+ * the sky is at the eyepiece before the last of the light has gone and still
+ * there when the first of it comes back.
+ *
+ * This is the pair that wraps midnight, and the reason `isOpenHours` is
+ * written the way it is.
+ */
+export const STARGAZING_HOURS: OpeningHours = { opensAt: SUNSET - 1, shutsAt: SUNRISE + 1 };
+
+/**
+ * Whether a door is open at this hour.
+ *
+ * Handles a window that wraps midnight, which the observatory's does and the
+ * village's does not: when `shutsAt` is the smaller of the two, the open
+ * hours are the ones *outside* the pair rather than between them.
+ */
+export function isOpenHours(hour: number, hours: OpeningHours = VILLAGE_HOURS): boolean {
+  const { opensAt, shutsAt } = hours;
+  if (opensAt <= shutsAt) return hour >= opensAt && hour < shutsAt;
+  return hour >= opensAt || hour < shutsAt;
 }
 
 /**
@@ -52,9 +95,10 @@ export function isOpenHours(hour: number): boolean {
  * shop at seven in the evening and is told nothing has met a bug; one who is
  * told it opens in thirteen hours has met a village.
  */
-export function opensIn(hour: number): number {
-  if (isOpenHours(hour)) return 0;
-  return hour < OPENS_AT ? OPENS_AT - hour : 24 - hour + OPENS_AT;
+export function opensIn(hour: number, hours: OpeningHours = VILLAGE_HOURS): number {
+  if (isOpenHours(hour, hours)) return 0;
+  const wait = hours.opensAt - hour;
+  return wait >= 0 ? wait : wait + 24;
 }
 
 // 0 (no tint, full day) to MAX_NIGHT_ALPHA (full night), ramping linearly

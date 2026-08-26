@@ -27,6 +27,7 @@ import {
   protectedCells,
   roomsAfforded,
   same,
+  takesAColour,
   without,
 } from "./decor";
 import { MaterialType } from "./materials";
@@ -272,6 +273,15 @@ describe("what a room protects and what it blocks", () => {
       { name: "bed", cell: [2, 1], footprint: [1, 2], blocks: true, animated: false, light: null },
       { name: "rug", cell: [3, 3], footprint: [2, 2], blocks: false, animated: false, light: null },
     ],
+    // What there is art for, which is where sizes are read from. The same
+    // four here, because this room's shop sells nothing it does not already
+    // contain — the shipped one sells six more.
+    pieces: {
+      stove: { footprint: [1, 1], blocks: true, animated: true, light: "fire" },
+      bookshelf: { footprint: [1, 1], blocks: true, animated: false, light: null },
+      bed: { footprint: [1, 2], blocks: true, animated: false, light: null },
+      rug: { footprint: [2, 2], blocks: false, animated: false, light: null },
+    },
   } as unknown as GrowableSidecar;
 
   // The fire used to be a fact about the *sidecar*: a fireplace was built
@@ -564,5 +574,45 @@ describe("putting a piece down in front of you", () => {
   test("and a tall thing shifts only for the direction it is tall in", () => {
     expect(anchorFor("bed", ahead, "up", sizes)).toEqual({ col: 5, row: 4 });
     expect(anchorFor("bed", ahead, "left", sizes)).toEqual({ col: 5, row: 5 });
+  });
+});
+
+/**
+ * Which pieces a colour means anything to.
+ *
+ * A colourway swaps the room's wood and cloth ramps; a piece with neither in
+ * it is the same picture five times. The shop offered exactly that under the
+ * bath and the kettle before this existed.
+ */
+describe("what can be painted", () => {
+  test("the wooden things can", () => {
+    for (const piece of [
+      DecorType.Bed,
+      DecorType.Table,
+      DecorType.Chair,
+      DecorType.Rug,
+      DecorType.Bookshelf,
+      DecorType.Sink,
+      DecorType.Dresser,
+      DecorType.Washstand,
+      DecorType.Privy,
+    ]) {
+      expect({ piece, painted: takesAColour(piece) }).toEqual({ piece, painted: true });
+    }
+  });
+
+  test("and the ones made of metal cannot", () => {
+    for (const piece of [DecorType.Kettle, DecorType.Bath]) {
+      expect({ piece, painted: takesAColour(piece) }).toEqual({ piece, painted: false });
+    }
+  });
+
+  test("every piece the game has is one or the other, and none is missed", () => {
+    // The check that keeps the list honest as furniture is added: a new
+    // piece is painted unless it says otherwise, which is the safe default
+    // and the one worth being explicit about.
+    for (const piece of DECOR_TYPES) {
+      expect(typeof takesAColour(piece)).toBe("boolean");
+    }
   });
 });

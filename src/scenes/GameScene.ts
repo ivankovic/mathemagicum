@@ -323,6 +323,7 @@ import {
 } from "../world/landmarks";
 import { hasStep } from "../world/levels";
 import { MATERIAL_TYPES, MaterialType, yieldOf } from "../world/materials";
+import { NAMED_PEOPLE, nameCast } from "../world/names";
 import type { PlacedObject } from "../world/objects";
 import { LAMP_POSTS, type Observatory, lampsLit, postsFree } from "../world/observatory";
 import { findPath } from "../world/pathfinding";
@@ -345,7 +346,13 @@ import {
   scenerySheetKey,
   scenerySidecarKey,
 } from "../world/scenery";
-import { type Patch, patchBetween, patchCells, patchIsCastable } from "../world/selection";
+import {
+  type Patch,
+  markingZoom,
+  patchBetween,
+  patchCells,
+  patchIsCastable,
+} from "../world/selection";
 import {
   AIM_REACH,
   type ActionResult,
@@ -390,6 +397,9 @@ import {
 import {
   MAX_NIGHT_ALPHA,
   NIGHT_TINT_COLOR,
+  type OpeningHours,
+  STARGAZING_HOURS,
+  VILLAGE_HOURS,
   isOpenHours,
   nightTintAlpha,
   opensIn,
@@ -855,8 +865,15 @@ const ASTRONOMER_ID = "astronomer";
 const CLOCKMAKER_ID = "clockmaker";
 /** His id in the world, which the city gives him. See `keepsNoCurfew`. */
 const CITY_CLOCKMAKER_ID = "city-clockmaker";
+/**
+ * The dome on the mountain — the one building that keeps the night's hours.
+ *
+ * Named because two things now ask for it by id: who is found inside, and
+ * when the door opens. See `hoursFor`.
+ */
+const OBSERVATORY_DOME_ID = "observatory-dome";
 const LONE_ATTENDANTS: Record<string, string> = {
-  "observatory-dome": ASTRONOMER_ID,
+  [OBSERVATORY_DOME_ID]: ASTRONOMER_ID,
 };
 // The post office's room, and the one building with a reason to have a map of
 // the world on its wall.
@@ -1612,6 +1629,16 @@ export class GameScene extends Phaser.Scene {
   // Who the village put where, kept because an indoor NPC is not spawned
   // until the player walks into their building.
   private villageNpcs: readonly VillageNpcSpec[] = [];
+  /**
+   * What each of them is called, by id.
+   *
+   * Settled once, when the cast is assembled, because names are handed out
+   * in cast order and a second reckoning somewhere else would hand out a
+   * different set. Empty until then, and `nameCast` puts the named roles in
+   * whatever the world holds, so a lookup before the world is built gets the
+   * teacher rather than nothing.
+   */
+  private npcNames: ReadonlyMap<string, string> = nameCast([]);
   private attendant: Phaser.GameObjects.Sprite | null = null;
   /** The tower's wall map, while the player is in the tower. */
   private wallMap: Phaser.GameObjects.Image | null = null;
@@ -1773,6 +1800,7 @@ export class GameScene extends Phaser.Scene {
     // spawner sorts the indoor ones from the outdoor ones by itself, and
     // `homeBuildingId` is what puts a shopkeeper behind the right counter.
     this.villageNpcs = [...world.village.npcs, ...world.city.npcs, ...(world.harbour?.npcs ?? [])];
+    this.npcNames = nameCast(this.villageNpcs);
     this.spawnAnimals(
       world.village.well,
       world.village.buildings,
@@ -2150,6 +2178,15 @@ export class GameScene extends Phaser.Scene {
         const room = this.interior;
         return room ? { room: room.room, building: room.house ?? null } : null;
       },
+      /**
+       * Where the camera is pulled to.
+       *
+       * The one number in the game that depends on how big the screen is, so
+       * it is also the one a scenario cannot work out for itself — see
+       * `markingZoom`. Reported live rather than as the constant, because
+       * what is worth checking is that it *moved* and came back.
+       */
+      zoom: () => this.cameras.main.zoom,
       openHours: () => ({
         open: this.villageIsOpen,
         hour: this.hourNow(),
@@ -2477,6 +2514,10 @@ export class GameScene extends Phaser.Scene {
      * what it can see — never filled the rest in.
      */
     this.cameras.main.setSize(width, height);
+    // How far out the camera belongs depends on how wide the screen is, so a
+    // phone turned sideways while a patch is half drawn wants asking again.
+    // Before the reframe, because the framing is worked out from the zoom.
+    this.applyZoom();
     // The room's bounds are computed from the camera's own size, so a room
     // framed for a portrait screen is framed wrong the moment it is not one.
     if (this.interior) this.reframeInterior();
@@ -2576,6 +2617,24 @@ export class GameScene extends Phaser.Scene {
    * Everything that glows reads its strength off the result, so the grove's
    * mushrooms are lit at noon. That is the whole point of them.
    */
+  /**
+   * How much of a light's reach to draw, given where the camera is.
+   *
+   * Every radius in this file is quoted "in screen pixels at the world
+   * zoom", and until the array spell started pulling the camera out that was
+   * a distinction without a difference — the zoom never moved. It moves now,
+   * and a radius left in raw screen pixels would light twice the floor at
+   * half the zoom: a lamp in a cottage at night would visibly swell the
+   * moment a child armed the times rune.
+   *
+   * So the radii mean what they always said they meant, and this is the
+   * factor that keeps them meaning it: a light covers the same *ground*
+   * whatever the camera is doing.
+   */
+  private get lightScale(): number {
+    return this.cameras.main.zoom / CAMERA_ZOOM;
+  }
+
   private paintNight(nightAlpha: number, dusk: number): void {
     const alpha = Math.max(nightAlpha, GROVE_DUSK_ALPHA * dusk);
     // Hidden rather than merely transparent. A rectangle at alpha zero is
@@ -2595,7 +2654,10 @@ export class GameScene extends Phaser.Scene {
       const at = this.screenOfPoint(this.player.x, this.player.y - TILE_SIZE / 2);
       player
         .setPosition(at.x, at.y)
-        .setDisplaySize(PLAYER_LIGHT_RADIUS * 2, PLAYER_LIGHT_RADIUS * 2)
+        .setDisplaySize(
+          PLAYER_LIGHT_RADIUS * 2 * this.lightScale,
+          PLAYER_LIGHT_RADIUS * 2 * this.lightScale,
+        )
         .setAlpha(strength * PLAYER_GLOW_ALPHA);
     }
     for (const [key, glow] of this.lampGlows) {
@@ -2605,7 +2667,10 @@ export class GameScene extends Phaser.Scene {
       const at = this.screenOf(cell.col, cell.row);
       glow
         .setPosition(at.x, at.y - TILE_SIZE)
-        .setDisplaySize(LAMP_LIGHT_RADIUS * 2, LAMP_LIGHT_RADIUS * 2)
+        .setDisplaySize(
+          LAMP_LIGHT_RADIUS * 2 * this.lightScale,
+          LAMP_LIGHT_RADIUS * 2 * this.lightScale,
+        )
         .setAlpha(strength * LAMP_GLOW_ALPHA);
     }
     this.paintTree();
@@ -2636,7 +2701,10 @@ export class GameScene extends Phaser.Scene {
     glow
       .setVisible(true)
       .setPosition(at.x, at.y - TREE_GLOW_RISE)
-      .setDisplaySize(TREE_LIGHT_RADIUS * 2, TREE_LIGHT_RADIUS * 2)
+      .setDisplaySize(
+        TREE_LIGHT_RADIUS * 2 * this.lightScale,
+        TREE_LIGHT_RADIUS * 2 * this.lightScale,
+      )
       .setAlpha(TREE_GLOW_ALPHA * lightBreath(this.time.now, TREE_BREATH_MS, TREE_BREATH));
   }
 
@@ -2688,7 +2756,10 @@ export class GameScene extends Phaser.Scene {
     const flicker = 1 - (HEARTH_FLICKER * (1 - Math.cos(phase * Math.PI * 2))) / 2;
     glow
       .setPosition(at.x, at.y - TILE_SIZE)
-      .setDisplaySize(HEARTH_LIGHT_RADIUS * 2, HEARTH_LIGHT_RADIUS * 2)
+      .setDisplaySize(
+        HEARTH_LIGHT_RADIUS * 2 * this.lightScale,
+        HEARTH_LIGHT_RADIUS * 2 * this.lightScale,
+      )
       .setAlpha(strength * HEARTH_GLOW_ALPHA * flicker);
   }
 
@@ -2769,7 +2840,10 @@ export class GameScene extends Phaser.Scene {
         if (!near) continue;
         glow
           .setPosition(on.x, on.y)
-          .setDisplaySize(WINDOW_LIGHT_RADIUS * 2, WINDOW_LIGHT_RADIUS * 2)
+          .setDisplaySize(
+            WINDOW_LIGHT_RADIUS * 2 * this.lightScale,
+            WINDOW_LIGHT_RADIUS * 2 * this.lightScale,
+          )
           .setAlpha(lit * WINDOW_GLOW_ALPHA);
       }
     }
@@ -4414,6 +4488,10 @@ export class GameScene extends Phaser.Scene {
     // the whole of "mark out the ground": a spell that is waiting for a tap
     // and says nothing is a spell that looks like it did not fire.
     this.raiseArmedRune(uiTextureKey(UiAsset.RuneTimes));
+    // Out, so the whole reach is on screen. On anything desktop-shaped this
+    // does nothing at all; on a phone it is the difference between drawing a
+    // rectangle and drawing a line — see `markingZoom`.
+    this.applyZoom();
     this.paintPatch();
   }
 
@@ -4524,6 +4602,11 @@ export class GameScene extends Phaser.Scene {
     if (!this.marking) return;
     this.marking = null;
     this.settling = false;
+    // Back in, and from here rather than from each of the ways marking ends.
+    // There are five — cast, the rune tapped again, a cancel, a panel
+    // opening over it, and walking out of the room — and every one of them
+    // already comes through here.
+    this.applyZoom();
     this.patchMenu?.close();
     this.paintPatch();
     this.armedRune?.destroy();
@@ -6558,6 +6641,17 @@ export class GameScene extends Phaser.Scene {
     this.joystick?.release();
     this.closeTrays();
     this.shopPanel.open_(
+      // Whoever is behind *this* counter. `attendantId` is the person the
+      // room was built with, which is the only thing that tells the city's
+      // five shops apart — they share a sheet, a stock and a room.
+      //
+      // Neither fallback is reachable, and both are written down rather than
+      // left to a crash: the tap that opens this is registered while the
+      // attendant is spawned, so there is always one, and the names are
+      // reckoned from the very list the attendant was found in. If one ever
+      // did fire the shop would say Mira, which is a wrong name rather than
+      // a child staring at a dead panel.
+      this.npcNames.get(this.attendantId ?? SHOPKEEPER_ID) ?? NAMED_PEOPLE.shopkeeper,
       () => {
         this.refreshCarried();
       },
@@ -7591,8 +7685,14 @@ export class GameScene extends Phaser.Scene {
     const sidecar = this.scenerySidecars.get(kind);
     if (!sidecar) throw new Error(`no art loaded for scenery "${kind}"`);
     // Which individual this tile gets, and whether it faces the other way.
-    // Four shapes times a mirror is eight silhouettes, which is enough that
-    // a wood of thousands stops reading as a repeat.
+    //
+    // Twelve of them now, and the count is read off the sidecar rather than
+    // written here — the art decides how many there are of anything. It was
+    // four, with a note claiming that four shapes and a mirror were enough
+    // that a wood of thousands stopped reading as a repeat. They were not:
+    // the world puts down forty thousand conifers and a screenshot of that
+    // wood was one tree tiled across the screen. What fixed it was mostly
+    // not the count — see the design doc, "A wood is not one tree".
     const instance = variationFor(object.col, object.row, Math.max(1, sidecar.instances));
     return this.spawnFootprintSprite(
       object,
@@ -8500,6 +8600,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * The hours *this* door keeps.
+   *
+   * Nearly everything keeps the village's, because nearly everything is a
+   * shop or a school or somebody's house and those are open when people are
+   * about. The dome is the exception and it is the interesting one: an
+   * astronomer works when there is something to look at, so it is locked all
+   * afternoon and lit at midnight — see `STARGAZING_HOURS`.
+   *
+   * By building id rather than by room, because the room is a picture and
+   * the hours are a fact about the person in it.
+   */
+  private hoursFor(buildingId: string): OpeningHours {
+    return buildingId === OBSERVATORY_DOME_ID ? STARGAZING_HOURS : VILLAGE_HOURS;
+  }
+
+  private isOpenNow(buildingId: string): boolean {
+    return isOpenHours(this.hourNow(), this.hoursFor(buildingId));
+  }
+
+  /**
    * A shut door, said in a picture.
    *
    * A cross on the door, which is what every other refusal in this game
@@ -8508,7 +8628,13 @@ export class GameScene extends Phaser.Scene {
    */
   private refuseForTheNight(building: BuildingRuntime): void {
     this.markRefusal(building.doorCol, building.doorRow);
-    this.floatMark(UiAsset.MarkNight);
+    // Which way round it is shut. A moon on nearly everything, and a sun on
+    // the dome — the two refusals mean opposite things and a child has to be
+    // able to tell "they have gone to bed" from "come back when it is dark".
+    // Read off the hours the door keeps rather than off a second list, so a
+    // building that changed its hours cannot keep the wrong picture.
+    const opensAtNight = this.hoursFor(building.id).opensAt > this.hoursFor(building.id).shutsAt;
+    this.floatMark(opensAtNight ? UiAsset.MarkDay : UiAsset.MarkNight);
   }
 
   private enterInterior(building: BuildingRuntime): void {
@@ -8527,7 +8653,7 @@ export class GameScene extends Phaser.Scene {
     // through this very function — so a curfew checked at the top of it
     // would lock her out of her own front door at seven in the evening.
     // Everything past this line is somebody else's building.
-    if (!this.villageIsOpen) {
+    if (!this.isOpenNow(building.id)) {
       this.refuseForTheNight(building);
       return;
     }
@@ -8612,6 +8738,40 @@ export class GameScene extends Phaser.Scene {
   private reframeInterior(): void {
     const framed = this.framedRoom;
     if (framed) this.frameRoom(framed.width, framed.height, framed.at);
+  }
+
+  /**
+   * How far out the camera should be right now.
+   *
+   * The world's own zoom, except while a patch is being drawn — see
+   * `markingZoom`. Asked rather than remembered, so the one answer serves
+   * the moment marking starts, the moment it ends, and a phone turned
+   * sideways in between.
+   */
+  private zoomWanted(): number {
+    if (!this.marking) return CAMERA_ZOOM;
+    const camera = this.cameras.main;
+    return markingZoom({ width: camera.width, height: camera.height }, TILE_SIZE, CAMERA_ZOOM);
+  }
+
+  /**
+   * Put the camera where `zoomWanted` says, and tidy up after it.
+   *
+   * Two things follow a zoom and neither follows it by itself. A room's
+   * camera bounds are worked out from the view in *world* pixels, which is
+   * the viewport divided by the zoom — so a room framed at one zoom and
+   * shown at another is framed wrong, which indoors is precisely where this
+   * fires. And the lights are drawn in screen pixels, so without repainting
+   * them a lamp's pool covers twice the floor it did a moment ago.
+   */
+  private applyZoom(): void {
+    const camera = this.cameras.main;
+    const wanted = this.zoomWanted();
+    if (camera.zoom === wanted) return;
+    camera.setZoom(wanted);
+    if (this.interior) this.reframeInterior();
+    // The lights repaint themselves every frame off `lightScale`, so there
+    // is nothing to do for them here beyond having changed the zoom.
   }
 
   /**

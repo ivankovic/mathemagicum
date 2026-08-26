@@ -209,6 +209,13 @@ export interface GrowableSidecar {
   start_floor: readonly (readonly [number, number])[];
   door_cell: readonly [number, number];
   start_size_cells: { cols: number; rows: number };
+  /**
+   * The arrangement the room ships with: what stands where.
+   *
+   * An *arrangement*, and only that. It used to double as the list of what a
+   * room had pictures of, which held for exactly as long as the shop sold
+   * nothing the room did not already contain — see `pieces`.
+   */
   furniture: readonly {
     name: string;
     cell: readonly [number, number];
@@ -217,6 +224,27 @@ export interface GrowableSidecar {
     animated: boolean;
     light: string | null;
   }[];
+  /**
+   * And every piece there is art for, whether or not the room starts with
+   * one, by the generator's own name for it.
+   *
+   * The two lists came apart when the shop started selling a kitchen and a
+   * washroom: those are things a child buys and puts down, and a cottage
+   * that shipped with a privy already standing in it would be answering a
+   * question nobody asked. This is *what things are*; `furniture` is *where
+   * one of them starts*.
+   */
+  pieces: Readonly<
+    Record<
+      string,
+      {
+        footprint: readonly [number, number];
+        blocks: boolean;
+        animated: boolean;
+        light: string | null;
+      }
+    >
+  >;
   palette?: Readonly<Record<string, readonly [number, number, number]>>;
   /**
    * What a piece of furniture may be painted: wood and cloth together.

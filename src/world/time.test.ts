@@ -6,6 +6,8 @@ import {
   MAX_NIGHT_ALPHA,
   OPENS_AT,
   SHUTS_AT,
+  STARGAZING_HOURS,
+  VILLAGE_HOURS,
   isOpenHours,
   nightTintAlpha,
   opensIn,
@@ -131,6 +133,78 @@ describe("nightTintAlpha", () => {
       expect(Number.isNaN(alpha)).toBe(false);
       expect(alpha).toBeGreaterThanOrEqual(0);
       expect(alpha).toBeLessThanOrEqual(MAX_NIGHT_ALPHA);
+    }
+  });
+});
+
+/**
+ * The observatory keeps the hours of the thing it looks at.
+ *
+ * The one door in the world that is open at midnight and locked at noon, and
+ * the one window that wraps midnight — which is the whole reason the two
+ * functions above take a pair rather than reading a global.
+ */
+describe("the observatory's hours", () => {
+  const cases: [number, boolean][] = [
+    [0, true],
+    [3, true],
+    [STARGAZING_HOURS.shutsAt - 0.01, true],
+    [STARGAZING_HOURS.shutsAt, false],
+    [9, false],
+    [12, false],
+    [STARGAZING_HOURS.opensAt - 0.01, false],
+    [STARGAZING_HOURS.opensAt, true],
+    [22, true],
+    [23.99, true],
+  ];
+  for (const [hour, expected] of cases) {
+    test(`hour ${hour} -> ${expected}`, () => {
+      expect(isOpenHours(hour, STARGAZING_HOURS)).toBe(expected);
+    });
+  }
+
+  // The point of the change, stated as the thing it has to be: the two doors
+  // are never both shut and never both open, so a child turning the glass to
+  // get into one is turning it out of the other. That is the trade, and it
+  // is what makes the hourglass worth having twice.
+  test("is the village's, inverted", () => {
+    for (let hour = 0; hour < 24; hour += 0.25) {
+      const village = isOpenHours(hour, VILLAGE_HOURS);
+      const dome = isOpenHours(hour, STARGAZING_HOURS);
+      if (village) {
+        expect({ hour, dome }).toEqual({ hour, dome: false });
+      }
+    }
+  });
+
+  // It is not *exactly* the inverse, and deliberately: both are shut in the
+  // hour after the village locks up and before the sky is dark, which is the
+  // gap between the hours people keep and the hours the sun keeps.
+  test("but not its exact complement — there is a dusk between them", () => {
+    const between = [];
+    for (let hour = 0; hour < 24; hour += 0.25) {
+      if (!isOpenHours(hour, VILLAGE_HOURS) && !isOpenHours(hour, STARGAZING_HOURS)) {
+        between.push(hour);
+      }
+    }
+    expect(between.length).toBeGreaterThan(0);
+  });
+
+  test("says how long until it is dark", () => {
+    expect(opensIn(22, STARGAZING_HOURS)).toBe(0);
+    expect(opensIn(2, STARGAZING_HOURS)).toBe(0);
+    // Locked at noon, and opening this evening rather than tomorrow's.
+    expect(opensIn(12, STARGAZING_HOURS)).toBe(STARGAZING_HOURS.opensAt - 12);
+    // Just shut at dawn: the wait is the whole day.
+    expect(opensIn(STARGAZING_HOURS.shutsAt, STARGAZING_HOURS)).toBe(
+      STARGAZING_HOURS.opensAt - STARGAZING_HOURS.shutsAt,
+    );
+  });
+
+  test("the village's own hours are unchanged by the argument", () => {
+    for (let hour = 0; hour < 24; hour += 0.25) {
+      expect(isOpenHours(hour)).toBe(isOpenHours(hour, VILLAGE_HOURS));
+      expect(opensIn(hour)).toBe(opensIn(hour, VILLAGE_HOURS));
     }
   });
 });

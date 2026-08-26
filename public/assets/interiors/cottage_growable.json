@@ -42,38 +42,8 @@
     }
   },
   "piece_sheets": {
-    "stove": {
-      "file": "cottage_piece_stove.png",
-      "frame_width": 32,
-      "frame_height": 48,
-      "frame_count": 8,
-      "columns": 8,
-      "rows": 1,
-      "margin": 1,
-      "spacing": 2
-    },
-    "rug": {
-      "file": "cottage_piece_rug.png",
-      "frame_width": 64,
-      "frame_height": 80,
-      "frame_count": 1,
-      "columns": 1,
-      "rows": 1,
-      "margin": 1,
-      "spacing": 2
-    },
-    "bookshelf": {
-      "file": "cottage_piece_bookshelf.png",
-      "frame_width": 32,
-      "frame_height": 48,
-      "frame_count": 1,
-      "columns": 1,
-      "rows": 1,
-      "margin": 1,
-      "spacing": 2
-    },
-    "table": {
-      "file": "cottage_piece_table.png",
+    "bath": {
+      "file": "cottage_piece_bath.png",
       "frame_width": 64,
       "frame_height": 48,
       "frame_count": 1,
@@ -92,8 +62,98 @@
       "margin": 1,
       "spacing": 2
     },
+    "bookshelf": {
+      "file": "cottage_piece_bookshelf.png",
+      "frame_width": 32,
+      "frame_height": 48,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
     "chair": {
       "file": "cottage_piece_chair.png",
+      "frame_width": 32,
+      "frame_height": 48,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "dresser": {
+      "file": "cottage_piece_dresser.png",
+      "frame_width": 32,
+      "frame_height": 48,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "kettle": {
+      "file": "cottage_piece_kettle.png",
+      "frame_width": 32,
+      "frame_height": 48,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "privy": {
+      "file": "cottage_piece_privy.png",
+      "frame_width": 32,
+      "frame_height": 48,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "rug": {
+      "file": "cottage_piece_rug.png",
+      "frame_width": 64,
+      "frame_height": 80,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "sink": {
+      "file": "cottage_piece_sink.png",
+      "frame_width": 32,
+      "frame_height": 48,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "stove": {
+      "file": "cottage_piece_stove.png",
+      "frame_width": 32,
+      "frame_height": 48,
+      "frame_count": 8,
+      "columns": 8,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "table": {
+      "file": "cottage_piece_table.png",
+      "frame_width": 64,
+      "frame_height": 48,
+      "frame_count": 1,
+      "columns": 1,
+      "rows": 1,
+      "margin": 1,
+      "spacing": 2
+    },
+    "washstand": {
+      "file": "cottage_piece_washstand.png",
       "frame_width": 32,
       "frame_height": 48,
       "frame_count": 1,
@@ -309,6 +369,116 @@
       "light": null
     }
   ],
+  "pieces": {
+    "bath": {
+      "footprint": [
+        2,
+        1
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    "bed": {
+      "footprint": [
+        1,
+        2
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    "bookshelf": {
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    "chair": {
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    "dresser": {
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    "kettle": {
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    "privy": {
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    "rug": {
+      "footprint": [
+        2,
+        2
+      ],
+      "blocks": false,
+      "animated": false,
+      "light": null
+    },
+    "sink": {
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    "stove": {
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true,
+      "animated": true,
+      "light": "fire"
+    },
+    "table": {
+      "footprint": [
+        2,
+        1
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    },
+    "washstand": {
+      "footprint": [
+        1,
+        1
+      ],
+      "blocks": true,
+      "animated": false,
+      "light": null
+    }
+  },
   "window_columns": [
     2,
     5

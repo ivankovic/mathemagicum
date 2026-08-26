@@ -849,8 +849,10 @@ a door: walking in gets a room and nobody in it.
 **Fixed: every shop in the world has somebody behind the counter.** A
 `role` on an NPC says what they *are* when their id cannot — the village has
 one shopkeeper and she is called `shopkeeper`, and the city has five whose
-ids have to be their own — and it decides both which sheet they are drawn
-with and which panel they open.
+ids have to be their own — and it decides which sheet they are drawn with,
+which panel they open and, since they were given names, which of them is
+Mira and which is somebody else (see the design doc, "Everybody has a
+name").
 
 **The city's shops stopped being a die roll.** One block in five, drawn per
 block, mostly came out at five or six and *sometimes came out at none*: a

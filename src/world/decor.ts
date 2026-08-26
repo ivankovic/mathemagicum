@@ -42,6 +42,17 @@ export const DecorType = {
   Rug: "rug",
   Bookshelf: "bookshelf",
   Stove: "stove",
+  // The kitchen and the washroom, which a playtest asked for by name: the
+  // children wanted things to buy for the *house* rather than for the
+  // garden, and named the two rooms every cottage has and this one had not.
+  // The stove was already here; what was missing was anywhere to wash a
+  // plate or a child.
+  Sink: "sink",
+  Dresser: "dresser",
+  Kettle: "kettle",
+  Bath: "bath",
+  Washstand: "washstand",
+  Privy: "privy",
 } as const;
 
 export type DecorType = (typeof DecorType)[keyof typeof DecorType];
@@ -64,6 +75,12 @@ const PIECE_ART: Record<DecorType, string> = {
   [DecorType.Rug]: "rug",
   [DecorType.Bookshelf]: "bookshelf",
   [DecorType.Stove]: "stove",
+  [DecorType.Sink]: "sink",
+  [DecorType.Dresser]: "dresser",
+  [DecorType.Kettle]: "kettle",
+  [DecorType.Bath]: "bath",
+  [DecorType.Washstand]: "washstand",
+  [DecorType.Privy]: "privy",
 };
 
 export function pieceArt(decor: DecorType): string {
@@ -101,6 +118,28 @@ export function decorItem(piece: DecorType, look: number): DecorItem {
  */
 export const DECOR_LOOKS = 5;
 
+/**
+ * Which pieces can actually be painted, and which are one colour only.
+ *
+ * A colourway swaps the room's *wood* and *cloth* ramps for another pair —
+ * see the generator's note on `PIECE_COLOURWAYS`. So a piece drawn out of
+ * those two ramps has five looks, and a piece drawn out of tin has one: the
+ * kettle and the bath came into the shop with five swatches under them, all
+ * five of which were the same picture.
+ *
+ * Listed by exception rather than derived from the art, because "does this
+ * sprite contain a wood pixel" is a question about a texture that may not
+ * have loaded, and `DECOR_ITEMS` has to enumerate the basket's contents
+ * before anything is on screen. `decor.test.ts` checks the list against what
+ * the generator ships.
+ */
+const ONE_COLOUR: readonly string[] = [DecorType.Kettle, DecorType.Bath];
+
+/** Whether a swatch under this piece would mean anything. */
+export function takesAColour(piece: DecorType): boolean {
+  return !ONE_COLOUR.includes(piece);
+}
+
 /** Every kind of thing a basket can hold: each piece in each colour. */
 export const DECOR_ITEMS: readonly DecorItem[] = DECOR_TYPES.flatMap((piece) =>
   Array.from({ length: DECOR_LOOKS }, (_, look) => decorItem(piece, look)),
@@ -132,8 +171,12 @@ export type Footprints = Readonly<Record<string, { cols: number; rows: number }>
 
 export function footprintsOf(sidecar: GrowableSidecar): Footprints {
   const sizes: Record<string, { cols: number; rows: number }> = {};
-  for (const piece of sidecar.furniture) {
-    const decor = decorFor(piece.name);
+  // Read off `pieces` rather than off the shipped arrangement. A bath is a
+  // thing the shop sells and the room does not start with, so a size taken
+  // from what is standing in the room would be no size at all — and a piece
+  // with no footprint is a piece that cannot be put down.
+  for (const [name, piece] of Object.entries(sidecar.pieces)) {
+    const decor = decorFor(name);
     if (!decor) continue;
     sizes[decor] = { cols: piece.footprint[0], rows: piece.footprint[1] };
   }

@@ -36,6 +36,43 @@ export const PATCH_REACH = 10;
 /** The fewest cells worth asking a multiplication about. */
 export const PATCH_LEAST = 2;
 
+/**
+ * How far out to pull the camera while a patch is being drawn.
+ *
+ * **A reach you cannot see is not a reach.** The spell lets a child draw ten
+ * squares across; at the world's own zoom, ten squares are 640 screen pixels
+ * and an iPhone is 390 of them. So the far corner of anything but a small
+ * rectangle was simply not on the screen, and a playtest came back with
+ * children who could only ever mark one row or one column.
+ *
+ * It bites hardest indoors, which is where it was reported. A cottage fills
+ * a phone from wall to wall, and the squares this spell *builds* on are the
+ * ones beyond those walls — so the ground a child was being asked to draw
+ * round was the one part of the room they could not see at all.
+ *
+ * **Integer zooms only**, which is the rule the whole renderer is built on:
+ * every world pixel has to land on a whole number of screen pixels or the
+ * art shimmers. So this picks the largest whole zoom that fits the reach
+ * rather than the exact one that would — and never goes below 1, because
+ * under that a tile is sixteen pixels and a finger is not.
+ *
+ * **The smaller side decides it.** A patch may be ten squares either way, so
+ * the axis with less room to give is the one that has to fit. On a desktop
+ * that is the height and it already clears the reach, so nothing there
+ * changes at all — this is a phone's fix and it should be invisible
+ * everywhere else.
+ */
+export function markingZoom(
+  view: { readonly width: number; readonly height: number },
+  tile: number,
+  normal: number,
+  reach: number = PATCH_REACH,
+): number {
+  const shorter = Math.min(view.width, view.height);
+  const fits = Math.floor(shorter / (tile * reach));
+  return Math.max(1, Math.min(normal, fits));
+}
+
 export interface Patch {
   readonly col: number;
   readonly row: number;

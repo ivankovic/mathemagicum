@@ -3,9 +3,9 @@
     "file": "grass_sheet.png",
     "frame_width": 64,
     "frame_height": 64,
-    "frame_count": 32,
+    "frame_count": 96,
     "columns": 8,
-    "rows": 4,
+    "rows": 12,
     "margin": 1,
     "spacing": 2
   },
@@ -29,7 +29,7 @@
     "width": 64,
     "height": 64
   },
-  "frame_count": 32,
+  "frame_count": 96,
   "animations": {
     "instance_0": {
       "start": 0,
@@ -50,7 +50,47 @@
       "start": 24,
       "end": 31,
       "frame_count": 8
+    },
+    "instance_4": {
+      "start": 32,
+      "end": 39,
+      "frame_count": 8
+    },
+    "instance_5": {
+      "start": 40,
+      "end": 47,
+      "frame_count": 8
+    },
+    "instance_6": {
+      "start": 48,
+      "end": 55,
+      "frame_count": 8
+    },
+    "instance_7": {
+      "start": 56,
+      "end": 63,
+      "frame_count": 8
+    },
+    "instance_8": {
+      "start": 64,
+      "end": 71,
+      "frame_count": 8
+    },
+    "instance_9": {
+      "start": 72,
+      "end": 79,
+      "frame_count": 8
+    },
+    "instance_10": {
+      "start": 80,
+      "end": 87,
+      "frame_count": 8
+    },
+    "instance_11": {
+      "start": 88,
+      "end": 95,
+      "frame_count": 8
     }
   },
-  "instances": 4
+  "instances": 12
 }

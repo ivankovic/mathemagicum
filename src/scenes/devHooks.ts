@@ -544,6 +544,8 @@ export interface DevHandle {
    * refused it. A scenario that read "I could not get in" and called that
    * closed would pass just as well if the door had moved.
    */
+  /** Where the camera is pulled to. See `markingZoom`. */
+  readonly zoom: () => number;
   readonly openHours: () => { open: boolean; hour: number; opensIn: number };
   /**
    * Which building she is standing inside, or null for out of doors.

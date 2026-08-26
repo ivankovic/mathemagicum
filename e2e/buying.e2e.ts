@@ -7,6 +7,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 // scenario holding its own copy of that would be checking the copy.
 import { CURRENCY, coinsFor } from "../src/shop/currency";
 import { MOST_COUNTER_COINS } from "../src/shop/tender";
+import { DecorType } from "../src/world/decor";
 import { MAX_TRADE } from "../src/world/shop";
 import { play, shutDown } from "./harness";
 
@@ -52,6 +53,42 @@ describe("standing at the counter", () => {
         // All of them affordable, and one more than that not.
         expect(counter.owed).toBeLessThanOrEqual(purse);
         expect(one.owed * (counter.most + 1)).toBeGreaterThan(purse);
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * And the things a child asked for are things a child can reach.
+   *
+   * The stock outgrew a single column and is sorted onto shelves now, which
+   * puts a shop's whole washroom behind a tap nothing else in the suite
+   * makes. `shop.test.ts` proves every price and that nothing fell off a
+   * shelf; what only a browser can say is that turning to a shelf shows what
+   * is on it and that what is on it can then be bought.
+   */
+  test(
+    "a shelf can be turned to, and what is on it bought",
+    async () => {
+      await play({ seams: "&hour=12&coins=100000&at=244,258" }, async (game) => {
+        await game.goShopping();
+        // The washroom, which is the last shelf and holds nothing the garden
+        // does — so a tap that did nothing would leave the bath unreachable
+        // rather than merely showing the wrong list.
+        expect(await game.tap("shop.shelf.3")).toBe(true);
+        await game.settle(300);
+        expect(await game.tap(`shop.buy.${DecorType.Bath}`)).toBe(true);
+        const counter = await game.seam<{ item: string; owed: number }>("shop");
+        expect(counter.item).toBe(DecorType.Bath);
+        expect(counter.owed).toBeGreaterThan(0);
+
+        // And back to the garden, where the bath is not.
+        await game.tap("shop.back");
+        await game.settle(300);
+        await game.tap("shop.shelf.0");
+        await game.settle(300);
+        expect(await game.tap(`shop.buy.${DecorType.Bath}`)).toBe(false);
+        expect(await game.tap("shop.buy.fence")).toBe(true);
       });
     },
     5 * MINUTES,
@@ -195,7 +232,9 @@ describe("standing at the counter", () => {
         await game.goShopping();
         expect(await game.held("chair~3")).toBe(0);
 
-        await game.tap("shop.buy.chair");
+        // Through the shelves, because a chair is in the room's and the shop
+        // opens on the garden's.
+        expect(await game.shopFor("chair")).toBe(true);
         const counter = await game.seam<{ item: string; owed: number; look: number }>("shop");
         expect(counter.item).toBe("chair");
         expect(counter.look).toBe(0);
@@ -237,7 +276,10 @@ describe("standing at the counter", () => {
       await play({ seams: "&hour=12&coins=100000&at=244,258" }, async (game) => {
         await game.goShopping();
         for (const item of ["fence", "table", "lamp"]) {
-          await game.tap(`shop.buy.${item}`);
+          // Through the shelves rather than straight at it: all three are on
+          // the garden's today, and a scenario that assumed so would start
+          // checking nothing the day one of them moved.
+          expect(await game.shopFor(item)).toBe(true);
           const counter = await game.seam<{ owed: number; title: string }>("shop");
           const ducats = Math.floor(counter.owed / 100);
           const mites = String(counter.owed % 100).padStart(2, "0");

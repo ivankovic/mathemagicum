@@ -14,9 +14,12 @@ import {
   CROP_PRICE,
   FURNITURE_STOCK,
   MAX_TRADE,
+  MOST_PER_SHELF,
   Purse,
+  SHELVES,
   SHOP_STOCK,
   buyStock,
+  isOneCell,
   isSellable,
   mostBuyable,
   mostSellable,
@@ -358,5 +361,60 @@ describe("selling furniture", () => {
   test("nothing in the house costs more than the lamp", () => {
     const dearest = Math.max(...FURNITURE_STOCK.map((piece) => priceOf(piece)));
     expect(dearest).toBeLessThanOrEqual(priceOf(FixtureType.Lamp));
+  });
+});
+
+/**
+ * The shelves, and the promise they make to the parchment.
+ *
+ * A shelf too long does not look wrong — it looks like a shop with its last
+ * two things underneath the footer, which is how the single list got to
+ * eighteen without anything failing.
+ */
+describe("the shop's shelves", () => {
+  test("every shelf fits on the parchment", () => {
+    for (const [at, shelf] of SHELVES.entries()) {
+      expect({ at, tall: shelf.stock.length }).toEqual({
+        at,
+        tall: Math.min(shelf.stock.length, MOST_PER_SHELF),
+      });
+    }
+  });
+
+  test("between them they sell everything the shop has, once each", () => {
+    // The check that matters. A thing left off every shelf is a thing that
+    // exists, has a price, has a noun in three languages and cannot be
+    // bought — and nothing else in the game would notice.
+    const shelved = SHELVES.flatMap((shelf) => shelf.stock);
+    expect([...shelved].sort()).toEqual([...SHOP_STOCK, ...FURNITURE_STOCK].sort());
+  });
+
+  test("and each tab stands one of its own things on itself", () => {
+    for (const shelf of SHELVES) {
+      expect({ icon: shelf.icon, its: shelf.stock.includes(shelf.icon) }).toEqual({
+        icon: shelf.icon,
+        its: true,
+      });
+    }
+  });
+
+  test("and it is a thing that stands in one cell", () => {
+    // A tab is a square. A bed is drawn two cells tall and a bath two wide,
+    // and either of them shrunk into a square is a stripe rather than a
+    // picture of anything.
+    for (const shelf of SHELVES) {
+      expect({ icon: shelf.icon, square: isOneCell(shelf.icon) }).toEqual({
+        icon: shelf.icon,
+        square: true,
+      });
+    }
+  });
+
+  test("everything on a shelf has a price", () => {
+    for (const shelf of SHELVES) {
+      for (const thing of shelf.stock) {
+        expect({ thing, price: priceOf(thing, CROP_PRICE) > 0 }).toEqual({ thing, price: true });
+      }
+    }
   });
 });

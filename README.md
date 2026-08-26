@@ -16,10 +16,11 @@ seedlings and grown by casting **addition** on them, a number-line minigame
 opened from the spellbook. The player bends to plant, and a golden plus
 sinks into the tile a spell lands on. Seeds and spells are picked from two icon trays
 in the corner of the screen, and both act on the tile the player faces.
-Ripe crops are picked with a tap and go into a basket, and the village
-shopkeeper buys them for coins you can spend on fences, tables and lamps to
-put down — and the counter is the second minigame: buying means counting the
-exact sum out in coins — ducats and mites, which are nobody's real money — and
+Ripe crops are picked with a tap and go into a basket, and Mira, the village
+shopkeeper, buys them for coins you can spend on fences, tables and lamps to
+put down — and there are things for the house too, a shelf each for the room,
+the kitchen and the washroom. The counter is the second minigame: buying
+means counting the exact sum out in coins — ducats and mites, which are nobody's real money — and
 selling means checking the payment she counts back, which one time in ten is
 wrong. Planting and harvesting are still direct actions — those spells
 are not speced. The game is playable in English and German — every line of it
@@ -56,7 +57,7 @@ uv run asset-generator terrain-cliffs --seed 7 --out-dir output/terrain_cliffs
 uv run asset-generator terrain-buildings --seed 7 --sheets --out-dir output/terrain_buildings
 uv run asset-generator terrain-characters --seed 7 --out-dir output/terrain_characters
 uv run asset-generator terrain-animals --out-dir output/terrain_animals
-uv run asset-generator terrain-interiors --seed 7 --sheets --out-dir output/terrain_interiors
+uv run asset-generator terrain-interiors --seed 7 --sheets --growable --out-dir output/terrain_interiors
 uv run asset-generator terrain-plants --seed 7 --out-dir output/terrain_plants
 uv run asset-generator terrain-fixtures --seed 7 --out-dir output/terrain_fixtures
 uv run asset-generator terrain-effects --seed 7 --out-dir output/terrain_effects
@@ -79,25 +80,34 @@ for a in chicken cat rabbit duck; do
   cp "$OUT/terrain_animals/$a.json" "$OUT/terrain_animals/${a}_sheet.png" public/assets/animals/
 done
 for r in cottage barn tower schoolhouse; do
-  cp $OUT/terrain_interiors/$r{.json,_sheet.png} public/assets/interiors/
+  cp $OUT/terrain_interiors/${r}{.json,_sheet.png} public/assets/interiors/
 done
+# The cottage is shipped twice: once as a picture, like the other rooms, and
+# once in parts — because it is the one a child can build out. `--growable`
+# is what writes these, and a piece sheet exists for everything the shop
+# sells into it as well as for everything it starts with.
+cp $OUT/terrain_interiors/cottage_growable.json                    public/assets/interiors/
+cp $OUT/terrain_interiors/cottage_{walls,floor,window,door}.png    public/assets/interiors/
+cp $OUT/terrain_interiors/cottage_piece_*.png                      public/assets/interiors/
 for p in carrot sunflower cactus tomato pepper wheat; do
-  cp $OUT/terrain_plants/$p{.json,_sheet.png} public/assets/plants/
+  cp $OUT/terrain_plants/${p}{.json,_sheet.png} public/assets/plants/
 done
 for f in well fence fence-side table lamp gate stall bench scarecrow flowerpot \
          fence-corner gate-side gate-side-lower glowcap \
          city-wall city-wall-side city-gate city-gate-side \
          tulip daisy bellflower; do
-  cp $OUT/terrain_fixtures/$f{.json,_sheet.png} public/assets/fixtures/
+  cp $OUT/terrain_fixtures/${f}{.json,_sheet.png} public/assets/fixtures/
 done
 cp $OUT/terrain_effects/plus{.json,_sheet.png} public/assets/effects/
 for t in grass woodland dirt hilly mountain sand; do
-  cp $OUT/terrain_objects/$t{.json,_sheet.png} public/assets/objects/
+  cp $OUT/terrain_objects/${t}{.json,_sheet.png} public/assets/objects/
 done
 cp $OUT/ui/{ui.json,parchment_fill.png,parchment_frame.png}    public/assets/ui/
 cp $OUT/ui/{spellbook.png,seed_pouch.png,basket.png,crate.png,map_wall.png} public/assets/ui/
 cp $OUT/ui/rune_*.png                                              public/assets/ui/
 cp $OUT/ui/{crop_*.png,item_*.png,coin_*.png,flower_*.png}         public/assets/ui/
+cp $OUT/ui/{mark_*.png,sign_*.png,material_*.png,flag_*.png}       public/assets/ui/
+cp $OUT/ui/{star_chart.png,thought_bubble.png}                     public/assets/ui/
 bun test   # src/world/assets.test.ts checks the sync
 ```
 
