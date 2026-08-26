@@ -121,7 +121,32 @@ interface Pairs {
   readonly crossing: boolean;
   readonly addends: readonly number[];
   readonly weights: readonly number[];
+  /**
+   * The weights added up as we go, for finding one without walking them.
+   *
+   * A running total rather than a scan. The scan was fine while a rung held
+   * a few hundred addends and became half a million of them at six places —
+   * every problem set walked the lot, in the tests and on a tablet.
+   */
+  readonly running: Float64Array;
   readonly total: number;
+}
+
+/**
+ * Which entry a ticket falls in, by halving rather than by walking.
+ *
+ * `running[i]` is the weight of everything up to and including `i`, so the
+ * answer is the first entry whose running total reaches the ticket.
+ */
+function ticketAt(running: Float64Array, ticket: number): number {
+  let low = 0;
+  let high = running.length - 1;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if ((running[middle] as number) < ticket) low = middle + 1;
+    else high = middle;
+  }
+  return low;
 }
 
 const PAIRS = new Map<string, Pairs>();
@@ -243,6 +268,7 @@ function pairsFor(places: number, crossing: boolean): Pairs {
     crossing,
     addends,
     weights,
+    running: runningTotals(weights),
     total: weights.reduce((sum, weight) => sum + weight, 0),
   };
   PAIRS.set(key, pairs);
@@ -275,15 +301,7 @@ function noJumpCrosses(startDigits: readonly number[], addendDigits: readonly nu
  */
 export function makeAdditionProblem(rng: Rng, rung: Rung = rungAt(HARDEST_RUNG)): AdditionProblem {
   const pairs = pairsFor(rung.places, rung.crossing);
-  let ticket = randInt(rng, 1, pairs.total);
-  let index = pairs.addends.length - 1;
-  for (const [at, weight] of pairs.weights.entries()) {
-    ticket -= weight;
-    if (ticket <= 0) {
-      index = at;
-      break;
-    }
-  }
+  const index = ticketAt(pairs.running, randInt(rng, 1, pairs.total));
   const addend = pairs.addends[index] as number;
   // Uniform over the starts this addend leaves, without ever building the
   // list of them: the k-th is arithmetic. See `nthStart`.
@@ -480,4 +498,15 @@ export function nthStartForTest(
   k: number,
 ): number {
   return nthStart(places, crossing, addend, digitsOf(addend, places), k);
+}
+
+/** The weights added up as we go. See `ticketAt`. */
+function runningTotals(weights: readonly number[]): Float64Array {
+  const running = new Float64Array(weights.length);
+  let sum = 0;
+  for (const [at, weight] of weights.entries()) {
+    sum += weight;
+    running[at] = sum;
+  }
+  return running;
 }
