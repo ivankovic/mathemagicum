@@ -38,9 +38,19 @@ async function toTheNameStep(game: Game): Promise<void> {
     await game.settle(500);
   }
   await game.waitForStep("tongue");
-  // A device with nobody on it opens on the flags, and its "next" is alone
-  // in the middle because there is nothing to go back to.
-  await game.tab.mouse.click(view.width / 2, view.height - 32);
+  // A device with nobody on it opens on the flags, with "next" on the right
+  // and "restore a backup" where "back" would be — there is nothing behind
+  // this screen to go back *to*, and a tablet being set up after a lost one
+  // needs to be told it can put its old game on. Every step after it has an
+  // ordinary "back", which sits a little closer in.
+  await game.tab.mouse.click(view.width / 2 + 92, view.height - 32);
+  // Then the three notices a parent is walked through before the tablet is
+  // handed over. Stepped by name rather than by counting taps: a notice
+  // added or moved should fail here saying which screen it stuck on.
+  for (const step of ["parents", "offline", "backup"]) {
+    await game.waitForStep(step);
+    await game.tab.mouse.click(view.width / 2 + 74, view.height - 32);
+  }
   await game.waitForStep("who");
 }
 

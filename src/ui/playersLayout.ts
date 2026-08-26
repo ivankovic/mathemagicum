@@ -64,18 +64,28 @@ export function tileGrid(width: number, height: number, count: number): TileGrid
 }
 
 /**
- * The three steps that make a player, in the order they are asked.
+ * The steps that make a player, in the order they are asked.
  *
  * Here rather than in the scene for the same reason the tile grid is: it is
  * a rule about what follows what, it has an off-the-end case in each
  * direction, and both are worth a test rather than a walkthrough.
  *
  * The order is the whole design. Language first, because every word of the
- * two steps after it is written in the answer — a form that asks a child to
+ * steps after it is written in the answer — a form that asks a child to
  * read English in order to find the button that stops it being in English
  * has asked them the wrong thing first.
+ *
+ * Then three panels of small print for whoever is holding the tablet: who
+ * this part is for, that the game never goes online, and what a lost device
+ * costs. Second rather than first, because the flags are what makes them
+ * readable at all, and second rather than last, because by the last step
+ * the tablet is in a child's hands and the notices are not for them.
+ *
+ * The child's own two steps come after, and they are the ones that finish:
+ * a grown-up reads three screens and hands over, which is the shape of the
+ * thing rather than an accident of ordering.
  */
-export const MAKING_STEPS = ["tongue", "who", "sums"] as const;
+export const MAKING_STEPS = ["tongue", "parents", "offline", "backup", "who", "sums"] as const;
 
 export type MakingStep = (typeof MAKING_STEPS)[number];
 

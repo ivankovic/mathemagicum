@@ -302,6 +302,18 @@ export const EN: Phrases = {
   sumsHeading: "Your sums",
   sumsTitle: "How big are your sums?",
   nextStep: "Next",
+  parentsNotice: "Important information for parents",
+  offlineNotice: "This game is not played online.",
+  backupNotice:
+    "If you lose your device, your game world is lost. Back up your save file regularly.",
+  exportSaves: "Export saves",
+  exportDone: "Saved",
+  importSaves: "Restore a backup",
+  importAreYouSure:
+    "Everything on this tablet is replaced by the file: every player, and every game they have played.",
+  importYes: "Yes, restore",
+  importNo: "No, keep this",
+  importNotASave: "That file is not a Mathemagicum backup.",
   gamesHeading: "Games on this device",
   gameWhen: (savedAt) =>
     new Date(savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),

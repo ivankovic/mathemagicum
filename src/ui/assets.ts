@@ -79,6 +79,24 @@ export const UiAsset = {
   /** The two halves of *are you sure*, for the one thing that asks twice. */
   MarkYes: "mark-yes",
   MarkNo: "mark-no",
+  /**
+   * The four pictures on the notices a parent is shown while the game is
+   * being set up: who it is for, that nothing here goes online, and what a
+   * lost tablet costs.
+   *
+   * Bigger than a rune, because they are the panel rather than a button on
+   * it, and because a figure at a rune's size is a blob with a dot on top.
+   */
+  SignParents: "sign-parents",
+  SignDevice: "sign-device",
+  SignGlobe: "sign-globe",
+  /**
+   * A copy going somewhere safe. Drawn once and used twice on purpose: it
+   * is the picture on the panel that asks for a backup *and* the button in
+   * the options that makes one, so a parent who read the warning is looking
+   * for a picture rather than for a word they half remember.
+   */
+  SignBackup: "sign-backup",
 } as const;
 
 export type UiAsset = (typeof UiAsset)[keyof typeof UiAsset];

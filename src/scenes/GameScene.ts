@@ -15,6 +15,7 @@ import type { Phrases } from "../i18n/phrases";
 import { VirtualJoystick } from "../input/VirtualJoystick";
 import { type Rgb, rampPlan } from "../render/recolour";
 import { repaintedSheet } from "../render/sheetTexture";
+import { exportSaves } from "../save/backupFile";
 import {
   type SavedGame,
   deleteGame,
@@ -1940,6 +1941,9 @@ export class GameScene extends Phaser.Scene {
     // Over the options rather than instead of them: it was opened from there
     // and closing it should put you back where you were.
     this.optionsPanel.onAbout = () => this.aboutPanel?.show(() => {});
+    // The other half of the notice a parent read while the game was being
+    // set up: the world lives on this device, so here is how to take it off.
+    this.optionsPanel.onExport = () => exportSaves();
     this.optionsPanel.onBandChange = (band) => this.applyBand(band);
     this.optionsPanel.setBand(this.profile.band);
     this.optionsPanel.setGames(listGames(browserStore()), playingId(browserStore()));

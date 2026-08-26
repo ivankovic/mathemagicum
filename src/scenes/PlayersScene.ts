@@ -16,6 +16,8 @@ import {
 import { avatarCatalogue, avatarTexture } from "../avatar/texture";
 import { phrasesFor } from "../i18n";
 import type { Phrases } from "../i18n/phrases";
+import type { Backup } from "../save/backup";
+import { ImportResult, canTakeBackup, readBackupFile, takeBackup } from "../save/backupFile";
 import {
   MAX_PROFILES,
   type Profile,
@@ -38,7 +40,7 @@ import {
 import { makeAdditionProblem } from "../spells/addition";
 import { BANDS, DEFAULT_BAND, SUGGESTED_BAND, sampleProblem } from "../spells/difficulty";
 import { GAME_NAME } from "../ui/TitleCard";
-import { flagIcon, uiTextureKey } from "../ui/assets";
+import { UiAsset, flagIcon, uiTextureKey } from "../ui/assets";
 import { HEADER, MAKING_STEPS, type MakingStep, stepFrom, tileGrid } from "../ui/playersLayout";
 import {
   ALL_CHARACTERS,
@@ -105,6 +107,31 @@ const ROW_MARGIN = 12;
 const BUTTON_HEIGHT = 34;
 /** Air under the last row, so nothing sits against the bottom edge. */
 const FOOTER_ROOM = 64;
+/**
+ * Between two pictures standing side by side on a notice, in *their* pixels.
+ *
+ * Four rather than a comfortable-looking ten, because the middle panel is a
+ * tablet, a cross and a world and has to fit three of them across a phone.
+ */
+const PICTURE_GAP = 4;
+/**
+ * The size the notices are written at.
+ *
+ * Between the title and the labels. They are sentences a grown-up reads
+ * once, so they do not want a title's weight — but small print is exactly
+ * what a parent skips, and the one about backups is the one sentence in
+ * this game that costs a year of somebody's farm if it is skipped.
+ */
+const NOTICE_SIZE = 18;
+/**
+ * And the biggest a sign may be drawn.
+ *
+ * A ceiling as well as the room's share, because the room's share is a
+ * fraction of a screen and a screen can be very tall: a phone in landscape
+ * and a desktop browser at full height are the same panel with five times
+ * the space between the words and the buttons.
+ */
+const PICTURE_SCALE_MAX = 5;
 
 /**
  * Which screen is up.
@@ -131,9 +158,20 @@ export class PlayersScene extends Phaser.Scene {
   private draftLanguage: Language = "en";
   private draftBand = SUGGESTED_BAND;
   private removing: Profile | null = null;
+  /**
+   * A backup that has been read off a file and is waiting to be agreed to.
+   *
+   * Read first and asked about second, so that a file which turns out not
+   * to be one of ours is refused *before* anybody has been asked to agree
+   * to their tablet being emptied.
+   */
+  private offering: Backup | null = null;
+  /** What went wrong with the last file, until the screen is touched again. */
+  private importTrouble = "";
 
   private parts: Phaser.GameObjects.GameObject[] = [];
   private nameBox: HTMLInputElement | null = null;
+  private importBox: HTMLInputElement | null = null;
 
   constructor() {
     super("players");
@@ -192,9 +230,23 @@ export class PlayersScene extends Phaser.Scene {
   private render(): void {
     for (const part of this.parts) part.destroy();
     this.parts = [];
+    // Put away on every pass and put back by whichever screen wants it, the
+    // same as the name box: a real element over the canvas outlives the
+    // picture under it unless something takes it down.
+    this.hideImportBox();
     const { width, height } = this.scale;
     this.own(this.add.rectangle(0, 0, width, height, GROUND).setOrigin(0, 0).setDepth(-1));
     if (this.mode === "tongue") this.renderTongue();
+    else if (this.mode === "parents")
+      this.renderNotice(this.words.parentsNotice, [UiAsset.SignParents]);
+    else if (this.mode === "offline")
+      this.renderNotice(this.words.offlineNotice, [
+        UiAsset.SignDevice,
+        UiAsset.MarkNo,
+        UiAsset.SignGlobe,
+      ]);
+    else if (this.mode === "backup")
+      this.renderNotice(this.words.backupNotice, [UiAsset.SignBackup]);
     else if (this.mode === "who") this.renderWho();
     else if (this.mode === "sums") this.renderSums();
     else this.renderList();
@@ -226,10 +278,16 @@ export class PlayersScene extends Phaser.Scene {
       );
     }
 
-    if (this.profiles.length > 0) {
+    // Two things at the foot, and which two depends on what is on the
+    // device. Removing a player needs a player to remove; restoring a
+    // backup is *most* wanted on a tablet with nothing on it at all, which
+    // is the one state where the other button is not there.
+    const removes = this.profiles.length > 0;
+    const middle = width / 2;
+    if (removes) {
       this.button(
         this.mode === "remove" ? this.words.neverMind : this.words.deletePlayer,
-        width / 2,
+        this.mode === "remove" ? middle : middle - 92,
         height - 32,
         () => {
           this.mode = this.mode === "remove" ? "list" : "remove";
@@ -238,8 +296,86 @@ export class PlayersScene extends Phaser.Scene {
         this.mode === "remove" ? TILE_EDGE : DANGER,
       );
     }
+    // Not while removing: that screen is one question, and a second button
+    // beside it that empties the whole tablet is the worst possible thing
+    // to put next to a row of faces somebody is deleting from.
+    if (this.mode !== "remove" && canTakeBackup()) {
+      const over = this.button(
+        this.words.importSaves,
+        removes ? middle + 92 : middle,
+        height - 32,
+        () => {},
+      );
+      // Not while a question is up: the input is a real element over the
+      // canvas and would sit on top of the dark screen catching taps meant
+      // for yes and no.
+      if (!this.removing && !this.offering) this.showImportBox(over);
+    }
+    if (this.importTrouble) {
+      this.own(
+        this.text(this.importTrouble, LABEL_SIZE, INK_DIM)
+          .setOrigin(0.5, 1)
+          .setPosition(middle, height - 58),
+      );
+    }
 
     if (this.removing) this.renderConfirm(this.removing);
+    else if (this.offering) {
+      this.renderAsking(this.words.importAreYouSure, this.words.importYes, () => this.takeItOn());
+    }
+  }
+
+  /**
+   * A file has been chosen: read it, and only then ask whether to use it.
+   *
+   * Nothing is touched until both have happened, and that order is the
+   * whole of it. A parent who agrees to their tablet being emptied and is
+   * then told the file was no good has been asked to authorise something
+   * that never happened; asked the other way round, a bad file costs them a
+   * line of text and nothing else.
+   */
+  private offerFile(file: File): void {
+    void readBackupFile(file).then(({ result, backup }) => {
+      if (result === ImportResult.NotASave) {
+        this.importTrouble = this.words.importNotASave;
+        this.render();
+        return;
+      }
+      if (result !== ImportResult.Done || !backup) return;
+      this.importTrouble = "";
+      this.offering = backup;
+      this.render();
+    });
+  }
+
+  /**
+   * Put it on, and become that device.
+   *
+   * Read back rather than reloaded. Nothing else is running yet — this
+   * screen is in front of the game, not over it — so the whole of "the
+   * device is now the one in the file" is this scene's own two facts: who
+   * plays here, and in what language. A reload would do the same thing and
+   * would also throw away a title card somebody has already tapped past.
+   */
+  private takeItOn(): void {
+    const backup = this.offering;
+    this.offering = null;
+    if (!backup || !takeBackup(backup)) {
+      this.importTrouble = this.words.importNotASave;
+      this.render();
+      return;
+    }
+    const settings = readSettings(this.store, navigator.language);
+    this.words = phrasesFor(settings.language);
+    this.draftLanguage = settings.language;
+    this.profiles = byRecency(readProfiles(this.store));
+    // Back to the faces whichever screen this was asked from. Restoring on
+    // the flags — which is where a new tablet starts — has just put
+    // somebody on the device, and leaving a parent on step one of making
+    // *another* child would be the game ignoring what it had just done.
+    this.mode = "list";
+    this.importTrouble = "";
+    this.render();
   }
 
   private playerTile(profile: Profile, x: number, y: number, size: number): void {
@@ -295,6 +431,21 @@ export class PlayersScene extends Phaser.Scene {
   }
 
   private renderConfirm(profile: Profile): void {
+    this.renderAsking(this.words.deleteAreYouSure(profile.name), this.words.deleteYes, () =>
+      this.remove(profile),
+    );
+  }
+
+  /**
+   * The one shape both of this screen's dangerous questions are asked in.
+   *
+   * Removing a child and restoring a backup are the same interaction — a
+   * dark screen, a sentence naming what goes, and a red button against a
+   * plain one — and they were the same code copied twice for about an hour.
+   * A parent who has learned what this box looks like once should not have
+   * to read the second one as though it were new.
+   */
+  private renderAsking(words: string, yes: string, act: () => void): void {
     const { width, height } = this.scale;
     this.own(
       this.add
@@ -309,29 +460,23 @@ export class PlayersScene extends Phaser.Scene {
         .setStrokeStyle(2, DANGER)
         .setDepth(51),
     ) as Phaser.GameObjects.Rectangle;
-    const words = this.own(
-      this.text(this.words.deleteAreYouSure(profile.name), LABEL_SIZE, INK)
+    const said = this.own(
+      this.text(words, LABEL_SIZE, INK)
         .setOrigin(0.5)
         .setDepth(52)
         .setPosition(width / 2, height / 2 - 34),
     ) as Phaser.GameObjects.Text;
-    words.setWordWrapWidth(box.width - 32);
-    words.setPosition(width / 2, height / 2 - 30);
+    said.setWordWrapWidth(box.width - 32);
+    said.setPosition(width / 2, height / 2 - 30);
 
-    this.button(
-      this.words.deleteYes,
-      width / 2 - 84,
-      height / 2 + 48,
-      () => this.remove(profile),
-      DANGER,
-      52,
-    );
+    this.button(yes, width / 2 - 84, height / 2 + 48, act, DANGER, 52);
     this.button(
       this.words.deleteNo,
       width / 2 + 84,
       height / 2 + 48,
       () => {
         this.removing = null;
+        this.offering = null;
         this.render();
       },
       TILE_EDGE,
@@ -406,6 +551,113 @@ export class PlayersScene extends Phaser.Scene {
         .setOrigin(0.5, 1)
         .setPosition(x + size / 2, y + size - 10),
     );
+  }
+
+  /**
+   * The three panels a parent is walked through, all drawn by one routine.
+   *
+   * Words above pictures, which is the way round it has to be: the panel is
+   * a *sentence*, and the picture is what makes somebody stop long enough
+   * to read it. Reversed — picture first — the third panel becomes a nice
+   * drawing of a filing tray with some type under it, and the sentence
+   * about losing everything is the part that gets tapped past.
+   *
+   * One routine and a list of pictures rather than three renderers, because
+   * the three panels differ in exactly two things and a shared one is what
+   * keeps them looking like a set. The middle panel's list is three: a
+   * tablet, the cross the whole game already uses for *no*, and the world.
+   * That reads as "no internet" to somebody who cannot read the sentence
+   * above it, which is most of why the pictures are there.
+   */
+  private renderNotice(words: string, pictures: readonly string[]): void {
+    const { width, height } = this.scale;
+    const top = this.notice(words);
+    const room = height - top - FOOTER_ROOM;
+    // Well short of the room there is. Grown to fill it, a single sign came
+    // out nine times its own size on a tablet — a picture that fills the
+    // screen and a sentence above it in small type, which is the wrong way
+    // round for a panel whose whole job is the sentence.
+    // The pictures get the full width; the words above them get a narrower
+    // measure. Given the same room, three pictures on a phone came out at
+    // twice their size where they had space for three times it, and a
+    // sentence at that width is a sentence read by sliding your eye.
+    this.pictureRow(pictures, width / 2, top + room / 2, width - ROW_MARGIN * 2, room * 0.6);
+    this.stepButtons(
+      this.words.nextStep,
+      () => this.step(1),
+      () => this.step(-1),
+    );
+  }
+
+  /**
+   * A row of pictures, centred, all grown by the same whole number.
+   *
+   * The same number for all of them: they are drawn at the sizes they mean
+   * to be seen at relative to one another — the cross between the tablet
+   * and the world is a third of their height because it is an operator
+   * between two things rather than a third thing — and scaling each to fit
+   * its own share would throw exactly that away.
+   */
+  private pictureRow(
+    assets: readonly string[],
+    centreX: number,
+    middleY: number,
+    room: number,
+    tall: number,
+  ): void {
+    const images = assets.map(
+      (asset) =>
+        this.own(
+          this.add.image(0, 0, uiTextureKey(asset)).setOrigin(0.5),
+        ) as Phaser.GameObjects.Image,
+    );
+    const widest = images.reduce((sum, image) => sum + image.width, 0);
+    const highest = Math.max(...images.map((image) => image.height));
+    // The gap is in the pictures' own pixels and grows with them. Fixed in
+    // screen pixels it is a third of the row on a phone and a hairline on a
+    // tablet, which is the one measurement here that has to stay in
+    // proportion to what it separates.
+    const wide = widest + PICTURE_GAP * Math.max(0, images.length - 1);
+    // Whole numbers only. This is pixel art, and a sign drawn at two and a
+    // half has some rows twice as tall as others.
+    const scale = Math.max(
+      1,
+      Math.min(
+        PICTURE_SCALE_MAX,
+        Math.floor(Math.min(room / Math.max(1, wide), tall / Math.max(1, highest))),
+      ),
+    );
+    let x = centreX - (wide * scale) / 2;
+    for (const image of images) {
+      image.setScale(scale);
+      image.setPosition(x + (image.width * scale) / 2, middleY);
+      x += (image.width + PICTURE_GAP) * scale;
+    }
+  }
+
+  /**
+   * The game's name, and then a sentence rather than a title.
+   *
+   * Its own thing beside `heading`, which shrinks a title until it fits on
+   * one line — right for one word over a row of flags, and wrong for two
+   * sentences about backups, which would come out at the size of the small
+   * print it is trying not to be. This wraps instead and keeps the size.
+   */
+  private notice(words: string): number {
+    const { width } = this.scale;
+    const middle = width / 2;
+    this.own(this.text(GAME_NAME, LABEL_SIZE, INK_DIM).setOrigin(0.5, 0).setPosition(middle, 10));
+    const top = 10 + LABEL_SIZE + 8;
+    const room = width - ROW_MARGIN * 4;
+    const said = this.own(
+      this.text(words, NOTICE_SIZE, INK).setOrigin(0.5, 0).setPosition(middle, top),
+    ) as Phaser.GameObjects.Text;
+    said.setWordWrapWidth(room, true);
+    said.setAlign("center");
+    // Re-centred after wrapping: the origin is applied to the box, and the
+    // box only knows how tall it is once the words have been broken.
+    said.setPosition(middle, top);
+    return top + said.height + 16;
   }
 
   /**
@@ -639,8 +891,40 @@ export class PlayersScene extends Phaser.Scene {
     // the only screen here that shows one button and centres it.
     const first = this.mode === MAKING_STEPS[0];
     const alone = first && this.profiles.length === 0;
-    this.button(onward, alone ? middle : middle + 74, y, go);
-    if (!alone) this.button(this.words.neverMind, middle - 74, y, back, TILE_EDGE);
+    if (!alone) {
+      this.button(onward, middle + 74, y, go);
+      this.button(this.words.neverMind, middle - 74, y, back, TILE_EDGE);
+      return;
+    }
+    // **And restoring a backup lives here too, not only on the faces.**
+    //
+    // A tablet with nobody on it never shows the faces at all: with no
+    // child to pick there is nothing to pick from, so the game opens
+    // straight onto the flags. Which means the one device that most needs
+    // to be told "you can put your old game back" — a new one, or one being
+    // set up after the old one was lost — is exactly the device that could
+    // not be told, when this button was only on the screen behind.
+    //
+    // So on that screen the question is a pair: make somebody new, or bring
+    // a game back. The space is there — it is where "back" would be, and
+    // there is nothing behind this screen to go back to.
+    if (!canTakeBackup()) {
+      this.button(onward, middle, y, go);
+      return;
+    }
+    this.button(onward, middle + 92, y, go);
+    const over = this.button(this.words.importSaves, middle - 92, y, () => {}, TILE_EDGE);
+    if (!this.offering) this.showImportBox(over);
+    if (this.importTrouble) {
+      this.own(
+        this.text(this.importTrouble, LABEL_SIZE, INK_DIM)
+          .setOrigin(0.5, 1)
+          .setPosition(middle, y - 26),
+      );
+    }
+    if (this.offering) {
+      this.renderAsking(this.words.importAreYouSure, this.words.importYes, () => this.takeItOn());
+    }
   }
 
   /**
@@ -739,6 +1023,55 @@ export class PlayersScene extends Phaser.Scene {
     this.nameBox.style.width = `${boxWidth}px`;
     this.nameBox.style.left = `${bounds.left + centreX - boxWidth / 2 - 10}px`;
     this.nameBox.style.top = `${bounds.top + y}px`;
+  }
+
+  /**
+   * A real file input, laid exactly over the button that says restore.
+   *
+   * **Not a Phaser button that opens a picker.** That was the first
+   * version, and it does nothing at all: a browser will only open a file
+   * picker while a user's tap is still live, and Phaser reads its input
+   * during the game's own frame rather than in the DOM event — so by the
+   * time the handler runs, the tap is over as far as the browser is
+   * concerned and the picker is silently refused. Nothing is logged that
+   * anybody would go looking for.
+   *
+   * So the tap has to land on the input itself. It is invisible and sits on
+   * top of the drawn button, which is the same trick the name box already
+   * plays one screen along — a real HTML control over the canvas, moved to
+   * wherever the canvas has drawn its picture of it.
+   */
+  private showImportBox(over: Phaser.GameObjects.Rectangle): void {
+    const bounds = this.game.canvas.getBoundingClientRect();
+    if (!this.importBox) {
+      const box = document.createElement("input");
+      box.type = "file";
+      // Named rather than left to `*/*`: on a tablet this is the difference
+      // between a folder of documents and a photo library.
+      box.accept = "application/json,.json";
+      box.style.position = "fixed";
+      box.style.zIndex = "40";
+      // Invisible, and still a target. `display: none` and `visibility:
+      // hidden` both stop it taking the tap; zero opacity does not.
+      box.style.opacity = "0";
+      box.style.cursor = "pointer";
+      box.addEventListener("change", () => {
+        const file = box.files?.[0];
+        box.value = "";
+        if (file) this.offerFile(file);
+      });
+      document.body.appendChild(box);
+      this.importBox = box;
+    }
+    this.importBox.style.left = `${bounds.left + over.x - over.width / 2}px`;
+    this.importBox.style.top = `${bounds.top + over.y - over.height / 2}px`;
+    this.importBox.style.width = `${over.width}px`;
+    this.importBox.style.height = `${over.height}px`;
+  }
+
+  private hideImportBox(): void {
+    this.importBox?.remove();
+    this.importBox = null;
   }
 
   private hideNameBox(): void {
@@ -856,6 +1189,7 @@ export class PlayersScene extends Phaser.Scene {
 
   private teardown(): void {
     this.hideNameBox();
+    this.hideImportBox();
     this.scale.off(Phaser.Scale.Events.RESIZE);
     // Taken down with the scene, so a scenario cannot read a step off a
     // screen that is no longer there and conclude the game never started.
@@ -905,7 +1239,7 @@ export class PlayersScene extends Phaser.Scene {
     onTap: () => void,
     edge = TILE_HOT,
     depth = 0,
-  ): void {
+  ): Phaser.GameObjects.Rectangle {
     const text = this.text(label, BUTTON_SIZE, INK)
       .setOrigin(0.5)
       .setDepth(depth + 1);
@@ -922,6 +1256,7 @@ export class PlayersScene extends Phaser.Scene {
     text.setPosition(x, y);
     this.own(text);
     box.on("pointerdown", onTap);
+    return box;
   }
 
   private text(value: string, size: number, color: string): Phaser.GameObjects.Text {

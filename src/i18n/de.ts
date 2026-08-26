@@ -332,6 +332,18 @@ export const DE: Phrases = {
   sumsHeading: "Deine Aufgaben",
   sumsTitle: "Wie groß sind deine Aufgaben?",
   nextStep: "Weiter",
+  parentsNotice: "Wichtige Hinweise f\u00fcr Eltern",
+  offlineNotice: "Dieses Spiel wird nicht online gespielt.",
+  backupNotice:
+    "Geht das Ger\u00e4t verloren, ist die Spielwelt verloren. Sichern Sie die Speicherdatei regelm\u00e4\u00dfig.",
+  exportSaves: "Spielst\u00e4nde sichern",
+  exportDone: "Gesichert",
+  importSaves: "Sicherung einspielen",
+  importAreYouSure:
+    "Alles auf diesem Ger\u00e4t wird durch die Datei ersetzt: jeder Spieler und jedes Spiel.",
+  importYes: "Ja, einspielen",
+  importNo: "Nein, behalten",
+  importNotASave: "Diese Datei ist keine Mathemagicum-Sicherung.",
   gamesHeading: "Spielstände",
   gameWhen: (savedAt) =>
     new Date(savedAt).toLocaleDateString("de-DE", { day: "numeric", month: "short" }),

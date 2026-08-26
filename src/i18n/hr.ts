@@ -424,6 +424,18 @@ export const HR: Phrases = {
   sumsHeading: "Tvoji zadaci",
   sumsTitle: "Koliko su veliki tvoji zadaci?",
   nextStep: "Dalje",
+  parentsNotice: "Va\u017ene informacije za roditelje",
+  offlineNotice: "Ova se igra ne igra na internetu.",
+  backupNotice:
+    "Izgubite li ure\u0111aj, izgubljen je i svijet igre. Redovito sigurnosno kopirajte datoteku sa spremljenim igrama.",
+  exportSaves: "Izvezi spremljene igre",
+  exportDone: "Spremljeno",
+  importSaves: "Vrati sigurnosnu kopiju",
+  importAreYouSure:
+    "Sve na ovom ure\u0111aju zamijenit \u0107e datoteka: svaki igra\u010d i svaka igra.",
+  importYes: "Da, vrati",
+  importNo: "Ne, zadr\u017ei",
+  importNotASave: "Ta datoteka nije Mathemagicum sigurnosna kopija.",
   gamesHeading: "Igre na ovom uređaju",
   gameWhen: (savedAt) =>
     new Date(savedAt).toLocaleDateString("hr-HR", { day: "numeric", month: "short" }),

@@ -122,6 +122,26 @@
       "width": 33,
       "height": 21
     },
+    "sign-parents": {
+      "file": "sign_parents.png",
+      "width": 56,
+      "height": 48
+    },
+    "sign-device": {
+      "file": "sign_device.png",
+      "width": 48,
+      "height": 48
+    },
+    "sign-globe": {
+      "file": "sign_globe.png",
+      "width": 48,
+      "height": 48
+    },
+    "sign-backup": {
+      "file": "sign_backup.png",
+      "width": 48,
+      "height": 48
+    },
     "item-fence": {
       "file": "item_fence.png",
       "width": 32,

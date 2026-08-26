@@ -340,6 +340,49 @@ export interface Phrases {
   sumsTitle: string;
   /** Moves on to the next of the three steps. */
   nextStep: string;
+  /**
+   * The three notices a parent is walked through while a player is made.
+   *
+   * Sentences rather than headings, and the pictures under them carry as
+   * much as the words do — the panels are drawn for a grown-up who may be
+   * reading a language they only half have, and for a child who will
+   * otherwise tap past all three before anybody sees them.
+   *
+   * After the flags, so they are read in a language somebody chose, and
+   * before the name box, so the grown-up is still the one holding the
+   * tablet. Shown every time a player is made rather than once on a fresh
+   * device: it is three taps, the second person to set a child up here may
+   * be a different adult, and the one about backups is the one message in
+   * the game worth repeating.
+   */
+  parentsNotice: string;
+  offlineNotice: string;
+  backupNotice: string;
+  /** The options row that writes every save on this device into one file. */
+  exportSaves: string;
+  /** Said on the button once the file has gone. */
+  exportDone: string;
+  /**
+   * The button on the who's-playing screen that reads a backup file.
+   *
+   * There and not in the options, which is where its opposite lives. A
+   * tablet being restored has nothing on it yet — no child to pick, no game
+   * to open — so the options panel is behind a door that cannot be reached
+   * from where somebody restoring a lost device is standing.
+   */
+  importSaves: string;
+  /**
+   * What agreeing to it costs, named the way removing a player is.
+   *
+   * Everything, is the answer, and it has to say so: a backup is a whole
+   * tablet rather than one game, so restoring one puts every child and
+   * every world in the file over every child and every world on the device.
+   */
+  importAreYouSure: string;
+  importYes: string;
+  importNo: string;
+  /** When the file was not one of ours. */
+  importNotASave: string;
   /** The options row that throws the world away. */
   /** The options row that lists the games saved on this device. */
   gamesHeading: string;

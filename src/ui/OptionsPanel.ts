@@ -81,6 +81,8 @@ const SMALL_SIZE = 12;
 
 const BUTTON_H = 32;
 const BUTTON_GAP = 6;
+/** How long the export button says "saved" before going back to what it does. */
+const EXPORT_SAID_MS = 2200;
 /** A heading and the row of buttons under it, plus air before the next one. */
 /** How big the map and the two answers are drawn on their buttons. */
 const ICON = 22;
@@ -103,6 +105,9 @@ export class OptionsPanel {
   private readonly title: Phaser.GameObjects.Text;
   private readonly headings: Phaser.GameObjects.Text[] = [];
   private readonly aboutButton: Choice;
+  private readonly exportButton: Choice;
+  /** Set while the button is saying "saved" rather than what it does. */
+  private exported = false;
   private readonly languageChoices: Choice[] = [];
   /**
    * Which sums this child gets, shown as four sample sums.
@@ -140,6 +145,21 @@ export class OptionsPanel {
    * has no business knowing what a sponsorship is.
    */
   onAbout?: () => void;
+
+  /**
+   * Write every save on this device into a file.
+   *
+   * Asked for rather than done here, for the reason `onAbout` is: making a
+   * file and handing it to whatever the device does with files is the one
+   * job on this screen that is entirely about the browser, and this panel
+   * draws buttons.
+   *
+   * It answers, though — the button says so afterwards. A control that
+   * silently hands a file to a share sheet a parent then cancels needs to
+   * be able to say that nothing was saved, and the only thing that knows is
+   * whatever does the work.
+   */
+  onExport?: () => Promise<boolean>;
 
   private games: readonly GameEntry[] = [];
   private playing: string | null = null;
@@ -203,13 +223,14 @@ export class OptionsPanel {
       this.headings.push(this.own(this.text("", SMALL_SIZE, INK_DIM).setOrigin(0, 0)));
     }
     this.aboutButton = this.choice("", () => this.onAbout?.());
+    this.exportButton = this.pictureChoice(UiAsset.SignBackup, "", () => this.exportNow());
 
     for (const language of LANGUAGES) {
       // Flag *and* name. The flag is for the child who cannot read either
       // name; the name is for everybody else, and for anyone who reads a
       // flag as a country rather than as a language.
       this.languageChoices.push(
-        this.flagChoice(flagIcon(language), LANGUAGE_NAMES[language], () =>
+        this.pictureChoice(flagIcon(language), LANGUAGE_NAMES[language], () =>
           this.choose({ language }),
         ),
       );
@@ -258,6 +279,7 @@ export class OptionsPanel {
       ...this.languageChoices,
       ...this.bandChoices,
       ...this.gameChoices,
+      this.exportButton,
       this.newButton,
       this.yesButton,
       this.noButton,
@@ -277,17 +299,28 @@ export class OptionsPanel {
   }
 
   /**
-   * A button with a flag on it and a word beside the flag.
+   * A button with a picture on it and a word beside the picture.
    *
-   * At its own size rather than squared into the icon box every other
-   * picture here uses: a flag is a rectangle, and one squashed to a square
-   * is a flag drawn wrong rather than a flag drawn small.
+   * At the picture's own size rather than squared into the icon box every
+   * other one here uses: a flag is a rectangle and a flag squashed to a
+   * square is a flag drawn wrong rather than a flag drawn small. The same
+   * is true of the backup sign, which is why the two share this.
    */
-  private flagChoice(asset: string, text: string, onTap: () => void): Choice {
+  private pictureChoice(asset: string, text: string, onTap: () => void): Choice {
     const choice = this.choice(text, onTap);
     const icon = this.own(this.scene.add.image(0, 0, uiTextureKey(asset)).setOrigin(0.5));
     this.icons.push(icon);
-    this.iconOf.set(choice.box, { image: icon, width: icon.width, beside: true });
+    // Brought down to about the icon box when it is bigger than one, and by
+    // a whole number: this is pixel art, and forty-eight resampled to
+    // twenty-two is a picture with some rows dropped and others doubled.
+    // Halved it is twenty-four, which is two pixels over the box and well
+    // inside the button, and it is still the drawing.
+    //
+    // The flags are smaller than the box already and divide by one, which
+    // is the same as being left alone.
+    const part = Math.max(1, Math.round(icon.height / ICON));
+    icon.setDisplaySize(icon.width / part, icon.height / part);
+    this.iconOf.set(choice.box, { image: icon, width: icon.displayWidth, beside: true });
     return choice;
   }
 
@@ -307,6 +340,7 @@ export class OptionsPanel {
   buttonPositions(): Record<string, { x: number; y: number }> {
     const at: Record<string, { x: number; y: number }> = {
       about: { x: this.aboutButton.box.x, y: this.aboutButton.box.y },
+      exportSaves: { x: this.exportButton.box.x, y: this.exportButton.box.y },
       newGame: { x: this.newButton.box.x, y: this.newButton.box.y },
       deleteYes: { x: this.yesButton.box.x, y: this.yesButton.box.y },
       deleteNo: { x: this.noButton.box.x, y: this.noButton.box.y },
@@ -442,17 +476,74 @@ export class OptionsPanel {
     // this game's own invented money and nobody was ever going to have a
     // question about it; who made the thing, and whether they want paying,
     // is the question an adult opening this screen actually has.
+    //
+    // Two buttons wide now, and the second one is the answer to the notice
+    // a parent was shown while the game was being set up: the world lives
+    // on this device and nowhere else, so here is how to take a copy of it.
+    // At the foot beside "about" rather than up in the games row, because
+    // it is a thing done *to* the device rather than to any one game.
+    const footer = Math.min(200, (rect.width - PAD * 2 - BUTTON_GAP) / 2);
+    const footerY = rect.top + rect.height - PAD - BUTTON_H / 2;
+    // The word first, then the placing. `place` centres a picture and its
+    // word together as one block and measures the word to do it, so a
+    // button placed while its label is still empty gets a block the width
+    // of the picture alone — and the picture ends up in the middle of the
+    // button with the word laid across it.
+    this.exportButton.label.setText(this.exported ? this.words.exportDone : this.words.exportSaves);
+    // And the word goes if it will not fit, which on this button is a
+    // smaller loss than anywhere else on the panel: what is left is the
+    // same picture the third notice showed while the game was being set up,
+    // which is what a parent is looking for. `Izvezi spremljene igre` is
+    // twice the length of `Export saves` and a phone's footer is half a
+    // tablet's, so this is reached by an ordinary player rather than by a
+    // contrived one — it is the same overflow the sums row grew its own
+    // answer to.
+    this.place(
+      this.exportButton,
+      rect.centreX - footer / 2 - BUTTON_GAP / 2,
+      footerY,
+      footer,
+      BUTTON_H,
+      this.blockWidth(this.exportButton) > footer - LABEL_GAP,
+    );
+    this.show(this.exportButton);
     this.place(
       this.aboutButton,
-      rect.centreX,
-      rect.top + rect.height - PAD - BUTTON_H / 2,
-      Math.min(200, rect.width - PAD * 2),
+      rect.centreX + footer / 2 + BUTTON_GAP / 2,
+      footerY,
+      footer,
       BUTTON_H,
     );
     this.aboutButton.label.setText(this.words.aboutButton);
     this.show(this.aboutButton);
 
     this.worldRow(rect, below + AFTER_ROW);
+  }
+
+  /**
+   * Take the backup, and say so on the button.
+   *
+   * Saying so matters more here than anywhere else on this screen. On a
+   * tablet the file goes to the share sheet, which is the operating
+   * system's window and not this game's — so from in here a backup that
+   * worked and a backup a parent dismissed look identical, and a button
+   * that answered either way with nothing at all would leave somebody
+   * tapping it again wondering whether it does anything.
+   *
+   * The word goes back after a beat rather than staying. "Saved" left on
+   * the button for ever is a button that has stopped being an instruction.
+   */
+  private exportNow(): void {
+    if (!this.onExport) return;
+    void this.onExport().then((saved) => {
+      if (!saved || !this.open) return;
+      this.exported = true;
+      this.render();
+      this.scene.time.delayedCall(EXPORT_SAID_MS, () => {
+        this.exported = false;
+        if (this.open) this.render();
+      });
+    });
   }
 
   /**

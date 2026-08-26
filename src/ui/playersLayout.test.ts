@@ -105,16 +105,27 @@ describe("fitting the faces on the screen", () => {
   });
 });
 
-describe("the three steps that make a player", () => {
-  test("go language, then who, then sums", () => {
-    expect(MAKING_STEPS).toEqual(["tongue", "who", "sums"]);
+describe("the steps that make a player", () => {
+  /**
+   * Language, then the grown-up's three panels, then the child's two.
+   *
+   * Written out rather than counted, because the *order* is the design: the
+   * flags have to come before anything with words on it, and the notices
+   * for a parent have to come before the tablet is handed over.
+   */
+  test("go language, then the parent's notices, then who and sums", () => {
+    expect(MAKING_STEPS).toEqual(["tongue", "parents", "offline", "backup", "who", "sums"]);
   });
 
   test("next walks forward and back walks back", () => {
-    expect(stepFrom("tongue", 1)).toBe("who");
+    expect(stepFrom("tongue", 1)).toBe("parents");
+    expect(stepFrom("parents", 1)).toBe("offline");
+    expect(stepFrom("offline", 1)).toBe("backup");
+    expect(stepFrom("backup", 1)).toBe("who");
     expect(stepFrom("who", 1)).toBe("sums");
     expect(stepFrom("sums", -1)).toBe("who");
-    expect(stepFrom("who", -1)).toBe("tongue");
+    expect(stepFrom("who", -1)).toBe("backup");
+    expect(stepFrom("parents", -1)).toBe("tongue");
   });
 
   // Both ends are the caller's to act on: forward off the last is finishing,
