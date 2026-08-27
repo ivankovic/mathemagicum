@@ -117,7 +117,7 @@ import { BrickPopup } from "../ui/BrickPopup";
 import { ClockPopup } from "../ui/ClockPopup";
 import { GeometryLessonPanel } from "../ui/GeometryLessonPanel";
 import { GroveLessonPanel } from "../ui/GroveLessonPanel";
-import { IconTray } from "../ui/IconTray";
+import { IconTray, type IconTrayOptions } from "../ui/IconTray";
 import { IntroPanel } from "../ui/IntroPanel";
 import { LessonPanel } from "../ui/LessonPanel";
 import { MapPanel } from "../ui/MapPanel";
@@ -4018,10 +4018,6 @@ export class GameScene extends Phaser.Scene {
   // read the status line to find out what they were about to plant.
 
   private createActionBar(): void {
-    const size = this.mobileControls ? 64 : 56;
-    const bottom = this.mobileControls ? 76 : 48;
-    const edge = size / 2 + (this.mobileControls ? 16 : 12);
-
     this.seedTray = new IconTray(this, {
       texture: uiTextureKey(UiAsset.SeedPouch),
       // One button per crop, in the order the keyboard's number keys pick
@@ -4050,18 +4046,7 @@ export class GameScene extends Phaser.Scene {
           available: () => this.hasFoundFlower(flower),
         })),
       ],
-      size,
-      right: edge + size + 10,
-      bottom,
-      depth: TOUCH_UI_DEPTH,
-      register: (object) => this.ui(object),
-      onOpen: () => {
-        this.spellTray?.setOpen(false);
-        this.basketTray?.setOpen(false);
-        this.crateTray?.setOpen(false);
-        this.purseTray?.setOpen(false);
-      },
-      canOpen: () => !this.modalOpen,
+      ...this.trayShelf("seeds", 1),
     });
 
     this.spellTray = new IconTray(this, {
@@ -4081,18 +4066,7 @@ export class GameScene extends Phaser.Scene {
         // left out — a book with a gap in it says there is something to find.
         available: () => KNOWN_FROM_THE_START.includes(spell) || this.knows(spell),
       })),
-      size,
-      right: edge,
-      bottom,
-      depth: TOUCH_UI_DEPTH,
-      register: (object) => this.ui(object),
-      onOpen: () => {
-        this.seedTray?.setOpen(false);
-        this.basketTray?.setOpen(false);
-        this.crateTray?.setOpen(false);
-        this.purseTray?.setOpen(false);
-      },
-      canOpen: () => !this.modalOpen,
+      ...this.trayShelf("spellbook", 0),
     });
 
     // What she is carrying, in the same shape as the two containers beside
@@ -4123,18 +4097,7 @@ export class GameScene extends Phaser.Scene {
       // fixtures too, and a basket badge that counted those would say she is
       // carrying three carrots when she is carrying a carrot and two fences.
       count: () => gathered.reduce((sum, { item }) => sum + this.inventory.count(item), 0),
-      size,
-      right: edge + (size + 10) * 2,
-      bottom,
-      depth: TOUCH_UI_DEPTH,
-      register: (object) => this.ui(object),
-      onOpen: () => {
-        this.seedTray?.setOpen(false);
-        this.spellTray?.setOpen(false);
-        this.crateTray?.setOpen(false);
-        this.purseTray?.setOpen(false);
-      },
-      canOpen: () => !this.modalOpen,
+      ...this.trayShelf("basket", 2),
     });
 
     // What she has bought and can put down. A fourth container rather than
@@ -4162,22 +4125,7 @@ export class GameScene extends Phaser.Scene {
       count: () =>
         PLACEABLE_FIXTURES.reduce((sum, f) => sum + this.inventory.count(f), 0) +
         DECOR_TYPES.reduce((sum, piece) => sum + this.decorHeld(piece), 0),
-      size,
-      right: edge + (size + 10) * 3,
-      bottom,
-      depth: TOUCH_UI_DEPTH,
-      register: (object) => this.ui(object),
-      // Every tray closes the other three. Notably not itself: a blanket
-      // "close the rest" that included the crate made it shut on the same
-      // click that opened it, which reads exactly like a button that does
-      // nothing.
-      onOpen: () => {
-        this.seedTray?.setOpen(false);
-        this.spellTray?.setOpen(false);
-        this.basketTray?.setOpen(false);
-        this.purseTray?.setOpen(false);
-      },
-      canOpen: () => !this.modalOpen,
+      ...this.trayShelf("crate", 3),
     });
 
     // Money, as a button with a badge rather than a line of text in the
@@ -4204,18 +4152,7 @@ export class GameScene extends Phaser.Scene {
       // ninety-nine carrots is a basket where the number has stopped
       // mattering; a purse is the one count where it has not.
       mostShown: MOST_DUCATS_SHOWN,
-      size,
-      right: edge + (size + 10) * 4,
-      bottom,
-      depth: TOUCH_UI_DEPTH,
-      register: (object) => this.ui(object),
-      onOpen: () => {
-        this.seedTray?.setOpen(false);
-        this.spellTray?.setOpen(false);
-        this.basketTray?.setOpen(false);
-        this.crateTray?.setOpen(false);
-      },
-      canOpen: () => !this.modalOpen,
+      ...this.trayShelf("purse", 4),
     });
 
     this.edgeAnchored.push(
@@ -7236,6 +7173,43 @@ export class GameScene extends Phaser.Scene {
     // The line on screen was written in the old language by whatever the
     // player last did; it would otherwise sit there until they did something
     // else. Clearing it is honest — re-translating a past event is not.
+  }
+
+  /**
+   * Everything five trays agree about: where they sit and how they behave.
+   *
+   * It was written out five times, and the four lines that matter were the
+   * worst of it — each tray closed the other four *by name*, so a sixth
+   * would have meant editing five blocks and leaving two trays open at once
+   * if any of them were missed.
+   *
+   * **Notably it does not close itself.** A blanket "shut the rest" that
+   * included the tray being opened made it shut on the same click that
+   * opened it, which reads exactly like a button that does nothing.
+   *
+   * The slot is how far along the bar it sits, counted from the spellbook.
+   */
+  private trayShelf(
+    name: string,
+    slot: number,
+  ): Pick<
+    IconTrayOptions,
+    "size" | "right" | "bottom" | "depth" | "register" | "onOpen" | "canOpen"
+  > {
+    const size = this.mobileControls ? 64 : 56;
+    return {
+      size,
+      right: size / 2 + (this.mobileControls ? 16 : 12) + (size + 10) * slot,
+      bottom: this.mobileControls ? 76 : 48,
+      depth: TOUCH_UI_DEPTH,
+      register: (object) => this.ui(object),
+      onOpen: () => {
+        for (const [which, tray] of Object.entries(this.trays())) {
+          if (which !== name) tray?.setOpen(false);
+        }
+      },
+      canOpen: () => !this.modalOpen,
+    };
   }
 
   private trays(): Record<string, IconTray | undefined> {
