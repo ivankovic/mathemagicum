@@ -212,6 +212,31 @@ export interface Phrases {
   brickHintAdd: string;
   brickHintTakeAway: string;
 
+  // --- the astronomer, on the climb to the observatory ----------------------
+
+  /** The heading over her errand. */
+  lampsTaskTitle: string;
+  /**
+   * What she is asking for, as it stands — or that it is done.
+   *
+   * The row of lamps drawn under this says *how many*, and says it to a
+   * child who cannot read a word. What a picture of five identical things
+   * cannot say is what they are for, or where they go, or who is asking —
+   * so the sentence says that, and leaves the counting to the row.
+   */
+  lampsAsk: (left: number) => string;
+  /** What it is for, while there is still something to do. */
+  lampsBargain: string;
+  /** And once the climb is lit and the spell is hers. */
+  lampsEarned: string;
+
+  // --- the chart of the night, on the dome's wall ---------------------------
+
+  /** Over the picture, when it is held up. */
+  starChartTitle: string;
+  /** And the line under it. */
+  starChartCaption: string;
+
   // --- the mirror -----------------------------------------------------------
 
   /** Over the grid. */

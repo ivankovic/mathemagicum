@@ -683,6 +683,30 @@ game that is legibly about coming back after dark, and the dome is the one
 place in the world that cares what hour it is. The child does the thing the
 spell is about before the spell exists.
 
+##### The parchment says it as well as draws it
+
+The errand opened as a picture and nothing else: five lamps, an arrow, a
+rune. That is the right picture — a countable row of identical things is
+exactly what she is asking for, and a child too young to read a sentence can
+still watch five holes go to four. What a picture cannot do is say whose path
+the lamps are for, or that the shape under the arrow is a spell rather than a
+decoration. A reader was being handed a rebus instead of an errand, and the
+older sibling reading it out to the younger one had nothing to read.
+
+**So both, every time, each beside the thing it belongs to.** Her name and
+what she wants sit over the row; what the rune is worth sits under the rune.
+The number is in both — the row for anybody who cannot read it, the sentence
+so that a child who has just been told "five still to light" is not then made
+to count the dim ones to check. Nothing was taken out of the picture to make
+room for the words.
+
+The same rule closed the other wordless thing in the dome. The chart of the
+night on the wall held itself up with nothing written on it, on the grounds
+that describing a picture to somebody who is looking at the picture is wasted
+breath. That is true of the description and false of everything else: the
+drawing does not say that it is *this valley's* sky, or that those are the
+stars at midnight, and neither of those is anywhere in it to be looked at.
+
 ##### And the dome is open at night
 
 Every door in the world used to keep the same hours: unlocked at eight,

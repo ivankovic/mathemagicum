@@ -288,6 +288,17 @@ export const DE: Phrases = {
   brickHintAdd: "Zähl die beiden Steine darunter zusammen.",
   brickHintTakeAway: "Zieh den Stein daneben von dem darüber ab.",
 
+  lampsTaskTitle: `${NAMED_PEOPLE.astronomer}s Aufstieg`,
+  lampsAsk: (left) =>
+    left > 0
+      ? `Der Weg zu meiner Tür ist dunkel. Stell auf jeden Pfosten eine Laterne — ${left} ${left === 1 ? "fehlt" : "fehlen"} noch.`
+      : "Jeder Pfosten brennt. Komm nach Einbruch der Dunkelheit herauf, dann zeige ich dir den Himmel.",
+  lampsBargain: "Tu das, und der Spiegel gehört dir.",
+  lampsEarned: "Der Spiegel gehört dir.",
+
+  starChartTitle: "Die Nacht über dem Tal",
+  starChartCaption: "Die Sterne, wie sie um Mitternacht stehen, von Hand gezeichnet.",
+
   mirrorTitle: "Der Spiegel",
   mirrorAsk: "Male die Felder aus, damit beide Seiten der Linie gleich sind.",
   mirrorWrong: "Das nicht. Schau über die Linie.",

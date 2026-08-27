@@ -6558,11 +6558,20 @@ export class GameScene extends Phaser.Scene {
         this.refreshCarried();
       }
     }
-    // The errand itself, drawn: five posts with the lit ones lit, and the
-    // rune underneath, dim until it is hers. What she used to say in a line
-    // of small type is a row a child can count.
+    // The errand, drawn and said: five posts with the lit ones lit and the
+    // rune underneath, dim until it is hers — and her own two lines beside
+    // them, because the row can be counted by a child who cannot read and
+    // the sentence tells a child who can what the row is a row of.
+    //
+    // The number is in both, on purpose. The row is the number for anybody
+    // who cannot read it, and a reader who has just been told "three still
+    // to light" should not then have to count the dim ones to check.
+    const left = observatory.posts.length - lit;
     this.taskPanel?.show(
       {
+        title: this.words.lampsTaskTitle,
+        line: this.words.lampsAsk(left),
+        bargain: left > 0 ? this.words.lampsBargain : this.words.lampsEarned,
         token: itemIcon(FixtureType.Lamp),
         needed: observatory.posts.length,
         done: lit,
@@ -7832,24 +7841,22 @@ export class GameScene extends Phaser.Scene {
     );
     sprite.on("pointerdown", () => {
       if (this.pointerIsSpokenFor) return;
-      // The map opens the map; the chart says what it is. A chart of the
-      // night that opened a chart would want a second panel to put in it,
-      // and what the dome has to say fits in a line.
-      // The map opens the map. The chart is a picture and nothing else, so
-      // tapping it holds the picture up — which is the whole of what a
-      // sentence describing it was ever for.
+      // The map opens the map. The chart is a picture, so tapping it holds
+      // the picture up — with the two things the drawing cannot say about
+      // itself written round it: whose sky it is, and when.
       if (hanging === UiAsset.MapWall) this.openMap();
-      else this.showPicture(UiAsset.StarChart);
+      else
+        this.showPicture(UiAsset.StarChart, this.words.starChartTitle, this.words.starChartCaption);
     });
     this.wallMap = sprite;
   }
 
   /** A picture on a wall, held up close. */
-  private showPicture(asset: string): void {
+  private showPicture(asset: string, title: string, caption: string): void {
     if (this.modalOpen) return;
     this.joystick?.release();
     this.closeTrays();
-    this.picturePanel?.show(asset, () => {});
+    this.picturePanel?.show(asset, title, caption, () => {});
   }
 
   /** The map, opened. Nothing is refused indoors here — it is on a wall. */

@@ -384,6 +384,17 @@ export const HR: Phrases = {
   brickHintAdd: "Zbroji dvije cigle ispod nje.",
   brickHintTakeAway: "Oduzmi ciglu do nje od one iznad.",
 
+  lampsTaskTitle: `${NAMED_PEOPLE.astronomer}in uspon`,
+  lampsAsk: (left) =>
+    left > 0
+      ? `Put do mojih vrata je mračan. Na svaki stup ide svjetiljka, a nedostaje ih još ${left}.`
+      : "Svi stupovi gore. Dođi kad padne mrak i pokazat ću ti nebo.",
+  lampsBargain: "Učini to i zrcalo je tvoje.",
+  lampsEarned: "Zrcalo je tvoje.",
+
+  starChartTitle: "Noć nad dolinom",
+  starChartCaption: "Zvijezde kako stoje u ponoć, nacrtane rukom.",
+
   mirrorTitle: "Zrcalo",
   mirrorAsk: "Oboji polja tako da obje strane crte budu jednake.",
   mirrorWrong: "Ne to. Pogledaj preko crte.",

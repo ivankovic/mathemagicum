@@ -257,6 +257,17 @@ export const EN: Phrases = {
   brickHintAdd: "Add the two bricks under it.",
   brickHintTakeAway: "Take the brick beside it away from the one above.",
 
+  lampsTaskTitle: `${NAMED_PEOPLE.astronomer}'s climb`,
+  lampsAsk: (left) =>
+    left > 0
+      ? `The path to my door is dark. Set a lamp on every post — ${left} still to light.`
+      : "Every post is lit. Come up after dark and I will show you the sky.",
+  lampsBargain: "Do that and the mirror is yours.",
+  lampsEarned: "The mirror is yours.",
+
+  starChartTitle: "The night over the valley",
+  starChartCaption: "The stars as they stand at midnight, drawn by hand.",
+
   mirrorTitle: "The mirror",
   mirrorAsk: "Colour the squares that make both sides of the line match.",
   mirrorWrong: "Not that one. Look across the line.",

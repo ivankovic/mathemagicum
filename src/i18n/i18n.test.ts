@@ -53,6 +53,17 @@ function sample(p: Phrases): Record<string, string> {
     brickDone: p.brickDone,
     brickHintAdd: p.brickHintAdd,
     brickHintTakeAway: p.brickHintTakeAway,
+    lampsTaskTitle: p.lampsTaskTitle,
+    // Both branches under the one key, because the sample list is checked
+    // against the interface's keys exactly: a second entry for the finished
+    // errand would be a key no phrase answers to. Joined, the "real text
+    // everywhere" and "no two languages say the same thing" checks cover the
+    // done wording as well — which is the wording nothing else reaches.
+    lampsAsk: `${p.lampsAsk(3)} ${p.lampsAsk(0)}`,
+    lampsBargain: p.lampsBargain,
+    lampsEarned: p.lampsEarned,
+    starChartTitle: p.starChartTitle,
+    starChartCaption: p.starChartCaption,
     mirrorTitle: p.mirrorTitle,
     mirrorAsk: p.mirrorAsk,
     mirrorWrong: p.mirrorWrong,

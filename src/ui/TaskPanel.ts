@@ -6,36 +6,50 @@ import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
 
 /**
- * Somebody's errand, drawn: a row of things to do, and what you get for it.
+ * Somebody's errand: a row of things to do, what you get for it, and both
+ * halves said in words as well.
  *
- * Wordless on purpose. The astronomer used to say *"5 lamps still to set on
- * the path"* along the top of the screen, which fails twice over — a line of
- * small type is unreadable at arm's length, and the youngest children this
- * game is for cannot read it at all. What she is asking for is a countable
- * row of identical things, and a countable row of identical things is a
- * picture.
+ * It was wordless for a while, and the argument for that was half right. The
+ * half that holds: what the astronomer is asking for is a countable row of
+ * identical things, a countable row of identical things is a picture, and
+ * the youngest children this game is for cannot read a sentence at all — so
+ * the row has to carry the number on its own, and it does.
  *
- * Three parts, top to bottom:
+ * The half that does not: a picture of five lamps and a rune says *how many*
+ * and says nothing else. It cannot say whose path they are for, or where
+ * they go, or that the rune underneath is a spell rather than a decoration.
+ * A child who can read was being given a puzzle instead of an errand, and
+ * the older sibling reading it out to the younger one had nothing to read.
  *
+ * So both, always, each beside the picture it belongs to:
+ *
+ * - **the heading** — whose errand this is;
+ * - **the asking** — what the row of tokens is a row of, and what to do with
+ *   them. The number is still the row's to give;
  * - **the row** — one token per thing to do, the finished ones in full
- *   colour and the rest dimmed over an empty socket. Counting the dim ones
- *   is the number the sentence used to give;
+ *   colour and the rest dimmed over an empty socket;
  * - **the arrow** — which way the bargain runs;
  * - **the reward** — the rune she will teach, dim until it is earned and lit
- *   the moment it is. That is the only difference between "here is what I
- *   want" and "here is what you have", and it needs no word either.
+ *   the moment it is;
+ * - **the bargain** — what the rune is, under it, and what it takes. This
+ *   line is the one thing on the sheet a picture genuinely cannot give.
  */
 
-const PANEL_MAX_W = 420;
-const PANEL_MAX_H = 236;
+const PANEL_MAX_W = 440;
+const PANEL_MAX_H = 360;
 const PANEL_MIN_W = 280;
-const PANEL_MIN_H = 200;
+const PANEL_MIN_H = 300;
 
+const INK = "#4a3422";
+const INK_DIM = "#8a6a48";
 const INK_HEX = 0x4a3422;
 const PAPER_PALE_HEX = 0xf6e8c4;
 const SOCKET_HEX = 0x2b2620;
 const RULE_HEX = 0x8a6a48;
 const CLOSE_SIZE = 13;
+
+const TITLE_SIZE = 17;
+const BODY_SIZE = 13;
 
 /** How big a token in the row is drawn. */
 const TOKEN = 34;
@@ -50,12 +64,33 @@ const REWARD = 52;
  */
 const DIM = 0.45;
 
+/** The gaps down the sheet: under the heading, round the arrow, under the rune. */
+const TITLE_GAP = 10;
+/**
+ * How much of each side the heading gives up.
+ *
+ * The close box sits in the top right corner, so a heading wrapped to the
+ * full width would run under it — and being centred, it would do that in
+ * whichever language happened to have the longest word for the errand.
+ * Taken off both sides so the line stays centred on the sheet.
+ */
+const CORNER_ROOM = 36;
+const ASK_GAP = 14;
+const ARROW_GAP = 26;
+const REWARD_GAP = 12;
+
 type PanelPart = Phaser.GameObjects.GameObject &
   Phaser.GameObjects.Components.Depth &
   Phaser.GameObjects.Components.ScrollFactor &
   Phaser.GameObjects.Components.Visible;
 
 export interface Task {
+  /** Whose errand it is. */
+  readonly title: string;
+  /** What is being asked for, in words. The row says how many. */
+  readonly line: string;
+  /** What it is for — or, once it is earned, what it was. */
+  readonly bargain: string;
   /** The picture of one thing to do — a lamp, a crop, a stone. */
   readonly token: string;
   /** How many there are, and how many are done. */
@@ -69,6 +104,9 @@ export class TaskPanel {
   private readonly paper: ParchmentPanel;
   private readonly parts: PanelPart[] = [];
   private readonly ink: Phaser.GameObjects.Graphics;
+  private readonly heading: Phaser.GameObjects.Text;
+  private readonly ask: Phaser.GameObjects.Text;
+  private readonly bargain: Phaser.GameObjects.Text;
   private readonly tokens: Phaser.GameObjects.Image[] = [];
   private readonly reward: Phaser.GameObjects.Image;
   private readonly closeBox: Phaser.GameObjects.Rectangle;
@@ -96,6 +134,9 @@ export class TaskPanel {
       register,
     });
     this.ink = this.own(scene.add.graphics());
+    this.heading = this.own(this.text(TITLE_SIZE, INK).setOrigin(0.5, 0));
+    this.ask = this.own(this.text(BODY_SIZE, INK).setOrigin(0.5, 0).setAlign("center"));
+    this.bargain = this.own(this.text(BODY_SIZE, INK_DIM).setOrigin(0.5, 0).setAlign("center"));
     for (let n = 0; n < most; n++) {
       this.tokens.push(this.own(scene.add.image(0, 0, uiTextureKey(UiAsset.Spellbook))));
     }
@@ -108,7 +149,7 @@ export class TaskPanel {
     );
     this.closeLabel = this.own(
       scene.add
-        .text(0, 0, "x", { fontFamily: "monospace", fontSize: `${CLOSE_SIZE}px`, color: "#4a3422" })
+        .text(0, 0, "x", { fontFamily: "monospace", fontSize: `${CLOSE_SIZE}px`, color: INK })
         .setOrigin(0.5),
     );
     this.closeBox.on("pointerdown", () => this.close());
@@ -175,15 +216,40 @@ export class TaskPanel {
     for (const part of this.parts) part.setVisible(true);
     for (const token of this.tokens) token.setVisible(false);
 
+    // Written before it is placed. Both lines wrap, so how tall the sheet's
+    // contents are is not known until the words have been set into the width
+    // they have — and everything below them hangs off that.
+    const room = rect.width - PAD * 2;
+    this.heading.setText(task.title).setWordWrapWidth(room - CORNER_ROOM * 2);
+    this.ask.setText(task.line).setWordWrapWidth(room);
+    this.bargain.setText(task.bargain).setWordWrapWidth(room);
+
+    const tall =
+      this.heading.height +
+      TITLE_GAP +
+      this.ask.height +
+      ASK_GAP +
+      TOKEN +
+      ARROW_GAP +
+      22 +
+      REWARD +
+      REWARD_GAP +
+      this.bargain.height;
+    // Centred in whatever paper there is, never above the top pad: on a short
+    // screen the sheet is smaller than its contents and the heading has to
+    // stay on the page even if the bargain runs off the bottom of it.
+    let y = Math.max(rect.top + PAD, rect.top + (rect.height - tall) / 2);
+
+    this.heading.setPosition(rect.centreX, y).setVisible(true);
+    y += this.heading.height + TITLE_GAP;
+    this.ask.setPosition(rect.centreX, y).setVisible(true);
+    y += this.ask.height + ASK_GAP;
+
     // --- the row ------------------------------------------------------------
     const shown = Math.min(task.needed, this.tokens.length);
     const span = shown * TOKEN + (shown - 1) * TOKEN_GAP;
     const left = rect.centreX - span / 2;
-    // The whole block centred in the sheet rather than hung from the top: it
-    // is one picture and the paper is sized to it, so there is nothing for a
-    // band of blank parchment underneath to be.
-    const block = TOKEN + 30 + 26 + REWARD;
-    const rowY = rect.centreY - block / 2 + TOKEN / 2;
+    const rowY = y + TOKEN / 2;
     for (let n = 0; n < shown; n++) {
       const x = left + n * (TOKEN + TOKEN_GAP) + TOKEN / 2;
       const done = n < task.done;
@@ -203,25 +269,39 @@ export class TaskPanel {
         .setAlpha(done ? 1 : DIM)
         .setVisible(true);
     }
+    y += TOKEN;
 
     // --- the arrow ----------------------------------------------------------
-    const arrowY = rowY + TOKEN / 2 + 30;
+    const arrowY = y + ARROW_GAP;
     this.ink.lineStyle(3, RULE_HEX, 1);
     this.ink.lineBetween(rect.centreX, arrowY - 12, rect.centreX, arrowY + 10);
     this.ink.lineBetween(rect.centreX, arrowY + 10, rect.centreX - 7, arrowY + 2);
     this.ink.lineBetween(rect.centreX, arrowY + 10, rect.centreX + 7, arrowY + 2);
+    y = arrowY + 22;
 
     // --- what it is for -----------------------------------------------------
     const earned = task.done >= task.needed;
     this.reward
       .setTexture(uiTextureKey(task.reward))
       .setDisplaySize(REWARD, REWARD)
-      .setPosition(rect.centreX, arrowY + 26 + REWARD / 2)
+      .setPosition(rect.centreX, y + REWARD / 2)
       .setAlpha(earned ? 1 : DIM)
       .setVisible(true);
+    y += REWARD + REWARD_GAP;
+
+    this.bargain.setPosition(rect.centreX, y).setVisible(true);
 
     this.closeBox.setPosition(rect.left + rect.width - PAD - 14, rect.top + PAD + 10);
     this.closeLabel.setPosition(this.closeBox.x, this.closeBox.y);
+  }
+
+  private text(size: number, color: string): Phaser.GameObjects.Text {
+    return this.scene.add.text(0, 0, "", {
+      fontFamily: "monospace",
+      fontSize: `${size}px`,
+      color,
+      lineSpacing: 3,
+    });
   }
 
   private own<T extends PanelPart>(object: T): T {
