@@ -114,6 +114,8 @@ export interface DevOptions {
   readonly portalRung: number | null;
   /** Hold the array spell at one rung of its own ladder. */
   readonly arrayRung: number | null;
+  /** And the sharing spell's, held at one rung for a script. */
+  readonly shareRung: number | null;
   readonly brickRung: number | null;
   /** Hold the hourglass at one rung of the clock ladder. */
   /**
@@ -211,6 +213,7 @@ const NONE: DevOptions = {
   reached: [],
   portalRung: null,
   arrayRung: null,
+  shareRung: null,
   rung: null,
   clockRung: null,
   symmetryRung: null,
@@ -302,6 +305,7 @@ export function parseDevOptions(search: string): DevOptions {
     reached: places(params.get("reached")),
     portalRung: number("portalRung"),
     arrayRung: number("arrayRung"),
+    shareRung: number("shareRung"),
     brickRung: number("brickRung"),
     rung: number("rung"),
     clockRung: number("clockRung"),
@@ -519,6 +523,15 @@ export interface DevHandle {
    * of the world, from inside the one building the map hangs in.
    */
   readonly mapMark: () => { col: number; row: number };
+  /**
+   * Which patch spell is waiting for ground, or null.
+   *
+   * `armed` answers about the spells that land on one square. A patch spell
+   * is a different state — the rune is lit and a rectangle is being drawn —
+   * and until now the only way to see it from a script was to notice that
+   * the camera had moved.
+   */
+  readonly marking: () => string | null;
   /**
    * What the division parchment is asking, and what has been typed into it.
    *

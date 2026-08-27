@@ -1,0 +1,152 @@
+{
+  "sheet": {
+    "file": "fisher_sheet.png",
+    "frame_width": 32,
+    "frame_height": 48,
+    "frame_count": 72,
+    "columns": 6,
+    "rows": 12,
+    "margin": 1,
+    "spacing": 2
+  },
+  "character": "fisher",
+  "tile_size": 32,
+  "footprint_tiles": {
+    "width": 1,
+    "height": 1
+  },
+  "sprite_offset_px": {
+    "x": 0,
+    "y": -16
+  },
+  "sprite_size_px": {
+    "width": 32,
+    "height": 48
+  },
+  "frame_count": 72,
+  "animations": {
+    "idle_down": {
+      "start": 0,
+      "end": 3,
+      "frame_count": 4
+    },
+    "idle_up": {
+      "start": 6,
+      "end": 9,
+      "frame_count": 4
+    },
+    "idle_left": {
+      "start": 12,
+      "end": 15,
+      "frame_count": 4
+    },
+    "idle_right": {
+      "start": 18,
+      "end": 21,
+      "frame_count": 4
+    },
+    "walk_down": {
+      "start": 24,
+      "end": 27,
+      "frame_count": 4
+    },
+    "walk_up": {
+      "start": 30,
+      "end": 33,
+      "frame_count": 4
+    },
+    "walk_left": {
+      "start": 36,
+      "end": 39,
+      "frame_count": 4
+    },
+    "walk_right": {
+      "start": 42,
+      "end": 45,
+      "frame_count": 4
+    },
+    "plant_down": {
+      "start": 48,
+      "end": 53,
+      "frame_count": 6
+    },
+    "plant_up": {
+      "start": 54,
+      "end": 59,
+      "frame_count": 6
+    },
+    "plant_left": {
+      "start": 60,
+      "end": 65,
+      "frame_count": 6
+    },
+    "plant_right": {
+      "start": 66,
+      "end": 71,
+      "frame_count": 6
+    }
+  },
+  "directions": [
+    "down",
+    "up",
+    "left",
+    "right"
+  ],
+  "palette": {
+    "outline": [
+      58,
+      48,
+      74
+    ],
+    "skin": [
+      168,
+      118,
+      80
+    ],
+    "skin_shade": [
+      132,
+      88,
+      58
+    ],
+    "hair": [
+      120,
+      78,
+      48
+    ],
+    "hair_shade": [
+      88,
+      56,
+      34
+    ],
+    "shirt": [
+      240,
+      186,
+      90
+    ],
+    "shirt_shade": [
+      198,
+      144,
+      58
+    ],
+    "pants": [
+      92,
+      104,
+      150
+    ],
+    "accent": [
+      120,
+      200,
+      128
+    ],
+    "accent_shade": [
+      82,
+      156,
+      92
+    ],
+    "light": [
+      255,
+      250,
+      240
+    ]
+  }
+}

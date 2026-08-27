@@ -55,6 +55,11 @@ const NAMED_ROLES: Record<string, string> = {
   // shape where the geometer's square is a triangle and the schoolteacher's
   // book is an upright block.
   astronomer: "astronomer",
+  // On the quay. The sixth teacher, carrying the fifth outline anybody in
+  // this cast carries: a creel, which is a trapezoid where the book is an
+  // upright rectangle, the square a triangle, the spyglass a bar and the
+  // clock face a disc. It is also the picture his own spell draws.
+  fisher: "fisher",
   // Beside the tower in the city. The fifth teacher, told apart by the one
   // round thing anybody here carries: a clock face held out flat, where the
   // book is an upright block, the square a triangle and the spyglass a

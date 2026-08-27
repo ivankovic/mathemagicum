@@ -42,6 +42,11 @@
       "width": 32,
       "height": 32
     },
+    "rune-divide": {
+      "file": "rune_divide.png",
+      "width": 32,
+      "height": 32
+    },
     "rune-hourglass": {
       "file": "rune_hourglass.png",
       "width": 32,

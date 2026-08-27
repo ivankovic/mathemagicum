@@ -39,6 +39,7 @@ export const NAMED_PEOPLE = {
   // harbour's are other people; see `KEEPER_NAMES`.
   shopkeeper: "Mira",
   astronomer: "Vera",
+  fisher: "Tomo",
   clockmaker: "Emil",
 } as const;
 

@@ -352,6 +352,36 @@ export class GameSession {
     });
   }
 
+  /**
+   * Every ripe square of a patch — what the sharing spell picks.
+   *
+   * `growableIn`'s exact opposite: that one wants a crop that is *not* ripe
+   * yet, this one wants a crop that is. The two together are the whole of
+   * what the garden does in bulk.
+   */
+  pickableIn(patch: Patch): GridPoint[] {
+    if (this.indoors) return [];
+    return patchCells(patch).filter((at) => {
+      const crop = this.grid.getCrop(at.col, at.row);
+      return crop !== null && crop.stage === PlantStage.Mature;
+    });
+  }
+
+  /**
+   * Pick one named square, and say what came up.
+   *
+   * The cell is given rather than aimed at, which is what a patch cast
+   * needs: `harvest` is one child reaching for one square in front of her,
+   * and this is a spell taking a whole bed at once.
+   */
+  harvestAt(col: number, row: number): CropResult {
+    if (this.indoors) return { ok: false, outcome: Outcome.Indoors };
+    const picked = this.pickAt({ col, row });
+    if (!picked) return { ok: false, outcome: Outcome.NothingThere, tile: { col, row } };
+    this.inventory.add(picked.crop.plant, HARVEST_YIELD);
+    return { ok: true, outcome: Outcome.Picked, tile: picked.tile, crop: picked.crop };
+  }
+
   clearableIn(patch: Patch): GridPoint[] {
     if (this.indoors) return [];
     return patchCells(patch).filter((at) => {

@@ -58,6 +58,15 @@ const QUAY_DEPTH = 3;
 const QUAYSIDE_FOLK = 4;
 /** What the person behind a harbour counter is, whatever their id says. */
 const SHOPKEEPER_ROLE = "shopkeeper";
+/**
+ * The fisherman on the quay, who teaches the sharing spell.
+ *
+ * His id and his role are the same word, unlike the keepers': there is one
+ * of him in the world, the way there is one geometer and one astronomer, so
+ * there is nothing for an id to tell apart.
+ */
+const FISHER_ID = "fisher";
+const FISHER_ROLE = "fisher";
 /** How far out a pier reaches, and how many the front carries. */
 const PIER_REACH = 7;
 /**
@@ -794,6 +803,26 @@ export function layoutHarbour(grid: WorldGrid, box: AreaPlacement, rng: Rng): Ha
   const standing = quay.filter(
     (at) => grid.isPassable(at.col, at.row) && !grid.isBridged(at.col, at.row),
   );
+  // The fisherman, at the foot of the first pier that has one.
+  //
+  // At a pier rather than anywhere along the front, and that is worth a
+  // line: what he teaches is dealing a catch out into equal baskets, and
+  // the place a catch is landed is where a boat ties up. A teacher standing
+  // among the stalls would be a man who happens to be here.
+  //
+  // He keeps the quay's hours like everybody else, and he is placed before
+  // the crowd so that the four of them spread round him rather than one of
+  // them standing on his cell.
+  const landing = piers[0]?.[0] ?? standing[Math.floor(standing.length / 2)];
+  if (landing) {
+    npcs.push({
+      id: FISHER_ID,
+      role: FISHER_ROLE,
+      home: { ...landing },
+      homeBuildingId: "",
+      indoors: false,
+    });
+  }
   for (let n = 0; n < QUAYSIDE_FOLK && standing.length > 0; n++) {
     const at = standing[Math.floor((n * standing.length) / QUAYSIDE_FOLK)] as GridPoint;
     npcs.push({

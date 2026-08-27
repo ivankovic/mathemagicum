@@ -7,6 +7,7 @@ import { FixtureType } from "./fixtures";
 import { WorldGrid } from "./grid";
 import { PlantStage, PlantType } from "./plants";
 import { sceneryType } from "./scenery";
+import { type Patch, patchCells } from "./selection";
 import {
   AIM_REACH,
   GameSession,
@@ -713,5 +714,53 @@ describe("pulling a crop back out of the ground", () => {
     for (const at of offered) {
       expect(game.checkClearing(at).ok).toBe(true);
     }
+  });
+});
+
+describe("picking a whole patch", () => {
+  /** Plant every square of a rectangle and bring some of them on to ripe. */
+  function bed(grid: WorldGrid, patch: Patch, ripe: number): void {
+    for (const [n, at] of patchCells(patch).entries()) {
+      expect(grid.plant(at.col, at.row, PlantType.Carrot)).toBe(true);
+      if (n >= ripe) continue;
+      // Grown rather than staged by hand, so the crop reaches ripe the way
+      // the game gets it there.
+      while (grid.getCrop(at.col, at.row)?.stage !== PlantStage.Mature) {
+        if (!grid.growCrop(at.col, at.row)) break;
+      }
+    }
+  }
+
+  /**
+   * `growableIn`'s exact opposite, and the pair is the point: the array
+   * spell ripens what is not ripe and the sharing spell picks what is. A
+   * patch cast that took the unripe ones too would be a spell that threw
+   * half a bed away.
+   */
+  test("only the ripe squares, and never the unripe ones", () => {
+    const patch: Patch = { col: 1, row: 1, width: 2, height: 2 };
+    const bare = field(TerrainType.Dirt);
+    bed(bare, patch, 0);
+    expect(session(bare).pickableIn(patch)).toEqual([]);
+    expect(session(bare).growableIn(patch)).toHaveLength(4);
+
+    const half = field(TerrainType.Dirt);
+    bed(half, patch, 2);
+    expect(session(half).pickableIn(patch)).toHaveLength(2);
+    expect(session(half).growableIn(patch)).toHaveLength(2);
+  });
+
+  test("picking one square puts it in the basket and leaves the ground bare", () => {
+    const grid = field(TerrainType.Dirt);
+    bed(grid, { col: 3, row: 3, width: 1, height: 1 }, 1);
+    const s = session(grid);
+    const before = s.inventory.count(PlantType.Carrot);
+    expect(s.harvestAt(3, 3).ok).toBe(true);
+    expect(s.inventory.count(PlantType.Carrot)).toBeGreaterThan(before);
+    expect(grid.getCrop(3, 3)).toBeNull();
+  });
+
+  test("and picking bare ground says so rather than pretending", () => {
+    expect(session(field(TerrainType.Dirt)).harvestAt(4, 4).ok).toBe(false);
   });
 });

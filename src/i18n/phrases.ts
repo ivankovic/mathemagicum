@@ -193,6 +193,15 @@ export interface Phrases {
 
   // --- the division spell --------------------------------------------------
 
+  /** The heading over the fisherman's lesson. */
+  shareLessonTitle: string;
+  /** One idea per page, in the order he shows them. */
+  shareRune: string;
+  shareHeap: (total: number, parts: number) => string;
+  shareDeal: (total: number, parts: number, each: number) => string;
+  /** The last page, and only for a child whose spell has leftovers in it. */
+  shareOver: (left: number, parts: number) => string;
+
   /** `23 ÷ 5`, over the baskets. */
   shareTitle: (total: number, parts: number) => string;
   /** The question under it, while the share is being answered. */

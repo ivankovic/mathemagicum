@@ -70,7 +70,7 @@ cp $OUT/terrain_atlas/terrain*.{png,json} public/assets/terrain/
 cp $OUT/terrain_cliffs/cliffs*.{png,json} public/assets/cliffs/
 cp $OUT/terrain_buildings/{cottage,barn,tower,schoolhouse}{.json,_sheet.png} public/assets/buildings/
 for c in player player-bun player-trousers player-short player-broad player-crop \
-         teacher postal-worker shopkeeper geometer astronomer clockmaker \
+         teacher postal-worker shopkeeper geometer astronomer clockmaker fisher \
          villager-0 villager-1 villager-2; do
   cp "$OUT/terrain_characters/$c.json" "$OUT/terrain_characters/${c}_sheet.png" \
      public/assets/characters/

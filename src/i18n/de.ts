@@ -281,6 +281,14 @@ export const DE: Phrases = {
   arrayHintRows: (columns, counted) =>
     `Zähl in ${columns}er-Schritten: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
 
+  shareLessonTitle: "Aufteilen",
+  shareRune: `Der Strich mit den zwei Punkten in deinem Zauberbuch erntet ein ganzes Beet auf einmal — und fragt, wie sich der Fang aufteilt. ${NAMED_PEOPLE.fisher} macht das jeden Morgen.`,
+  shareHeap: (total, parts) =>
+    `Das ist der ganze Haufen: ${total}. Und das sind ${parts} Körbe, in jeden kommt gleich viel.`,
+  shareDeal: (total, parts, each) =>
+    `Geh die Körbe der Reihe nach durch, bis der Haufen leer ist. ${total} auf ${parts} verteilt macht ${each} in jedem.`,
+  shareOver: (left, parts) =>
+    `Und diese ${left} passen nicht mehr: sonst hätte ein Korb mehr als die anderen. Was übrig bleibt, ist immer weniger als ${parts}.`,
   shareTitle: (total, parts) => `${total} ÷ ${parts}`,
   shareAsk: "Wie viel bekommt jeder Korb?",
   shareAskLeft: "Und wie viel bleibt übrig?",

@@ -250,6 +250,14 @@ export const EN: Phrases = {
   arrayHintRows: (columns, counted) =>
     `Count along by ${columns}: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
 
+  shareLessonTitle: "Sharing it out",
+  shareRune: `The bar with two dots in your spellbook picks a whole patch at once — and asks how the catch divides up. ${NAMED_PEOPLE.fisher} does it every morning.`,
+  shareHeap: (total, parts) =>
+    `Here is the whole heap: ${total}. And here are ${parts} baskets to put it in, with the same in each.`,
+  shareDeal: (total, parts, each) =>
+    `Go round the baskets one at a time until the heap runs out. ${total} shared ${parts} ways puts ${each} in every one.`,
+  shareOver: (left, parts) =>
+    `And these ${left} will not go: any more and one basket would have more than the rest. ${left} left over is always fewer than ${parts}.`,
   shareTitle: (total, parts) => `${total} ÷ ${parts}`,
   shareAsk: "How many does each basket get?",
   shareAskLeft: "And how many are left over?",

@@ -151,6 +151,7 @@ describe("the list of players", () => {
     rung: HARDEST_RUNG,
     portalRung: 0,
     arrayRung: 0,
+    shareRung: 0,
     clockRung: 0,
     clockOffset: 0,
     symmetryRung: 0,

@@ -32,8 +32,10 @@ export const Spell = {
   Clearing: "clearing",
   /** Measuring, on a ruled map. Crosses the world. */
   Portal: "portal",
-  /** Multiplication, as rows and columns. Plants a patch in one go. */
+  /** Multiplication, as rows and columns. Ripens a patch in one go. */
   Array: "array",
+  /** Division, as a heap dealt into baskets. Picks a ripe patch in one go. */
+  Share: "share",
   /** Telling the time. Winds the world's clock to wherever you point it. */
   Hourglass: "hourglass",
   /** Folding a shape in half: the first geometry about a whole figure. */
@@ -47,6 +49,7 @@ export const SPELLS: readonly Spell[] = [
   Spell.Clearing,
   Spell.Portal,
   Spell.Array,
+  Spell.Share,
   Spell.Hourglass,
   Spell.Mirror,
 ];
@@ -70,6 +73,10 @@ export const TAUGHT_BY: Partial<Record<Spell, string>> = {
   // is the point: the forest has no village and nobody lives there, so a
   // teacher who was a person would have needed a house built round them.
   [Spell.Array]: "great-tree",
+  // The fisherman on the quay. Dealing a catch out into equal baskets is
+  // what a quay does all morning, and the harbour was the one place in the
+  // world with people in it and nothing to learn from any of them.
+  [Spell.Share]: "fisher",
   // Beside the tower in the city, under the one clock in the world that
   // shows the hour to everybody at once. A spell about telling the time
   // belongs with the thing that tells it — which is also why it is no

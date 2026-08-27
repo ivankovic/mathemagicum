@@ -36,6 +36,7 @@ export const UiAsset = {
    * leaves the operator signs alone and shows the array itself.
    */
   RuneTimes: "rune-times",
+  RuneDivide: "rune-divide",
   /**
    * The hourglass spell's rune: an hourglass, half run through.
    *

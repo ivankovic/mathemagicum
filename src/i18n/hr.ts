@@ -377,6 +377,14 @@ export const HR: Phrases = {
   arrayHintRows: (columns, counted) =>
     `Broji po ${columns}: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
 
+  shareLessonTitle: "Dijeljenje",
+  shareRune: `Crta s dvije točkice u tvojoj knjizi obere cijelu gredicu odjednom — i pita kako se ulov dijeli. ${NAMED_PEOPLE.fisher} to radi svako jutro.`,
+  shareHeap: (total, parts) =>
+    `Ovo je cijela hrpa: ${total}. A ovo su ${parts} košare, u svaku ide jednako.`,
+  shareDeal: (total, parts, each) =>
+    `Obilazi košare jednu po jednu dok se hrpa ne potroši. ${total} podijeljeno na ${parts} stavlja ${each} u svaku.`,
+  shareOver: (left, parts) =>
+    `A ovih ${left} ne stane: inače bi jedna košara imala više od ostalih. Ostatak je uvijek manji od ${parts}.`,
   shareTitle: (total, parts) => `${total} ÷ ${parts}`,
   shareAsk: "Koliko dobiva svaka košara?",
   shareAskLeft: "A koliko je ostalo?",

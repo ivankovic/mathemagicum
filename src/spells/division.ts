@@ -5,10 +5,15 @@
  * The division spell: a heap of crop, dealt out into equal shares.
  *
  * The fourth of the arithmetic spells and the answer to an asymmetry the
- * garden had grown. A child plants a patch in one cast and ripens it in one
- * cast, and then picks it one tap at a time — the array spell has no
- * inverse. This is it: cast on a ripe patch and the whole of it comes up at
- * once, shared out.
+ * garden had grown. A child *ripens* a patch in one cast — that is the array
+ * spell, and outdoors it is the only thing that one does in bulk — and then
+ * picks it one tap at a time. This is the other end: cast on a ripe patch
+ * and the whole of it comes up at once, shared out.
+ *
+ * Planting is by hand at both ends and stays that way. Putting a seed down
+ * is the one gesture in the garden a child does *with* their hands rather
+ * than through a rune, and a patch sown by spell would take that away to
+ * save four taps.
  *
  * **The numbers are generated, not drawn by the player.** That is the one
  * place this parts company with the array spell, and the reason is worth
@@ -301,4 +306,74 @@ export function shareHint(cast: ShareCast): number {
 /** What the leftovers look like once this many rings have been dealt. */
 export function heapLeft(problem: ShareProblem, dealt: number): number {
   return problem.total - Math.max(0, Math.min(problem.parts, dealt)) * problem.each;
+}
+
+/**
+ * The share the fisherman works through, for a child on this rung.
+ *
+ * Chosen rather than rolled, which is the difference between an example and
+ * a sample. The generator is right to hand a *cast* whatever the ladder
+ * allows — one each into two baskets is a perfectly good question — and
+ * quite wrong to teach on it: a lesson whose picture is two baskets with one
+ * thing in each has demonstrated nothing that could not be seen without it.
+ *
+ * So: three baskets where the rung has room for three, four things in each
+ * where it has room for four, and a leftover if the rung is one that has
+ * them. `lessonFor` cuts a fixed sum down to size for exactly this reason,
+ * and `geometryLessonFor` walks a fixed journey.
+ */
+export function shareLessonFor(rung: ShareRung): ShareProblem {
+  const parts = Math.max(2, Math.min(rung.mostParts, 3));
+  const each = Math.max(2, Math.min(rung.mostEach, 4));
+  const left = rung.remainders ? Math.min(parts - 1, 2) : 0;
+  return {
+    total: each * parts + left,
+    parts,
+    each,
+    left,
+    remainders: rung.remainders,
+    tier: rung.tier,
+    given: 0,
+    hintAfter: rung.hintAfter,
+  };
+}
+
+/**
+ * What the fisherman shows you, one idea per page.
+ *
+ * The same four-beat shape the other teachers keep: what the spell is, then
+ * the thing it acts on, then the method, then the one idea a picture cannot
+ * carry on its own.
+ */
+export const ShareBeat = {
+  /** What it is and where it lives: the spellbook and the obelus. */
+  Rune: "rune",
+  /** The heap. One pile, and the question of what to do with it. */
+  Heap: "heap",
+  /** Dealing. The baskets, filled one at a time — the method. */
+  Deal: "deal",
+  /** And what will not go: the leftovers, named. */
+  Over: "over",
+} as const;
+
+export type ShareBeat = (typeof ShareBeat)[keyof typeof ShareBeat];
+
+export const SHARE_BEATS: readonly ShareBeat[] = [
+  ShareBeat.Rune,
+  ShareBeat.Heap,
+  ShareBeat.Deal,
+  ShareBeat.Over,
+];
+
+/**
+ * The pages he actually turns, for a child on this rung.
+ *
+ * Cut the way the geometer's is, and for the reason a playtest gave him:
+ * a method demonstrated on a question a child has not been asked is a method
+ * they cannot check. The bottom rungs deal shares that come out even and
+ * never meet a leftover in the spell — so they do not meet one here either.
+ * The page arrives with the thing it is about.
+ */
+export function shareBeatsFor(rung: ShareRung): readonly ShareBeat[] {
+  return rung.remainders ? SHARE_BEATS : SHARE_BEATS.filter((beat) => beat !== ShareBeat.Over);
 }

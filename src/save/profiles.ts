@@ -6,6 +6,7 @@ import { DEFAULT_AVATAR } from "../avatar/style";
 import { type Language, languageOf } from "../settings";
 import { HARDEST_BRICK_RUNG } from "../spells/bricks";
 import { type Band, DEFAULT_BAND, bandAt, bandOn, rungInBand } from "../spells/difficulty";
+import { HARDEST_SHARE_RUNG } from "../spells/division";
 import { HARDEST_CLOCK_RUNG } from "../spells/hourglass";
 import { HARDEST_ARRAY_RUNG } from "../spells/multiplication";
 import { readLearned } from "../spells/spellbook";
@@ -122,6 +123,8 @@ export interface Progress {
    * arithmetic — so it is clamped against its own end rather than theirs.
    */
   readonly arrayRung: number;
+  /** And the sharing spell's, which is its own ladder for its own reason. */
+  readonly shareRung: number;
   /**
    * Where the hourglass spell's own ladder sits: how hard a clock face is.
    *
@@ -326,6 +329,7 @@ export function createProfile(
     rung: bandAt(wanted.band).from,
     portalRung: bandAt(wanted.band).from,
     arrayRung: arrayFloor(bandAt(wanted.band)),
+    shareRung: shareFloor(bandAt(wanted.band)),
     clockRung: clockFloor(bandAt(wanted.band)),
     // A new world's clock is the real one until somebody moves it.
     clockOffset: 0,
@@ -380,6 +384,7 @@ export function freshProgress(bandAt_: number): Progress {
     rung: band.from,
     portalRung: band.from,
     arrayRung: arrayFloor(band),
+    shareRung: shareFloor(band),
     clockRung: clockFloor(band),
     clockOffset: 0,
     symmetryRung: 0,
@@ -403,6 +408,10 @@ export function freshProgress(bandAt_: number): Progress {
  */
 function arrayRungInBand(band: Band, rung: number): number {
   return rungInBand(band, rung, HARDEST_ARRAY_RUNG);
+}
+
+function shareRungInBand(band: Band, rung: number): number {
+  return rungInBand(band, rung, HARDEST_SHARE_RUNG);
 }
 
 /**
@@ -456,6 +465,10 @@ function brickRungInBand(band: Band, rung: number): number {
  */
 function arrayFloor(band: Band): number {
   return bandOn(band, HARDEST_ARRAY_RUNG).from;
+}
+
+function shareFloor(band: Band): number {
+  return bandOn(band, HARDEST_SHARE_RUNG).from;
 }
 
 function clockFloor(band: Band): number {
@@ -528,6 +541,9 @@ export function readProfile(value: unknown): Profile | null {
     // A child saved before the great tree existed starts it at the bottom of
     // their own band, exactly as a new child does — they have never cast it.
     arrayRung: arrayRungInBand(bandAt(band), Number(record.arrayRung ?? arrayFloor(bandAt(band)))),
+    // A child saved before the fisherman existed starts it at the bottom of
+    // their own band, exactly as a new child does — they have never cast it.
+    shareRung: shareRungInBand(bandAt(band), Number(record.shareRung ?? shareFloor(bandAt(band)))),
     // A child saved before the astronomer existed starts it at the bottom of
     // their own band, exactly as a new child does — they have never cast it.
     clockRung: clockRungInBand(bandAt(band), Number(record.clockRung ?? clockFloor(bandAt(band)))),

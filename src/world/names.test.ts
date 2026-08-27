@@ -48,7 +48,14 @@ describe("everybody in the world is somebody", () => {
       const cast = castOf(seed);
       const keepers = cast.filter((person) => (person.role ?? person.id) === "shopkeeper");
       most.keepers = Math.max(most.keepers, keepers.length);
-      most.folk = Math.max(most.folk, cast.length - keepers.length);
+      // Counted the way `nameCast` counts: anybody named by hand never takes
+      // a name out of the pool, so a sixth teacher joining the cast must not
+      // read here as one more villager needing one.
+      const byHand = cast.filter((person) => {
+        const part = person.role ?? person.id;
+        return part !== "shopkeeper" && part in NAMED_PEOPLE;
+      });
+      most.folk = Math.max(most.folk, cast.length - keepers.length - byHand.length);
     }
     // Minus one keeper: the village's is named by hand and never takes a
     // name out of the pool.
@@ -59,12 +66,13 @@ describe("everybody in the world is somebody", () => {
 
 describe("who is named by hand", () => {
   test("the roles the game writes sentences about", () => {
-    // Not a spelling test. These six are the people the phrase books name in
-    // so many words — a rename here is a rename in three languages, and this
-    // is where that gets noticed.
+    // Not a spelling test. These seven are the people the phrase books name
+    // in so many words — a rename here is a rename in three languages, and
+    // this is where that gets noticed.
     expect(Object.keys(NAMED_PEOPLE).sort()).toEqual([
       "astronomer",
       "clockmaker",
+      "fisher",
       "geometer",
       "postal-worker",
       "shopkeeper",

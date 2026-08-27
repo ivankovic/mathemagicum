@@ -68,7 +68,7 @@ import {
   recordCast,
   rungAt,
 } from "../spells/difficulty";
-import { boxesOf, shareProblemFor, shareRungAt } from "../spells/division";
+import { HARDEST_SHARE_RUNG, boxesOf, shareProblemFor, shareRungAt } from "../spells/division";
 import {
   type ClockTime,
   HARDEST_CLOCK_RUNG,
@@ -119,6 +119,7 @@ import { PatchMenu } from "../ui/PatchMenu";
 import { PicturePanel } from "../ui/PicturePanel";
 import { PortalPanel } from "../ui/PortalPanel";
 import { SandGlass } from "../ui/SandGlass";
+import { ShareLessonPanel } from "../ui/ShareLessonPanel";
 import { SharePopup } from "../ui/SharePopup";
 import { ShopPanel } from "../ui/ShopPanel";
 import { SpellPopup } from "../ui/SpellPopup";
@@ -732,6 +733,20 @@ export const PatchAction = {
    * of what multiplication is for.
    */
   Copy: "copy",
+  /**
+   * Pick every ripe thing in it, in one cast.
+   *
+   * The division spell's, and the only patch action that is not the times
+   * rune's. It is here rather than in a list of its own because from the
+   * child's side this is the same gesture — mark out ground, and something
+   * happens to all of it — and because `beginMarking` is where that gesture
+   * lives.
+   *
+   * The parchment that opens is not the array's. Marking a rectangle is how
+   * a patch is chosen; what is asked about it is the spell's own business,
+   * and this one asks a share. See `castShareSpell`.
+   */
+  Pick: "pick",
 } as const;
 
 export type PatchAction = (typeof PatchAction)[keyof typeof PatchAction];
@@ -748,6 +763,7 @@ const SPELL_RUNES: Record<PatchAction, string> = {
   [PatchAction.Grow]: UiAsset.RuneAdd,
   [PatchAction.Clear]: UiAsset.RuneMinus,
   [PatchAction.Build]: UiAsset.RuneAdd,
+  [PatchAction.Pick]: UiAsset.RuneDivide,
   [PatchAction.Copy]: UiAsset.RuneMirror,
 };
 
@@ -871,6 +887,8 @@ const GEOMETER_ID = "geometer";
  * at all.
  */
 const ASTRONOMER_ID = "astronomer";
+/** The fisherman on the quay, who teaches the sharing spell. */
+const FISHER_ID = "fisher";
 /**
  * The clockmaker, in the plaza under the city's tower.
  *
@@ -1306,6 +1324,8 @@ export class GameScene extends Phaser.Scene {
    * and looked at before there is a garden behind it. See `division.ts`.
    */
   private sharePopup?: SharePopup;
+  /** And the lesson the fisherman gives beside it. */
+  private sharePanel?: ShareLessonPanel;
   private brickPopup?: BrickPopup;
   private clockPopup?: ClockPopup;
   private readonly flowerSidecars = new Map<FlowerType, FixtureSidecar>();
@@ -1427,6 +1447,7 @@ export class GameScene extends Phaser.Scene {
    */
   private recentPortalCasts: Recent = [];
   private recentArrayCasts: Recent = [];
+  private recentShareCasts: Recent = [];
   private recentBrickCasts: Recent = [];
   private recentClockCasts: Recent = [];
   private recentSymmetryCasts: Recent = [];
@@ -1991,6 +2012,9 @@ export class GameScene extends Phaser.Scene {
     this.sharePopup = new SharePopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
+    this.sharePanel = new ShareLessonPanel(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
+      this.ui(object),
+    );
     this.brickPopup = new BrickPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
@@ -2073,6 +2097,7 @@ export class GameScene extends Phaser.Scene {
       session: this.session,
       ui: () => this.uiPositions(),
       armed: () => armedTag(this.armed),
+      marking: () => this.marking?.action ?? null,
       grove: () => ({ col: this.grove.doorstep.col, row: this.grove.doorstep.row }),
       stats: () => ({
         fps: Math.round(this.game.loop.actualFps),
@@ -4097,6 +4122,11 @@ export class GameScene extends Phaser.Scene {
           available: () => this.knowsArray,
         },
         {
+          texture: uiTextureKey(UiAsset.RuneDivide),
+          act: () => this.castShareSpell(),
+          available: () => this.knowsShare,
+        },
+        {
           texture: uiTextureKey(UiAsset.RuneHourglass),
           act: () => this.castHourglass(),
           available: () => this.knowsHourglass,
@@ -4562,6 +4592,45 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * Cast the sharing spell: mark a ripe patch, and pick all of it at once.
+   *
+   * The array spell's other end. That one ripens a patch in a cast and this
+   * one picks it in a cast, and between them the only thing left to do by
+   * hand in a garden is put the seed in — which is the one gesture worth
+   * keeping in a child's hands.
+   *
+   * No menu. The times rune asks what is being multiplied because it has
+   * three or four answers; this rune does one thing, and a menu of one is a
+   * tap that asks a child to confirm a decision the game has already made.
+   *
+   * Out of doors only. A room has nothing ripe in it, and a spell that
+   * opened a parchment about an empty floor would be a spell that had not
+   * looked.
+   */
+  private castShareSpell(): void {
+    if (this.modalOpen) return;
+    this.spellTray?.setOpen(false);
+    if (!this.knowsShare) {
+      this.showRefusalOnPlayer(UiAsset.RuneDivide);
+      return;
+    }
+    if (this.interior) {
+      this.showRefusalOnPlayer(UiAsset.RuneDivide);
+      return;
+    }
+    if (this.marking) {
+      this.stopMarking();
+      return;
+    }
+    this.joystick?.release();
+    this.beginMarking(PatchAction.Pick);
+  }
+
+  private get knowsShare(): boolean {
+    return knowsSpell([...this.profile.learned, ...this.dev.learned], Spell.Share);
+  }
+
+  /**
    * Which spell is being multiplied: the plus one or the minus one.
    *
    * Over her head rather than over the ground, because there is no ground
@@ -4928,6 +4997,7 @@ export class GameScene extends Phaser.Scene {
     return [
       { action: PatchAction.Grow, cells: this.session.growableIn(patch) },
       { action: PatchAction.Clear, cells: this.session.clearableIn(patch) },
+      { action: PatchAction.Pick, cells: this.session.pickableIn(patch) },
     ];
   }
 
@@ -5061,6 +5131,15 @@ export class GameScene extends Phaser.Scene {
     // many times, and a child who has not done it once has not been shown
     // what is being multiplied.
     //
+    // The sharing spell asks its own question about the patch rather than a
+    // multiplication, so it does not go round this loop at all: there is no
+    // "do it once by hand and then say how many times" to do, because
+    // picking a heap *is* the one thing, and what division asks is how it
+    // divides up.
+    if (action === PatchAction.Pick) {
+      this.askTheShare(patch);
+      return;
+    }
     this.castOnce(action, (worked) => {
       if (!worked) {
         this.stopMarking();
@@ -5124,6 +5203,25 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * The share the marked patch asks, and what picking it does.
+   *
+   * The numbers are the ladder's rather than the patch's, and that is the
+   * one place this parts company with the multiplication above. A rectangle
+   * *is* the shape multiplication draws, so the array spell takes its
+   * numbers from the ground; a share is not a shape, and there is nothing on
+   * the ground that says "into five". See `division.ts`.
+   */
+  private askTheShare(patch: Patch): void {
+    const rung = shareRungAt(this.dev.shareRung ?? this.profile.shareRung);
+    this.sharePopup?.open(shareProblemFor(this.spellRng, rung), (result) => {
+      // The marker first, for the reason the array's goes first.
+      this.stopMarking();
+      if (result.solved) this.applyToPatch(patch, PatchAction.Pick);
+      this.noteShareCast(result);
+    });
+  }
+
+  /**
    * Do it, to every square of the patch that will take it.
    *
    * Each square that took it says so on itself — a crop rising off the ones
@@ -5156,6 +5254,11 @@ export class GameScene extends Phaser.Scene {
     } else if (action === PatchAction.Clear) {
       for (const at of this.session.clearableIn(patch)) {
         this.clearAt(at.col, at.row);
+        done++;
+      }
+    } else if (action === PatchAction.Pick) {
+      for (const at of this.session.pickableIn(patch)) {
+        this.pickCropAt(at.col, at.row);
         done++;
       }
     } else if (action === PatchAction.Copy) {
@@ -5898,6 +6001,17 @@ export class GameScene extends Phaser.Scene {
    * seeing that four rows of six is twenty-four is not the skill that adds
    * 347 and 265, and a child fluent at one can be nowhere near the other.
    */
+  /** The same, for the sharing ladder. See `noteArrayCast`. */
+  private noteShareCast(result: CastResult): void {
+    this.recentShareCasts = recordCast(this.recentShareCasts, result);
+    const band = bandAt(this.profile.band);
+    const moved = nextRung(band, this.profile.shareRung, this.recentShareCasts, HARDEST_SHARE_RUNG);
+    if (moved === this.profile.shareRung) return;
+    this.recentShareCasts = [];
+    if (this.dev.shareRung !== null) return;
+    this.saveProfileChange({ shareRung: moved });
+  }
+
   private noteArrayCast(result: CastResult): void {
     this.recentArrayCasts = recordCast(this.recentArrayCasts, result);
     const band = bandAt(this.profile.band);
@@ -6711,6 +6825,37 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * The fisherman on the quay, and the spell he hands over.
+   *
+   * Taught for being spoken to, the way the geometer and the clockmaker
+   * teach theirs, and not earned by an errand the way the astronomer's and
+   * the tree's are. The rule the two errands were set under is that an
+   * errand is worth it *where the reward would otherwise remove most of the
+   * work from the game* — which is true of the array spell, because it
+   * removes the arithmetic. This one removes tapping: every crop it picks
+   * still cost its growth casts, one sum at a time, on the way to being
+   * ripe. What it costs a child is the walk to the harbour, and the harbour
+   * is a long way.
+   *
+   * And then his lesson opens, because a man who says hello and nothing else
+   * is a man who reads as broken — the clockmaker's note, one quay along.
+   */
+  private meetFisher(): void {
+    if (this.modalOpen) return;
+    this.joystick?.release();
+    this.closeTrays();
+    const learned = learnSpell(this.profile.learned, Spell.Share);
+    const first = learned !== this.profile.learned;
+    if (first) {
+      this.saveProfileChange({ learned });
+      this.spellTray?.refresh();
+      this.showEarned(UiAsset.RuneDivide);
+    }
+    this.sharePanel?.setRung(shareRungAt(this.dev.shareRung ?? this.profile.shareRung));
+    this.sharePanel?.open_(() => {});
+  }
+
+  /**
    * The great tree's lesson, and the task that earns the spell.
    *
    * It used to teach the spell for being touched, the way the geometer
@@ -7247,6 +7392,21 @@ export class GameScene extends Phaser.Scene {
   //
   // Harvesting is a direct action rather than a spell, in the same way
   // planting is, and for the same reason: the harvest spell is not speced.
+
+  /**
+   * Pick one square of a patch the sharing spell has just been cast on.
+   *
+   * `tryHarvest` without the aiming or the message: the spell says which
+   * squares, and every one of them says so on itself the way a grown crop
+   * does. The basket is told once at the end rather than per square — see
+   * `applyToPatch`.
+   */
+  private pickCropAt(col: number, row: number): void {
+    if (!this.session.harvestAt(col, row).ok) return;
+    const key = tileKey(col, row);
+    this.cropSprites.get(key)?.destroy();
+    this.cropSprites.delete(key);
+  }
 
   private tryHarvest(): void {
     if (this.modalOpen) return;
@@ -8001,6 +8161,12 @@ export class GameScene extends Phaser.Scene {
         sprite,
         () => cell,
         () => this.openGeometryLesson(),
+      );
+    if (part === FISHER_ID)
+      this.watchAttendant(
+        sprite,
+        () => cell,
+        () => this.meetFisher(),
       );
     if (part === ASTRONOMER_ID)
       this.watchAttendant(
@@ -9230,6 +9396,19 @@ export class GameScene extends Phaser.Scene {
             () => this.meetClockmaker(),
           );
         }
+        // The second outdoor teacher, on the quay, and tapped the same way
+        // for the same reason: he keeps a short circuit round the foot of
+        // his pier, so where he *is* is not where the harbour put him.
+        if ((spec.role ?? spec.id) === FISHER_ID) {
+          this.watchAttendant(
+            sprite,
+            () => {
+              const npc = this.npcs.find((one) => one.id === spec.id);
+              return { col: npc?.col ?? spec.home.col, row: npc?.row ?? spec.home.row };
+            },
+            () => this.meetFisher(),
+          );
+        }
         if (spec.id === POSTAL_WORKER_ID) {
           // He wanders, so the tap asks him where he is now rather than
           // where he was when the world was built.
@@ -9597,6 +9776,7 @@ export class GameScene extends Phaser.Scene {
       this.taskPanel?.isOpen === true ||
       this.portalPanel?.isOpen === true ||
       this.geometryPanel?.isOpen === true ||
+      this.sharePanel?.isOpen === true ||
       // The array and clock parchments are not on this list. Whether that is
       // deliberate has not been established here, so it is left alone — but
       // a new parchment goes on it, because everything that reads this asks
