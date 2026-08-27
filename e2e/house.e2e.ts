@@ -106,7 +106,7 @@ describe("building a room out", () => {
 
         await game.tap("spellbook");
         await game.tap("spellbook.0");
-        expect(await game.seam("armed")).toBe("growth");
+        expect(await game.seam<string | null>("armed")).toBe("growth");
 
         const wanted = before.buildable[0];
         if (!wanted) throw new Error("the starting room has nowhere to grow");
@@ -144,7 +144,7 @@ describe("building a room out", () => {
 
         await game.tap("spellbook");
         await game.tap("spellbook.0");
-        expect(await game.seam("armed")).toBe("growth");
+        expect(await game.seam<string | null>("armed")).toBe("growth");
         const wanted = before.buildable[0];
         if (!wanted) throw new Error("the starting room has nowhere to grow");
         await game.tapCell(wanted.col, wanted.row);
@@ -173,7 +173,7 @@ describe("building a room out", () => {
 
         await game.tap("spellbook");
         await game.tap("spellbook.1");
-        expect(await game.seam("armed")).toBe("clearing");
+        expect(await game.seam<string | null>("armed")).toBe("clearing");
         // (3,1) is bare floor: clear of the fireplace, the shelf and the bed.
         await tapPlan(game, before, 3, 1);
 
@@ -210,7 +210,7 @@ describe("building a room out", () => {
 
         await game.tap("spellbook");
         await game.tap("spellbook.1");
-        expect(await game.seam("armed")).toBe("clearing");
+        expect(await game.seam<string | null>("armed")).toBe("clearing");
         await tapPlan(game, before, 4, 4);
         await game.settle(600);
 
@@ -312,7 +312,7 @@ describe("furnishing it", () => {
         // Armed, not placed. Furniture goes down the way a spell is cast
         // now — pick it up, then tap the square — so the chair waits over
         // her head until she says where.
-        expect(await game.seam("armed")).toBe("chair~0");
+        expect(await game.seam<string | null>("armed")).toBe("chair~0");
         await tapPlan(game, house, 2, 3);
         await game.settle(700);
 
@@ -340,7 +340,7 @@ describe("furnishing it", () => {
         await game.standAt(under.col, under.row, "up");
         await game.tap("crate");
         await game.tap(RUG_SLOT);
-        expect(await game.seam("armed")).toBe("rug~0");
+        expect(await game.seam<string | null>("armed")).toBe("rug~0");
         // The square in front of her, which for a piece two cells across is
         // the near corner of where it lands rather than the whole of it.
         await tapPlan(game, house, 3, 3);
@@ -402,7 +402,7 @@ describe("furnishing it", () => {
         await game.standAt(standing.col, standing.row, "down");
         await game.tap("crate");
         await game.tap(STOVE_SLOT);
-        expect(await game.seam("armed")).toBe("stove~0");
+        expect(await game.seam<string | null>("armed")).toBe("stove~0");
         await tapPlan(game, house, 2, 3);
         await game.settle(700);
         expect(await game.held("stove~0")).toBe(0);
@@ -457,7 +457,7 @@ describe("furnishing it", () => {
         await game.standAt(her.col, her.row, "up");
         await game.tap("crate");
         await game.tap(RUG_SLOT);
-        expect(await game.seam("armed")).toBe("rug~0");
+        expect(await game.seam<string | null>("armed")).toBe("rug~0");
         await game.tapCell(her.col, her.row);
         await game.settle(700);
 
@@ -476,7 +476,7 @@ describe("furnishing it", () => {
         expect(await game.held("chair~0")).toBe(1);
         await game.tap("crate");
         await game.tap(CHAIR_SLOT);
-        expect(await game.seam("armed")).toBe("chair~0");
+        expect(await game.seam<string | null>("armed")).toBe("chair~0");
         await game.tapCell(her.col, her.row);
         await game.settle(700);
         expect(await game.held("chair~0")).toBe(1);
@@ -527,7 +527,7 @@ describe("furnishing it", () => {
         // Armed, not placed. Furniture goes down the way a spell is cast
         // now — pick it up, then tap the square — so the chair waits over
         // her head until she says where.
-        expect(await game.seam("armed")).toBe("chair~0");
+        expect(await game.seam<string | null>("armed")).toBe("chair~0");
         await tapPlan(game, house, 2, 3);
         await game.settle(700);
         expect(
@@ -591,7 +591,7 @@ describe("coming back tomorrow", () => {
         // Armed, not placed. Furniture goes down the way a spell is cast
         // now — pick it up, then tap the square — so the chair waits over
         // her head until she says where.
-        expect(await game.seam("armed")).toBe("chair~0");
+        expect(await game.seam<string | null>("armed")).toBe("chair~0");
         await tapPlan(game, grown, 2, 3);
         await game.settle(700);
 

@@ -1,4 +1,11 @@
 {
+  // The whole repository, not only what ships.
+  //
+  // `include` was `["src"]`, which typechecked the game and nothing else —
+  // and the two things it left out are the two that drive it: three thousand
+  // lines of browser scenarios in `e2e/`, and the build's own config. Both
+  // are TypeScript, both are run by `bun`, and neither had ever been through
+  // the compiler. `bun test` does not typecheck; biome lints without types.
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
@@ -18,5 +25,5 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src", "e2e", "vite.config.ts"]
 }

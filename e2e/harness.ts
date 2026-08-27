@@ -421,6 +421,7 @@ async function running(page: Page): Promise<void> {
     () => {
       const handle = (globalThis as never as Record<string, Record<string, unknown>>)
         .__mathemagicum;
+      if (!handle) throw new Error("the game has not put its handle out");
       const stats = handle.stats as () => { frames: number };
       return stats().frames > 20;
     },
@@ -529,6 +530,7 @@ export class Game {
         ([which, given]) => {
           const handle = (globalThis as never as Record<string, Record<string, unknown>>)
             .__mathemagicum;
+          if (!handle) throw new Error("the game has not put its handle out");
           const found = handle[which as string];
           // `session` is the object itself rather than a getter, so a script
           // asking for it by name should get it rather than a type error.
@@ -559,6 +561,7 @@ export class Game {
       page.evaluate(() => {
         const handle = (globalThis as never as Record<string, Record<string, unknown>>)
           .__mathemagicum;
+        if (!handle) throw new Error("the game has not put its handle out");
         const session = handle.session as { tile: { col: number; row: number } };
         return { col: session.tile.col, row: session.tile.row };
       }),
@@ -587,6 +590,7 @@ export class Game {
         ([c, r]) => {
           const handle = (globalThis as never as Record<string, Record<string, unknown>>)
             .__mathemagicum;
+          if (!handle) throw new Error("the game has not put its handle out");
           const screenOf = handle.screenOf as (
             col: number,
             row: number,
@@ -647,6 +651,7 @@ export class Game {
         ([dc, dr]) => {
           const handle = (globalThis as never as Record<string, Record<string, unknown>>)
             .__mathemagicum;
+          if (!handle) throw new Error("the game has not put its handle out");
           const me = (handle.session as { tile: { col: number; row: number } }).tile;
           const screenOf = handle.screenOf as (
             col: number,
@@ -699,7 +704,7 @@ export class Game {
         ([c, r, f]) => {
           const session = (
             globalThis as never as Record<string, { session: Record<string, unknown> }>
-          ).__mathemagicum.session as unknown as {
+          ).__mathemagicum?.session as unknown as {
             setPosition: (col: number, row: number) => void;
             face: (which: string) => void;
           };
@@ -722,7 +727,7 @@ export class Game {
               string,
               { session: { inventory: { count: (item: string) => number } } }
             >
-          ).__mathemagicum.session.inventory.count(which as string),
+          ).__mathemagicum?.session.inventory.count(which as string) ?? 0,
         item,
       ),
     );
@@ -734,7 +739,7 @@ export class Game {
       page.evaluate(
         () =>
           (globalThis as never as Record<string, { session: { purse: { coins: number } } }>)
-            .__mathemagicum.session.purse.coins,
+            .__mathemagicum?.session.purse.coins ?? 0,
       ),
     );
   }
@@ -941,6 +946,7 @@ export class Game {
       page.evaluate(() => {
         const handle = (globalThis as never as Record<string, Record<string, unknown>>)
           .__mathemagicum;
+        if (!handle) throw new Error("the game has not put its handle out");
         return (handle.zoom as () => number)();
       }),
     );

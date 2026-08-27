@@ -102,7 +102,12 @@ describe("making both sides match", () => {
     async () => {
       await play({ seams: `&learned=all&symmetryRung=${HARDEST_SYMMETRY_RUNG}` }, async (game) => {
         const opened = await castMirror(game);
-        expect(opened.size).toBe(SYMMETRY_RUNGS[HARDEST_SYMMETRY_RUNG]?.size);
+        // Read out rather than indexed inline: the ladder's top rung is a
+        // fact this test rests on, and `?.size` quietly compares against
+        // `undefined` if it ever stops being there.
+        const hardest = SYMMETRY_RUNGS[HARDEST_SYMMETRY_RUNG];
+        if (!hardest) throw new Error("the symmetry ladder has no top rung");
+        expect(opened.size).toBe(hardest.size);
         expect(opened.axis).toBe("corner");
         expect(opened.wanted.length).toBeGreaterThan(0);
         expect(opened.done).toBe(false);

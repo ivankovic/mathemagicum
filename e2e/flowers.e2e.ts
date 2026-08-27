@@ -122,7 +122,7 @@ describe("planting one", () => {
 
         await game.tap("bloom.3");
         // Armed rather than planted: the colour chosen, and now the square.
-        expect(await game.seam("armed")).toBe("tulip~3");
+        expect(await game.seam<string | null>("armed")).toBe("tulip~3");
         await game.tapNear(0, 1);
         await game.settle(700);
         const seen = await game.seam<Flowers>("flowers");

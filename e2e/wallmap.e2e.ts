@@ -39,7 +39,7 @@ describe("the you-are-here mark", () => {
         // Outside, the mark is simply where she is standing.
         const step = { col: door.col, row: door.row + 1 };
         await game.reload(`${AT_HOME}&at=${step.col},${step.row}`);
-        expect(await game.seam("mapMark")).toEqual(step);
+        expect(await game.seam<{ col: number; row: number }>("mapMark")).toEqual(step);
 
         // In through the door, and the mark stays on the building.
         await game.walk("ArrowUp", 700);

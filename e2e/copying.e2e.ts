@@ -43,6 +43,7 @@ const OPEN_GROUND = "&learned=all&hour=12&freezeNpcs&symmetryRung=0";
 function groundUnder(game: Game, cells: readonly Spot[]): Promise<string[]> {
   return game.tab.evaluate((list) => {
     const handle = (globalThis as never as Record<string, Record<string, unknown>>).__mathemagicum;
+    if (!handle) throw new Error("the game has not put its handle out");
     const session = handle.session as {
       grid: { getTerrain: (col: number, row: number) => string };
     };
@@ -67,6 +68,7 @@ async function standAtABoundary(game: Game): Promise<{ source: Spot; dest: Spot 
     ([col, row]) => {
       const handle = (globalThis as never as Record<string, Record<string, unknown>>)
         .__mathemagicum;
+      if (!handle) throw new Error("the game has not put its handle out");
       const session = handle.session as {
         grid: { getTerrain: (col: number, row: number) => string };
       };

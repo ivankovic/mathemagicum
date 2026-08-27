@@ -65,7 +65,7 @@ describe("learning to share out a catch", () => {
         await game.settle(300);
         expect(await game.tap("spellbook.4")).toBe(true);
         await game.settle(400);
-        expect(await game.seam("marking")).toBeNull();
+        expect(await game.seam<string | null>("marking")).toBeNull();
 
         await game.press("Escape");
         await game.tapNear(0, -1);
@@ -83,7 +83,7 @@ describe("learning to share out a catch", () => {
         await game.settle(300);
         await game.tap("spellbook.4");
         await game.settle(500);
-        expect(await game.seam("marking")).toBe("pick");
+        expect(await game.seam<string | null>("marking")).toBe("pick");
       });
     },
     5 * MINUTES,
