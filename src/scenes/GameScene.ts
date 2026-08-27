@@ -31,6 +31,7 @@ import {
 } from "../save/games";
 import { type Profile, createProfile, freshStart } from "../save/profiles";
 import {
+  HEARTH_IS_FURNITURE,
   type WorldBaseline,
   readDecor,
   readPlans,
@@ -210,6 +211,7 @@ import {
   decorToSave,
   without as decorWithout,
   footprintsOf,
+  hearthRestored,
   inTheWayOf,
   itemParts,
   occupiedCells,
@@ -6859,8 +6861,16 @@ export class GameScene extends Phaser.Scene {
       this.plans.set(house, planFromKeys(floor));
     }
     this.decor.clear();
+    // The one moment a room is repaired, and the reason it is only this one:
+    // a save older than `HEARTH_IS_FURNITURE` has no stove written in it
+    // because back then there was nothing to write, and a save newer than it
+    // has none written when the child is *carrying* it. Done on every read
+    // instead, the two were the same thing — and the oven grew back in its
+    // corner the instant it was picked up.
+    const beforeTheStove = (saved?.snapshotVersion ?? 0) < HEARTH_IS_FURNITURE;
     for (const [house, pieces] of Object.entries(readDecor(saved?.world))) {
-      this.decor.set(house, decorFromSave(pieces));
+      const stored = decorFromSave(pieces);
+      this.decor.set(house, beforeTheStove ? hearthRestored(stored, this.growable) : stored);
     }
     // The child's own things come from their progress in this game, never
     // from the ground — which is why a world the generator can no longer

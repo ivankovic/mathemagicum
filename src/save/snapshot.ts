@@ -39,7 +39,27 @@ import type { GridPoint } from "../world/topdown";
 export const GENERATOR_VERSION = 1;
 
 /** Bumped when the shape below changes, which is a different thing. */
-export const SNAPSHOT_VERSION = 1;
+export const SNAPSHOT_VERSION = 2;
+
+/**
+ * The first version whose rooms are believed about the fire.
+ *
+ * A room saved before the stove was furniture has no stove written in it,
+ * because back then the fireplace was part of the wall and not something a
+ * save had any business mentioning. Such a room has to have one put back or
+ * it is dark for ever with nothing on screen to say why.
+ *
+ * A room saved *after* has one written in it if there is one — and, just as
+ * importantly, has none written in it when the child is carrying it. Without
+ * a number to tell the two apart, "no stove in the save" meant both things at
+ * once, and the repair fired on every read: picking the oven up put one in
+ * the basket and conjured another in the corner, once per tap.
+ *
+ * Equal to `SNAPSHOT_VERSION` today and not the same fact. This one is the
+ * age at which a piece of the save became trustworthy, and it stays where it
+ * is when the shape changes again for some unrelated reason.
+ */
+export const HEARTH_IS_FURNITURE = 2;
 
 export interface WorldSnapshot {
   /** Planted tiles: column, row, what, how grown. */

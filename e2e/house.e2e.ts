@@ -92,6 +92,8 @@ async function tapPlan(game: Game, house: House, col: number, row: number): Prom
 const CHAIR_SLOT = "crate.9";
 /** And the one after it: rug. */
 const RUG_SLOT = "crate.10";
+/** Then bookshelf, then stove — the room's own pieces in the order they are declared. */
+const STOVE_SLOT = "crate.12";
 
 describe("building a room out", () => {
   test(
@@ -347,6 +349,75 @@ describe("furnishing it", () => {
         expect(
           (await game.seam<Piece[]>("decor")).find((one) => one.piece === "rug"),
         ).toMatchObject({ col: 3, row: 2 });
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * The oven stays picked up.
+   *
+   * Reported from a playtest as *why can't the oven be moved*, and what was
+   * happening was worse than that. Reading a room used to put a stove back
+   * into any arrangement that had none — a repair for saves written before
+   * the fire was furniture — and reading happens on every repaint. Picking
+   * the oven up *is* an arrangement with no stove in it, so one went into the
+   * basket and another grew in the corner it shipped in, once per tap. She
+   * could stand there and tap out as many stoves as she liked.
+   *
+   * Three things, and the middle one is the bug: that it leaves the floor,
+   * that tapping again does not mint another, and that where she puts it is
+   * where it is after the game has been closed and opened.
+   */
+  test(
+    "the oven can be carried across the room, and only one of it exists",
+    async () => {
+      await play({ seams: AT_HOME }, async (game) => {
+        const house = await goHome(game);
+        const stove = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "stove");
+        if (!stove) throw new Error("the room she starts in has no stove");
+        expect(await game.held("stove~0")).toBe(0);
+
+        await tapPlan(game, house, stove.col, stove.row);
+        await game.settle(600);
+        expect(await game.held("stove~0")).toBe(1);
+        // The floor it stood on is bare. This is the assertion the bug
+        // failed: the oven used to still be standing there.
+        expect((await game.seam<Piece[]>("decor")).some((one) => one.piece === "stove")).toBe(
+          false,
+        );
+
+        // Tapped twice more where it was. Nothing is there to pick up, so
+        // nothing is picked up — and nothing is minted either.
+        for (let again = 0; again < 2; again++) {
+          await tapPlan(game, house, stove.col, stove.row);
+          await game.settle(500);
+        }
+        expect(await game.held("stove~0")).toBe(1);
+
+        // Carried across the room and set down — on the same clear square
+        // the chair goes to above, standing clear of it, since a stove is
+        // solid and will not go under her.
+        const standing = grid(house, 2, 2);
+        await game.standAt(standing.col, standing.row, "down");
+        await game.tap("crate");
+        await game.tap(STOVE_SLOT);
+        expect(await game.seam("armed")).toBe("stove~0");
+        await tapPlan(game, house, 2, 3);
+        await game.settle(700);
+        expect(await game.held("stove~0")).toBe(0);
+        const moved = (await game.seam<Piece[]>("decor")).filter((one) => one.piece === "stove");
+        expect(moved).toEqual([{ piece: "stove", col: 2, row: 3, look: 0 }]);
+
+        // And it is still there tomorrow — the half that would fail if the
+        // repair had merely been moved to the way in rather than gated on
+        // how old the save is.
+        await game.reload(AT_HOME);
+        await goHome(game);
+        expect((await game.seam<Piece[]>("decor")).filter((one) => one.piece === "stove")).toEqual([
+          { piece: "stove", col: 2, row: 3, look: 0 },
+        ]);
+        expect(await game.held("stove~0")).toBe(0);
       });
     },
     5 * MINUTES,

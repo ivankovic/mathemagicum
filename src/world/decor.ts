@@ -473,22 +473,44 @@ export function blockersFor(sidecar: GrowableSidecar, decor: readonly Placed[]):
  * The fallback is the reason `same` compares by value rather than by
  * identity — a room nobody has rearranged is rebuilt here on every read, so
  * the chair a caller is holding is never the chair that comes back.
+ *
+ * **Nothing is repaired here.** It used to put a stove back into any
+ * arrangement that had none, which is right for a room saved before the fire
+ * was furniture and catastrophic on every other read: this is called on
+ * every repaint, and picking the oven up is precisely an arrangement with no
+ * stove in it. So the oven went into the basket, a new one appeared in the
+ * corner it shipped in, and a child could tap out as many stoves as she
+ * liked. A repair belongs where a save is read, once — see `hearthRestored`.
  */
 export function arrangementIn(
   stored: readonly Placed[] | undefined,
   sidecar: GrowableSidecar | null,
 ): Placed[] {
-  const shipped = sidecar ? startingDecor(sidecar) : [];
-  if (!stored) return shipped;
+  if (!stored) return sidecar ? startingDecor(sidecar) : [];
+  return [...stored];
+}
+
+/**
+ * A room out of a save too old to know where its fire is, with one put back.
+ *
+ * For exactly one moment: the save being read off the disk, and only when it
+ * was written before `HEARTH_IS_FURNITURE`. Back then a fireplace was part of
+ * the wall, so a room from then has no stove written in it and would come
+ * back dark for ever with nothing on screen to say why.
+ *
+ * It goes where the room shipped it — unless something has since been stood
+ * there, in which case it is left out, because a stove standing in the bed
+ * would be a worse repair than the fault.
+ */
+export function hearthRestored(
+  stored: readonly Placed[],
+  sidecar: GrowableSidecar | null,
+): Placed[] {
   const arranged = [...stored];
-  // A room saved before the fire was furniture has no stove in it, and a
-  // child coming back to a house they had already rearranged would find it
-  // dark for ever with nothing on screen to say why. So the fire is put back
-  // where the room shipped it — unless something has since been stood there,
-  // in which case it goes wherever is free, because a stove that overwrote
-  // the bed would be a worse repair than the fault.
   if (arranged.some((piece) => piece.piece === DecorType.Stove)) return arranged;
-  const fire = shipped.find((piece) => piece.piece === DecorType.Stove);
+  const fire = sidecar
+    ? startingDecor(sidecar).find((p) => p.piece === DecorType.Stove)
+    : undefined;
   if (!fire) return arranged;
   const sizes = sidecar ? footprintsOf(sidecar) : {};
   if (fits(fire, arranged, sizes, () => true)) arranged.push(fire);

@@ -20,6 +20,7 @@ import {
   decorToSave,
   fireCells,
   fits,
+  hearthRestored,
   inTheWayOf,
   itemParts,
   occupiedCells,
@@ -427,16 +428,40 @@ describe("what a room protects and what it blocks", () => {
   });
 
   /**
-   * A room saved before the fire was furniture has no stove in it.
+   * The bug this pair of functions exists to keep apart, said as a test.
    *
-   * Left alone, a child coming back to a house they had already rearranged
-   * would find it dark for ever, with nothing on screen to say why — which
-   * is the exact complaint the old comment here used to defend against by
-   * making the fire unmovable.
+   * Reading a room used to put a stove back into any arrangement that had
+   * none. That is right for a save written before the fire was furniture and
+   * ruinous everywhere else, because "an arrangement with no stove in it" is
+   * also exactly what picking the oven up produces — and reading happens on
+   * every repaint. The oven went into the basket, a new one grew in the
+   * corner it shipped in, and a child could tap out as many as she liked.
+   *
+   * So reading repairs nothing, ever. If this assertion is ever softened,
+   * the stove duplicates again.
    */
-  test("a room arranged before there was a stove gets its fire back", () => {
+  test("reading a room back never conjures a stove into it", () => {
+    const carriedOff: Placed[] = [{ piece: DecorType.Chair, col: 4, row: 4, look: 0 }];
+    expect(arrangementIn(carriedOff, sidecar)).toEqual(carriedOff);
+    // Twice, because the fault was that every read added one: a repair that
+    // ran on the way in and nowhere else would pass a single call.
+    const read = arrangementIn(arrangementIn(carriedOff, sidecar), sidecar);
+    expect(read.filter((piece) => piece.piece === DecorType.Stove)).toEqual([]);
+    // And an empty room stays empty rather than lighting itself.
+    expect(arrangementIn([], sidecar)).toEqual([]);
+  });
+
+  /**
+   * The repair itself, which now happens once, where a save is read.
+   *
+   * A room saved before the fire was furniture has no stove written in it,
+   * and left alone a child coming back to a house they had already
+   * rearranged would find it dark for ever with nothing on screen to say
+   * why.
+   */
+  test("but a room saved before there was a stove gets its fire back", () => {
     const old: Placed[] = [{ piece: DecorType.Chair, col: 4, row: 4, look: 0 }];
-    const mended = arrangementIn(old, sidecar);
+    const mended = hearthRestored(old, sidecar);
     expect(mended.filter((p) => p.piece === DecorType.Stove)).toEqual([
       { piece: DecorType.Stove, col: 1, row: 1, look: 0 },
     ]);
@@ -444,14 +469,22 @@ describe("what a room protects and what it blocks", () => {
     expect(mended).toEqual(expect.arrayContaining(old));
   });
 
-  test("but never on top of something she has since put there", () => {
+  test("never on top of something she has since put there", () => {
     const old: Placed[] = [{ piece: DecorType.Bed, col: 1, row: 1, look: 0 }];
-    expect(arrangementIn(old, sidecar).some((p) => p.piece === DecorType.Stove)).toBe(false);
+    expect(hearthRestored(old, sidecar).some((p) => p.piece === DecorType.Stove)).toBe(false);
   });
 
   test("and a room that already has one is left exactly as it is", () => {
     const mine: Placed[] = [{ piece: DecorType.Stove, col: 5, row: 5, look: 2 }];
-    expect(arrangementIn(mine, sidecar)).toEqual(mine);
+    expect(hearthRestored(mine, sidecar)).toEqual(mine);
+  });
+
+  // Even the repair only ever adds one. Run twice — which is what a reload
+  // of a reload is — it must not stack fires in the corner.
+  test("and repairing a room twice does not give it two fires", () => {
+    const old: Placed[] = [{ piece: DecorType.Chair, col: 4, row: 4, look: 0 }];
+    const twice = hearthRestored(hearthRestored(old, sidecar), sidecar);
+    expect(twice.filter((piece) => piece.piece === DecorType.Stove)).toHaveLength(1);
   });
 });
 
