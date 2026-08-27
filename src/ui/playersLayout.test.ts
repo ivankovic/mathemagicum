@@ -10,6 +10,7 @@ import {
   TILE_GAP,
   TILE_MAX,
   TILE_MIN,
+  boxTopWithin,
   stepFrom,
   tileGrid,
 } from "./playersLayout";
@@ -133,5 +134,53 @@ describe("the steps that make a player", () => {
   test("and walking off either end says so rather than wrapping", () => {
     expect(stepFrom("sums", 1)).toBeNull();
     expect(stepFrom("tongue", -1)).toBeNull();
+  });
+});
+
+describe("keeping the name box on screen", () => {
+  const BOX = 34;
+
+  /**
+   * With no keyboard up the band is the whole page, and nothing moves.
+   *
+   * The check that matters most: every desktop and every tablet before the
+   * first tap goes through this, so a fix for iOS that nudged the box on
+   * every other device would be a worse bug than the one it fixed.
+   */
+  test("a full-page band gives back the y that was asked for", () => {
+    expect(boxTopWithin({ offsetTop: 0, height: 900 }, 120, BOX)).toBe(120);
+  });
+
+  /**
+   * A keyboard takes about half a tablet. The box was asked for at 120 and
+   * the band is 360 tall, so it still fits and still does not move — this is
+   * the case the old fix solved by moving the box up the page.
+   */
+  test("and a shorter one leaves a box that still fits where it is", () => {
+    expect(boxTopWithin({ offsetTop: 0, height: 360 }, 120, BOX)).toBe(120);
+  });
+
+  // The failure itself: iOS scrolls the visual viewport to reveal the input,
+  // and a fixed box goes with the page. Following the offset is what puts it
+  // back on screen.
+  test("a band scrolled down the page carries the box with it", () => {
+    expect(boxTopWithin({ offsetTop: 200, height: 360 }, 120, BOX)).toBe(320);
+  });
+
+  test("a box the keyboard would cover is lifted above it", () => {
+    // Asked for 300, but only 200 of the page is visible: it goes as low as
+    // it can and no lower.
+    expect(boxTopWithin({ offsetTop: 0, height: 200 }, 300, BOX)).toBe(200 - BOX - 8);
+  });
+
+  test("and one asked for above the band is brought down into it", () => {
+    expect(boxTopWithin({ offsetTop: 240, height: 300 }, 0, BOX)).toBe(248);
+  });
+
+  // A band with no room in it at all — a landscape phone with a keyboard up
+  // is very nearly this. Pinned to the top, so the first line of what is
+  // being typed is readable; held to the bottom it would be under the keys.
+  test("a band shorter than the box pins it to the top", () => {
+    expect(boxTopWithin({ offsetTop: 100, height: 20 }, 300, BOX)).toBe(108);
   });
 });

@@ -511,6 +511,15 @@ export interface DevHandle {
    */
   readonly ships: () => { x: number; y: number }[];
   /**
+   * The cell the world map puts its you-are-here mark on.
+   *
+   * Not the same question as "where is she standing", which is the whole
+   * reason it is worth asking. Indoors her tile is a *room* coordinate, and
+   * the map drew that as a world cell — a mark in the far north-west corner
+   * of the world, from inside the one building the map hangs in.
+   */
+  readonly mapMark: () => { col: number; row: number };
+  /**
    * What the division parchment is asking, and what has been typed into it.
    *
    * The same reason `spell` and `array` exist: answering a cast means

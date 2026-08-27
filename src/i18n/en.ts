@@ -385,7 +385,11 @@ export const EN: Phrases = {
   lessonRune:
     "Open your spellbook and tap the + rune. Whatever you are facing grows one step — but only if you can do the sum it asks you.",
   lessonSplit: (addend, parts) =>
-    `Pull the number apart. ${addend} is ${parts.join(" and ")}. Every number is made of hundreds, tens and ones, and those are the three jumps.`,
+    parts.length === 1
+      ? `${addend} is already one piece, so there is one jump to make.`
+      : `Pull the number apart. ${addend} is ${parts.join(" and ")}. Every number is made of ${
+          parts.length === 2 ? "tens and ones" : "hundreds, tens and ones"
+        }, and those are the ${parts.length === 2 ? "two" : "three"} jumps.`,
   lessonJump: (start, jumps) =>
     `Start at ${start} and jump the small part first: ${jumps.map((jump) => `+${jump}`).join(", then ")}. Type the number you land on into each box.`,
   lessonAnswer: (answer) =>

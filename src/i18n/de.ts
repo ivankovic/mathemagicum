@@ -415,7 +415,11 @@ export const DE: Phrases = {
   lessonRune:
     "Öffne dein Zauberbuch und tipp auf die +-Rune. Was vor dir steht, wächst einen Schritt — aber nur, wenn du die Aufgabe lösen kannst.",
   lessonSplit: (addend, parts) =>
-    `Zerleg die Zahl. ${addend} ist ${parts.join(" und ")}. Jede Zahl besteht aus Hundertern, Zehnern und Einern — und das sind die drei Sprünge.`,
+    parts.length === 1
+      ? `${addend} ist schon ein einziges Stück — also nur ein Sprung.`
+      : `Zerleg die Zahl. ${addend} ist ${parts.join(" und ")}. Jede Zahl besteht aus ${
+          parts.length === 2 ? "Zehnern und Einern" : "Hundertern, Zehnern und Einern"
+        } — und das sind die ${parts.length === 2 ? "zwei" : "drei"} Sprünge.`,
   lessonJump: (start, jumps) =>
     `Fang bei ${start} an und spring zuerst den kleinen Teil: ${jumps.map((jump) => `+${jump}`).join(", dann ")}. Schreib in jedes Kästchen die Zahl, auf der du landest.`,
   lessonAnswer: (answer) =>

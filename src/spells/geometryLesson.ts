@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { GridPoint } from "../world/topdown";
-import { type PortalJourney, type PortalRung, journeyBetween } from "./portal";
+import { type PortalJourney, type PortalRung, PortalTier, journeyBetween } from "./portal";
 
 /**
  * What the geometry teacher explains, and the journey she explains it on.
@@ -86,6 +86,29 @@ export function squaresOf(journey: PortalJourney): number {
 }
 
 /** Where the player is in the lesson, and which way they can go from there. */
+/**
+ * The pages he actually turns, for a child on this rung.
+ *
+ * All four of them was the bug a playtest found: the geometer worked through
+ * the crow's flight — two legs squared, added, and rooted — at a child whose
+ * own spell asks them to count stepping stones. That is the mistake
+ * `lessonFor` was written to avoid on the other side of the world, said in
+ * its own words: a method demonstrated on a question they have not been
+ * asked is a method they cannot check.
+ *
+ * So the deck is cut to the tier. Everybody gets the rune and the ruler,
+ * because everybody has to find the map and know where nought is. The legs
+ * arrive when the spell starts asking for both of them, and the straight
+ * line only when the spell starts asking for it.
+ */
+export function geometryBeatsFor(rung: PortalRung): readonly GeometryBeat[] {
+  if (rung.tier === PortalTier.Crow) return GEOMETRY_BEATS;
+  if (rung.tier === PortalTier.Add) {
+    return GEOMETRY_BEATS.filter((beat) => beat !== GeometryBeat.Crow);
+  }
+  return [GeometryBeat.Rune, GeometryBeat.Ruler];
+}
+
 export function nextGeometryBeat(beat: GeometryBeat, step: number): GeometryBeat {
   const index = GEOMETRY_BEATS.indexOf(beat);
   const wanted = Math.max(0, Math.min(GEOMETRY_BEATS.length - 1, index + step));

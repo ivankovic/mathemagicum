@@ -504,6 +504,14 @@ export interface Phrases {
   /** Beat one: the spellbook and the rune, which are drawn beside this. */
   lessonRune: string;
   /** Beat two: the number pulled apart into hundreds, tens and ones. */
+  /**
+   * The addend pulled apart, and how many jumps that makes.
+   *
+   * The sentence has to follow the *count*: a child on the gentlest band is
+   * adding one digit to one digit, and being told her number is made of
+   * hundreds, tens and ones — "and those are the three jumps" — is being
+   * told something plainly untrue about the one number in front of her.
+   */
   lessonSplit: (addend: number, parts: readonly number[]) => string;
   /** Beat three: the jumps along the line, smallest first. */
   lessonJump: (start: number, jumps: readonly number[]) => string;

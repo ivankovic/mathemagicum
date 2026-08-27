@@ -548,3 +548,29 @@ describe("the fence at the edges of the band", () => {
     expect(nextRung(bandAt(DEFAULT_BAND), SHARED_TOP_RUNG, clean(200))).toBe(SHARED_TOP_RUNG);
   });
 });
+
+describe("which band opens the whole world", () => {
+  /**
+   * Reported from a playtest: *if the difficulty is lowest, enable all
+   * portal destinations even if the player didn't walk there yet.*
+   *
+   * Every other place in this world is earned by walking to it once, which
+   * is a long walk and the right price for a child who can take it. For the
+   * band that opens on `3 + 4` it is a fence in front of the one spell that
+   * is pure fun — and what is behind the fence is not arithmetic, it is an
+   * afternoon of holding an arrow key.
+   */
+  test("the gentlest one, and only the gentlest one", () => {
+    expect(BANDS[0]?.opensEveryPlace).toBe(true);
+    for (const band of BANDS.slice(1)) expect(band.opensEveryPlace).toBe(false);
+  });
+
+  // Read through `bandAt` as the game reads it, including from off the ends:
+  // a saved band from a build with more of them must not open the world by
+  // accident, and one from a build with fewer must not close it.
+  test("read the way the game reads it, from either end", () => {
+    expect(bandAt(0).opensEveryPlace).toBe(true);
+    expect(bandAt(-3).opensEveryPlace).toBe(true);
+    expect(bandAt(BANDS.length + 5).opensEveryPlace).toBe(false);
+  });
+});

@@ -41,7 +41,14 @@ import { makeAdditionProblem } from "../spells/addition";
 import { BANDS, DEFAULT_BAND, SUGGESTED_BAND, sampleProblem } from "../spells/difficulty";
 import { GAME_NAME } from "../ui/TitleCard";
 import { UiAsset, flagIcon, uiTextureKey } from "../ui/assets";
-import { HEADER, MAKING_STEPS, type MakingStep, stepFrom, tileGrid } from "../ui/playersLayout";
+import {
+  HEADER,
+  MAKING_STEPS,
+  type MakingStep,
+  boxTopWithin,
+  stepFrom,
+  tileGrid,
+} from "../ui/playersLayout";
 import {
   ALL_CHARACTERS,
   DEFAULT_FACING,
@@ -171,6 +178,10 @@ export class PlayersScene extends Phaser.Scene {
 
   private parts: Phaser.GameObjects.GameObject[] = [];
   private nameBox: HTMLInputElement | null = null;
+  /** Where the layout wanted the box, before any keyboard had an opinion. */
+  private nameBoxTop = 0;
+  /** The listener that follows the visible band, while there is a box. */
+  private followBand: (() => void) | null = null;
   private importBox: HTMLInputElement | null = null;
 
   constructor() {
@@ -1014,6 +1025,13 @@ export class PlayersScene extends Phaser.Scene {
       // listeners and a number comparison.
       box.addEventListener("focus", () => this.pinPage());
       box.addEventListener("blur", () => this.pinPage());
+      // The keyboard coming up, going down, and the page being scrolled
+      // under it are three separate events and all three move the band.
+      // Listened for once and taken off again with the box: a listener that
+      // outlived the input would be reaching for an element that is gone.
+      this.followBand = () => this.placeNameBox();
+      window.visualViewport?.addEventListener("resize", this.followBand);
+      window.visualViewport?.addEventListener("scroll", this.followBand);
       document.body.appendChild(box);
       this.nameBox = box;
       box.focus();
@@ -1022,7 +1040,29 @@ export class PlayersScene extends Phaser.Scene {
     const boxWidth = 220;
     this.nameBox.style.width = `${boxWidth}px`;
     this.nameBox.style.left = `${bounds.left + centreX - boxWidth / 2 - 10}px`;
-    this.nameBox.style.top = `${bounds.top + y}px`;
+    // Kept, because the keyboard can come and go many times over one name
+    // and every one of those needs this number again.
+    this.nameBoxTop = bounds.top + y;
+    this.placeNameBox();
+  }
+
+  /**
+   * Put the box where the visible page actually is.
+   *
+   * Called on every change to `window.visualViewport`, which is what a
+   * software keyboard moves — the layout viewport, which is what
+   * `position: fixed` is anchored to, does not budge. See `boxTopWithin` for
+   * what that costs and why this follows the band instead.
+   */
+  private placeNameBox(): void {
+    const box = this.nameBox;
+    if (!box) return;
+    const band = window.visualViewport;
+    box.style.top = `${boxTopWithin(
+      { offsetTop: band?.offsetTop ?? 0, height: band?.height ?? window.innerHeight },
+      this.nameBoxTop,
+      box.getBoundingClientRect().height || NAME_HEIGHT,
+    )}px`;
   }
 
   /**
@@ -1075,6 +1115,11 @@ export class PlayersScene extends Phaser.Scene {
   }
 
   private hideNameBox(): void {
+    if (this.followBand) {
+      window.visualViewport?.removeEventListener("resize", this.followBand);
+      window.visualViewport?.removeEventListener("scroll", this.followBand);
+      this.followBand = null;
+    }
     this.nameBox?.remove();
     this.nameBox = null;
     // A stranded offset outlives the input that caused it, so the page is

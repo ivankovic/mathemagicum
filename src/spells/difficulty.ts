@@ -143,6 +143,21 @@ export interface Band {
    * needs two coins, then the one the game shipped with.
    */
   readonly cropPrice: number;
+  /**
+   * Whether the portal will carry her anywhere, walked to or not.
+   *
+   * The gentlest band only, and it is a playtest's answer to a real dead
+   * end. Every other place in this world is reached by walking to it once,
+   * which is a long walk and the right price for a child who can take it.
+   * For the youngest — the band that opens on `3 + 4` — it is a fence in
+   * front of the one spell that is pure fun, and the thing behind the fence
+   * is not the arithmetic, it is an afternoon of holding an arrow key.
+   *
+   * A property of the band rather than a switch of its own, for the reason
+   * `cropPrice` is: this is what "the gentlest setting" *means*, and a
+   * second place to say so is a second place for it to disagree.
+   */
+  readonly opensEveryPlace: boolean;
 }
 
 /**
@@ -183,9 +198,9 @@ export interface Band {
  * One-fifty is two coins, which is where counting starts.
  */
 export const BANDS: readonly Band[] = [
-  { from: 0, to: 2, cropPrice: 150 },
-  { from: 2, to: 6, cropPrice: 250 },
-  { from: 6, to: SHARED_TOP_RUNG, cropPrice: 350 },
+  { from: 0, to: 2, cropPrice: 150, opensEveryPlace: true },
+  { from: 2, to: 6, cropPrice: 250, opensEveryPlace: false },
+  { from: 6, to: SHARED_TOP_RUNG, cropPrice: 350, opensEveryPlace: false },
   // Up to six digits, which is as far as this goes.
   //
   // The one band that is not about a new *kind* of sum. Everything below it
@@ -199,7 +214,7 @@ export const BANDS: readonly Band[] = [
   //
   // Wide, and overlapping the band below it by a rung, for the reason every
   // band overlaps: picking the neighbouring one is off by a nudge.
-  { from: SHARED_TOP_RUNG, to: HARDEST_RUNG, cropPrice: 450 },
+  { from: SHARED_TOP_RUNG, to: HARDEST_RUNG, cropPrice: 450, opensEveryPlace: false },
 ];
 
 /**

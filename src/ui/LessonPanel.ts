@@ -160,22 +160,28 @@ export class LessonPanel extends PagedPanel<LessonBeat> {
    */
   private drawNumberLine(rect: PanelRect, middle: number, answering: boolean): void {
     const problem = this.example();
+    // How many jumps this sum actually has, not how many the widest sum has.
+    // `PLACES` is three, and a child on the gentlest band is adding one digit
+    // to one digit: the line was drawn with three arcs whatever the rung, so
+    // the two that had no jump behind them were labelled `+undefined` and
+    // their landing boxes said `undefined` under them.
+    const places = Math.max(1, problem.jumps.length);
     const lineLeft = rect.left + 16 + STOP_BOX_W / 2;
     const lineRight = rect.left + rect.width - 16 - STOP_BOX_W / 2;
-    const spacing = (lineRight - lineLeft) / PLACES;
+    const spacing = (lineRight - lineLeft) / places;
     const stopX = (i: number) => lineLeft + spacing * i;
     const lineY = middle + 14;
 
     this.ink.lineStyle(2, INK_HEX, 1);
     this.ink.lineBetween(lineLeft - 8, lineY, lineRight + 8, lineY);
-    for (let i = 0; i <= PLACES; i++) {
+    for (let i = 0; i <= places; i++) {
       this.ink.lineBetween(stopX(i), lineY - 4, stopX(i), lineY + 4);
     }
 
     // Curves first, then every head: consecutive jumps share a landing point,
     // so an arc drawn whole lays its rising stroke over the head before it.
-    for (let i = 0; i < PLACES; i++) {
-      const last = answering && i === PLACES - 1;
+    for (let i = 0; i < places; i++) {
+      const last = answering && i === places - 1;
       this.arcCurve(
         stopX(i),
         stopX(i + 1),
@@ -184,8 +190,8 @@ export class LessonPanel extends PagedPanel<LessonBeat> {
         last ? DONE_HEX : RUNE_HEX,
       );
     }
-    for (let i = 0; i < PLACES; i++) {
-      const last = answering && i === PLACES - 1;
+    for (let i = 0; i < places; i++) {
+      const last = answering && i === places - 1;
       this.arcHead(stopX(i + 1), lineY, last ? DONE_HEX : RUNE_HEX);
     }
 
@@ -194,7 +200,7 @@ export class LessonPanel extends PagedPanel<LessonBeat> {
       .setPosition(stopX(0), lineY + 8)
       .setVisible(true);
 
-    for (let i = 0; i < PLACES; i++) {
+    for (let i = 0; i < places; i++) {
       this.jumpLabels[i]
         ?.setText(`+${problem.jumps[i]}`)
         .setPosition((stopX(i) + stopX(i + 1)) / 2, lineY - (ARC_HEIGHTS[i] as number) - 2)
@@ -206,7 +212,7 @@ export class LessonPanel extends PagedPanel<LessonBeat> {
       stop.label.setText(String(problem.stops[i]));
       // The last landing is the answer, and on the last beat it is the point
       // of the whole picture.
-      const isAnswer = answering && i === PLACES - 1;
+      const isAnswer = answering && i === places - 1;
       stop.box.setStrokeStyle(isAnswer ? 3 : 2, isAnswer ? DONE_HEX : INK_HEX);
       this.show(stop);
     }

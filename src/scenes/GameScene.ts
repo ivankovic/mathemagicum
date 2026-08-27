@@ -330,6 +330,7 @@ import {
 } from "../world/landmarks";
 import { hasStep } from "../world/levels";
 import { MATERIAL_TYPES, MaterialType, yieldOf } from "../world/materials";
+import { markedPlaces } from "../world/minimap";
 import { NAMED_PEOPLE, nameCast } from "../world/names";
 import type { PlacedObject } from "../world/objects";
 import { LAMP_POSTS, type Observatory, lampsLit, postsFree } from "../world/observatory";
@@ -1967,7 +1968,7 @@ export class GameScene extends Phaser.Scene {
       this.words,
       world.grid,
       world.anchors,
-      () => this.session.tile,
+      () => this.whereOnTheMap(),
       (object) => this.ui(object),
     );
     this.picturePanel = new PicturePanel(this, uiIndex, MODAL_DEPTH, (object) => this.ui(object));
@@ -2119,6 +2120,7 @@ export class GameScene extends Phaser.Scene {
           missteps: cast.missteps,
         };
       },
+      mapMark: () => this.whereOnTheMap(),
       ships: () =>
         this.visitingShips.filter((ship) => ship.visible).map((ship) => ({ x: ship.x, y: ship.y })),
       scenery: () => [...this.liveScenery.values()].reduce((n, list) => n + list.length, 0),
@@ -5210,7 +5212,14 @@ export class GameScene extends Phaser.Scene {
     const at = this.session.tile;
     // `?reached=` is a dev seam, and it adds rather than replaces: a script
     // asking for the harbour should still be able to go home.
-    const reached = [...this.profile.reached, ...this.dev.reached];
+    //
+    // And on the gentlest band, everywhere is open whether she has walked
+    // there or not — see `opensEveryPlace`. The walk is the right price for a
+    // child who can take it and a dead end for the one who cannot, and what
+    // is behind it is not arithmetic, it is an afternoon on an arrow key.
+    const reached = bandAt(this.profile.band).opensEveryPlace
+      ? markedPlaces(this.anchors).map(({ id }) => id)
+      : [...this.profile.reached, ...this.dev.reached];
     const stops = portalStops(
       this.anchors,
       reached,
@@ -8056,6 +8065,24 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** The map, opened. Nothing is refused indoors here — it is on a wall. */
+  /**
+   * Where the map marks her, which is not always where she is standing.
+   *
+   * Indoors her tile is a *room* coordinate — a handful of cells across a
+   * cottage floor — and the world map drew that as a mark in the far
+   * north-west corner of the world, because column three row four is a
+   * perfectly good world cell and happens to be up there. The one map a
+   * child can reach is the one on the post office wall, so this was true of
+   * the only time it was ever looked at.
+   *
+   * A room is *at* somewhere, and `returnTo` is where: the cell she walked in
+   * from, remembered so she can be put back on it. That is the mark a map of
+   * the world should carry — the building she is standing in.
+   */
+  private whereOnTheMap(): GridPoint {
+    return this.interior?.returnTo ?? this.session.tile;
+  }
+
   private openMap(): void {
     if (this.modalOpen) return;
     this.joystick?.release();

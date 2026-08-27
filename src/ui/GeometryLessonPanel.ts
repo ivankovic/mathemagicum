@@ -4,8 +4,8 @@
 import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import {
-  GEOMETRY_BEATS,
   GeometryBeat,
+  geometryBeatsFor,
   geometryLessonFor,
   squaresOf,
 } from "../spells/geometryLesson";
@@ -87,8 +87,20 @@ export class GeometryLessonPanel extends PagedPanel<GeometryBeat> {
     return geometryLessonFor(this.rung);
   }
 
+  /**
+   * Only the pages this child's own spell asks for. See `geometryBeatsFor`.
+   *
+   * A playtest found him working through the crow's flight at a child whose
+   * spell asks her to count stepping stones.
+   */
   protected deck(): readonly GeometryBeat[] {
-    return GEOMETRY_BEATS;
+    // `?? portalRungAt(0)` is not belt and braces. The base class asks for
+    // the deck from inside its own constructor, which runs *before* this
+    // subclass's fields are initialised — so `this.rung` is genuinely
+    // undefined for that one call, whatever its type says. Without this the
+    // whole game failed to boot on `undefined.tier`, and the class field
+    // above reads as if it could not possibly.
+    return geometryBeatsFor(this.rung ?? portalRungAt(0));
   }
 
   protected titleText(): string {

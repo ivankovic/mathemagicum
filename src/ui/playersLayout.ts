@@ -102,3 +102,51 @@ export function stepFrom(from: MakingStep, by: number): MakingStep | null {
   if (at < 0) return null;
   return MAKING_STEPS[at + by] ?? null;
 }
+
+/**
+ * The part of the page a keyboard has left visible.
+ *
+ * `window.visualViewport` in the two numbers that matter, so the arithmetic
+ * below can be tested without a browser and without an iPad.
+ */
+export interface VisibleBand {
+  /** How far the visible part has been pushed down the layout viewport. */
+  readonly offsetTop: number;
+  /** And how tall what is left of it is. */
+  readonly height: number;
+}
+
+/** How much air is kept between the box and the edge of what is visible. */
+const BOX_MARGIN = 8;
+
+/**
+ * Where the name box has to sit to stay on screen with a keyboard up.
+ *
+ * The one HTML input in this game is `position: fixed`, which anchors it to
+ * the *layout* viewport — and a software keyboard does not change that
+ * viewport at all. It changes the **visual** one: iOS shrinks it to the band
+ * above the keyboard and scrolls it to reveal whatever is focused. A fixed
+ * box therefore goes wherever the page went, which on a tablet is off the
+ * top of the screen; and when the keyboard is put away the band comes back
+ * and the box, never repositioned, is somewhere else entirely.
+ *
+ * That is the whole of the playtest report: *the input box goes above the
+ * screen, and pulling the keyboard down makes the top visible but the box
+ * disappears.* Two halves of one thing — the box has to be placed against
+ * the band that is actually visible, and placed again every time it moves.
+ *
+ * So: start from where the layout wanted it, follow the band, and hold it
+ * inside. A box pushed off the bottom by a keyboard is lifted above it; one
+ * pushed off the top is brought back down; and where the band is the whole
+ * page, which is every desktop and every tablet with no keyboard up, this
+ * gives back exactly the y that was asked for.
+ */
+export function boxTopWithin(band: VisibleBand, wanted: number, boxHeight: number): number {
+  const top = band.offsetTop + BOX_MARGIN;
+  const bottom = band.offsetTop + band.height - boxHeight - BOX_MARGIN;
+  // A band shorter than the box itself has no room to hold it in; pinning to
+  // the top at least keeps the box's own first line readable, where clamping
+  // the other way round would put all of it under the keyboard.
+  if (bottom <= top) return top;
+  return Math.round(Math.max(top, Math.min(bottom, band.offsetTop + wanted)));
+}

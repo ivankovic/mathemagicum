@@ -517,7 +517,11 @@ export const HR: Phrases = {
   lessonRune:
     "Otvori knjigu i dodirni runu +. Ono ispred tebe naraste za jedan korak — ali samo ako riješiš zadatak koji ti postavi.",
   lessonSplit: (addend, parts) =>
-    `Rastavi broj. ${addend} je ${parts.join(" i ")}. Svaki je broj složen od stotica, desetica i jedinica, i to su ta tri skoka.`,
+    parts.length === 1
+      ? `${addend} je već jedan komad — dakle samo jedan skok.`
+      : `Rastavi broj. ${addend} je ${parts.join(" i ")}. Svaki je broj složen od ${
+          parts.length === 2 ? "desetica i jedinica" : "stotica, desetica i jedinica"
+        }, i to su ta ${parts.length === 2 ? "dva" : "tri"} skoka.`,
   lessonJump: (start, jumps) =>
     `Kreni od ${start} i prvo preskoči mali dio: ${jumps.map((jump) => `+${jump}`).join(", pa ")}. Upiši broj na koji si sletio u svaki okvir.`,
   lessonAnswer: (answer) =>

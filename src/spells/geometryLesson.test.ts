@@ -7,12 +7,13 @@ import {
   GEOMETRY_LESSON_FROM,
   GEOMETRY_LESSON_TO,
   GeometryBeat,
+  geometryBeatsFor,
   geometryLessonFor,
   isLastGeometryBeat,
   nextGeometryBeat,
   squaresOf,
 } from "./geometryLesson";
-import { PORTAL_RUNGS, journeyBetween, portalRungAt } from "./portal";
+import { HARDEST_PORTAL_RUNG, PORTAL_RUNGS, journeyBetween, portalRungAt } from "./portal";
 
 describe("the journey he works through", () => {
   // The whole reason those two cells were chosen. A worked example whose
@@ -106,5 +107,50 @@ describe("the beats", () => {
   test("only the last beat is the last one", () => {
     expect(isLastGeometryBeat(GeometryBeat.Crow)).toBe(true);
     for (const beat of GEOMETRY_BEATS.slice(0, -1)) expect(isLastGeometryBeat(beat)).toBe(false);
+  });
+});
+
+describe("how much of the lesson he gives", () => {
+  /**
+   * Reported from a playtest: *the portal teacher teaches the most difficult
+   * version even if the player is on easy mode.*
+   *
+   * He worked through the crow's flight — two legs squared, added and rooted
+   * — at a child whose own spell asks her to count stepping stones. That is
+   * the mistake `lessonFor` was written to avoid on the addition side, in
+   * its own words: a method demonstrated on a question they have not been
+   * asked is a method they cannot check.
+   */
+  test("counting and reading get the rune and the ruler, and stop there", () => {
+    for (const at of [0, 1, 2]) {
+      expect(geometryBeatsFor(portalRungAt(at))).toEqual([GeometryBeat.Rune, GeometryBeat.Ruler]);
+    }
+  });
+
+  test("adding legs gets the legs page as well, and still no crow", () => {
+    for (const at of [3, 4, 5]) {
+      const deck = geometryBeatsFor(portalRungAt(at));
+      expect(deck).toContain(GeometryBeat.Legs);
+      expect(deck).not.toContain(GeometryBeat.Crow);
+    }
+  });
+
+  test("and only the rungs that ask for the straight line are shown it", () => {
+    for (const at of [6, 7, 8, 9]) {
+      expect(geometryBeatsFor(portalRungAt(at))).toEqual(GEOMETRY_BEATS);
+    }
+  });
+
+  // Whatever is cut, the first two are always there: everybody has to find
+  // the map and know where nought is before any of it means anything.
+  test("every rung is shown the rune and the ruler", () => {
+    for (let at = 0; at <= HARDEST_PORTAL_RUNG; at++) {
+      const deck = geometryBeatsFor(portalRungAt(at));
+      expect(deck[0]).toBe(GeometryBeat.Rune);
+      expect(deck[1]).toBe(GeometryBeat.Ruler);
+      // And the pages kept are always a prefix of the full lesson, so the
+      // order a child meets them in never changes with the rung.
+      expect(GEOMETRY_BEATS.slice(0, deck.length)).toEqual([...deck]);
+    }
   });
 });

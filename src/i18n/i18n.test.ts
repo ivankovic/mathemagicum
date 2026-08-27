@@ -146,7 +146,10 @@ function sample(p: Phrases): Record<string, string> {
     intro: p.intro(IntroBeat.Seeds),
     lessonTitle: p.lessonTitle,
     lessonRune: p.lessonRune,
-    lessonSplit: p.lessonSplit(114, [100, 10, 4]),
+    // All three lengths under the one key: a one-digit sum has one jump and
+    // a two-digit one has two, and the sentence has to follow the count. It
+    // used to say "hundreds, tens and ones" whatever the number was.
+    lessonSplit: `${p.lessonSplit(114, [100, 10, 4])} ${p.lessonSplit(14, [10, 4])} ${p.lessonSplit(4, [4])}`,
     lessonJump: p.lessonJump(148, [4, 10, 100]),
     lessonAnswer: p.lessonAnswer(262),
     lessonNext: p.lessonNext,
