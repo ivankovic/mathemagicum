@@ -428,6 +428,8 @@ import { type VillageNpcSpec, houseIdFor } from "../world/villageLayout";
 import { type GeneratedWorld, generateWorld } from "../world/worldGenerator";
 import { sidecarKey } from "./BootScene";
 import { type DevOptions, devOptions, exposeForTests } from "./devHooks";
+import { FROZEN_TIDE, HarbourTraffic } from "./harbourTraffic";
+import { type Standing, TeacherMarks } from "./teacherMarks";
 
 const WORLD_SIZE = 500;
 // Fixed for now so the world is reproducible during development; will
@@ -659,16 +661,6 @@ const CHUNK_CACHE_LIMIT = 60;
 const BUILDING_ANIM_FPS = 6;
 /** The hull the harbour's traffic is drawn with — the great ship's own. */
 const SHIP_SPRITE = BuildingSprite.Ship;
-/**
- * Where the tide stands in a frozen world.
- *
- * `?freezeNpcs` holds the villagers still so a script knows where they are,
- * and a ship sailing through that would be the one thing on screen it could
- * not pin. Halfway through a visit, so the harbour a screenshot catches has
- * ships *in* it rather than an empty bay — a frozen world should look like
- * the world, not like a Sunday.
- */
-const FROZEN_TIDE = VISIT * 0.6;
 // Slow enough to read as a breeze rather than a shiver.
 const PLANT_SWAY_FPS = 4;
 // The well bucket drifts rather than swings.
@@ -759,37 +751,6 @@ export type PatchAction = (typeof PatchAction)[keyof typeof PatchAction];
  * has learned what plus does should not have to learn a second picture for
  * the same spell doing the same arithmetic in a different room.
  */
-/**
- * The rune each spell is drawn as, for the mark over whoever teaches it.
- *
- * The two spells nobody teaches are absent rather than mapped to nothing:
- * a child has the plus and the minus from their first minute, so there is
- * no teacher to hang a mark over.
- */
-const SPELL_RUNE: Partial<Record<Spell, string>> = {
-  [Spell.Portal]: UiAsset.RunePortal,
-  [Spell.Array]: UiAsset.RuneTimes,
-  [Spell.Share]: UiAsset.RuneDivide,
-  [Spell.Hourglass]: UiAsset.RuneHourglass,
-  [Spell.Mirror]: UiAsset.RuneMirror,
-};
-
-/**
- * How big the mark over a teacher's head is drawn, and how far above it.
- *
- * Measured up from the *feet*, not down from the top of the sprite. A
- * character's canvas is half as tall again as the character — there is empty
- * air over every head, for the tall one and the hats — so a mark hung off
- * `displayHeight` floats a body's length above the person it belongs to.
- * The same trap the shop's tab icons fell into.
- */
-const TEACH_MARK = 22;
-const TEACH_LIFT = 28;
-/** How faint it goes and how bright it comes back, and how long that takes. */
-const TEACH_DIM = 0.38;
-const TEACH_BRIGHT = 0.8;
-const TEACH_BEAT_MS = 900;
-
 const SPELL_RUNES: Record<PatchAction, string> = {
   [PatchAction.Grow]: UiAsset.RuneAdd,
   [PatchAction.Clear]: UiAsset.RuneMinus,
@@ -1691,17 +1652,10 @@ export class GameScene extends Phaser.Scene {
   private city!: CityLayout;
   private observatory: Observatory | null = null;
   private harbourFront: HarbourLayout | null = null;
-  /**
-   * The ships that come and go, one sprite per berth, made once and moved.
-   *
-   * Made once rather than spawned and destroyed as they arrive: there are at
-   * most four, a sprite that is off camera costs a cull test, and a harbour
-   * that built and threw away a ship every few minutes would be a harbour
-   * that stuttered every few minutes. Hidden is how a berth stands empty.
-   */
-  private visitingShips: Phaser.GameObjects.Sprite[] = [];
-  /** A rune over each teacher who still has one to give. See `markTeachers`. */
-  private readonly teacherMarks = new Map<string, Phaser.GameObjects.Image>();
+  /** The hulls that come and go at the harbour's piers. */
+  private traffic?: HarbourTraffic;
+  /** A rune over each teacher who still has one to give. */
+  private teacherMarks?: TeacherMarks;
   /** What part each npc plays, for the marks — `spec.role ?? spec.id`. */
   private readonly npcRoles = new Map<string, string>();
   /** Where the three wild flowers grew, for a script that has to walk to one. */
@@ -1921,7 +1875,20 @@ export class GameScene extends Phaser.Scene {
     this.spawnPlacedObjects(
       this.grid.listObjects().filter((object) => sceneryKind(object.type) === null),
     );
-    this.launchVisitingShips();
+    // The harbour's traffic, if this world has a harbour with berths in it.
+    const berths = world.harbour?.berths ?? [];
+    const hull = this.buildingSidecars.get(BuildingSprite.Ship);
+    if (berths.length > 0 && hull) {
+      this.traffic = new HarbourTraffic(
+        this,
+        berths,
+        hull,
+        { x: this.originX, y: this.originY },
+        this.seed,
+        (name, sprite) => this.houseSheetFor(name, sprite),
+        (object) => this.world(object),
+      );
+    }
     // Anything this child had already planted. Their fences came back with
     // the line above — objects are spawned from the grid — but a crop is
     // drawn as a sprite of its own, and one that exists only in the grid is
@@ -2130,13 +2097,13 @@ export class GameScene extends Phaser.Scene {
 
     this.setupInput();
     this.createActionBar();
+    this.teacherMarks = new TeacherMarks(this, (object) => this.world(object));
     exposeForTests({
       session: this.session,
       ui: () => this.uiPositions(),
       armed: () => armedTag(this.armed),
       marking: () => this.marking?.action ?? null,
-      teaching: () =>
-        [...this.teacherMarks.entries()].filter(([, mark]) => mark.visible).map(([who]) => who),
+      teaching: () => this.teacherMarks?.showing() ?? [],
       grove: () => ({ col: this.grove.doorstep.col, row: this.grove.doorstep.row }),
       stats: () => ({
         fps: Math.round(this.game.loop.actualFps),
@@ -2185,8 +2152,7 @@ export class GameScene extends Phaser.Scene {
         };
       },
       mapMark: () => this.whereOnTheMap(),
-      ships: () =>
-        this.visitingShips.filter((ship) => ship.visible).map((ship) => ({ x: ship.x, y: ship.y })),
+      ships: () => this.traffic?.positions() ?? [],
       scenery: () => [...this.liveScenery.values()].reduce((n, list) => n + list.length, 0),
       sceneryOnScreen: () => {
         const view = this.cameras.main.worldView;
@@ -2528,8 +2494,11 @@ export class GameScene extends Phaser.Scene {
       // animals, so with that seam set their hunger clocks stopped as well as
       // their feet. Freezing a village for a screenshot should not stop time.
       this.updateAnimals(this.time.now);
-      this.sailVisitingShips();
-      this.markTeachers();
+      // The minute to draw is the scene's to decide, not the harbour's: it
+      // is the world's clock, unless a script has asked for everything to
+      // hold still. See `FROZEN_TIDE`.
+      this.traffic?.sail(this.dev.freezeNpcs ? FROZEN_TIDE : this.worldNow() / 60_000);
+      this.teacherMarks?.show(this.teachersOnScreen(), (spell) => !this.knows(spell));
       this.cullScenery();
       this.placeArmedRune();
       // The reach is drawn round wherever she is standing now, so it follows
@@ -7847,164 +7816,39 @@ export class GameScene extends Phaser.Scene {
     // The smile in its bubble says the rest.
   }
 
-  /**
-   * One hull per berth, made once and moved for the rest of the game.
-   *
-   * They are drawn from the great ship's own sheet, playing her closed-door
-   * bob. A smaller fishing boat would read better as traffic and is a
-   * drawing that does not exist yet; this is the same hull the harbour
-   * already has one of, which at least cannot look like it came from a
-   * different game.
-   *
-   * Nothing is told about them: not the grid, not the save, not the depth
-   * sorter beyond a y. They are weather. See `shipping.ts`.
-   */
-  private launchVisitingShips(): void {
-    const berths = this.harbourFront?.berths ?? [];
-    const sidecar = this.buildingSidecars.get(SHIP_SPRITE);
-    if (berths.length === 0 || !sidecar) return;
-    const anim = buildingAnimKey(SHIP_SPRITE, DoorState.Closed);
-    if (!this.anims.exists(anim)) return;
-    // Each one painted from her own name, so four hulls at four piers are
-    // four ships rather than one drawn four times — the argument the village
-    // cottages are repainted on, which the ship only escaped while there was
-    // exactly one of her in the world. `houseSheetFor` falls back to the
-    // shipped colours if a repaint is not possible, so this cannot fail into
-    // a missing texture.
-    this.visitingShips = berths.map((_, n) => {
-      const painted = this.houseSheetFor(`harbour-visitor-${n}`, SHIP_SPRITE);
-      return this.world(
-        this.add
-          .sprite(0, 0, spriteSheetKey(painted))
-          .setOrigin(0, 0)
-          .setVisible(false)
-          .play(buildingAnimKey(painted, DoorState.Closed)),
-      );
-    });
+  /** Whether this child has been taught a spell — the marks' one question. */
+  private knows(spell: Spell): boolean {
+    return knowsSpell([...this.profile.learned, ...this.dev.learned], spell);
   }
 
   /**
-   * Move them along their lanes, or hide the berths nobody is at.
+   * Everybody on screen who might have something to teach, and where they
+   * stand.
    *
-   * Off the world's clock rather than off the frame count, so that winding
-   * the hourglass forward moves the harbour along with the light: an
-   * afternoon skipped is an afternoon of shipping skipped, and a quay that
-   * looked identical either side of it would say the world had been waiting.
+   * Three sources and one answer. Whoever is behind the counter or the desk
+   * of the room she is in — one at a time, because a room has one. Everybody
+   * out of doors, which is where the clockmaker and the fisherman are. And
+   * the great tree, which is a teacher that is a thing rather than a person
+   * and simply stands still.
    *
-   * `?freezeNpcs` stops them where a villager stops. A ship that sailed
-   * through a frozen world would be the one thing on screen a screenshot
-   * could not pin — the same reason the seam exists at all.
+   * Every one of them placed through `toFeet`, because that is how anything
+   * standing on ground is placed here. See `LIFT`.
    */
-  private sailVisitingShips(): void {
-    const berths = this.harbourFront?.berths ?? [];
-    const sidecar = this.buildingSidecars.get(SHIP_SPRITE);
-    if (this.visitingShips.length === 0 || !sidecar) return;
-    const minutes = this.dev.freezeNpcs ? FROZEN_TIDE : this.worldNow() / 60_000;
-    for (const ship of this.visitingShips) ship.setVisible(false);
-    for (const sailing of shipsAt(minutes, berths.length, this.seed)) {
-      const lane = berths[sailing.berth]?.lane;
-      const sprite = this.visitingShips[sailing.berth];
-      if (!lane || !sprite) continue;
-      const at = alongLane(lane, sailing.along);
-      const origin = spriteOrigin(sidecar, at.col, at.row);
-      sprite
-        .setPosition(this.originX + origin.x, this.originY + origin.y)
-        .setDepth(depthFor(footprintBottomY(sidecar, at.row)))
-        .setVisible(true);
-    }
-  }
-
-  /**
-   * The rune a teacher still owes this child, or nothing.
-   *
-   * Nothing once it is learned, which is what makes the mark a *sign* rather
-   * than a label: it is there to send a child across a room, and a sign that
-   * stayed up afterwards would be pointing at something already had.
-   */
-  private runeOwed(teacher: string): string | null {
-    const spell = spellTaughtBy(teacher);
-    if (!spell) return null;
-    if (knowsSpell([...this.profile.learned, ...this.dev.learned], spell)) return null;
-    return SPELL_RUNE[spell] ?? null;
-  }
-
-  /**
-   * A rune over the head of everybody who has something to teach.
-   *
-   * The game's one unanswered question from the child's side: the spellbook
-   * draws a rune it has not been given yet, dimmed, and says nothing at all
-   * about where to go and get it. This is the other half of that — the same
-   * dimmed rune, over the person who has it, so the book and the world are
-   * asking and answering the same question.
-   *
-   * Faint and breathing rather than solid: solid is a label, and a thing
-   * that pulses is a thing being *offered*. It is also how everything else
-   * in this game says "here": the armed rune over the player's head, and the
-   * glow round a lit lamp.
-   *
-   * Made once per teacher and moved, like the harbour's ships. There are
-   * five of them in a world and at most a couple on screen at a time, and a
-   * mark built and thrown away as a child walks past would be a stutter
-   * every time they did.
-   */
-  private markTeachers(): void {
-    const shown = new Set<string>();
-    const beat = TEACH_DIM + (TEACH_BRIGHT - TEACH_DIM) * this.pulse(TEACH_BEAT_MS);
-    const put = (teacher: string, x: number, y: number, depth: number) => {
-      const rune = this.runeOwed(teacher);
-      if (!rune) return;
-      shown.add(teacher);
-      let mark = this.teacherMarks.get(teacher);
-      if (!mark) {
-        mark = this.world(
-          this.add
-            .image(0, 0, uiTextureKey(rune))
-            .setOrigin(0.5, 1)
-            .setDisplaySize(TEACH_MARK, TEACH_MARK),
-        );
-        this.teacherMarks.set(teacher, mark);
-      }
-      mark.setPosition(x, y).setDepth(depth).setAlpha(beat).setVisible(true);
+  private teachersOnScreen(): Standing[] {
+    const here: Standing[] = [];
+    const at = (part: string, cell: GridPoint) => {
+      const feet = this.toFeet(cell.col, cell.row);
+      here.push({ part, feet: { ...cell, x: feet.x, y: feet.y } });
     };
-
-    // Whoever is behind the counter or the desk of the room she is in. One
-    // at a time, because a room has one.
-    const attendant = this.attendant;
-    const inside = this.attendantId;
-    if (attendant && inside) {
-      put(
-        inside,
-        attendant.x,
-        attendant.y - attendant.displayHeight - TEACH_LIFT,
-        attendant.depth + 1,
-      );
-    }
-    // And everybody out of doors who teaches: the clockmaker in his plaza
-    // and the fisherman on his quay. Read off their sprites rather than
-    // their tiles, so the mark travels with the walk rather than hopping a
-    // cell at a time behind it.
+    const attendant = this.attendantCell;
+    if (attendant && this.attendantId) at(this.attendantId, attendant);
     if (!this.interior) {
       for (const npc of this.npcs) {
-        const part = this.npcRoles.get(npc.id) ?? npc.id;
-        // The cell she is on, so the mark steps with the walk. A rune that
-        // glided while its owner stepped would drift off them and back.
-        const feet = this.toFeet(npc.col, npc.row);
-        put(part, feet.x, feet.y - TEACH_LIFT, depthFor(feet.y) + 1);
+        at(this.npcRoles.get(npc.id) ?? npc.id, { col: npc.col, row: npc.row });
       }
-      // The one teacher who is not a person. It stands still, so this is the
-      // same call with a fixed cell in place of a sprite.
-      const tree = this.toFeet(this.grove.tree.col, this.grove.tree.row);
-      put(GREAT_TREE_ID, tree.x, tree.y - TILE_SIZE * 3, depthFor(tree.y) + 1);
+      at(GREAT_TREE_ID, this.grove.tree);
     }
-
-    for (const [teacher, mark] of this.teacherMarks) {
-      if (!shown.has(teacher)) mark.setVisible(false);
-    }
-  }
-
-  /** A nought-to-one that goes up and comes back, on a period in ms. */
-  private pulse(period: number): number {
-    return 0.5 + 0.5 * Math.sin((this.time.now / period) * Math.PI * 2);
+    return here;
   }
 
   private spawnPlacedObjects(objects: readonly PlacedObject[]): void {
