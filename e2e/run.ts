@@ -30,9 +30,21 @@
 const files = [...new Bun.Glob("e2e/*.e2e.ts").scanSync(".")].sort();
 if (files.length === 0) throw new Error("no scenario files in e2e/");
 
+// Built once, here, for all of them. The scenarios are served the built site
+// rather than a dev server — see `serve` — and twenty files each spending ten
+// seconds building the same thing is three minutes of a suite that is slow
+// enough already.
+console.error("building the site the scenarios will be served…");
+const build = Bun.spawn(["bun", "run", "build"], { stdout: "ignore", stderr: "inherit" });
+if ((await build.exited) !== 0) process.exit(1);
+
 const failed: string[] = [];
 for (const file of files) {
-  const run = Bun.spawn(["bun", "test", `./${file}`], { stdout: "inherit", stderr: "inherit" });
+  const run = Bun.spawn(["bun", "test", `./${file}`], {
+    stdout: "inherit",
+    stderr: "inherit",
+    env: { ...process.env, E2E_PREBUILT: "1" },
+  });
   if ((await run.exited) !== 0) failed.push(file);
 }
 
