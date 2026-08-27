@@ -3,7 +3,8 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { zoomSteps } from "../src/input/pinch";
-import { PHONE, play, shutDown } from "./harness";
+import { Spell } from "../src/spells/spellbook";
+import { PHONE, play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -73,14 +74,14 @@ describe("pinching the world smaller", () => {
 
         await game.tap("spellbook");
         await game.settle(300);
-        await game.tap("spellbook.3");
+        await game.tap(runeButton(Spell.Array));
         await game.settle(700);
         // Out of doors the times rune arms straight away, with no menu.
         expect(await game.zoomNow()).toBe(chosen);
 
         await game.tap("spellbook");
         await game.settle(300);
-        await game.tap("spellbook.3");
+        await game.tap(runeButton(Spell.Array));
         await game.settle(700);
         // And putting the rune out leaves it at *her* zoom, not the world's.
         expect(await game.zoomNow()).toBe(chosen);

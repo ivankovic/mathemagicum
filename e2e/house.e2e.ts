@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { type Game, play, shutDown } from "./harness";
+import { Spell } from "../src/spells/spellbook";
+import { type Game, play, runeButton, shutDown } from "./harness";
 
 /**
  * Building a house, and coming back to it tomorrow.
@@ -105,7 +106,7 @@ describe("building a room out", () => {
         const stone = await game.held("stone");
 
         await game.tap("spellbook");
-        await game.tap("spellbook.0");
+        await game.tap(runeButton(Spell.Growth));
         expect(await game.seam<string | null>("armed")).toBe("growth");
 
         const wanted = before.buildable[0];
@@ -143,7 +144,7 @@ describe("building a room out", () => {
         expect(await game.held("stone")).toBe(0);
 
         await game.tap("spellbook");
-        await game.tap("spellbook.0");
+        await game.tap(runeButton(Spell.Growth));
         expect(await game.seam<string | null>("armed")).toBe("growth");
         const wanted = before.buildable[0];
         if (!wanted) throw new Error("the starting room has nowhere to grow");
@@ -172,7 +173,7 @@ describe("building a room out", () => {
         const wood = await game.held("wood");
 
         await game.tap("spellbook");
-        await game.tap("spellbook.1");
+        await game.tap(runeButton(Spell.Clearing));
         expect(await game.seam<string | null>("armed")).toBe("clearing");
         // (3,1) is bare floor: clear of the fireplace, the shelf and the bed.
         await tapPlan(game, before, 3, 1);
@@ -209,7 +210,7 @@ describe("building a room out", () => {
         expect((await game.seam<Piece[]>("decor")).some((one) => one.piece === "rug")).toBe(false);
 
         await game.tap("spellbook");
-        await game.tap("spellbook.1");
+        await game.tap(runeButton(Spell.Clearing));
         expect(await game.seam<string | null>("armed")).toBe("clearing");
         await tapPlan(game, before, 4, 4);
         await game.settle(600);
@@ -224,7 +225,7 @@ describe("building a room out", () => {
         // satisfied by nothing happening — a tap that missed, or a spellbook
         // that quietly stopped arming, reads exactly the same as a refusal.
         await game.tap("spellbook");
-        await game.tap("spellbook.1");
+        await game.tap(runeButton(Spell.Clearing));
         await tapPlan(game, before, 2, 3);
         await game.settle(600);
         expect(await game.seam("spell")).not.toBeNull();
@@ -254,7 +255,7 @@ describe("building a room out", () => {
         const wood = await game.held("wood");
 
         await game.tap("spellbook");
-        await game.tap("spellbook.3");
+        await game.tap(runeButton(Spell.Array));
         // Indoors the choice is plus or minus. Plus lays floor.
         expect(await game.tap("patch.0")).toBe(true);
 
@@ -503,7 +504,7 @@ describe("furnishing it", () => {
         const house = await goHome(game);
 
         await game.tap("spellbook");
-        await game.tap("spellbook.1");
+        await game.tap(runeButton(Spell.Clearing));
         await tapPlan(game, house, 2, 3);
         expect(await game.seam("spell")).not.toBeNull();
         // Walk away from the sum rather than answering it: the square has to
@@ -535,7 +536,7 @@ describe("furnishing it", () => {
         ).toMatchObject({ col: 2, row: 3 });
 
         await game.tap("spellbook");
-        await game.tap("spellbook.1");
+        await game.tap(runeButton(Spell.Clearing));
         await tapPlan(game, house, 2, 3);
         await game.settle(600);
         expect(await game.seam("spell")).toBeNull();
@@ -561,7 +562,7 @@ describe("coming back tomorrow", () => {
         const before = await goHome(game);
 
         await game.tap("spellbook");
-        await game.tap("spellbook.0");
+        await game.tap(runeButton(Spell.Growth));
         const wanted = before.buildable[0];
         if (!wanted) throw new Error("nowhere to build");
         await game.tapCell(wanted.col, wanted.row);

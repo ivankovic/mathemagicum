@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { Spell } from "../src/spells/spellbook";
 import { PATCH_REACH, markingZoom } from "../src/world/selection";
 import { TILE_SIZE } from "../src/world/topdown";
-import { type Game, PHONE, play, shutDown } from "./harness";
+import { type Game, PHONE, play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -48,7 +49,7 @@ async function intoTheHouse(game: Game): Promise<void> {
 async function markOutFloor(game: Game): Promise<void> {
   await game.tap("spellbook");
   await game.settle(300);
-  await game.tap("spellbook.3");
+  await game.tap(runeButton(Spell.Array));
   await game.settle(500);
   // Build: the first of the two the menu offers indoors.
   await game.tap("patch.0");
@@ -76,7 +77,7 @@ describe("marking out a patch on a phone", () => {
         // `stopMarking`, which is where the camera is put back.
         await game.tap("spellbook");
         await game.settle(300);
-        await game.tap("spellbook.3");
+        await game.tap(runeButton(Spell.Array));
         await game.settle(700);
         expect(await game.zoomNow()).toBe(resting);
       });

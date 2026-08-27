@@ -3,7 +3,8 @@
 
 import type Phaser from "phaser";
 import { type Spell, spellTaughtBy } from "../spells/spellbook";
-import { UiAsset, uiTextureKey } from "../ui/assets";
+import { uiTextureKey } from "../ui/assets";
+import { RUNE_OF } from "../ui/runes";
 import type { GridPoint } from "../world/topdown";
 import { depthFor } from "../world/topdown";
 
@@ -21,21 +22,6 @@ import { depthFor } from "../world/topdown";
  * something to give has a rune over them and how that rune breathes, and
  * that is all it knows.
  */
-
-/**
- * The rune each spell is drawn as.
- *
- * The two spells nobody teaches are absent rather than mapped to nothing: a
- * child has the plus and the minus from their first minute, so there is no
- * teacher to hang a mark over.
- */
-const SPELL_RUNE: Partial<Record<Spell, string>> = {
-  portal: UiAsset.RunePortal,
-  array: UiAsset.RuneTimes,
-  share: UiAsset.RuneDivide,
-  hourglass: UiAsset.RuneHourglass,
-  mirror: UiAsset.RuneMirror,
-};
 
 /** How big the mark is drawn, and how far over the feet it floats. */
 const MARK = 22;
@@ -83,8 +69,7 @@ export class TeacherMarks {
     for (const who of here) {
       const spell = spellTaughtBy(who.part);
       if (!spell || !owed(spell)) continue;
-      const rune = SPELL_RUNE[spell];
-      if (!rune) continue;
+      const rune = RUNE_OF[spell];
       shown.add(who.part);
       let mark = this.marks.get(who.part);
       if (!mark) {

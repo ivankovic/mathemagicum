@@ -4,7 +4,8 @@
 import { describe, expect, test } from "bun:test";
 import { afterAll } from "bun:test";
 import { SAND_MOST_MS } from "../src/spells/hourglass";
-import { type Game, play, shutDown } from "./harness";
+import { Spell } from "../src/spells/spellbook";
+import { type Game, play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -70,7 +71,7 @@ async function settled(game: Game): Promise<void> {
 /** Open the spellbook at the hourglass. */
 async function castHourglass(game: import("./harness").Game): Promise<Cast> {
   await game.tap("spellbook");
-  await game.tap("spellbook.4");
+  await game.tap(runeButton(Spell.Hourglass));
   await game.settle(500);
   const cast = await game.seam<Cast | null>("clock");
   if (!cast) throw new Error("the hourglass did not open");

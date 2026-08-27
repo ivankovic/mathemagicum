@@ -5,6 +5,7 @@ import { type Page, chromium } from "playwright";
 // The game's own feel constant rather than a copy: a harness holding its own
 // idea of how far a swipe goes is a harness that silently stops matching.
 import { SWIPE_PER_TICK, TICK_MINUTES } from "../src/spells/hourglass";
+import { SPELLS, type Spell } from "../src/spells/spellbook";
 
 /**
  * Playing the real game, in a real browser, as a test.
@@ -261,6 +262,21 @@ export interface Opening {
  * the playtest that asked for the zoom was run on.
  */
 export const PHONE = { width: 390, height: 844 } as const;
+
+/**
+ * The name of a rune's button in the spellbook, by the spell it casts.
+ *
+ * Not `spellbook.4`. The tray is built from `SPELLS`, so a rune inserted
+ * anywhere in that list renumbers every button after it — which happened
+ * when the division rune went in between the times and the hourglass. Five
+ * scenarios went on tapping the fourth button while meaning the hourglass,
+ * and nothing failed loudly: the tap landed, the rune it hit was one nobody
+ * had been taught, and a refusal looks exactly like a spell that did not
+ * open.
+ */
+export function runeButton(spell: Spell): string {
+  return `spellbook.${SPELLS.indexOf(spell)}`;
+}
 
 /**
  * Open the game, play, and put it away.

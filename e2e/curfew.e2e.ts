@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { Spell } from "../src/spells/spellbook";
 import { OPENS_AT, SHUTS_AT } from "../src/world/time";
-import { type Game, play, shutDown } from "./harness";
+import { type Game, play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -121,7 +122,7 @@ describe("the village shuts for the night", () => {
         const before = await game.seam<Hours>("openHours");
 
         await game.tap("spellbook");
-        await game.tap("spellbook.4");
+        await game.tap(runeButton(Spell.Hourglass));
         await game.settle(600);
         // Most of a face, so the world lands somewhere other than where it
         // started whatever time it is when this runs.

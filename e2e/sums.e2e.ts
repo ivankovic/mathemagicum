@@ -3,7 +3,8 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { HARDEST_RUNG, SHARED_TOP_RUNG, rungAt } from "../src/spells/difficulty";
-import { type Game, play, shutDown } from "./harness";
+import { Spell } from "../src/spells/spellbook";
+import { type Game, play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -52,7 +53,7 @@ async function castGrowth(game: Game): Promise<Line> {
   await game.tapNear(0, 1);
   await game.settle(500);
   await game.tap("spellbook");
-  await game.tap("spellbook.0");
+  await game.tap(runeButton(Spell.Growth));
   await game.tapNear(0, 1);
   await game.settle(700);
   const line = await game.seam<Line | null>("spell");

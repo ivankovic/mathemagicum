@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { play, shutDown } from "./harness";
+import { Spell } from "../src/spells/spellbook";
+import { play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -63,7 +64,7 @@ describe("learning to share out a catch", () => {
         // Not learned yet: the rune is drawn in the book and refuses.
         await game.tap("spellbook");
         await game.settle(300);
-        expect(await game.tap("spellbook.4")).toBe(true);
+        expect(await game.tap(runeButton(Spell.Share))).toBe(true);
         await game.settle(400);
         expect(await game.seam<string | null>("marking")).toBeNull();
 
@@ -81,7 +82,7 @@ describe("learning to share out a catch", () => {
         // No menu, unlike the times rune — this spell does one thing.
         await game.tap("spellbook");
         await game.settle(300);
-        await game.tap("spellbook.4");
+        await game.tap(runeButton(Spell.Share));
         await game.settle(500);
         expect(await game.seam<string | null>("marking")).toBe("pick");
       });

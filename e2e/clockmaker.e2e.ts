@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { play, shutDown } from "./harness";
+import { Spell } from "../src/spells/spellbook";
+import { play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 /** An hour at which everyone else has gone home. See the scenario below. */
@@ -68,7 +69,7 @@ describe("learning to wind the clock", () => {
         // out, so it is still a button — and a check that only asked
         // whether the parchment stayed shut would pass if the tap had
         // missed the book altogether.
-        expect(await game.tap("spellbook.4")).toBe(true);
+        expect(await game.tap(runeButton(Spell.Hourglass))).toBe(true);
         await game.settle(400);
         expect(await game.seam<unknown>("clock")).toBeNull();
 
@@ -89,7 +90,7 @@ describe("learning to wind the clock", () => {
         await game.press("Escape");
         await game.settle(400);
         await game.tap("spellbook");
-        await game.tap("spellbook.4");
+        await game.tap(runeButton(Spell.Hourglass));
         await game.settle(500);
         expect(await game.seam<unknown>("clock")).not.toBeNull();
       });

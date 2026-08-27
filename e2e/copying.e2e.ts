@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { type Game, play, shutDown } from "./harness";
+import { Spell } from "../src/spells/spellbook";
+import { type Game, play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -143,7 +144,7 @@ describe("moving the ground", () => {
         expect(before[0]).not.toBe(before[1]);
 
         await game.tap("spellbook");
-        await game.tap("spellbook.5");
+        await game.tap(runeButton(Spell.Mirror));
         await game.settle(300);
         await pointAt(game, source);
         await pointAt(game, dest);
@@ -199,7 +200,7 @@ describe("moving the ground", () => {
         expect(wasHere[0]).not.toBe(wasThere[1]);
 
         await game.tap("spellbook");
-        await game.tap("spellbook.3");
+        await game.tap(runeButton(Spell.Array));
         // Grow, clear, copy — copy is the one the mirror put on the menu.
         expect(await game.tap("patch.2")).toBe(true);
         await pointAt(game, from[0] as Spot);
@@ -227,18 +228,18 @@ describe("moving the ground", () => {
         // four. Tapping the mirror rune while it is already lit is how a
         // child gives up, so that is what this does.
         await game.tap("spellbook");
-        await game.tap("spellbook.3");
+        await game.tap(runeButton(Spell.Array));
         expect(await game.tap("patch.2")).toBe(true);
         await pointAt(game, from[0] as Spot);
         await pointAt(game, from[3] as Spot);
         await game.settle(900);
         await game.tap("spellbook");
-        await game.tap("spellbook.5");
+        await game.tap(runeButton(Spell.Mirror));
         await game.settle(300);
 
         // Lit again, and this time pointed at one square.
         await game.tap("spellbook");
-        await game.tap("spellbook.5");
+        await game.tap(runeButton(Spell.Mirror));
         await game.settle(300);
         await pointAt(game, source);
         await pointAt(game, dest);

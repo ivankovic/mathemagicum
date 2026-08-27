@@ -101,7 +101,14 @@ import {
   portalTravelMs,
   portalView,
 } from "../spells/portalTravel";
-import { Spell, knowsSpell, learnSpell, spellTaughtBy } from "../spells/spellbook";
+import {
+  KNOWN_FROM_THE_START,
+  SPELLS,
+  Spell,
+  knowsSpell,
+  learnSpell,
+  spellTaughtBy,
+} from "../spells/spellbook";
 import { makeSubtractionProblem } from "../spells/subtraction";
 import { nextSymmetryRung, symmetryHint, symmetryRungAt } from "../spells/symmetry";
 import { AboutPanel } from "../ui/AboutPanel";
@@ -136,6 +143,7 @@ import {
   materialIcon,
   uiTextureKey,
 } from "../ui/assets";
+import { RUNE_OF } from "../ui/runes";
 import type { AreaPlacement } from "../world/anchors";
 import type { AnchorPlacements } from "../world/anchors";
 import {
@@ -425,6 +433,7 @@ import {
   screenToGrid,
 } from "../world/topdown";
 import { type VillageNpcSpec, houseIdFor } from "../world/villageLayout";
+import { type Direction, STEP_DIRECTIONS, insideWander, stepsToward } from "../world/wander";
 import { type GeneratedWorld, generateWorld } from "../world/worldGenerator";
 import { sidecarKey } from "./BootScene";
 import { type DevOptions, devOptions, exposeForTests } from "./devHooks";
@@ -967,11 +976,6 @@ const INTRO_PATIENCE_STEPS = 60;
 const LOCAL_WANDER_RADIUS = 5;
 const PATROL_WANDER_RADIUS = 16;
 
-interface Direction {
-  dCol: number;
-  dRow: number;
-}
-
 // How fast each character animation runs. Walk is tied to the step duration,
 // idle is a slow breath, and the planting gesture sits between them: six
 // frames at 12 is about half a second, long enough to read as deliberate and
@@ -987,13 +991,6 @@ const FPS_FOR_ANIMATION: Record<string, number> = {
 function tileKey(col: number, row: number): string {
   return `${col},${row}`;
 }
-
-const STEP_DIRECTIONS: readonly Direction[] = [
-  { dCol: 0, dRow: -1 },
-  { dCol: 0, dRow: 1 },
-  { dCol: -1, dRow: 0 },
-  { dCol: 1, dRow: 0 },
-];
 
 /** What an animal is thinking about, if anything. */
 const AnimalMood = {
@@ -4115,37 +4112,21 @@ export class GameScene extends Phaser.Scene {
 
     this.spellTray = new IconTray(this, {
       texture: uiTextureKey(UiAsset.Spellbook),
-      items: [
-        { texture: uiTextureKey(UiAsset.RuneAdd), act: () => this.castGrowthSpell() },
-        { texture: uiTextureKey(UiAsset.RuneMinus), act: () => this.castClearingSpell() },
-        {
-          texture: uiTextureKey(UiAsset.RunePortal),
-          act: () => this.castPortalSpell(),
-          // Drawn dimmed until somebody has taught it, rather than left out:
-          // a book with a gap in it says there is something to find.
-          available: () => this.knowsPortal,
-        },
-        {
-          texture: uiTextureKey(UiAsset.RuneTimes),
-          act: () => this.castArraySpell(),
-          available: () => this.knowsArray,
-        },
-        {
-          texture: uiTextureKey(UiAsset.RuneDivide),
-          act: () => this.castShareSpell(),
-          available: () => this.knowsShare,
-        },
-        {
-          texture: uiTextureKey(UiAsset.RuneHourglass),
-          act: () => this.castHourglass(),
-          available: () => this.knowsHourglass,
-        },
-        {
-          texture: uiTextureKey(UiAsset.RuneMirror),
-          act: () => this.castMirrorSpell(),
-          available: () => this.knowsMirror,
-        },
-      ],
+      // Built from `SPELLS` rather than written out, so the book's order and
+      // the game's cannot come apart. They did: the division rune went in
+      // between the times and the hourglass, every button after it moved up
+      // one, and four scenarios that tap `spellbook.4` carried on tapping the
+      // fourth button while meaning the hourglass. The tap landed, the rune
+      // it hit was one nobody had been taught, and a refusal looks exactly
+      // like a spell that did not open.
+      items: SPELLS.map((spell) => ({
+        texture: uiTextureKey(RUNE_OF[spell]),
+        act: () => this.cast(spell),
+        // The two everybody has from their first minute are always lit; the
+        // rest are drawn dimmed until somebody has taught them, rather than
+        // left out — a book with a gap in it says there is something to find.
+        available: () => KNOWN_FROM_THE_START.includes(spell) || this.knows(spell),
+      })),
       size,
       right: edge,
       bottom,
@@ -7851,6 +7832,26 @@ export class GameScene extends Phaser.Scene {
     return here;
   }
 
+  /**
+   * What tapping each rune does.
+   *
+   * A record rather than a switch, and exhaustive by its own type: a spell
+   * added to `SPELLS` with nothing to cast will not compile, which is the
+   * whole reason the tray is built from that list rather than written out.
+   */
+  private cast(spell: Spell): void {
+    const casts: Record<Spell, () => void> = {
+      growth: () => this.castGrowthSpell(),
+      clearing: () => this.castClearingSpell(),
+      portal: () => this.castPortalSpell(),
+      array: () => this.castArraySpell(),
+      share: () => this.castShareSpell(),
+      hourglass: () => this.castHourglass(),
+      mirror: () => this.castMirrorSpell(),
+    };
+    casts[spell]();
+  }
+
   private spawnPlacedObjects(objects: readonly PlacedObject[]): void {
     for (const object of objects) {
       const sprite = ROLE_SPRITES[object.type as BuildingRole];
@@ -9559,17 +9560,14 @@ export class GameScene extends Phaser.Scene {
   private npcWanderStep(npc: NpcRuntime): void {
     const direction = STEP_DIRECTIONS[Phaser.Math.Between(0, STEP_DIRECTIONS.length - 1)];
     if (!direction) return;
-    const col = npc.col + direction.dCol;
-    const row = npc.row + direction.dRow;
+    const at = { col: npc.col + direction.dCol, row: npc.row + direction.dRow };
     // Villagers and chickens keep to their own level too — one wandering up
     // a cliff would be the clearest possible statement that the cliff is
     // only a picture.
-    if (!this.grid.canStep({ col: npc.col, row: npc.row }, { col, row })) return;
-    const withinRadius =
-      Math.max(Math.abs(col - npc.wanderCenterCol), Math.abs(row - npc.wanderCenterRow)) <=
-      npc.wanderRadius;
-    if (!withinRadius) return;
-    this.moveNpcTo(npc, col, row);
+    if (!this.grid.canStep({ col: npc.col, row: npc.row }, at)) return;
+    const home = { col: npc.wanderCenterCol, row: npc.wanderCenterRow };
+    if (!insideWander(home, npc.wanderRadius, at)) return;
+    this.moveNpcTo(npc, at.col, at.row);
   }
 
   // Greedy step toward home, preferring whichever axis is further off —
@@ -9580,25 +9578,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private npcStepToward(npc: NpcRuntime, toCol: number, toRow: number): void {
-    if (npc.col === toCol && npc.row === toRow) return;
-    const dCol = Math.sign(toCol - npc.col);
-    const dRow = Math.sign(toRow - npc.row);
-    const attempts: Direction[] = [];
-    if (Math.abs(toCol - npc.col) >= Math.abs(toRow - npc.row)) {
-      if (dCol !== 0) attempts.push({ dCol, dRow: 0 });
-      if (dRow !== 0) attempts.push({ dCol: 0, dRow });
-    } else {
-      if (dRow !== 0) attempts.push({ dCol: 0, dRow });
-      if (dCol !== 0) attempts.push({ dCol, dRow: 0 });
-    }
-    // Greedy on the longer axis first, which is enough for the village's
-    // open square-and-spokes layout; a real path would be a lot of machinery
-    // for a walk across a plaza.
-    for (const attempt of attempts) {
-      const col = npc.col + attempt.dCol;
-      const row = npc.row + attempt.dRow;
-      if (this.grid.canStep({ col: npc.col, row: npc.row }, { col, row })) {
-        this.moveNpcTo(npc, col, row);
+    const from = { col: npc.col, row: npc.row };
+    // Which squares to try and in which order is `stepsToward`'s, and
+    // whether they can be stepped on is the grid's. Neither of those is a
+    // fact about sprites, which is why only the moving is left here.
+    for (const attempt of stepsToward(from, { col: toCol, row: toRow })) {
+      const at = { col: npc.col + attempt.dCol, row: npc.row + attempt.dRow };
+      if (this.grid.canStep(from, at)) {
+        this.moveNpcTo(npc, at.col, at.row);
         return;
       }
     }

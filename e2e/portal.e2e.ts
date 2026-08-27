@@ -3,7 +3,8 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { PortalTier, portalRungAt, zoomsFor } from "../src/spells/portal";
-import { play, shutDown } from "./harness";
+import { Spell } from "../src/spells/spellbook";
+import { play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -49,7 +50,7 @@ describe("the same journey, twice", () => {
           let place: string | null = null;
           for (let go = 0; go < 10; go++) {
             await game.tap("spellbook");
-            await game.tap("spellbook.2");
+            await game.tap(runeButton(Spell.Portal));
             await game.settle(400);
             const marks = await game.seam<Record<string, { x: number; y: number }>>("portalMarks");
             // The same place every time, and the first one that is offered:

@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { Spell } from "../src/spells/spellbook";
 import { HARDEST_SYMMETRY_RUNG, SYMMETRY_RUNGS } from "../src/spells/symmetry";
-import { type Game, play, shutDown } from "./harness";
+import { type Game, play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -52,7 +53,7 @@ interface Grid {
 async function castMirror(game: Game): Promise<Grid> {
   const here = await game.where();
   await game.tap("spellbook");
-  await game.tap("spellbook.5");
+  await game.tap(runeButton(Spell.Mirror));
   await game.settle(300);
   await game.tapCell(here.col - 1, here.row);
   await game.settle(300);
@@ -233,7 +234,7 @@ describe("making both sides match", () => {
     async () => {
       await play({ seams: "&learned=portal" }, async (game) => {
         await game.tap("spellbook");
-        expect(await game.tap("spellbook.5")).toBe(true);
+        expect(await game.tap(runeButton(Spell.Mirror))).toBe(true);
         await game.settle(500);
         expect(await game.seam<Grid | null>("symmetry")).toBeNull();
       });
