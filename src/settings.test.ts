@@ -36,8 +36,26 @@ describe("reading a language tag", () => {
     }
   });
 
+  /**
+   * The one that was wrong, and was asserted wrong here for a year.
+   *
+   * `hr` sat in the list below while there were two phrase books and it was
+   * simply an unknown tag. There are three now, and nothing moved it — so a
+   * saved Croatian player came back English, because that is the same
+   * function a profile's language is read through.
+   */
+  test("Croatian in any country is Croatian", () => {
+    for (const tag of ["hr", "hr-HR", "hr-BA", "HR-ba"]) {
+      expect(languageOf(tag)).toBe(Language.Croatian);
+    }
+  });
+
+  test("every language the game has speaks for itself", () => {
+    for (const language of LANGUAGES) expect(languageOf(language)).toBe(language);
+  });
+
   test("anything else is English, including nothing at all", () => {
-    for (const tag of ["en", "en-GB", "hr", "fr-CH", "", null, undefined]) {
+    for (const tag of ["en", "en-GB", "fr-CH", "sv", "", null, undefined]) {
       expect(languageOf(tag)).toBe(Language.English);
     }
   });

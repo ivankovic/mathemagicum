@@ -384,7 +384,12 @@ export const HR: Phrases = {
   brickHintAdd: "Zbroji dvije cigle ispod nje.",
   brickHintTakeAway: "Oduzmi ciglu do nje od one iznad.",
 
-  lampsTaskTitle: `${NAMED_PEOPLE.astronomer}in uspon`,
+  // No name in the heading, where English and German both put one. A
+  // possessive in Croatian is a *declension* — Vera's is Verin, not Veran or
+  // Verain — and building one by sticking a suffix on a name out of the
+  // table is how the wrong word gets printed the day somebody renames her.
+  // The same reason her own lines never say her name: see the keeper's.
+  lampsTaskTitle: "Uspon do zvjezdarnice",
   lampsAsk: (left) =>
     left > 0
       ? `Put do mojih vrata je mračan. Na svaki stup ide svjetiljka, a nedostaje ih još ${left}.`

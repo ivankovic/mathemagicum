@@ -64,10 +64,25 @@ export const DEFAULT_SETTINGS: Settings = {
   language: Language.English,
 };
 
-/** What the game can read a language tag as. `de-CH`, `de-AT` and `de` all agree. */
+/**
+ * What the game can read a language tag as. `de-CH`, `de-AT` and `de` all
+ * agree, and anything it does not speak is English.
+ *
+ * Read off `LANGUAGES` rather than written out, which is the whole of a bug
+ * this had. It used to test for German by hand and answer English to
+ * everything else, and that was true for exactly as long as there were two
+ * books. Croatian arrived and this was not touched — so `hr` came back
+ * English, and because a *saved* language is read through here too, a child
+ * who chose Croatian was handed English back on the next launch. A list that
+ * has to be edited in two places to add a language is a list that will be
+ * edited in one.
+ *
+ * The country is dropped before the match: a tag is a language and a place,
+ * and the place has never been something this game varies on.
+ */
 export function languageOf(tag: string | null | undefined): Language {
-  const lower = (tag ?? "").toLowerCase();
-  return lower === "de" || lower.startsWith("de-") ? Language.German : Language.English;
+  const spoken = (tag ?? "").toLowerCase().split("-")[0] ?? "";
+  return LANGUAGES.find((language) => language === spoken) ?? Language.English;
 }
 
 /** Just enough of `localStorage` to keep the players and their worlds, so tests need no browser. */

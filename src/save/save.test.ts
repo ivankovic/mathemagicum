@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 /** A fixed wall-clock stamp, so a save is the same however long a test takes. */
 const CLOCK = new Date(2026, 0, 5, 9, 0, 0, 0).getTime();
 import { DEFAULT_AVATAR } from "../avatar/style";
-import { Language, type SettingsStore } from "../settings";
+import { LANGUAGES, Language, type SettingsStore } from "../settings";
 import { BANDS, DEFAULT_BAND, HARDEST_RUNG, bandAt, bandOn } from "../spells/difficulty";
 import { HARDEST_ARRAY_RUNG } from "../spells/multiplication";
 import { Spell, knowsSpell } from "../spells/spellbook";
@@ -216,6 +216,23 @@ describe("what the portal spell remembers about a child", () => {
     const mia = { ...made(), portalRung: 6, reached: ["village", "harbour"] };
     saveProfile(store, mia);
     expect(readProfiles(store)).toEqual([mia]);
+  });
+
+  /**
+   * Every language, not just the one the fixture is written in.
+   *
+   * A profile's language is read back through `languageOf`, which knew German
+   * and nothing else for as long as there were two books — so a child who
+   * chose Croatian was quietly handed English on the next launch, and the
+   * only test near it was written when `hr` meant nothing.
+   */
+  test("whichever language a child chose is the one they get back", () => {
+    for (const language of LANGUAGES) {
+      const store = memory();
+      const child = { ...made(), language };
+      saveProfile(store, child);
+      expect(readProfiles(store)[0]?.language).toBe(language);
+    }
   });
 
   // The array ladder is four rungs shorter than the sums', and the bands are
