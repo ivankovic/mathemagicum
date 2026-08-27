@@ -17,9 +17,12 @@ import {
   ANIMAL_QUIET_MIN_MS,
   ANIMAL_RANGE,
   AnimalKind,
+  AnimalMood,
   animalSheetKey,
   animalSidecarKey,
   animalSpots,
+  firstMood,
+  moodAfter,
 } from "./animals";
 import type { PlacedObject } from "./objects";
 import { PLANT_DEFINITIONS, PlantType } from "./plants";
@@ -251,5 +254,69 @@ describe("when they ask", () => {
   test("the smile is brief", () => {
     expect(ANIMAL_GLAD_MS).toBeGreaterThan(800);
     expect(ANIMAL_GLAD_MS).toBeLessThan(ANIMAL_ASK_MIN_MS);
+  });
+});
+
+describe("the hunger clock", () => {
+  /** A roll that always takes the middle, so a timing can be asserted. */
+  const middle = (min: number, max: number) => (min + max) / 2;
+
+  test("it goes round: asking, quiet, asking again", () => {
+    const seen: string[] = [];
+    let mood: AnimalMood = AnimalMood.Quiet;
+    for (let turn = 0; turn < 4; turn++) {
+      mood = moodAfter(mood, 0, middle, false).mood;
+      seen.push(mood);
+    }
+    expect(seen).toEqual(["asking", "quiet", "asking", "quiet"]);
+  });
+
+  /**
+   * A fed animal is quiet for a good while, and it is a *different* while.
+   *
+   * One that wanted a second carrot straight away would be a well, not a
+   * chicken — so being glad leads somewhere other than being ignored does.
+   */
+  test("and a fed one is quiet for longer than an ignored one", () => {
+    const fed = moodAfter(AnimalMood.Glad, 0, middle, false);
+    const ignored = moodAfter(AnimalMood.Asking, 0, middle, false);
+    expect(fed.mood).toBe(AnimalMood.Quiet);
+    expect(ignored.mood).toBe(AnimalMood.Quiet);
+    expect(fed.moodUntil).toBeGreaterThan(ignored.moodUntil);
+  });
+
+  // `?hungry` holds one asking for ever. They ask on their own clocks, which
+  // is the one thing a script cannot wait out.
+  test("held hungry, it never stops asking", () => {
+    const asking = moodAfter(AnimalMood.Quiet, 0, middle, true);
+    expect(asking).toEqual({ mood: AnimalMood.Asking, moodUntil: Number.POSITIVE_INFINITY });
+    expect(firstMood(0, middle, true).moodUntil).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  /**
+   * Every animal starts part way through a round, not at the beginning of
+   * one.
+   *
+   * Started at the beginning they are all quiet when the player arrives and
+   * then, a minute later, all asking together — the very thing the separate
+   * clocks exist to avoid.
+   */
+  test("they start scattered through the round, not all at its start", () => {
+    const moods = new Set<string>();
+    const untils = new Set<number>();
+    for (let at = 0; at <= 20; at++) {
+      const start = firstMood(0, (min, max) => min + ((max - min) * at) / 20, false);
+      moods.add(start.mood);
+      untils.add(start.moodUntil);
+    }
+    expect(moods).toEqual(new Set(["asking", "quiet"]));
+    expect(untils.size).toBeGreaterThan(10);
+  });
+
+  test("and none of them starts already over", () => {
+    for (let at = 0; at <= 20; at++) {
+      const start = firstMood(1_000, (min, max) => min + ((max - min) * at) / 20, false);
+      expect(start.moodUntil).toBeGreaterThanOrEqual(1_000);
+    }
   });
 });

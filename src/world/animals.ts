@@ -197,3 +197,87 @@ function nearestAnchor(anchors: readonly PlacedObject[], index: number): GridPoi
   if (!anchor) throw new Error("a village with nothing in it has nowhere to put a chicken");
   return { col: anchor.col, row: anchor.row };
 }
+
+/**
+ * What an animal is thinking about, if anything.
+ *
+ * Moved here from the scene along with the clock below. Which face a
+ * creature is wearing and how long it wears it are facts about the animal;
+ * the cloud drawn over its head is the scene's.
+ */
+export const AnimalMood = {
+  /** Nothing. No bubble. */
+  Quiet: "quiet",
+  /** A crop and a question mark. */
+  Asking: "asking",
+  /** A smile, for a moment after being fed. */
+  Glad: "glad",
+} as const;
+
+export type AnimalMood = (typeof AnimalMood)[keyof typeof AnimalMood];
+
+/** What a mood is, and when it runs out. */
+export interface Mood {
+  readonly mood: AnimalMood;
+  readonly moodUntil: number;
+}
+
+/**
+ * Somewhere between two numbers.
+ *
+ * Handed in rather than reached for, which is the whole reason this can be
+ * tested: Phaser's own is a static on a class that cannot be loaded outside
+ * a browser, and the *timing* is the thing worth pinning.
+ */
+export type Roll = (min: number, max: number) => number;
+
+/**
+ * The mood an animal turns to when the one it is in runs out.
+ *
+ * A round trip and nothing else: asking goes quiet, glad goes quiet, and
+ * quiet goes back to asking. There is no state it can be in that has no next
+ * one, which is what keeps a village from filling up with creatures that
+ * asked once and never spoke again.
+ *
+ * `alwaysHungry` is the `?hungry` seam. They ask on their own clocks, which
+ * is the point of them and the one thing a script cannot wait out — a test
+ * standing in the village hoping a chicken would get hungry would be a test
+ * that passes at three in the afternoon. Held asking for ever, it is a test.
+ */
+export function moodAfter(mood: AnimalMood, now: number, roll: Roll, alwaysHungry: boolean): Mood {
+  if (mood === AnimalMood.Asking) {
+    return {
+      mood: AnimalMood.Quiet,
+      moodUntil: now + roll(ANIMAL_QUIET_MIN_MS, ANIMAL_QUIET_MAX_MS),
+    };
+  }
+  if (mood === AnimalMood.Glad) {
+    // A fed animal says nothing for a good while afterwards: one that wanted
+    // a second carrot straight away would be a well, not a chicken.
+    return { mood: AnimalMood.Quiet, moodUntil: now + ANIMAL_FED_QUIET_MS };
+  }
+  return {
+    mood: AnimalMood.Asking,
+    moodUntil: alwaysHungry
+      ? Number.POSITIVE_INFINITY
+      : now + roll(ANIMAL_ASK_MIN_MS, ANIMAL_ASK_MAX_MS),
+  };
+}
+
+/**
+ * Where in its own round an animal starts.
+ *
+ * Dropped into the middle of one rather than started at the beginning.
+ * Started at the beginning they are all quiet when the player arrives and
+ * then, a minute later, all asking together — which is the very thing the
+ * separate clocks exist to avoid. Picking a random point in the whole
+ * ask-then-quiet round puts the village in its steady state from the first
+ * frame.
+ */
+export function firstMood(now: number, roll: Roll, alwaysHungry: boolean): Mood {
+  if (alwaysHungry) return { mood: AnimalMood.Asking, moodUntil: Number.POSITIVE_INFINITY };
+  const at = roll(0, ANIMAL_ASK_MAX_MS + ANIMAL_QUIET_MAX_MS);
+  return at < ANIMAL_ASK_MAX_MS
+    ? { mood: AnimalMood.Asking, moodUntil: now + at }
+    : { mood: AnimalMood.Quiet, moodUntil: now + at - ANIMAL_ASK_MAX_MS };
+}

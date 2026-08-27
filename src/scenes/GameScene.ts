@@ -156,9 +156,13 @@ import {
   ANIMAL_QUIET_MIN_MS,
   ANIMAL_RANGE,
   type AnimalKind,
+  AnimalMood,
+  type Mood,
   animalSheetKey,
   animalSidecarKey,
   animalSpots,
+  firstMood,
+  moodAfter,
 } from "../world/animals";
 import {
   BUILDING_FOOTPRINTS,
@@ -951,18 +955,6 @@ const FPS_FOR_ANIMATION: Record<string, number> = {
 function tileKey(col: number, row: number): string {
   return `${col},${row}`;
 }
-
-/** What an animal is thinking about, if anything. */
-const AnimalMood = {
-  /** Nothing. No bubble. */
-  Quiet: "quiet",
-  /** A crop and a question mark. */
-  Asking: "asking",
-  /** A smile, for a moment after being fed. */
-  Glad: "glad",
-} as const;
-
-type AnimalMood = (typeof AnimalMood)[keyof typeof AnimalMood];
 
 /**
  * A chicken, and what it is hoping somebody brings it.
@@ -7591,14 +7583,8 @@ export class GameScene extends Phaser.Scene {
    * ask-then-quiet round puts the village in its steady state from the first
    * frame.
    */
-  private firstMood(): { mood: AnimalMood; moodUntil: number } {
-    const now = this.time.now;
-    if (this.dev.hungry) return { mood: AnimalMood.Asking, moodUntil: Number.POSITIVE_INFINITY };
-    const round = ANIMAL_ASK_MAX_MS + ANIMAL_QUIET_MAX_MS;
-    const at = Phaser.Math.Between(0, round);
-    return at < ANIMAL_ASK_MAX_MS
-      ? { mood: AnimalMood.Asking, moodUntil: now + at }
-      : { mood: AnimalMood.Quiet, moodUntil: now + at - ANIMAL_ASK_MAX_MS };
+  private firstMood(): Mood {
+    return firstMood(this.time.now, (min, max) => Phaser.Math.Between(min, max), this.dev.hungry);
   }
 
   /**
@@ -7639,18 +7625,14 @@ export class GameScene extends Phaser.Scene {
    * nothing for.
    */
   private turnMood(animal: AnimalRuntime, now: number): void {
-    if (animal.mood === AnimalMood.Asking) {
-      animal.mood = AnimalMood.Quiet;
-      animal.moodUntil = now + Phaser.Math.Between(ANIMAL_QUIET_MIN_MS, ANIMAL_QUIET_MAX_MS);
-    } else if (animal.mood === AnimalMood.Glad) {
-      animal.mood = AnimalMood.Quiet;
-      animal.moodUntil = now + ANIMAL_FED_QUIET_MS;
-    } else {
-      animal.mood = AnimalMood.Asking;
-      animal.moodUntil = this.dev.hungry
-        ? Number.POSITIVE_INFINITY
-        : now + Phaser.Math.Between(ANIMAL_ASK_MIN_MS, ANIMAL_ASK_MAX_MS);
-    }
+    const next = moodAfter(
+      animal.mood,
+      now,
+      (min, max) => Phaser.Math.Between(min, max),
+      this.dev.hungry,
+    );
+    animal.mood = next.mood;
+    animal.moodUntil = next.moodUntil;
     this.showThought(animal);
   }
 
