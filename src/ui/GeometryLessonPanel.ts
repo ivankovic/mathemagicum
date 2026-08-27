@@ -13,6 +13,7 @@ import { type PortalJourney, type PortalRung, portalRungAt } from "../spells/por
 import { PagedPanel } from "./PagedPanel";
 import type { PanelRect } from "./ParchmentPanel";
 import { UiAsset, type UiIndex } from "./assets";
+import { INK, INK_HEX, RULE_HEX } from "./parchment";
 
 /**
  * What the geometer shows you: the portal spell, in four pictures.
@@ -28,9 +29,6 @@ import { UiAsset, type UiIndex } from "./assets";
  * make three ideas out of what is one idea seen three times.
  */
 
-const INK = "#4a3422";
-const INK_HEX = 0x4a3422;
-const RULE_HEX = 0x8a6a48;
 const PATH_HEX = 0x2f6f9e;
 const CROW_HEX = 0xa8321e;
 const MARK_HEX = 0xa8321e;

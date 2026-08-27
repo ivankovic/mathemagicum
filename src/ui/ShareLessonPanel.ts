@@ -15,6 +15,7 @@ import {
 import { PagedPanel } from "./PagedPanel";
 import type { PanelRect } from "./ParchmentPanel";
 import { UiAsset, type UiIndex } from "./assets";
+import { INK, RULE_HEX } from "./parchment";
 
 /**
  * What the fisherman shows you: the sharing spell, in pictures.
@@ -30,8 +31,6 @@ import { UiAsset, type UiIndex } from "./assets";
  * which is the argument the grove's panel is built on.
  */
 
-const INK = "#4a3422";
-const RULE_HEX = 0x8a6a48;
 const CROP_HEX = 0x5f8f3a;
 const CROP_DEALT_HEX = 0x2f5c1c;
 const OVER_HEX = 0xa8321e;

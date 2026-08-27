@@ -34,7 +34,7 @@ import type { GridPoint } from "./topdown";
 export const PATCH_REACH = 10;
 
 /** The fewest cells worth asking a multiplication about. */
-export const PATCH_LEAST = 2;
+const PATCH_LEAST = 2;
 
 /**
  * How far out to pull the camera while a patch is being drawn.

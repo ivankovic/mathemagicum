@@ -358,7 +358,7 @@ export const ShareBeat = {
 
 export type ShareBeat = (typeof ShareBeat)[keyof typeof ShareBeat];
 
-export const SHARE_BEATS: readonly ShareBeat[] = [
+const SHARE_BEATS: readonly ShareBeat[] = [
   ShareBeat.Rune,
   ShareBeat.Heap,
   ShareBeat.Deal,

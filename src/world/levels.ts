@@ -23,9 +23,6 @@ import { TerrainType } from "./terrain";
  * the ground teleporting. `smoothLevels` is what enforces it.
  */
 
-/** How many steps the world has. Three: the coast and meadows, the hills, the peaks. */
-export const LEVEL_COUNT = 3;
-
 /**
  * The level a terrain sits at before anything is carved through it.
  *

@@ -6,6 +6,7 @@ import type { Phrases } from "../i18n/phrases";
 import { isLastPage, stepPage } from "../pages";
 import { PANEL_PAD as PAD, type PanelRect, ParchmentPanel } from "./ParchmentPanel";
 import { type UiIndex, uiTextureKey } from "./assets";
+import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
 
 /**
  * A short deck of parchment pages: a title, a line or two, a picture, and a
@@ -23,10 +24,6 @@ import { type UiIndex, uiTextureKey } from "./assets";
  * resizing, which page you are on — is here, once.
  */
 
-const INK = "#4a3422";
-const INK_DIM = "#8a6a48";
-const INK_HEX = 0x4a3422;
-const PAPER_PALE_HEX = 0xf6e8c4;
 const HERE_HEX = 0xc8901c;
 const LAST_HEX = 0x3d6b2a;
 

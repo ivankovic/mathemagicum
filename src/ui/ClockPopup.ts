@@ -24,6 +24,18 @@ import {
 } from "../spells/hourglass";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
+import {
+  ACTIVE_HEX,
+  DONE_HEX,
+  DONE_INK,
+  INK,
+  INK_DIM,
+  INK_HEX,
+  PAPER_HEX,
+  PAPER_PALE_HEX,
+  WRONG_HEX,
+  WRONG_INK,
+} from "./parchment";
 
 /**
  * The parchment the hourglass spell is cast on: two clock faces and a box.
@@ -48,17 +60,6 @@ const PANEL_MAX_H = 430;
 const PANEL_MIN_W = 300;
 const PANEL_MIN_H = 320;
 
-const INK = "#4a3422";
-const INK_DIM = "#8a6a48";
-const WRONG_INK = "#a8321e";
-const DONE_INK = "#3d6b2a";
-
-const INK_HEX = 0x4a3422;
-const PAPER_PALE_HEX = 0xf6e8c4;
-const PAPER_HEX = 0xdec694;
-const ACTIVE_HEX = 0xc8901c;
-const WRONG_HEX = 0xa8321e;
-const DONE_HEX = 0x3d6b2a;
 const FACE_HEX = 0xf6e8c4;
 const RIM_HEX = 0x8a6a48;
 const HOUR_HAND_HEX = 0x4a3422;

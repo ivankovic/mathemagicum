@@ -237,7 +237,7 @@ export const EN: Phrases = {
   groveBargain: "Do that and the six dots are yours.",
   groveLessonTitle: "Rows and columns",
   groveRune:
-    "The six dots in your spellbook plant a whole patch at once. Say how many seedlings it will hold, and they all go in together.",
+    "The six dots in your spellbook cast on a whole patch at once. Say how many squares are in it, and every one of them grows together.",
   groveRows: (rows, columns) =>
     `Look at the patch as rows. ${rows} rows, and ${columns} in every one — every row exactly the same, which is the whole trick.`,
   groveCount: (rows, columns, total) =>

@@ -4,6 +4,7 @@
 import type Phaser from "phaser";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { type UiIndex, uiTextureKey } from "./assets";
+import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
 
 /**
  * One picture, held up close, named and captioned.
@@ -32,10 +33,6 @@ const PANEL_MAX_H = 460;
 const PANEL_MIN_W = 260;
 const PANEL_MIN_H = 260;
 
-const INK = "#4a3422";
-const INK_DIM = "#8a6a48";
-const INK_HEX = 0x4a3422;
-const PAPER_PALE_HEX = 0xf6e8c4;
 const CLOSE_SIZE = 13;
 
 const TITLE_SIZE = 17;

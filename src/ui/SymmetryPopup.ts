@@ -17,6 +17,16 @@ import {
 import type { Rng } from "../world/rng";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
+import {
+  DONE_HEX,
+  DONE_INK,
+  INK,
+  INK_DIM,
+  INK_HEX,
+  PAPER_HEX,
+  WRONG_HEX,
+  WRONG_INK,
+} from "./parchment";
 
 /**
  * The parchment the mirror spell is worked on.
@@ -42,16 +52,6 @@ const PANEL_MAX_W = 460;
 const PANEL_MAX_H = 470;
 const PANEL_MIN_W = 280;
 const PANEL_MIN_H = 330;
-
-const INK = "#4a3422";
-const INK_DIM = "#8a6a48";
-const WRONG_INK = "#a8321e";
-const DONE_INK = "#3d6b2a";
-
-const INK_HEX = 0x4a3422;
-const PAPER_HEX = 0xdec694;
-const WRONG_HEX = 0xa8321e;
-const DONE_HEX = 0x3d6b2a;
 
 /** An empty square: paler than the parchment, so the grid reads as a grid. */
 const EMPTY_HEX = 0xf2e6c8;

@@ -364,7 +364,7 @@ export const HR: Phrases = {
   groveBargain: "Učini to i šest točkica su tvoje.",
   groveLessonTitle: "Redovi i stupci",
   groveRune:
-    "Šest točkica u tvojoj knjizi sadi cijelu gredicu odjednom. Reci koliko će klica stati u nju, i sve ulaze zajedno.",
+    "Šest točkica u tvojoj knjizi radi na cijeloj gredici odjednom. Reci koliko polja ima u njoj, i svako od njih raste zajedno.",
   groveRows: (rows, columns) =>
     `Gledaj gredicu po redovima. ${rows} reda, a u svakom ${columns} — svaki red potpuno isti, i u tome je cijeli trik.`,
   groveCount: (rows, columns, total) =>

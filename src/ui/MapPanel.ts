@@ -8,6 +8,7 @@ import type { WorldGrid } from "../world/grid";
 import { areaCentre, markedPlaces, minimapPoint, minimapSize } from "../world/minimap";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
+import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
 import { paintWorldMap } from "./worldMapTexture";
 
 /**
@@ -29,10 +30,6 @@ const PANEL_MAX_H = 470;
 const PANEL_MIN_W = 300;
 const PANEL_MIN_H = 320;
 
-const INK = "#4a3422";
-const INK_DIM = "#8a6a48";
-const INK_HEX = 0x4a3422;
-const PAPER_PALE_HEX = 0xf6e8c4;
 const MARK_HEX = 0xa8321e;
 // White rather than parchment: at the start of a game the player is standing
 // in the village, so their mark lands on top of the village's own — and two

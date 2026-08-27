@@ -17,15 +17,30 @@
  * server, the port it settled on — belongs to exactly one file, which is
  * what it always assumed and never had.
  *
- * Files run in order and the first failure stops the run, because a scenario
- * suite is read from the top and a second failure is rarely news.
+ * Files run in order and every one of them runs, even after a failure.
+ *
+ * It used to stop at the first, on the argument that a suite is read from the
+ * top and a second failure is rarely news. That argument holds when somebody
+ * is watching it run and does not hold in CI: the first file is the biggest
+ * and slowest one, and when it failed there the answer to "what about the
+ * other nineteen" was nothing at all. A run that stops early is a run whose
+ * result is one bit wide.
  */
 
 const files = [...new Bun.Glob("e2e/*.e2e.ts").scanSync(".")].sort();
 if (files.length === 0) throw new Error("no scenario files in e2e/");
 
+const failed: string[] = [];
 for (const file of files) {
   const run = Bun.spawn(["bun", "test", `./${file}`], { stdout: "inherit", stderr: "inherit" });
-  const code = await run.exited;
-  if (code !== 0) process.exit(code);
+  if ((await run.exited) !== 0) failed.push(file);
 }
+
+if (failed.length > 0) {
+  // Said again at the end, because by then the failure itself has scrolled
+  // past several thousand lines of the files that came after it.
+  console.error(`\n${failed.length} of ${files.length} scenario files failed:`);
+  for (const file of failed) console.error(`  ${file}`);
+  process.exit(1);
+}
+console.error(`\nall ${files.length} scenario files passed`);

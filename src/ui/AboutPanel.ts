@@ -5,6 +5,7 @@ import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
+import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
 
 /**
  * Who made this, what it costs, and what is asked of anybody minded to pay.
@@ -32,11 +33,6 @@ const PANEL_MIN_W = 300;
 // paragraph. A floor of a few hundred pixels would simply win on a desktop,
 // where the text is five lines, and put the buttons a hand's width below it.
 const PANEL_MIN_H = 200;
-
-const INK = "#4a3422";
-const INK_DIM = "#8a6a48";
-const INK_HEX = 0x4a3422;
-const PAPER_PALE_HEX = 0xf6e8c4;
 
 const TITLE_SIZE = 17;
 const BODY_SIZE = 13;

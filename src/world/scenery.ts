@@ -8,7 +8,7 @@ import { TerrainType } from "./terrain";
 // buildings"), so which one appears is decided by what it is standing on
 // rather than chosen: conifers in woodland, rock in the mountains.
 
-export const SCENERY_PREFIX = "scenery-";
+const SCENERY_PREFIX = "scenery-";
 
 // Keyed by terrain, and the value is the generator's own name for that
 // object's sheet. Water is absent on purpose: it already blocks, and a

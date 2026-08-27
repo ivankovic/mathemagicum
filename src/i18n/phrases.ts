@@ -176,7 +176,16 @@ export interface Phrases {
    */
   groveBargain: string;
   groveLessonTitle: string;
-  /** One idea per page, in the order the tree shows them. */
+  /**
+   * One idea per page, in the order the tree shows them.
+   *
+   * `groveRune` says what the spell *does*, so it has to be true: it told
+   * children for months that the six dots "plant a whole patch at once", and
+   * they do not. Out of doors the times rune offers growing and clearing and
+   * nothing else — see `patchOffers` — and planting is by hand at both ends,
+   * on purpose, because putting a seed down is the one gesture in the garden
+   * a child does with their hands rather than through a rune.
+   */
   groveRune: string;
   groveRows: (rows: number, columns: number) => string;
   groveCount: (rows: number, columns: number, total: number) => string;

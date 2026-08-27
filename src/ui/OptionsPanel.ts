@@ -11,6 +11,7 @@ import { BANDS, DEFAULT_BAND, sampleProblem } from "../spells/difficulty";
 import { createRng } from "../world/rng";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, flagIcon, uiTextureKey } from "./assets";
+import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
 
 /**
  * The options: which language the game is read in.
@@ -58,10 +59,6 @@ const PANEL_MAX_H = 400;
 const PANEL_MIN_W = 280;
 const PANEL_MIN_H = 290;
 
-const INK = "#4a3422";
-const INK_DIM = "#8a6a48";
-const INK_HEX = 0x4a3422;
-const PAPER_PALE_HEX = 0xf6e8c4;
 const CHOSEN_HEX = 0xc8901c;
 
 const TITLE_SIZE = 17;

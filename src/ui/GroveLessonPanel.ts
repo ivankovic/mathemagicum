@@ -14,6 +14,7 @@ import { type GroveProgress, GroveTask } from "../world/enchantedForest";
 import { PagedPanel } from "./PagedPanel";
 import type { PanelRect } from "./ParchmentPanel";
 import { UiAsset, type UiIndex } from "./assets";
+import { INK, RULE_HEX } from "./parchment";
 
 /**
  * What the great tree shows you: the array spell, in four pictures.
@@ -29,8 +30,6 @@ import { UiAsset, type UiIndex } from "./assets";
  * is one patch looked at three ways — which is the whole lesson.
  */
 
-const INK = "#4a3422";
-const RULE_HEX = 0x8a6a48;
 const SEED_HEX = 0x5f8f3a;
 const SEED_COUNTED_HEX = 0x2f5c1c;
 const ROW_HEX = 0x2f6f9e;

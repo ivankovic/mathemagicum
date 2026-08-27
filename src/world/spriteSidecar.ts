@@ -307,17 +307,6 @@ export interface CharacterSidecar extends SheetSprite {
   animations: Record<string, AnimationRange>;
 }
 
-export function blockedCells(
-  sidecar: SpriteSidecar,
-  anchorCol: number,
-  anchorRow: number,
-): GridPoint[] {
-  return sidecar.blocked_cells_relative_to_anchor.map(([dRow, dCol]) => ({
-    col: anchorCol + dCol,
-    row: anchorRow + dRow,
-  }));
-}
-
 export function doorCell(
   sidecar: BuildingSidecar,
   anchorCol: number,

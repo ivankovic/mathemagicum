@@ -577,4 +577,4 @@ export function colourPlanFor(
 }
 
 /** The three tones a piece's timber is drawn in, and its cloth. */
-export const WOOD_SLOTS = ["wood_dark", "wood", "wood_light"] as const;
+const WOOD_SLOTS = ["wood_dark", "wood", "wood_light"] as const;

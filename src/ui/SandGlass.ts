@@ -82,7 +82,7 @@ export interface SandLevels {
  * one thing that would look wrong — sand in neither bulb, or in both to the
  * full — is a rule about two numbers rather than about a drawing.
  */
-export function sandLevels(along: number): SandLevels {
+function sandLevels(along: number): SandLevels {
   const through = Math.max(0, Math.min(1, along));
   return { top: 1 - through, bottom: through, falling: through > 0 && through < 1 };
 }

@@ -454,8 +454,21 @@ const ANSWER_MS = 30_000;
  * Longer than `ANSWER_MS` because it is process work rather than a question
  * to a page already running, and on a machine with more load than cores that
  * has been measured in tens of seconds.
+ *
+ * **Ninety seconds was not enough, and here is the measurement.** A scenario
+ * that only opens the game takes seven to ten seconds. One that opens it and
+ * *reloads twice* — which is how a scenario gets across the world, since
+ * `?at=` is the only way — takes forty, because a reload is not a reload: it
+ * is the whole game booted again, a world generated and several sheets
+ * recoloured. Eight of those in one file, on a machine already running one,
+ * and two of the eight went past ninety seconds and were failed for it.
+ *
+ * That is what turned the browser suite red on its first run in CI, on a
+ * runner with two cores. It is not a hung page and there is nothing to fix
+ * in the game: it is a budget set against the cost of *opening* rather than
+ * the cost of opening three times over.
  */
-const SETUP_MS = 90_000;
+const SETUP_MS = 180_000;
 
 /**
  * Wait until the game is not merely loaded but *running*.

@@ -186,8 +186,3 @@ export function sealFarEdges(grid: WorldGrid, corner: HighCorner): void {
     }
   }
 }
-
-/** Elevation above which the ground is walled by rock or forest, not sea. */
-export function barrierFloor(): number {
-  return bandFloor(TerrainType.Woodland);
-}

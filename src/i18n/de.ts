@@ -268,7 +268,7 @@ export const DE: Phrases = {
   groveBargain: "Tu das, und die sechs Punkte gehören dir.",
   groveLessonTitle: "Reihen und Spalten",
   groveRune:
-    "Die sechs Punkte in deinem Zauberbuch bepflanzen ein ganzes Beet auf einmal. Sag, wie viele Setzlinge hineinpassen, dann kommen sie alle zusammen in die Erde.",
+    "Die sechs Punkte in deinem Zauberbuch nehmen sich ein ganzes Beet auf einmal vor. Sag, wie viele Kästchen darin sind, dann wächst jedes einzelne mit.",
   groveRows: (rows, columns) =>
     `Sieh das Beet als Reihen an: ${rows} Reihen, und in jeder ${columns} — jede Reihe genau gleich, das ist der ganze Trick.`,
   groveCount: (rows, columns, total) =>

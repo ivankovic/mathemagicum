@@ -10,6 +10,7 @@ import { LESSON_BEATS, LessonBeat, lessonFor, partsOf } from "../spells/lesson";
 import { type Chip, PagedPanel } from "./PagedPanel";
 import type { PanelRect } from "./ParchmentPanel";
 import { UiAsset, type UiIndex } from "./assets";
+import { DONE_HEX, INK, INK_HEX } from "./parchment";
 
 /**
  * What the teacher shows you: the addition spell, in four pictures.
@@ -34,10 +35,7 @@ import { UiAsset, type UiIndex } from "./assets";
  * real problem, so what she teaches cannot drift from what the spell sets.
  */
 
-const INK = "#4a3422";
-const INK_HEX = 0x4a3422;
 const RUNE_HEX = 0xc8901c;
-const DONE_HEX = 0x3d6b2a;
 
 const SMALL_SIZE = 12;
 const CHIP_W = 74;

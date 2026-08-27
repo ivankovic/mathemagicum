@@ -18,7 +18,7 @@ import { MINIMAP_COLORS, MINIMAP_STEP, minimapPoint, minimapSize } from "../worl
  * would otherwise ask for a key already in use and get nothing back.
  */
 
-export const WORLD_MAP_TEXTURE = "world-map";
+const WORLD_MAP_TEXTURE = "world-map";
 
 /**
  * Paint it if it has not been painted, and give back the key.

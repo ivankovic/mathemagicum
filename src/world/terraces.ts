@@ -164,7 +164,7 @@ const RIM_RISE = 2;
  * was happening, and exactly the sort of thing that only shows up when
  * somebody walks to the edge of the map and finds the stairs.
  */
-export const RIM_KEEP_OUT = 2;
+const RIM_KEEP_OUT = 2;
 
 function raiseRim(grid: WorldGrid, levels: Uint8Array): void {
   const at = (col: number, row: number) => levels[row * grid.width + col] ?? 0;

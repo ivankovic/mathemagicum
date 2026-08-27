@@ -57,10 +57,6 @@ export function cornerTerrainsFor(grid: WorldGrid, col: number, row: number): Co
 // its first tile is indexed -1 so that its se corner is data cell (0, 0).
 export const DUAL_ORIGIN = -1;
 
-export function dualTileCount(dataCells: number): number {
-  return dataCells + 1;
-}
-
 export function comboKey(corners: CornerTerrains): string {
   return corners.join("_");
 }

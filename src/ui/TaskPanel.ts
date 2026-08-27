@@ -4,6 +4,7 @@
 import type Phaser from "phaser";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
+import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX, RULE_HEX } from "./parchment";
 
 /**
  * Somebody's errand: a row of things to do, what you get for it, and both
@@ -40,12 +41,7 @@ const PANEL_MAX_H = 360;
 const PANEL_MIN_W = 280;
 const PANEL_MIN_H = 300;
 
-const INK = "#4a3422";
-const INK_DIM = "#8a6a48";
-const INK_HEX = 0x4a3422;
-const PAPER_PALE_HEX = 0xf6e8c4;
 const SOCKET_HEX = 0x2b2620;
-const RULE_HEX = 0x8a6a48;
 const CLOSE_SIZE = 13;
 
 const TITLE_SIZE = 17;
