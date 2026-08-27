@@ -169,11 +169,25 @@ describe("which buildings vary at all", () => {
   });
 
   // There is one school and one store. Nothing about them needs telling
-  // apart, because there is nothing to tell them apart from. The two that do
-  // vary are the two there are many of — four cottages in the village and
-  // twenty townhouses in the city.
+  // apart, because there is nothing to tell them apart from. The three that
+  // do vary are the three there are many of — four cottages in the village,
+  // twenty townhouses in the city, and a hull at every pier of the harbour
+  // now that ships come and go from them.
   test("the shapes that vary are the ones there are many of", () => {
-    expect([...VARYING_SPRITES].sort()).toEqual(["cottage", "townhouse"]);
+    expect([...VARYING_SPRITES].sort()).toEqual(["cottage", "ship", "townhouse"]);
+  });
+
+  /**
+   * The ship changed sides, so it is worth saying why out loud.
+   *
+   * She was one of a kind while the world held one moored hull, and the rule
+   * above is exactly the argument for leaving her alone then. The harbour
+   * has traffic now — see `shipping.ts` — and four identical hulls at four
+   * piers read as one hull drawn four times, which is the failure the rule
+   * exists to prevent rather than an exception to it.
+   */
+  test("and the ship is one of them, now that there is more than one", () => {
+    expect(varies("ship")).toBe(true);
   });
 });
 

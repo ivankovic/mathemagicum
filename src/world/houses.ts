@@ -135,7 +135,14 @@ export function windowBrightness(darkness: number, delay: number): number {
  * there are twenty townhouses in it, and twenty of anything identical reads
  * as wallpaper rather than as a street.
  */
-export const VARYING_SPRITES: readonly string[] = ["cottage", "townhouse"];
+/*
+ * The ship joined them when the harbour got traffic. She was one of a kind
+ * while there was one moored hull in the world, which is the case above
+ * against repainting: nothing needed telling her apart from. There are four
+ * or five of her now, coming and going at the piers, and four identical
+ * hulls read as one hull drawn four times.
+ */
+export const VARYING_SPRITES: readonly string[] = ["cottage", "townhouse", "ship"];
 
 export function varies(sprite: string): boolean {
   return VARYING_SPRITES.includes(sprite);

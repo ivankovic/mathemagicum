@@ -482,6 +482,20 @@ export interface DevHandle {
    * destroyed leaves sprites nobody will ever see again, and the only symptom
    * is the game getting slower the further you walk.
    */
+  /**
+   * Where the harbour's traffic is, in world pixels, or nothing if she has
+   * none.
+   *
+   * A visiting ship is in no list a script can read: she is not an object on
+   * the grid, not a villager, not in the save — deliberately, because she is
+   * weather. That leaves nothing to assert about her without this, and "the
+   * harbour has ships in it" is precisely the sort of claim that would go on
+   * being made after the sprites stopped being drawn.
+   *
+   * Pixels rather than cells, and one entry per ship *currently in port*, so
+   * a script can watch one move without having to know the timetable.
+   */
+  readonly ships: () => { x: number; y: number }[];
   readonly scenery: () => number;
   /**
    * How much of the scenery the camera can see, and how much of it exists.

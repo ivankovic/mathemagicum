@@ -174,6 +174,43 @@ function assertYouCanGetIntoTheSettlements(
       expect(isReachable(reachable, grid, plank)).toBe(true);
     }
   }
+
+  /**
+   * Every berth's lane is open sea for a whole hull, end to end.
+   *
+   * The promise the lanes exist to make. A visiting ship follows one while a
+   * child watches and never asks the grid a thing, so a lane with a sandbar
+   * in it is a ship sailing over dry land — on whichever seed nobody
+   * happened to open. Twenty of them are opened here.
+   *
+   * The hull is checked at every position rather than at the two ends,
+   * because a lane is only straight *by construction* and a check that
+   * assumed it would be the first thing to go quiet if that ever changed.
+   */
+  for (const berth of harbour.berths) {
+    expect(harbour.piers[berth.pier]).toBeDefined();
+    expect(berth.lane.length).toBeGreaterThanOrEqual(4);
+    for (const at of berth.lane) {
+      for (let row = at.row; row < at.row + 2; row++) {
+        for (let col = at.col; col < at.col + 5; col++) {
+          expect(grid.inBounds(col, row)).toBe(true);
+          expect(grid.getTerrain(col, row)).toBe(TerrainType.Water);
+          expect(grid.isBridged(col, row)).toBe(false);
+          expect(grid.getObjectAt(col, row)).toBeNull();
+        }
+      }
+    }
+    // She ties up *at the pier*, not somewhere out in the bay: the mooring
+    // is within a hull's length of the tip, or the lane belongs to some
+    // other pier than the one it says.
+    const tip = harbour.piers[berth.pier]?.at(-1);
+    const moored = berth.lane[0];
+    if (tip && moored) {
+      expect(Math.abs(moored.col - tip.col) + Math.abs(moored.row - tip.row)).toBeLessThanOrEqual(
+        5,
+      );
+    }
+  }
 }
 
 /**

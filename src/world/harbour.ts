@@ -32,6 +32,19 @@ import type { VillageNpcSpec } from "./villageLayout";
  * angle it runs — so the layout finds the shore, works out which way is
  * seaward, and builds against that. A hardcoded "the sea is south" would be
  * right about a quarter of the time.
+ *
+ * **And there is traffic.** Four piers with one moored hull between them
+ * looked like what it was: a set of walkways over a flat blue field. Every
+ * pier that has open sea past its tip now gets a `Berth` — a mooring and the
+ * lane of water a ship comes in over — and `shipping.ts` sails visiting
+ * ships up and down them. What is decided *here* is where a ship may go, and
+ * it is decided once, over the grid, when the world is made: the sea in a
+ * box is not a rectangle, and a lane guessed at while a child watched would
+ * put a hull through a sandbar on the first seed nobody sampled.
+ *
+ * The visitors are scenery and nothing else — no grid, no save, not
+ * boardable. The great ship is the one you can walk into, and she stays
+ * where she is moored.
  */
 
 /** How far inland the working front is paved. */
@@ -47,7 +60,16 @@ const QUAYSIDE_FOLK = 4;
 const SHOPKEEPER_ROLE = "shopkeeper";
 /** How far out a pier reaches, and how many the front carries. */
 const PIER_REACH = 7;
-const PIERS = 3;
+/**
+ * Four rather than three.
+ *
+ * Not every one gets built — a root in a shallow stretch makes a stub and is
+ * dropped — so asking for four is how the front ends up with three on a
+ * ragged coast where three used to get two. And a pier is now somewhere a
+ * ship ties up rather than only somewhere to stand, so the number of them is
+ * the number of things that can be happening at once out there.
+ */
+const PIERS = 4;
 /** The least water a pier is worth building: shorter than this is a step. */
 const PIER_LEAST = 2;
 /** How far apart along the front things are spaced, in shoreline cells. */
@@ -98,6 +120,23 @@ export interface HarbourLayout {
    */
   readonly lighthouse: PlacedObject | null;
   /**
+   * Where a visiting ship ties up, and the water she comes in over.
+   *
+   * One per pier that has open sea beyond its tip, which is not every pier —
+   * a stub in a shallow corner of the bay has nowhere for a hull to sit.
+   *
+   * Worked out here rather than while the game is running, and that is the
+   * whole reason this is on the layout at all. The sea in a harbour box is
+   * not a rectangle: `findShore` exists because the coast runs at whatever
+   * angle it runs, and `moorShip` carries the scars of two attempts that
+   * berthed a ship beautifully somewhere she could not be reached. A lane
+   * guessed at by a sprite while a child watches would sail through a
+   * sandbar on the first seed nobody sampled. These are walked over the grid
+   * once, with every cell of the hull checked, and the twenty-seed sweep in
+   * `worldGenerator.test.ts` says so.
+   */
+  readonly berths: readonly Berth[];
+  /**
    * The great ship, moored off the front, or null if there is no room.
    *
    * A building, to the rest of the game: it blocks a footprint, it has a
@@ -117,6 +156,22 @@ export interface HarbourLayout {
    * rule the grove's doorstep exists for, one place further along.
    */
   readonly doorstep: GridPoint;
+}
+
+/**
+ * A berth: where a visiting ship sits, and the run of sea she arrives along.
+ *
+ * `lane[0]` is the mooring — where her hull's top-left corner goes when she
+ * is tied up — and the rest runs out to sea, so `lane.at(-1)` is where she
+ * comes from and where she goes back to. Every entry is a position at which
+ * her *whole* hull is clear water inside the box, which is what makes it
+ * safe for anything to move her along it without asking the grid again.
+ */
+export interface Berth {
+  /** Which pier she ties up at, by index into `piers`. */
+  readonly pier: number;
+  /** Moored end first, open sea last. */
+  readonly lane: readonly GridPoint[];
 }
 
 interface Shore {
@@ -341,6 +396,77 @@ const SHIP_SIZE = { width: 5, height: 2 };
 const GANGWAY_REACH = 10;
 
 /**
+ * The least sea a berth is worth having.
+ *
+ * Counted in hull-lengths of lane, not in cells: a ship that arrived from
+ * two cells out has not arrived from anywhere, she has appeared. Four
+ * positions is enough that she is well clear of the pier when she is away
+ * and visibly travelling when she is not.
+ */
+const LANE_LEAST = 4;
+/** And the most, so a ship does not set out from the far side of the bay. */
+const LANE_REACH = 9;
+
+/**
+ * Where a ship can tie up at this pier, and the water she comes in over.
+ *
+ * Walked seaward from the tip with the *whole hull* checked at every step,
+ * which is the point of doing it here. A lane is a promise that anything
+ * following it is on open water for its full width from one end to the
+ * other — so the thing that moves a ship along it never has to ask the grid,
+ * and cannot be wrong about a sandbar on a seed nobody looked at.
+ *
+ * Null when there is not enough clear sea, which is ordinary: a stub pier in
+ * a shallow corner of a bay is a place to fish from, not a place to berth.
+ */
+function berthAt(grid: WorldGrid, shore: Shore, pier: readonly GridPoint[]): GridPoint[] | null {
+  const tip = pier.at(-1);
+  if (!tip) return null;
+  // Not held inside the box, unlike everything else here, and that is the
+  // point rather than an oversight. The box is the stretch of coast this
+  // layout *builds* on, and a pier is built out to the edge of it — so there
+  // is no sea left inside for a ship to come from. She comes from outside
+  // it, over the horizon, which is where ships come from. The grid is still
+  // asked about every cell, so a lane that would run onto the next island
+  // stops at its beach.
+  const clearWater = (col: number, row: number) =>
+    grid.inBounds(col, row) &&
+    grid.getTerrain(col, row) === TerrainType.Water &&
+    !grid.isBridged(col, row) &&
+    grid.getObjectAt(col, row) === null;
+  // Her hull is five cells by two and is drawn from its top-left corner, so
+  // a hull sitting square on the end of the pier has that corner two cells
+  // west of it and however many cells seaward.
+  //
+  // Five *columns* whichever way the coast faces, because the sprite does
+  // not turn: a ship is drawn side-on like every other building here, and a
+  // harbour on an east-facing shore has her sailing along her own length
+  // rather than being redrawn end-on.
+  const anchorFor = (out: number): GridPoint => ({
+    col: tip.col + shore.out.dCol * out - 2,
+    row: tip.row + shore.out.dRow * out,
+  });
+  const afloat = (at: GridPoint) => {
+    for (let row = at.row; row < at.row + SHIP_SIZE.height; row++) {
+      for (let col = at.col; col < at.col + SHIP_SIZE.width; col++) {
+        if (!clearWater(col, row)) return false;
+      }
+    }
+    return true;
+  };
+  const lane: GridPoint[] = [];
+  for (let out = 1; out <= LANE_REACH; out++) {
+    const at = anchorFor(out);
+    // Stopped at the first position that will not float her rather than
+    // skipped past: a lane with a hole in it is a ship that crosses a
+    // sandbar on her way in.
+    if (!afloat(at)) break;
+    lane.push(at);
+  }
+  return lane.length >= LANE_LEAST ? lane : null;
+}
+
+/**
  * Moor the great ship, and lay a gangway to her entry port.
  *
  * **She floats, so her footprint is water** — every cell of it, or she is a
@@ -544,6 +670,18 @@ export function layoutHarbour(grid: WorldGrid, box: AreaPlacement, rng: Rng): Ha
   // middle of the working front, and the stalls are laid the length of it.
   const moored = moorShip(grid, box, shore, quay);
 
+  // --- where a visiting ship ties up --------------------------------------
+
+  // After the great ship, never before her: she is an object on the grid the
+  // moment she is moored, so asking now is what keeps a berth from being
+  // found underneath her hull. One pier in a shallow corner may have no
+  // berth and that is ordinary — it is a place to fish from.
+  const berths: Berth[] = [];
+  for (const [n, pier] of piers.entries()) {
+    const lane = berthAt(grid, shore, pier);
+    if (lane) berths.push({ pier: n, lane });
+  }
+
   // --- what stands on the front ------------------------------------------
 
   const placed: PlacedObject[] = [];
@@ -669,6 +807,7 @@ export function layoutHarbour(grid: WorldGrid, box: AreaPlacement, rng: Rng): Ha
   return {
     quay,
     piers,
+    berths,
     buildings,
     placed,
     npcs,

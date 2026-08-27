@@ -150,9 +150,10 @@ import {
   animalSpots,
 } from "../world/animals";
 import {
+  BUILDING_FOOTPRINTS,
   BUILDING_SPRITES,
   type BuildingRole,
-  type BuildingSprite,
+  BuildingSprite,
   DoorState,
   type Entrance,
   ROLE_SPRITES,
@@ -365,6 +366,7 @@ import {
   stepsToSpeak,
   withinReach,
 } from "../world/session";
+import { VISIT, alongLane, shipsAt } from "../world/shipping";
 import type { Purse } from "../world/shop";
 import {
   type BuildingSidecar,
@@ -651,6 +653,18 @@ const CHUNK_CACHE_LIMIT = 60;
 
 // Slow idle loop: the 8 frames are drifting chimney smoke, not motion.
 const BUILDING_ANIM_FPS = 6;
+/** The hull the harbour's traffic is drawn with — the great ship's own. */
+const SHIP_SPRITE = BuildingSprite.Ship;
+/**
+ * Where the tide stands in a frozen world.
+ *
+ * `?freezeNpcs` holds the villagers still so a script knows where they are,
+ * and a ship sailing through that would be the one thing on screen it could
+ * not pin. Halfway through a visit, so the harbour a screenshot catches has
+ * ships *in* it rather than an empty bay — a frozen world should look like
+ * the world, not like a Sunday.
+ */
+const FROZEN_TIDE = VISIT * 0.6;
 // Slow enough to read as a breeze rather than a shiver.
 const PLANT_SWAY_FPS = 4;
 // The well bucket drifts rather than swings.
@@ -1611,6 +1625,15 @@ export class GameScene extends Phaser.Scene {
   private city!: CityLayout;
   private observatory: Observatory | null = null;
   private harbourFront: HarbourLayout | null = null;
+  /**
+   * The ships that come and go, one sprite per berth, made once and moved.
+   *
+   * Made once rather than spawned and destroyed as they arrive: there are at
+   * most four, a sprite that is off camera costs a cull test, and a harbour
+   * that built and threw away a ship every few minutes would be a harbour
+   * that stuttered every few minutes. Hidden is how a berth stands empty.
+   */
+  private visitingShips: Phaser.GameObjects.Sprite[] = [];
   /** Where the three wild flowers grew, for a script that has to walk to one. */
   private wildFlowers: readonly WildSpot[] = [];
   private worldPixelWidth = 0;
@@ -1828,6 +1851,7 @@ export class GameScene extends Phaser.Scene {
     this.spawnPlacedObjects(
       this.grid.listObjects().filter((object) => sceneryKind(object.type) === null),
     );
+    this.launchVisitingShips();
     // Anything this child had already planted. Their fences came back with
     // the line above — objects are spawned from the grid — but a crop is
     // drawn as a sprite of its own, and one that exists only in the grid is
@@ -2056,6 +2080,8 @@ export class GameScene extends Phaser.Scene {
           index: cast.index,
         };
       },
+      ships: () =>
+        this.visitingShips.filter((ship) => ship.visible).map((ship) => ({ x: ship.x, y: ship.y })),
       scenery: () => [...this.liveScenery.values()].reduce((n, list) => n + list.length, 0),
       sceneryOnScreen: () => {
         const view = this.cameras.main.worldView;
@@ -2397,6 +2423,7 @@ export class GameScene extends Phaser.Scene {
       // animals, so with that seam set their hunger clocks stopped as well as
       // their feet. Freezing a village for a screenshot should not stop time.
       this.updateAnimals(this.time.now);
+      this.sailVisitingShips();
       this.cullScenery();
       this.placeArmedRune();
       // The reach is drawn round wherever she is standing now, so it follows
@@ -3310,12 +3337,12 @@ export class GameScene extends Phaser.Scene {
    * village of identical houses is a far smaller failure than a village of
    * missing ones.
    */
-  private houseSheetFor(object: PlacedObject, sprite: BuildingSprite): string {
+  private houseSheetFor(id: string, sprite: BuildingSprite): string {
     const sidecar = this.buildingSidecars.get(sprite);
     if (!varies(sprite)) return sprite;
     const options = (sidecar?.roof_options ?? []) as Ramp[];
     const shipped = rampOf((sidecar?.palette ?? {}) as Record<string, Rgb>, ROOF_SLOTS);
-    const look = houseLook(object.id, this.seed, options.length);
+    const look = houseLook(id, this.seed, options.length);
     const wanted = options[look];
     if (look === 0 || !shipped || !wanted || !sidecar?.sheet) return sprite;
 
@@ -7570,6 +7597,73 @@ export class GameScene extends Phaser.Scene {
     // The smile in its bubble says the rest.
   }
 
+  /**
+   * One hull per berth, made once and moved for the rest of the game.
+   *
+   * They are drawn from the great ship's own sheet, playing her closed-door
+   * bob. A smaller fishing boat would read better as traffic and is a
+   * drawing that does not exist yet; this is the same hull the harbour
+   * already has one of, which at least cannot look like it came from a
+   * different game.
+   *
+   * Nothing is told about them: not the grid, not the save, not the depth
+   * sorter beyond a y. They are weather. See `shipping.ts`.
+   */
+  private launchVisitingShips(): void {
+    const berths = this.harbourFront?.berths ?? [];
+    const sidecar = this.buildingSidecars.get(SHIP_SPRITE);
+    if (berths.length === 0 || !sidecar) return;
+    const anim = buildingAnimKey(SHIP_SPRITE, DoorState.Closed);
+    if (!this.anims.exists(anim)) return;
+    // Each one painted from her own name, so four hulls at four piers are
+    // four ships rather than one drawn four times — the argument the village
+    // cottages are repainted on, which the ship only escaped while there was
+    // exactly one of her in the world. `houseSheetFor` falls back to the
+    // shipped colours if a repaint is not possible, so this cannot fail into
+    // a missing texture.
+    this.visitingShips = berths.map((_, n) => {
+      const painted = this.houseSheetFor(`harbour-visitor-${n}`, SHIP_SPRITE);
+      return this.world(
+        this.add
+          .sprite(0, 0, spriteSheetKey(painted))
+          .setOrigin(0, 0)
+          .setVisible(false)
+          .play(buildingAnimKey(painted, DoorState.Closed)),
+      );
+    });
+  }
+
+  /**
+   * Move them along their lanes, or hide the berths nobody is at.
+   *
+   * Off the world's clock rather than off the frame count, so that winding
+   * the hourglass forward moves the harbour along with the light: an
+   * afternoon skipped is an afternoon of shipping skipped, and a quay that
+   * looked identical either side of it would say the world had been waiting.
+   *
+   * `?freezeNpcs` stops them where a villager stops. A ship that sailed
+   * through a frozen world would be the one thing on screen a screenshot
+   * could not pin — the same reason the seam exists at all.
+   */
+  private sailVisitingShips(): void {
+    const berths = this.harbourFront?.berths ?? [];
+    const sidecar = this.buildingSidecars.get(SHIP_SPRITE);
+    if (this.visitingShips.length === 0 || !sidecar) return;
+    const minutes = this.dev.freezeNpcs ? FROZEN_TIDE : this.worldNow() / 60_000;
+    for (const ship of this.visitingShips) ship.setVisible(false);
+    for (const sailing of shipsAt(minutes, berths.length, this.seed)) {
+      const lane = berths[sailing.berth]?.lane;
+      const sprite = this.visitingShips[sailing.berth];
+      if (!lane || !sprite) continue;
+      const at = alongLane(lane, sailing.along);
+      const origin = spriteOrigin(sidecar, at.col, at.row);
+      sprite
+        .setPosition(this.originX + origin.x, this.originY + origin.y)
+        .setDepth(depthFor(footprintBottomY(sidecar, at.row)))
+        .setVisible(true);
+    }
+  }
+
   private spawnPlacedObjects(objects: readonly PlacedObject[]): void {
     for (const object of objects) {
       const sprite = ROLE_SPRITES[object.type as BuildingRole];
@@ -7579,7 +7673,7 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       const origin = spriteOrigin(sidecar, object.col, object.row);
-      const painted = this.houseSheetFor(object, sprite);
+      const painted = this.houseSheetFor(object.id, sprite);
       const image = this.world(
         this.add
           .sprite(this.originX + origin.x, this.originY + origin.y, spriteSheetKey(painted))
