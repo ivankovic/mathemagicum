@@ -127,3 +127,18 @@ export function readLearned(value: unknown): readonly string[] {
   );
   return [...new Set(known)];
 }
+
+/**
+ * Which spell this teacher has to give, or null if they teach nothing.
+ *
+ * `TAUGHT_BY` read the other way round. Written as a lookup rather than
+ * inverted into a second table, because a second table is a second place for
+ * the pairing to be wrong — and there are six of them, which is not a number
+ * worth an index.
+ */
+export function spellTaughtBy(teacher: string): Spell | null {
+  for (const [spell, who] of Object.entries(TAUGHT_BY)) {
+    if (who === teacher) return spell as Spell;
+  }
+  return null;
+}

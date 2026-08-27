@@ -101,7 +101,7 @@ import {
   portalTravelMs,
   portalView,
 } from "../spells/portalTravel";
-import { Spell, knowsSpell, learnSpell } from "../spells/spellbook";
+import { Spell, knowsSpell, learnSpell, spellTaughtBy } from "../spells/spellbook";
 import { makeSubtractionProblem } from "../spells/subtraction";
 import { nextSymmetryRung, symmetryHint, symmetryRungAt } from "../spells/symmetry";
 import { AboutPanel } from "../ui/AboutPanel";
@@ -759,6 +759,37 @@ export type PatchAction = (typeof PatchAction)[keyof typeof PatchAction];
  * has learned what plus does should not have to learn a second picture for
  * the same spell doing the same arithmetic in a different room.
  */
+/**
+ * The rune each spell is drawn as, for the mark over whoever teaches it.
+ *
+ * The two spells nobody teaches are absent rather than mapped to nothing:
+ * a child has the plus and the minus from their first minute, so there is
+ * no teacher to hang a mark over.
+ */
+const SPELL_RUNE: Partial<Record<Spell, string>> = {
+  [Spell.Portal]: UiAsset.RunePortal,
+  [Spell.Array]: UiAsset.RuneTimes,
+  [Spell.Share]: UiAsset.RuneDivide,
+  [Spell.Hourglass]: UiAsset.RuneHourglass,
+  [Spell.Mirror]: UiAsset.RuneMirror,
+};
+
+/**
+ * How big the mark over a teacher's head is drawn, and how far above it.
+ *
+ * Measured up from the *feet*, not down from the top of the sprite. A
+ * character's canvas is half as tall again as the character — there is empty
+ * air over every head, for the tall one and the hats — so a mark hung off
+ * `displayHeight` floats a body's length above the person it belongs to.
+ * The same trap the shop's tab icons fell into.
+ */
+const TEACH_MARK = 22;
+const TEACH_LIFT = 28;
+/** How faint it goes and how bright it comes back, and how long that takes. */
+const TEACH_DIM = 0.38;
+const TEACH_BRIGHT = 0.8;
+const TEACH_BEAT_MS = 900;
+
 const SPELL_RUNES: Record<PatchAction, string> = {
   [PatchAction.Grow]: UiAsset.RuneAdd,
   [PatchAction.Clear]: UiAsset.RuneMinus,
@@ -889,6 +920,8 @@ const GEOMETER_ID = "geometer";
 const ASTRONOMER_ID = "astronomer";
 /** The fisherman on the quay, who teaches the sharing spell. */
 const FISHER_ID = "fisher";
+/** The one teacher who is a thing rather than a person. See `TAUGHT_BY`. */
+const GREAT_TREE_ID = "great-tree";
 /**
  * The clockmaker, in the plaza under the city's tower.
  *
@@ -1667,6 +1700,10 @@ export class GameScene extends Phaser.Scene {
    * that stuttered every few minutes. Hidden is how a berth stands empty.
    */
   private visitingShips: Phaser.GameObjects.Sprite[] = [];
+  /** A rune over each teacher who still has one to give. See `markTeachers`. */
+  private readonly teacherMarks = new Map<string, Phaser.GameObjects.Image>();
+  /** What part each npc plays, for the marks — `spec.role ?? spec.id`. */
+  private readonly npcRoles = new Map<string, string>();
   /** Where the three wild flowers grew, for a script that has to walk to one. */
   private wildFlowers: readonly WildSpot[] = [];
   private worldPixelWidth = 0;
@@ -2098,6 +2135,8 @@ export class GameScene extends Phaser.Scene {
       ui: () => this.uiPositions(),
       armed: () => armedTag(this.armed),
       marking: () => this.marking?.action ?? null,
+      teaching: () =>
+        [...this.teacherMarks.entries()].filter(([, mark]) => mark.visible).map(([who]) => who),
       grove: () => ({ col: this.grove.doorstep.col, row: this.grove.doorstep.row }),
       stats: () => ({
         fps: Math.round(this.game.loop.actualFps),
@@ -2490,6 +2529,7 @@ export class GameScene extends Phaser.Scene {
       // their feet. Freezing a village for a screenshot should not stop time.
       this.updateAnimals(this.time.now);
       this.sailVisitingShips();
+      this.markTeachers();
       this.cullScenery();
       this.placeArmedRune();
       // The reach is drawn round wherever she is standing now, so it follows
@@ -7874,6 +7914,99 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * The rune a teacher still owes this child, or nothing.
+   *
+   * Nothing once it is learned, which is what makes the mark a *sign* rather
+   * than a label: it is there to send a child across a room, and a sign that
+   * stayed up afterwards would be pointing at something already had.
+   */
+  private runeOwed(teacher: string): string | null {
+    const spell = spellTaughtBy(teacher);
+    if (!spell) return null;
+    if (knowsSpell([...this.profile.learned, ...this.dev.learned], spell)) return null;
+    return SPELL_RUNE[spell] ?? null;
+  }
+
+  /**
+   * A rune over the head of everybody who has something to teach.
+   *
+   * The game's one unanswered question from the child's side: the spellbook
+   * draws a rune it has not been given yet, dimmed, and says nothing at all
+   * about where to go and get it. This is the other half of that — the same
+   * dimmed rune, over the person who has it, so the book and the world are
+   * asking and answering the same question.
+   *
+   * Faint and breathing rather than solid: solid is a label, and a thing
+   * that pulses is a thing being *offered*. It is also how everything else
+   * in this game says "here": the armed rune over the player's head, and the
+   * glow round a lit lamp.
+   *
+   * Made once per teacher and moved, like the harbour's ships. There are
+   * five of them in a world and at most a couple on screen at a time, and a
+   * mark built and thrown away as a child walks past would be a stutter
+   * every time they did.
+   */
+  private markTeachers(): void {
+    const shown = new Set<string>();
+    const beat = TEACH_DIM + (TEACH_BRIGHT - TEACH_DIM) * this.pulse(TEACH_BEAT_MS);
+    const put = (teacher: string, x: number, y: number, depth: number) => {
+      const rune = this.runeOwed(teacher);
+      if (!rune) return;
+      shown.add(teacher);
+      let mark = this.teacherMarks.get(teacher);
+      if (!mark) {
+        mark = this.world(
+          this.add
+            .image(0, 0, uiTextureKey(rune))
+            .setOrigin(0.5, 1)
+            .setDisplaySize(TEACH_MARK, TEACH_MARK),
+        );
+        this.teacherMarks.set(teacher, mark);
+      }
+      mark.setPosition(x, y).setDepth(depth).setAlpha(beat).setVisible(true);
+    };
+
+    // Whoever is behind the counter or the desk of the room she is in. One
+    // at a time, because a room has one.
+    const attendant = this.attendant;
+    const inside = this.attendantId;
+    if (attendant && inside) {
+      put(
+        inside,
+        attendant.x,
+        attendant.y - attendant.displayHeight - TEACH_LIFT,
+        attendant.depth + 1,
+      );
+    }
+    // And everybody out of doors who teaches: the clockmaker in his plaza
+    // and the fisherman on his quay. Read off their sprites rather than
+    // their tiles, so the mark travels with the walk rather than hopping a
+    // cell at a time behind it.
+    if (!this.interior) {
+      for (const npc of this.npcs) {
+        const part = this.npcRoles.get(npc.id) ?? npc.id;
+        // The cell she is on, so the mark steps with the walk. A rune that
+        // glided while its owner stepped would drift off them and back.
+        const feet = this.toFeet(npc.col, npc.row);
+        put(part, feet.x, feet.y - TEACH_LIFT, depthFor(feet.y) + 1);
+      }
+      // The one teacher who is not a person. It stands still, so this is the
+      // same call with a fixed cell in place of a sprite.
+      const tree = this.toFeet(this.grove.tree.col, this.grove.tree.row);
+      put(GREAT_TREE_ID, tree.x, tree.y - TILE_SIZE * 3, depthFor(tree.y) + 1);
+    }
+
+    for (const [teacher, mark] of this.teacherMarks) {
+      if (!shown.has(teacher)) mark.setVisible(false);
+    }
+  }
+
+  /** A nought-to-one that goes up and comes back, on a period in ms. */
+  private pulse(period: number): number {
+    return 0.5 + 0.5 * Math.sin((this.time.now / period) * Math.PI * 2);
+  }
+
   private spawnPlacedObjects(objects: readonly PlacedObject[]): void {
     for (const object of objects) {
       const sprite = ROLE_SPRITES[object.type as BuildingRole];
@@ -9396,6 +9529,7 @@ export class GameScene extends Phaser.Scene {
             () => this.meetClockmaker(),
           );
         }
+        this.npcRoles.set(spec.id, spec.role ?? spec.id);
         // The second outdoor teacher, on the quay, and tapped the same way
         // for the same reason: he keeps a short circuit round the foot of
         // his pier, so where he *is* is not where the harbour put him.

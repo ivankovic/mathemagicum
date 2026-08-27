@@ -533,6 +533,15 @@ export interface DevHandle {
    */
   readonly marking: () => string | null;
   /**
+   * Who currently has a rune hanging over them, waiting to be asked.
+   *
+   * A pulsing half-transparent mark is the one thing on screen a screenshot
+   * cannot be trusted about: it is faint by design and it breathes, so a
+   * picture taken at the wrong instant looks the same as one taken of a
+   * mark that is not there.
+   */
+  readonly teaching: () => string[];
+  /**
    * What the division parchment is asking, and what has been typed into it.
    *
    * The same reason `spell` and `array` exist: answering a cast means
