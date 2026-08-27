@@ -353,6 +353,68 @@ describe("furnishing it", () => {
   );
 
   /**
+   * A carpet goes under her feet; a bath does not.
+   *
+   * Reported from a playtest as *the carpet will not go where I am
+   * standing*, which is the second half of a bug whose first half was fixed
+   * by `anchorFor`. Facing a square and putting a rug down in front of you
+   * already worked. **Tapping the square you are standing on** did not: the
+   * placement rule counted the child herself among the things in the way,
+   * whatever she was holding, so the one square a carpet is most obviously
+   * for was the one square it was refused on.
+   *
+   * The pair is the test. A rule that simply stopped counting her would let
+   * a child put a bath down on her own square and stand in it, so the two
+   * halves are asserted in one scenario: what the piece *is* decides, not
+   * who is standing there.
+   */
+  test(
+    "a rug is laid on the square she is standing on, and a chair is not",
+    async () => {
+      await play({ seams: AT_HOME }, async (game) => {
+        const house = await goHome(game);
+        const rug = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "rug");
+        if (!rug) throw new Error("the room she starts in has no rug");
+        await tapPlan(game, house, rug.col, rug.row);
+        await game.settle(600);
+        expect(await game.held("rug~0")).toBe(1);
+
+        // Standing on clear floor, and asking for it right here. Facing up,
+        // so a two-by-two anchored on this square reaches back over her —
+        // which is exactly the shape that used to be refused.
+        const her = grid(house, 3, 4);
+        await game.standAt(her.col, her.row, "up");
+        await game.tap("crate");
+        await game.tap(RUG_SLOT);
+        expect(await game.seam("armed")).toBe("rug~0");
+        await game.tapCell(her.col, her.row);
+        await game.settle(700);
+
+        expect(await game.held("rug~0")).toBe(0);
+        const laid = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "rug");
+        // Its corner is one row back, so the rug covers rows 3 and 4 — and
+        // she is standing on row 4, under her own carpet.
+        expect(laid).toMatchObject({ col: 3, row: 3 });
+
+        // The other half. A chair on that square would be a chair she is
+        // standing inside, so it is still refused and stays in the basket.
+        const chair = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "chair");
+        if (!chair) throw new Error("the room she starts in has no chair");
+        await tapPlan(game, house, chair.col, chair.row);
+        await game.settle(600);
+        expect(await game.held("chair~0")).toBe(1);
+        await game.tap("crate");
+        await game.tap(CHAIR_SLOT);
+        expect(await game.seam("armed")).toBe("chair~0");
+        await game.tapCell(her.col, her.row);
+        await game.settle(700);
+        expect(await game.held("chair~0")).toBe(1);
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
    * And the floor under it stops coming up — under where it *now* stands.
    *
    * The rule the children asked for out loud, and the one that fails

@@ -209,6 +209,7 @@ import {
   decorToSave,
   without as decorWithout,
   footprintsOf,
+  inTheWayOf,
   itemParts,
   occupiedCells,
   pieceArt,
@@ -8522,6 +8523,7 @@ export class GameScene extends Phaser.Scene {
   private putDecorDown(piece: DecorType, look: number): void {
     if (this.modalOpen) return;
     const inside = this.interior;
+    const parts = this.growable;
     const item = decorItem(piece, look);
     if (!inside?.plan || !inside.house || this.inventory.count(item) <= 0) {
       this.showRefusalOnPlayer();
@@ -8541,7 +8543,18 @@ export class GameScene extends Phaser.Scene {
     );
     const at: Placed = { piece, look, col: corner.col, row: corner.row };
     const room = this.decorIn(inside.house);
-    const taken = this.spokenFor();
+    // Her own square counts against a bath and not against a rug. Tapping
+    // the floor she is standing on is how a child asks for a carpet to go
+    // *under* her, and a walkable thing has no reason to refuse — see
+    // `inTheWayOf`. Not `spokenFor`, which is the minus spell's question and
+    // has to keep counting her whatever she is holding.
+    const her = this.session.tile;
+    const taken = parts
+      ? inTheWayOf(parts, piece, room, {
+          col: her.col + inside.origin.col,
+          row: her.row + inside.origin.row,
+        })
+      : this.spokenFor();
     const standable = (col: number, row: number) =>
       isFloor(inside.plan as RoomPlan, col, row) && !taken.has(cellKey(col, row));
     if (!decorFits(at, room, this.pieceSizes(), standable)) {

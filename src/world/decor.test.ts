@@ -20,9 +20,11 @@ import {
   decorToSave,
   fireCells,
   fits,
+  inTheWayOf,
   itemParts,
   occupiedCells,
   pieceArt,
+  pieceBlocks,
   pieceOn,
   protectedCells,
   roomsAfforded,
@@ -281,6 +283,9 @@ describe("what a room protects and what it blocks", () => {
       bookshelf: { footprint: [1, 1], blocks: true, animated: false, light: null },
       bed: { footprint: [1, 2], blocks: true, animated: false, light: null },
       rug: { footprint: [2, 2], blocks: false, animated: false, light: null },
+      // In the table and not in the arrangement, which is the shape every
+      // piece the shop added has: a cottage does not ship with a bath.
+      bath: { footprint: [2, 1], blocks: true, animated: false, light: null },
     },
   } as unknown as GrowableSidecar;
 
@@ -355,6 +360,45 @@ describe("what a room protects and what it blocks", () => {
     const guarded = protectedCells(sidecar, [], { col: 4, row: 2 });
     expect(guarded.has("4,2")).toBe(true);
     expect(protectedCells(sidecar, []).has("4,2")).toBe(false);
+  });
+
+  /**
+   * A thing the room does not ship with still blocks.
+   *
+   * Whether a piece stands in the way used to be read off the arrangement,
+   * which held for exactly as long as the shop sold nothing new. It sells a
+   * kitchen and a washroom now, and none of that is in any cottage's opening
+   * furniture — so every one of them was walked straight through.
+   */
+  test("a piece the room never shipped with blocks the way all the same", () => {
+    const bath: Placed = { piece: DecorType.Bath, col: 2, row: 5, look: 0 };
+    expect(sidecar.furniture.some((piece) => piece.name === "bath")).toBe(false);
+    expect(blockersFor(sidecar, [bath])[0]?.blocks).toBe(true);
+    expect(pieceBlocks(sidecar, DecorType.Bath)).toBe(true);
+    expect(pieceBlocks(sidecar, DecorType.Rug)).toBe(false);
+  });
+
+  /**
+   * And the other half of the same fact: what may go under her feet.
+   *
+   * A child asking for a carpet on the square she is standing on is asking
+   * for it to go *under* her, which is what a carpet is for. A bath on that
+   * square would be a bath she is standing in.
+   */
+  test("a rug goes under her feet and a bath does not", () => {
+    const her = { col: 4, row: 2 };
+    expect(inTheWayOf(sidecar, DecorType.Rug, [], her).has("4,2")).toBe(false);
+    expect(inTheWayOf(sidecar, DecorType.Bath, [], her).has("4,2")).toBe(true);
+  });
+
+  // Whichever she is holding, the furniture is still in the way of it.
+  test("but neither goes on top of the bed", () => {
+    const bed: Placed = { piece: DecorType.Bed, col: 1, row: 2, look: 0 };
+    for (const piece of [DecorType.Rug, DecorType.Bath]) {
+      const taken = inTheWayOf(sidecar, piece, [bed], { col: 4, row: 2 });
+      expect(taken.has("1,2")).toBe(true);
+      expect(taken.has("1,3")).toBe(true);
+    }
   });
 
   /**

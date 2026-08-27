@@ -400,6 +400,46 @@ export function protectedCells(
 }
 
 /**
+ * Whether a piece stands in the way, or is walked over.
+ *
+ * Read off `pieces` rather than off `furniture`, and the difference is a bug
+ * that shipped. `furniture` is only the arrangement the room *starts* with,
+ * so asking it whether a thing blocks answered "no" for everything the room
+ * does not already contain — which, since the shop started selling a kitchen
+ * and a washroom, meant a child could walk through her own bath.
+ *
+ * A piece nobody has heard of blocks. Drawn as a wall it is a bug somebody
+ * trips over on the first tap; drawn as a hole in the furniture it is the
+ * one that had to be found by hand.
+ */
+export function pieceBlocks(sidecar: GrowableSidecar, piece: DecorType): boolean {
+  return sidecar.pieces[pieceArt(piece)]?.blocks ?? true;
+}
+
+/**
+ * The cells a thing being put down has to keep off.
+ *
+ * Everything already standing in the room, always — and the child herself
+ * only when what she is holding would stand in her way. A rug is walked
+ * over, so it goes *under her feet* and she is no obstacle to it; a bath is
+ * not, so putting one down on her own square would be standing in it.
+ *
+ * The distinction is the piece's own, not the placer's: `protectedCells`
+ * answers a different question — what the minus spell must not take the
+ * floor from under — and there she counts whatever she is carrying, because
+ * a child who pulled the boards out from beneath herself would be standing
+ * in a wall.
+ */
+export function inTheWayOf(
+  sidecar: GrowableSidecar,
+  piece: DecorType,
+  decor: readonly Placed[],
+  standing: GridPoint,
+): Set<string> {
+  return protectedCells(sidecar, decor, pieceBlocks(sidecar, piece) ? standing : undefined);
+}
+
+/**
  * What stands in the *way*, which is a different question.
  *
  * A rug is walked over and still keeps its floor from the minus spell — see
@@ -411,14 +451,13 @@ export function protectedCells(
  * furniture the grid was never told about is furniture the next cast wipes.
  */
 export function blockersFor(sidecar: GrowableSidecar, decor: readonly Placed[]): RoomBlocker[] {
-  const solid = new Set(sidecar.furniture.filter((piece) => piece.blocks).map((p) => p.name));
   const sizes = footprintsOf(sidecar);
   const standing = decor.map((placed) => {
     const size = sizes[placed.piece] ?? { cols: 1, rows: 1 };
     return {
       cell: [placed.row, placed.col] as const,
       footprint: [size.cols, size.rows] as const,
-      blocks: solid.has(pieceArt(placed.piece)),
+      blocks: pieceBlocks(sidecar, placed.piece),
     };
   });
   // No separate list for the fire any more. A fireplace was built into the
