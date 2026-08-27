@@ -377,6 +377,17 @@ export const HR: Phrases = {
   arrayHintRows: (columns, counted) =>
     `Broji po ${columns}: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
 
+  shareTitle: (total, parts) => `${total} ÷ ${parts}`,
+  shareAsk: "Koliko dobiva svaka košara?",
+  shareAskLeft: "A koliko je ostalo?",
+  shareHintDeal: (filled, sharedOut) =>
+    `${filled} napunjeno, ${sharedOut} podijeljeno. Nastavi ukrug.`,
+  shareHintCount: (parts) => `Broji po ${parts} dok ne dođeš do hrpe.`,
+  shareDone: (total, parts, each, left) =>
+    left > 0
+      ? `${total} podijeljeno na ${parts} daje ${each} svakome, a ostaje ${left}.`
+      : `${total} podijeljeno na ${parts} daje točno ${each} svakome.`,
+
   brickTitle: "Zid",
   brickAsk: "Svaka je cigla zbroj dviju ispod sebe.",
   brickWrong: "Ta nije. Pogledaj još jednom.",

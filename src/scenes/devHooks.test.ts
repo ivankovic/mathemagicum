@@ -29,6 +29,7 @@ describe("parseDevOptions", () => {
       hour: null,
       skipTitle: false,
       at: null,
+      share: null,
     });
   });
 
@@ -153,6 +154,7 @@ describe("parseDevOptions", () => {
       hour: null,
       skipTitle: false,
       at: null,
+      share: null,
     });
   });
 });

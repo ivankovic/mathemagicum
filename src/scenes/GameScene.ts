@@ -68,6 +68,7 @@ import {
   recordCast,
   rungAt,
 } from "../spells/difficulty";
+import { boxesOf, shareProblemFor, shareRungAt } from "../spells/division";
 import {
   type ClockTime,
   HARDEST_CLOCK_RUNG,
@@ -118,6 +119,7 @@ import { PatchMenu } from "../ui/PatchMenu";
 import { PicturePanel } from "../ui/PicturePanel";
 import { PortalPanel } from "../ui/PortalPanel";
 import { SandGlass } from "../ui/SandGlass";
+import { SharePopup } from "../ui/SharePopup";
 import { ShopPanel } from "../ui/ShopPanel";
 import { SpellPopup } from "../ui/SpellPopup";
 import { SymmetryPopup } from "../ui/SymmetryPopup";
@@ -1294,6 +1296,15 @@ export class GameScene extends Phaser.Scene {
   private geometryPanel?: GeometryLessonPanel;
   private grovePanel?: GroveLessonPanel;
   private arrayPopup?: ArrayPopup;
+  /**
+   * The division spell's parchment.
+   *
+   * Built and reachable, and not yet cast by anything: the spell's world
+   * half — the rune, the harvest, whoever teaches it — is not written. What
+   * opens it today is `?share=`, which is what lets the parchment be driven
+   * and looked at before there is a garden behind it. See `division.ts`.
+   */
+  private sharePopup?: SharePopup;
   private brickPopup?: BrickPopup;
   private clockPopup?: ClockPopup;
   private readonly flowerSidecars = new Map<FlowerType, FixtureSidecar>();
@@ -1976,6 +1987,9 @@ export class GameScene extends Phaser.Scene {
     this.arrayPopup = new ArrayPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
+    this.sharePopup = new SharePopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
+      this.ui(object),
+    );
     this.brickPopup = new BrickPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
@@ -2012,6 +2026,14 @@ export class GameScene extends Phaser.Scene {
     // A beat first, so it opens over a world that has finished drawing
     // itself rather than over a grey screen.
     if (this.dev.wall) this.time.delayedCall(50, () => this.openBrickWall(() => {}));
+    // `?share=`: the division parchment on that rung, for the same reason and
+    // with the same beat. Nothing else opens it yet — see `sharePopup`.
+    if (this.dev.share !== null) {
+      const rung = shareRungAt(this.dev.share);
+      this.time.delayedCall(50, () =>
+        this.sharePopup?.open(shareProblemFor(this.spellRng, rung), () => {}),
+      );
+    }
     this.optionsPanel = new OptionsPanel(
       this,
       uiIndex,
@@ -2078,6 +2100,23 @@ export class GameScene extends Phaser.Scene {
           addend: movedBy(cast.problem),
           stops: cast.problem.stops,
           index: cast.index,
+        };
+      },
+      share: () => {
+        const cast = this.sharePopup?.cast;
+        if (!cast) return null;
+        const { problem } = cast;
+        return {
+          total: problem.total,
+          parts: problem.parts,
+          each: problem.each,
+          left: problem.left,
+          tier: problem.tier,
+          box: cast.box,
+          boxes: [...boxesOf(problem)],
+          typed: { each: cast.each, left: cast.left },
+          done: cast.done,
+          missteps: cast.missteps,
         };
       },
       ships: () =>
@@ -2608,6 +2647,7 @@ export class GameScene extends Phaser.Scene {
     // pieces is placed from the viewport's size.
     this.spellPopup?.layout();
     this.brickPopup?.layout();
+    this.sharePopup?.layout();
     this.symmetryPopup?.layout();
     this.portalPanel?.layout();
     this.geometryPanel?.layout();
@@ -7084,6 +7124,7 @@ export class GameScene extends Phaser.Scene {
     this.portalPanel?.setPhrases(this.words);
     this.geometryPanel?.setPhrases(this.words);
     this.brickPopup?.setPhrases(this.words);
+    this.sharePopup?.setPhrases(this.words);
     this.symmetryPopup?.setPhrases(this.words);
     this.shopPanel?.setPhrases(this.words);
     // The line on screen was written in the old language by whatever the
@@ -9534,6 +9575,7 @@ export class GameScene extends Phaser.Scene {
       // a new parchment goes on it, because everything that reads this asks
       // "is a question already on screen", and a wall is one.
       this.brickPopup?.isOpen === true ||
+      this.sharePopup?.isOpen === true ||
       this.symmetryPopup?.isOpen === true ||
       // Mid-crossing: a step from a tile they are no longer standing on.
       this.travelling

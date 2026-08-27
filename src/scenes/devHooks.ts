@@ -184,6 +184,18 @@ export interface DevOptions {
    * the seam instead, and sets the position before it builds the sprite.
    */
   readonly at: { col: number; row: number } | null;
+  /**
+   * Open the division spell's parchment on this rung, at once.
+   *
+   * The spell has a minigame and no world half yet — no rune, no harvest,
+   * nobody who teaches it — so there is nothing in the game that opens this
+   * parchment and no way to look at it. `?share=2` is that way, and it is
+   * the same shape as every other seam here: a thing the game will do on its
+   * own later, made reachable now.
+   *
+   * Null when it was not asked for, so a plain load is a plain load.
+   */
+  readonly share: number | null;
 }
 
 const NONE: DevOptions = {
@@ -208,6 +220,7 @@ const NONE: DevOptions = {
   hour: null,
   skipTitle: false,
   at: null,
+  share: null,
 };
 
 export function devOptions(search = globalThis.location?.search ?? ""): DevOptions {
@@ -298,6 +311,7 @@ export function parseDevOptions(search: string): DevOptions {
     hour: number("hour", false),
     skipTitle: params.has("skipTitle"),
     at: tile(params.get("at")),
+    share: number("share"),
   };
 }
 
@@ -496,6 +510,25 @@ export interface DevHandle {
    * a script can watch one move without having to know the timetable.
    */
   readonly ships: () => { x: number; y: number }[];
+  /**
+   * What the division parchment is asking, and what has been typed into it.
+   *
+   * The same reason `spell` and `array` exist: answering a cast means
+   * knowing what it asked, and the only other way to find out is to count
+   * apples in a screenshot.
+   */
+  readonly share: () => {
+    total: number;
+    parts: number;
+    each: number;
+    left: number;
+    tier: string;
+    box: string;
+    boxes: string[];
+    typed: { each: string; left: string };
+    done: boolean;
+    missteps: number;
+  } | null;
   readonly scenery: () => number;
   /**
    * How much of the scenery the camera can see, and how much of it exists.

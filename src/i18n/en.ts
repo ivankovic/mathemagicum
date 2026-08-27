@@ -250,6 +250,17 @@ export const EN: Phrases = {
   arrayHintRows: (columns, counted) =>
     `Count along by ${columns}: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
 
+  shareTitle: (total, parts) => `${total} ÷ ${parts}`,
+  shareAsk: "How many does each basket get?",
+  shareAskLeft: "And how many are left over?",
+  shareHintDeal: (filled, sharedOut) =>
+    `${filled} filled, ${sharedOut} shared out. Keep going round.`,
+  shareHintCount: (parts) => `Count up in ${parts}s until you reach the heap.`,
+  shareDone: (total, parts, each, left) =>
+    left > 0
+      ? `${total} shared ${parts} ways is ${each} each, and ${left} over.`
+      : `${total} shared ${parts} ways is ${each} each, exactly.`,
+
   brickTitle: "The wall",
   brickAsk: "Every brick is the two under it, added up.",
   brickWrong: "Not that one. Have another look.",

@@ -47,6 +47,15 @@ function sample(p: Phrases): Record<string, string> {
     groveTurn: p.groveTurn(4, 6, 24),
     arrayTitle: p.arrayTitle(4, 6),
     arrayAsk: p.arrayAsk,
+    shareTitle: p.shareTitle(23, 5),
+    shareAsk: p.shareAsk,
+    shareAskLeft: p.shareAskLeft,
+    shareHintDeal: p.shareHintDeal(2, 8),
+    shareHintCount: p.shareHintCount(5),
+    // Both branches under the one key, as `lampsAsk` is: the sample list is
+    // checked against the interface's keys exactly, and the even share is the
+    // wording nothing else reaches.
+    shareDone: `${p.shareDone(23, 5, 4, 3)} ${p.shareDone(20, 5, 4, 0)}`,
     brickTitle: p.brickTitle,
     brickAsk: p.brickAsk,
     brickWrong: p.brickWrong,
@@ -277,6 +286,7 @@ describe("every language says everything", () => {
       "lessonExample",
       "portalTitle",
       "arrayTitle",
+      "shareTitle",
       "copyright",
       "sponsorLink",
     ];

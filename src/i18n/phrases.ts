@@ -191,6 +191,32 @@ export interface Phrases {
   /** The help that arrives after a wrong answer: count along, row by row. */
   arrayHintRows: (columns: number, counted: number) => string;
 
+  // --- the division spell --------------------------------------------------
+
+  /** `23 ÷ 5`, over the baskets. */
+  shareTitle: (total: number, parts: number) => string;
+  /** The question under it, while the share is being answered. */
+  shareAsk: string;
+  /** And when the leftovers are, which is only ever at the top rung. */
+  shareAskLeft: string;
+  /**
+   * The help, once it comes: how far the dealing has got.
+   *
+   * How many baskets are filled and how much that is, rather than how many
+   * are in each — the last is the answer, and a hint that says it outright
+   * turns the spell into a button.
+   */
+  shareHintDeal: (filled: number, sharedOut: number) => string;
+  /**
+   * And where nothing is drawn: count up in baskets until you reach the heap.
+   *
+   * In *baskets*, never in shares. Counting up in fours when the answer is
+   * four is the answer with commas in it.
+   */
+  shareHintCount: (parts: number) => string;
+  /** The line under a finished share. */
+  shareDone: (total: number, parts: number, each: number, left: number) => string;
+
   // --- building a room -----------------------------------------------------
 
   /** Over the wall of bricks. */

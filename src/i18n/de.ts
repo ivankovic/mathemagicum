@@ -281,6 +281,17 @@ export const DE: Phrases = {
   arrayHintRows: (columns, counted) =>
     `Zähl in ${columns}er-Schritten: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
 
+  shareTitle: (total, parts) => `${total} ÷ ${parts}`,
+  shareAsk: "Wie viel bekommt jeder Korb?",
+  shareAskLeft: "Und wie viel bleibt übrig?",
+  shareHintDeal: (filled, sharedOut) =>
+    `${filled} gefüllt, ${sharedOut} verteilt. Geh weiter herum.`,
+  shareHintCount: (parts) => `Zähl in ${parts}er-Schritten, bis du beim Haufen bist.`,
+  shareDone: (total, parts, each, left) =>
+    left > 0
+      ? `${total} auf ${parts} verteilt macht ${each} für jeden, und ${left} bleibt übrig.`
+      : `${total} auf ${parts} verteilt macht genau ${each} für jeden.`,
+
   brickTitle: "Die Mauer",
   brickAsk: "Jeder Stein ist die Summe der beiden darunter.",
   brickWrong: "Der nicht. Schau noch einmal.",
