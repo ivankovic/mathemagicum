@@ -240,6 +240,17 @@ export interface Opening {
    * are wider than an iPhone. Nothing in this file could show that.
    */
   readonly viewport?: { readonly width: number; readonly height: number };
+  /**
+   * Whether the browser has a touchscreen, for the scenarios that need two
+   * fingers.
+   *
+   * Off everywhere else, and that is not laziness: a context with touch
+   * makes Phaser take the touch route through its input manager, which is a
+   * different code path from the mouse one every other scenario drives. A
+   * suite that quietly ran half on each would be a suite where a mouse-only
+   * break hid behind a touch-only pass.
+   */
+  readonly touch?: boolean;
 }
 
 /**
@@ -274,7 +285,10 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
   const browser = await bounded("a browser to start", chromium.launch(), SETUP_MS);
   const context = await bounded(
     "a browser window",
-    browser.newContext({ viewport: { ...(opening.viewport ?? { width: 1000, height: 760 }) } }),
+    browser.newContext({
+      viewport: { ...(opening.viewport ?? { width: 1000, height: 760 }) },
+      ...(opening.touch ? { hasTouch: true } : {}),
+    }),
     SETUP_MS,
   );
   await context.addInitScript(
@@ -930,6 +944,39 @@ export class Game {
         return (handle.zoom as () => number)();
       }),
     );
+  }
+
+  /**
+   * Two fingers, moved from one spread to another about the same centre.
+   *
+   * Through the debugger rather than through Playwright's own touchscreen,
+   * which taps and nothing else — a pinch is by definition two points at
+   * once and there is no other way to say that to a page.
+   *
+   * Moved in steps, like a coin being dragged and for the same reason: a
+   * gesture that arrives without travelling is a gesture the page never saw
+   * move, and following the fingers is the whole of what a pinch does.
+   */
+  async pinch(centre: { x: number; y: number }, from: number, to: number): Promise<void> {
+    const session = await this.page.context().newCDPSession(this.page);
+    const fingers = (apart: number) => [
+      { x: centre.x - apart / 2, y: centre.y, id: 1 },
+      { x: centre.x + apart / 2, y: centre.y, id: 2 },
+    ];
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: fingers(from),
+    });
+    const STEPS = 8;
+    for (let step = 1; step <= STEPS; step++) {
+      await session.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: fingers(from + ((to - from) * step) / STEPS),
+      });
+    }
+    await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await session.detach();
+    await this.settle(300);
   }
 
   /** A picture, for a human reading a failure. */

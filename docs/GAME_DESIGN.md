@@ -589,6 +589,46 @@ difference until the zoom moved: left alone, a lamp in a cottage at night
 would visibly swell the moment a child armed the times rune. Both are handled
 where the zoom is changed rather than at either call site.
 
+##### And a child can pull it out herself, with two fingers
+
+The spell moving the camera is the game deciding when a wider view is wanted.
+A playtest asked for the other half: **pinch to zoom, out to a half.** Two
+fingers on the glass, and the world follows them.
+
+**It rests on whole zooms and moves between them.** Same rule as above and
+for the same reason — a camera left at 1.37 draws every third row a pixel
+taller than its neighbours, which on hand-drawn tiles reads as a printing
+fault. But a gesture that jumped from one whole number to the next would not
+feel like a pinch at all; the whole of a pinch is the picture staying under
+your fingers. So it follows them exactly while they are down and lands on a
+step when they lift. Shimmer under a moving finger is invisible; shimmer in a
+picture nobody is touching is a bug.
+
+**Two steps, because there are two.** The world's zoom and half of it — which
+is what "out to a half" means when what is being halved is how big everything
+is drawn. Halving the world's 2 lands on 1, so both are whole numbers and the
+rule above costs nothing. There is no third step in: bigger than the art was
+drawn is not a view of the world, it is a worse copy of it.
+
+**Her choice outranks the spell's.** The camera is asked how far out it
+should be at every viewport change and at both ends of the array spell, and
+that question used to be answered with the world's constant. It is answered
+with *her* zoom now, and the spell's reach is a ceiling on top of it — so a
+child who has already pulled the view out is not zoomed back in by arming a
+rune, and putting the rune out leaves her where she was rather than where the
+game started.
+
+**A pinch is not a tap, and the finger it leaves behind is not a joystick.**
+A second finger landing while a rune is lit would otherwise cast the spell at
+whatever it touched, and a pinch ends with one finger usually still down —
+which would become a steering stick the instant its partner left, sending the
+child walking at the end of every zoom. Both are refused for as long as the
+hand is on the glass.
+
+**The view is not written down.** Where you are looking is not something you
+own, and a game that reopened zoomed out because of a pinch three days ago
+would be a game that had rearranged itself while nobody was there.
+
 #### The hourglass spell — telling the time (implemented)
 
 **Action:** two clock faces on the parchment — when you put the game down and

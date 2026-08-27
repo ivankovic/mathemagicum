@@ -13,6 +13,7 @@ import { phrasesFor } from "../i18n";
 import { EN } from "../i18n/en";
 import type { Phrases } from "../i18n/phrases";
 import { VirtualJoystick } from "../input/VirtualJoystick";
+import { pinchedZoom, settledZoom, spread, zoomSteps } from "../input/pinch";
 import { type Rgb, rampPlan } from "../render/recolour";
 import { repaintedSheet } from "../render/sheetTexture";
 import { exportSaves } from "../save/backupFile";
@@ -1328,6 +1329,40 @@ export class GameScene extends Phaser.Scene {
     action: PatchAction;
   } | null = null;
   /**
+   * How far out the child has pulled the camera, and the pinch doing it now.
+   *
+   * Two fields because they are two different facts. `restingZoom` is a
+   * *choice* — it outlives the fingers that made it and is what the camera
+   * goes back to when a spell that pulled the view out is done with it.
+   * `pinching` exists only between the second finger landing and the first
+   * one lifting, and while it does, the live value it carries is what the
+   * camera shows. See `zoomWanted`, which is the one place they meet.
+   *
+   * Not written down anywhere. A view is where you are looking rather than
+   * something you own, and a game that reopened zoomed out because of a
+   * pinch three days ago would be a game that had rearranged itself.
+   */
+  private restingZoom = CAMERA_ZOOM;
+  private pinching: { a: number; b: number; from: number; held: number; live: number } | null =
+    null;
+  /**
+   * Every finger currently on the glass, by pointer id.
+   *
+   * Phaser hands out one pointer per touch and reuses the ids, and the
+   * scene's own handlers see them one at a time — so "are two fingers down"
+   * is a question nothing else here could answer.
+   */
+  private readonly touching = new Map<number, { x: number; y: number }>();
+  /**
+   * Whether this touch has been a pinch, until the last finger lifts.
+   *
+   * A pinch ends when one of the two fingers goes, and the other is usually
+   * still down. Without this, that leftover finger becomes a joystick the
+   * moment its partner leaves and the child walks off across the world at
+   * the end of every zoom.
+   */
+  private pinched = false;
+  /**
    * Whether a finished rectangle is being looked at before its sum opens.
    *
    * Taps do nothing while it is set. See `PATCH_BEAT_MS`.
@@ -2291,6 +2326,12 @@ export class GameScene extends Phaser.Scene {
       // is only modal because of depth ordering stops being one the first
       // time something is drawn above it.
       if (this.modalOpen) return;
+      this.touching.set(pointer.id, { x: pointer.x, y: pointer.y });
+      // A second finger is a pinch, and a pinch is not a tap. Checked before
+      // everything below it, because everything below it would answer this
+      // finger with the thing it was aimed at — and a second finger landing
+      // on a tree while the times rune is lit would cast the spell there.
+      if (this.beginPinch()) return;
       // The array spell owns the pointer while it is armed: a tap marks a
       // corner instead of steering, walking, or being answered by whatever
       // happens to be standing on the tile.
@@ -2316,6 +2357,9 @@ export class GameScene extends Phaser.Scene {
         return;
       }
       if (over.length > 0) return; // a UI button handles its own pointerdown
+      // Nor does the finger left over from a pinch: it is halfway through a
+      // gesture that was never about walking anywhere.
+      if (this.pinched) return;
       // Touch steers with the floating joystick; a mouse walks to the tile it
       // clicked. Deliberately not both on touch: a press cannot be a stick
       // and a destination at once, and the stick is the one you can hold.
@@ -2323,12 +2367,18 @@ export class GameScene extends Phaser.Scene {
       else this.handleTileClick(pointer.worldX, pointer.worldY);
     });
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      if (this.touching.has(pointer.id)) {
+        this.touching.set(pointer.id, { x: pointer.x, y: pointer.y });
+      }
+      if (this.dragPinch()) return;
       this.joystick?.move(pointer);
     });
     // pointerupoutside fires when the finger leaves the canvas still held —
     // without it the stick would stay stuck on and the player walk forever.
     for (const event of ["pointerup", "pointerupoutside"]) {
       this.input.on(event, (pointer: Phaser.Input.Pointer) => {
+        this.touching.delete(pointer.id);
+        this.endPinch(pointer.id);
         this.joystick?.end(pointer);
       });
     }
@@ -8769,9 +8819,78 @@ export class GameScene extends Phaser.Scene {
    * sideways in between.
    */
   private zoomWanted(): number {
-    if (!this.marking) return CAMERA_ZOOM;
+    // What the child has asked for, or what her fingers are asking for right
+    // now. The live value wins while a pinch is running and is gone the
+    // moment it ends, which is the whole difference between the two.
+    const chosen = this.pinching?.live ?? this.restingZoom;
+    if (!this.marking) return chosen;
     const camera = this.cameras.main;
-    return markingZoom({ width: camera.width, height: camera.height }, TILE_SIZE, CAMERA_ZOOM);
+    // Her choice is the ceiling, not `CAMERA_ZOOM`. The spell pulls the view
+    // out far enough to draw ten squares; a child who has already pulled it
+    // further out than that did not ask to be zoomed back in by arming a
+    // rune.
+    return markingZoom({ width: camera.width, height: camera.height }, TILE_SIZE, chosen);
+  }
+
+  /**
+   * A second finger has landed: start following the two of them.
+   *
+   * Answered true when this press belongs to a pinch, which is what keeps it
+   * from also being a tap. The joystick is let go rather than left holding
+   * the first finger — a stick that stayed on would walk her across the
+   * world for as long as the zoom took.
+   *
+   * The two ids are remembered rather than re-read every frame. A third
+   * finger on a tablet held in two hands is common, and a pinch that
+   * silently changed which fingers it was watching would jump.
+   */
+  private beginPinch(): boolean {
+    if (this.pinching) return true;
+    if (this.touching.size < 2) return false;
+    const [first, second] = [...this.touching.entries()];
+    if (!first || !second) return false;
+    const steps = zoomSteps(CAMERA_ZOOM);
+    if (steps.length < 2) return false;
+    this.joystick?.release();
+    this.pinched = true;
+    this.pinching = {
+      a: first[0],
+      b: second[0],
+      from: spread(first[1], second[1]),
+      held: this.restingZoom,
+      live: this.restingZoom,
+    };
+    return true;
+  }
+
+  /** The fingers moved: put the camera where they are holding it. */
+  private dragPinch(): boolean {
+    const pinch = this.pinching;
+    if (!pinch) return false;
+    const one = this.touching.get(pinch.a);
+    const other = this.touching.get(pinch.b);
+    if (!one || !other) return true;
+    pinch.live = pinchedZoom(pinch.held, pinch.from, spread(one, other), zoomSteps(CAMERA_ZOOM));
+    this.applyZoom();
+    return true;
+  }
+
+  /**
+   * One of the two lifted: let it come to rest on a step.
+   *
+   * On the *nearest* step rather than wherever the fingers left it, so the
+   * world is never drawn at a fraction of a pixel while nobody is touching
+   * it — see `pinch.ts`. Nothing happens for the other fingers on the glass:
+   * the gesture is over the moment it is no longer two.
+   */
+  private endPinch(pointerId: number): void {
+    const pinch = this.pinching;
+    if (pinch && (pointerId === pinch.a || pointerId === pinch.b)) {
+      this.restingZoom = settledZoom(pinch.live, zoomSteps(CAMERA_ZOOM));
+      this.pinching = null;
+      this.applyZoom();
+    }
+    if (this.touching.size === 0) this.pinched = false;
   }
 
   /**
