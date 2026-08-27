@@ -3,7 +3,9 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
-import { type Game, play, runeButton, shutDown } from "./harness";
+import { DecorType } from "../src/world/decor";
+import { PatchAction } from "../src/world/selection";
+import { type Game, crateButton, patchButton, play, runeButton, shutDown } from "./harness";
 
 /**
  * Building a house, and coming back to it tomorrow.
@@ -90,11 +92,11 @@ async function tapPlan(game: Game, house: House, col: number, row: number): Prom
 }
 
 /** The crate's tenth slot: seven fixtures, then bed, table, chair. */
-const CHAIR_SLOT = "crate.9";
+const CHAIR_SLOT = crateButton(DecorType.Chair);
 /** And the one after it: rug. */
-const RUG_SLOT = "crate.10";
+const RUG_SLOT = crateButton(DecorType.Rug);
 /** Then bookshelf, then stove — the room's own pieces in the order they are declared. */
-const STOVE_SLOT = "crate.12";
+const STOVE_SLOT = crateButton(DecorType.Stove);
 
 describe("building a room out", () => {
   test(
@@ -257,7 +259,7 @@ describe("building a room out", () => {
         await game.tap("spellbook");
         await game.tap(runeButton(Spell.Array));
         // Indoors the choice is plus or minus. Plus lays floor.
-        expect(await game.tap("patch.0")).toBe(true);
+        expect(await game.tap(patchButton(PatchAction.Build))).toBe(true);
 
         // A strip four deep down the western wall, corner to corner.
         await tapPlan(game, before, 0, 1);

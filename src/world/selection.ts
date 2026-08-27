@@ -156,3 +156,54 @@ export function patchHolds(patch: Patch, at: GridPoint): boolean {
 export function patchIsCastable(patch: Patch): boolean {
   return patchArea(patch) >= PATCH_LEAST;
 }
+
+/**
+ * What a marked patch is about to have done to it.
+ *
+ * Here rather than in the scene, and moved out of it for a reason worth
+ * writing down: a scenario asking for the *build* button had to import this,
+ * importing it pulled `GameScene` in, and pulling that in pulled Phaser into
+ * a process with no `window` in it. A patch and what may be done to one are
+ * facts about the world; only the drawing of the menu is the scene's.
+ */
+export const PatchAction = {
+  Grow: "grow",
+  Clear: "clear",
+  /**
+   * Build every square of it, indoors.
+   *
+   * The one action that is not about the garden, and it is here rather than
+   * as a spell of its own for the reason the others are: from the child's
+   * side this is a *choice about a patch*. Multiplication is doing the same
+   * thing many times without doing it many times, and laying nine squares of
+   * floor is as good an example of that as planting nine carrots.
+   */
+  Build: "build",
+  /**
+   * Copy the whole block somewhere else, ground and all.
+   *
+   * The mirror spell's effect, taken from one square to a rectangle of them.
+   * It is here rather than being a mode of the mirror spell for the reason
+   * building is here: from the child's side this is a *choice about a
+   * patch*, and what the times spell contributes is the block — doing a
+   * thing to many squares without doing it many times, which is the whole
+   * of what multiplication is for.
+   */
+  Copy: "copy",
+  /**
+   * Pick every ripe thing in it, in one cast.
+   *
+   * The division spell's, and the only patch action that is not the times
+   * rune's. It is here rather than in a list of its own because from the
+   * child's side this is the same gesture — mark out ground, and something
+   * happens to all of it — and because `beginMarking` is where that gesture
+   * lives.
+   *
+   * The parchment that opens is not the array's. Marking a rectangle is how
+   * a patch is chosen; what is asked about it is the spell's own business,
+   * and this one asks a share. See `castShareSpell`.
+   */
+  Pick: "pick",
+} as const;
+
+export type PatchAction = (typeof PatchAction)[keyof typeof PatchAction];

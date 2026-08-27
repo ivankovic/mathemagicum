@@ -365,6 +365,7 @@ import {
 } from "../world/scenery";
 import {
   type Patch,
+  PatchAction,
   markingZoom,
   patchBetween,
   patchCells,
@@ -710,47 +711,6 @@ const GROVE_DUSK_ALPHA = 0.3;
  * spell multiplies spells; a seed still goes in the ground one at a time,
  * which is what putting a seed in the ground is.
  */
-export const PatchAction = {
-  Grow: "grow",
-  Clear: "clear",
-  /**
-   * Build every square of it, indoors.
-   *
-   * The one action that is not about the garden, and it is here rather than
-   * as a spell of its own for the reason the others are: from the child's
-   * side this is a *choice about a patch*. Multiplication is doing the same
-   * thing many times without doing it many times, and laying nine squares of
-   * floor is as good an example of that as planting nine carrots.
-   */
-  Build: "build",
-  /**
-   * Copy the whole block somewhere else, ground and all.
-   *
-   * The mirror spell's effect, taken from one square to a rectangle of them.
-   * It is here rather than being a mode of the mirror spell for the reason
-   * building is here: from the child's side this is a *choice about a
-   * patch*, and what the times spell contributes is the block — doing a
-   * thing to many squares without doing it many times, which is the whole
-   * of what multiplication is for.
-   */
-  Copy: "copy",
-  /**
-   * Pick every ripe thing in it, in one cast.
-   *
-   * The division spell's, and the only patch action that is not the times
-   * rune's. It is here rather than in a list of its own because from the
-   * child's side this is the same gesture — mark out ground, and something
-   * happens to all of it — and because `beginMarking` is where that gesture
-   * lives.
-   *
-   * The parchment that opens is not the array's. Marking a rectangle is how
-   * a patch is chosen; what is asked about it is the spell's own business,
-   * and this one asks a share. See `castShareSpell`.
-   */
-  Pick: "pick",
-} as const;
-
-export type PatchAction = (typeof PatchAction)[keyof typeof PatchAction];
 
 /**
  * The rune each of them casts — which is the whole of what the menu shows.
@@ -1653,6 +1613,8 @@ export class GameScene extends Phaser.Scene {
   private traffic?: HarbourTraffic;
   /** A rune over each teacher who still has one to give. */
   private teacherMarks?: TeacherMarks;
+  /** What the patch menu is currently offering, in the order it drew them. */
+  private patchChoices: readonly PatchAction[] = [];
   /** What part each npc plays, for the marks — `spec.role ?? spec.id`. */
   private readonly npcRoles = new Map<string, string>();
   /** Where the three wild flowers grew, for a script that has to walk to one. */
@@ -4640,6 +4602,9 @@ export class GameScene extends Phaser.Scene {
       : this.knowsMirror
         ? [PatchAction.Grow, PatchAction.Clear, PatchAction.Copy]
         : [PatchAction.Grow, PatchAction.Clear];
+    // Kept so the menu's buttons can be named for what they do. See
+    // `uiPositions`.
+    this.patchChoices = outdoors;
     const choices = outdoors.map((action) => ({
       action,
       rune: uiTextureKey(SPELL_RUNES[action]),
@@ -6965,8 +6930,13 @@ export class GameScene extends Phaser.Scene {
     for (const [index, at] of (this.flowerMenu?.buttonPositions() ?? []).entries()) {
       positions[`bloom.${index}`] = at;
     }
+    // Named for the action rather than numbered, because what is on this
+    // menu depends on where she is standing and what she has been taught:
+    // indoors it is build-or-clear, outdoors it is grow-or-clear, and the
+    // mirror adds a third. `patch.2` meant copying only for a child who had
+    // met the astronomer.
     for (const [index, at] of (this.patchMenu?.buttonPositions() ?? []).entries()) {
-      positions[`patch.${index}`] = at;
+      positions[`patch.${this.patchChoices[index] ?? index}`] = at;
     }
     if (this.optionsPanel?.isOpen) Object.assign(positions, this.optionsPanel.buttonPositions());
     Object.assign(positions, this.shopPanel?.buttonPositions() ?? {});

@@ -3,7 +3,8 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
-import { type Game, play, runeButton, shutDown } from "./harness";
+import { PatchAction } from "../src/world/selection";
+import { type Game, patchButton, play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -202,7 +203,7 @@ describe("moving the ground", () => {
         await game.tap("spellbook");
         await game.tap(runeButton(Spell.Array));
         // Grow, clear, copy — copy is the one the mirror put on the menu.
-        expect(await game.tap("patch.2")).toBe(true);
+        expect(await game.tap(patchButton(PatchAction.Copy))).toBe(true);
         await pointAt(game, from[0] as Spot);
         await pointAt(game, from[3] as Spot);
         // A beat on the finished rectangle before anything is asked.
@@ -229,7 +230,7 @@ describe("moving the ground", () => {
         // child gives up, so that is what this does.
         await game.tap("spellbook");
         await game.tap(runeButton(Spell.Array));
-        expect(await game.tap("patch.2")).toBe(true);
+        expect(await game.tap(patchButton(PatchAction.Copy))).toBe(true);
         await pointAt(game, from[0] as Spot);
         await pointAt(game, from[3] as Spot);
         await game.settle(900);

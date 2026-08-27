@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { FLOWER_LOOKS, FLOWER_TYPES } from "../src/world/flowers";
-import { type Game, play, shutDown } from "./harness";
+import { FLOWER_LOOKS, FLOWER_TYPES, type FlowerType } from "../src/world/flowers";
+import { type Game, play, seedButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -88,7 +88,7 @@ describe("finding a flower", () => {
     async () => {
       await play({ seams: "&hour=12&freezeNpcs" }, async (game) => {
         await game.tap("seeds");
-        expect(await game.tap("seeds.6")).toBe(true);
+        expect(await game.tap(seedButton(FLOWER_TYPES[0] as FlowerType))).toBe(true);
         await game.settle(500);
         const menu = await game.ui();
         expect(Object.keys(menu).filter((name) => name.startsWith("bloom."))).toEqual([]);
@@ -113,7 +113,7 @@ describe("planting one", () => {
       await play({ seams: "&hour=12&freezeNpcs&flowers=all" }, async (game) => {
         await game.tap("seeds");
         // Six crops, then the three flowers — appended, so no crop moved.
-        await game.tap("seeds.6");
+        await game.tap(seedButton(FLOWER_TYPES[0] as FlowerType));
         await game.settle(400);
         const menu = await game.ui();
         expect(Object.keys(menu).filter((name) => name.startsWith("bloom."))).toHaveLength(
@@ -156,7 +156,7 @@ describe("planting one", () => {
         for (const step of [0, 2]) {
           await game.standAt(here.col + step, here.row, "down");
           await game.tap("seeds");
-          await game.tap("seeds.7");
+          await game.tap(seedButton(FLOWER_TYPES[1] as FlowerType));
           await game.settle(350);
           await game.tap("bloom.0");
           await game.tapNear(0, 1);

@@ -3,9 +3,10 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
+import { PatchAction } from "../src/world/selection";
 import { PATCH_REACH, markingZoom } from "../src/world/selection";
 import { TILE_SIZE } from "../src/world/topdown";
-import { type Game, PHONE, play, runeButton, shutDown } from "./harness";
+import { type Game, PHONE, patchButton, play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -52,7 +53,7 @@ async function markOutFloor(game: Game): Promise<void> {
   await game.tap(runeButton(Spell.Array));
   await game.settle(500);
   // Build: the first of the two the menu offers indoors.
-  await game.tap("patch.0");
+  await game.tap(patchButton(PatchAction.Build));
   await game.settle(700);
 }
 

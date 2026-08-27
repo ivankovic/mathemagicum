@@ -6,6 +6,11 @@ import { type Page, chromium } from "playwright";
 // idea of how far a swipe goes is a harness that silently stops matching.
 import { SWIPE_PER_TICK, TICK_MINUTES } from "../src/spells/hourglass";
 import { SPELLS, type Spell } from "../src/spells/spellbook";
+import { DECOR_TYPES, type DecorType } from "../src/world/decor";
+import { type FixtureType, PLACEABLE_FIXTURES } from "../src/world/fixtures";
+import { FLOWER_TYPES, type FlowerType } from "../src/world/flowers";
+import { PLANT_TYPES, type PlantType } from "../src/world/plants";
+import type { PatchAction } from "../src/world/selection";
 
 /**
  * Playing the real game, in a real browser, as a test.
@@ -276,6 +281,41 @@ export const PHONE = { width: 390, height: 844 } as const;
  */
 export function runeButton(spell: Spell): string {
   return `spellbook.${SPELLS.indexOf(spell)}`;
+}
+
+/**
+ * The seed pouch's button for a crop, and the crate's for a thing to put
+ * down, by what it is rather than by where it sits.
+ *
+ * The same argument as `runeButton`, and the same list the game itself is
+ * built from: the pouch is the crops in `PLANT_TYPES` and then the flowers,
+ * and the crate is `PLACEABLE_FIXTURES` and then `DECOR_TYPES`. A crop or a
+ * piece of furniture added anywhere but the end used to shift every button
+ * after it, and a scenario reading `crate.9` would go on tapping the tenth
+ * thing in the box while meaning a chair.
+ */
+export function seedButton(seed: PlantType | FlowerType): string {
+  const crop = PLANT_TYPES.indexOf(seed as PlantType);
+  const at = crop >= 0 ? crop : PLANT_TYPES.length + FLOWER_TYPES.indexOf(seed as FlowerType);
+  return `seeds.${at}`;
+}
+
+/**
+ * And the patch menu's, by what the button does.
+ *
+ * The one menu whose *contents* change: indoors it is build-or-clear,
+ * outdoors grow-or-clear, and a child who has met the astronomer gets
+ * copying as a third. `patch.2` meant copying only for that last child.
+ */
+export function patchButton(action: PatchAction): string {
+  return `patch.${action}`;
+}
+
+export function crateButton(thing: FixtureType | DecorType): string {
+  const fixture = PLACEABLE_FIXTURES.indexOf(thing as FixtureType);
+  const at =
+    fixture >= 0 ? fixture : PLACEABLE_FIXTURES.length + DECOR_TYPES.indexOf(thing as DecorType);
+  return `crate.${at}`;
 }
 
 /**

@@ -4,7 +4,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { HARDEST_RUNG, SHARED_TOP_RUNG, rungAt } from "../src/spells/difficulty";
 import { Spell } from "../src/spells/spellbook";
-import { type Game, play, runeButton, shutDown } from "./harness";
+import { PlantType } from "../src/world/plants";
+import { type Game, play, runeButton, seedButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -49,7 +50,7 @@ async function castGrowth(game: Game): Promise<Line> {
   // A seed is armed and then aimed, the same two taps a spell takes: pick
   // it up, then say which square.
   await game.tap("seeds");
-  await game.tap("seeds.0");
+  await game.tap(seedButton(PlantType.Carrot));
   await game.tapNear(0, 1);
   await game.settle(500);
   await game.tap("spellbook");
