@@ -512,7 +512,34 @@ const SETUP_MS = 180_000;
  * a fixed sleep is either too short there or wasted here.
  */
 async function running(page: Page): Promise<void> {
-  await page.waitForFunction(() => "__mathemagicum" in globalThis, null, { timeout: SETUP_MS });
+  try {
+    await page.waitForFunction(() => "__mathemagicum" in globalThis, null, { timeout: SETUP_MS });
+  } catch (whyNot) {
+    // The *first* of the two waits, and it had no story either until a
+    // suite run spent three minutes here and reported a bare Playwright
+    // timeout pointing at a line of this file.
+    //
+    // Nothing has put a handle out, so there is nothing to ask about
+    // frames. What there is: whether the document finished loading at all,
+    // and whether the game got as far as making a canvas. A page still
+    // fetching is a slow machine or a slow server; a loaded page with no
+    // canvas is a script that threw before Phaser started, which is a bug
+    // in this repository and looks identical from the outside.
+    const state = await page
+      .evaluate(() => ({
+        ready: document.readyState,
+        canvas: Boolean(document.querySelector("canvas")),
+        url: location.href,
+      }))
+      .catch(() => null);
+    throw new Error(
+      state
+        ? `no game handle after ${SETUP_MS}ms: the document is "${state.ready}" and ` +
+            `${state.canvas ? "has" : "has no"} canvas (${state.url})`
+        : `no game handle after ${SETUP_MS}ms, and the page would not answer at all`,
+      { cause: whyNot },
+    );
+  }
   try {
     await page.waitForFunction(
       () => {
