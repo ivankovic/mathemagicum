@@ -492,19 +492,21 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
   // and also the only cells the grid guarantees are clear.
   //
   // It was a lamp at every one of them. A playtest asked for somewhere with
-  // a bit more solarpunk about it, and the crossings are where a city says
-  // what kind of city it is — so a lamp, then a sun panel, then greenery,
-  // round and round. Three in rotation rather than a random draw: a child
-  // walking a street should be able to see the pattern, which is also what
-  // stops one crossing looking like a mistake.
+  // a bit more solarpunk about it, so every third crossing is greenery
+  // instead: in rotation rather than at random, because a child walking a
+  // street should be able to see the pattern, which is also what stops one
+  // crossing looking like a mistake.
   //
-  // **The lamp keeps its share and keeps its place in the cycle**, because
-  // it is the only one of the three that does something — it lights the
-  // ground, and a city that swapped a third of its lamps for scenery would
-  // be a city that got darker to look nicer.
+  // **The lamp keeps two of every three**, because it is the one of the pair
+  // that does something — it lights the ground, and a city that swapped half
+  // its lamps for scenery would be a city that got darker to look nicer.
+  //
+  // A sun panel was in this rotation and is not any more. The same playtest
+  // said panels scattered about the place did not look good, and they were
+  // right — a panel belongs on a roof, so it is drawn into the townhouse
+  // itself and this list is back to things that stand on the ground.
   const CROSSING_CYCLE: readonly FixtureType[] = [
     FixtureType.Lamp,
-    FixtureType.SunArray,
     FixtureType.Lamp,
     FixtureType.Planter,
   ];

@@ -134,14 +134,8 @@ const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
     few: "razvrstavača",
     many: "razvrstavača",
   },
-  // Two feminine and one masculine, and the masculine is inanimate, so its
+  // One feminine and one masculine, and the masculine is inanimate, so its
   // accusative is its nominative — the same shape as *bunar* and the sorter.
-  [FixtureType.SunArray]: {
-    one: "sunčana ploča",
-    acc: "sunčanu ploču",
-    few: "sunčane ploče",
-    many: "sunčanih ploča",
-  },
   [FixtureType.Windpump]: {
     one: "vjetrenjača",
     acc: "vjetrenjaču",

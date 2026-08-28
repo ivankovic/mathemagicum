@@ -101,7 +101,6 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
   // The quay's and the city's dressing, not for sale for the reason the
   // market stall is not: it is a piece of a place rather than a thing
   // somebody owns.
-  "sun-array": Number.POSITIVE_INFINITY,
   windpump: Number.POSITIVE_INFINITY,
   planter: Number.POSITIVE_INFINITY,
   fence: 2,

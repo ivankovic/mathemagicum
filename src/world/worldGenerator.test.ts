@@ -113,11 +113,9 @@ function assertTheHarbourHasSeaInIt(grid: WorldGrid, harbour: AreaPlacement): vo
  * run of quay cells whose length is the coast's business, and pinning a
  * coordinate here would pin the coastline.
  *
- * The wind pump is deliberately not asserted here. It is the rare one —
- * every eleventh quay cell that is not already something else — and a quay
- * short enough to have none is a small harbour rather than a bug. It is
- * asked for at full scale instead, where the harbour is the one the game
- * ships and "no pump" could only mean the rhythm never fires.
+ * The wind pump is asked for by *place*, not merely by count. It moved from
+ * the quay to the village gardens on a playtest note, and a global count
+ * would have gone on passing wherever it had ended up.
  */
 function assertTheBuiltUpPlacesAreDressed(
   grid: WorldGrid,
@@ -126,12 +124,16 @@ function assertTheBuiltUpPlacesAreDressed(
   const standing = (type: string): number =>
     grid.listObjects().filter((object) => object.type === type).length;
 
-  // The city crossings run lamp, panel, lamp, planter, so a city with any
-  // crossings at all has some of each. Lamps are asserted too: the rotation
-  // took two of every four away from them, and a city that got darker to
-  // look nicer would be a bad trade made silently.
+  // The city crossings run lamp, lamp, planter, so a city with any crossings
+  // at all has both. Lamps are asserted too: the rotation took one of every
+  // three away from them, and a city that got darker to look nicer would be
+  // a bad trade made silently.
+  //
+  // Sun panels are not asked about here at all any more. They are drawn on
+  // the townhouse's roof rather than placed on a cell, so there is nothing
+  // in the grid to count — which is most of the reason moving them there was
+  // the right answer and not merely a nicer one.
   expect(standing(FixtureType.Lamp)).toBeGreaterThan(0);
-  expect(standing(FixtureType.SunArray)).toBeGreaterThan(0);
 
   // The quay's planters counted *inside the harbour*, which is the whole
   // point of scoping this rather than counting the world's.
@@ -140,6 +142,29 @@ function assertTheBuiltUpPlacesAreDressed(
   // deleting the quay's arm outright left every test in this file passing,
   // because the city's own planters answered for them. A count that two
   // different places can satisfy is a count that neither place has to.
+  // A wind pump at every village garden, outside its fence. Counted rather
+  // than located: which corner is the far one depends on which way the
+  // garden's way in faces, and pinning that here would pin the layout.
+  //
+  // This one earns its place. The pump moved from the quay to the village
+  // and a count that had stayed global would have gone on passing whichever
+  // of the two it was in, which is exactly the vacuous assertion the quay's
+  // planters caught me writing.
+  const villageBox = world.anchors.village;
+  const inTheVillage = grid
+    .listObjects()
+    .filter((object) => object.type === FixtureType.Windpump)
+    .filter(
+      (object) =>
+        object.col >= villageBox.col &&
+        object.col < villageBox.col + villageBox.width &&
+        object.row >= villageBox.row &&
+        object.row < villageBox.row + villageBox.height,
+    );
+  expect(inTheVillage.length).toBeGreaterThan(0);
+  // And none anywhere else: the quay's arm was deleted, not disabled.
+  expect(standing(FixtureType.Windpump)).toBe(inTheVillage.length);
+
   const harbour = world.harbour;
   if (!harbour) return;
   // Asked of the quay's own cells rather than of a bounding box: the quay is
@@ -592,15 +617,5 @@ describe("generateWorld at full target scale", () => {
     expect(isReachable(reachable, grid, centerOf(anchors.observatory))).toBe(true);
     assertYouCanGetIntoTheSettlements(grid, reachable, world);
     assertGroveIsReachedAndStandsThere(grid, reachable, world.grove);
-
-    // And the wind pump, which is asked for *here* rather than in the sweep.
-    // It is the rare one — every eleventh quay cell that is not already
-    // something else — and the sweep's worlds are small enough that a quay
-    // with none on it is a short quay rather than a bug. A five-hundred-cell
-    // world has the harbour the game actually ships, so if the rhythm never
-    // fires here it never fires.
-    expect(
-      grid.listObjects().filter((object) => object.type === FixtureType.Windpump).length,
-    ).toBeGreaterThan(0);
   });
 });

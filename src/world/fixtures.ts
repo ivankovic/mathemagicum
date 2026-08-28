@@ -113,19 +113,19 @@ export const FixtureType = {
    */
   Sorter: "sorter",
   /**
-   * The quay and the city, in glass and brass.
+   * Brass and greenery, for the places that are not the village square.
    *
    * A playtest liked the fairytale look and asked for somewhere with a bit
-   * more solarpunk in it, so the answer is *regional* rather than a repaint:
-   * the village stays timber, because timber is the half that worked, and
-   * these go where the world is already built up.
+   * more solarpunk in it, and these are the part of that answer a *game*
+   * places. The other part is on the roofs — a sun panel is drawn into the
+   * townhouse rather than standing on a cell, because a panel scattered
+   * about a place looks exactly like a panel scattered about a place, which
+   * is what the playtest said about the first version.
    *
-   * World generation's, like the well and the market stall. A child who
-   * could buy a length of solar array could put one in a wood, and what
-   * these are for is saying *what kind of place this is* — which is a fact
-   * about the place rather than about who lives there.
+   * World generation's, like the well and the market stall. What these are
+   * for is saying *what kind of place this is*, which is a fact about the
+   * place rather than about who lives there.
    */
-  SunArray: "sun-array",
   Windpump: "windpump",
   Planter: "planter",
 } as const;

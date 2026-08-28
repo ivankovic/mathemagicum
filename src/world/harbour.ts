@@ -743,17 +743,19 @@ export function layoutHarbour(grid: WorldGrid, box: AreaPlacement, rng: Rng): Ha
   }
 
   // The fish market: stalls along the front, between the piers, a lamp at
-  // each pier root so the quay is legible after dark, and — since a playtest
-  // asked for somewhere with a bit more solarpunk in it — the glass and
-  // brass that says a working quay rather than a fishing village.
+  // each pier root so the quay is legible after dark, and greenery between
+  // them — a working front with nothing growing on it is a wharf.
   //
-  // **Four rhythms sharing one run of cells, in a chain, so the order they
-  // are written in is the order they get first refusal.** A cell is a
-  // stall, else a lamp, else a pump, else a planter — and because it is a
-  // chain rather than four independent tests, the *last* arm is the common
-  // one however small its modulus looks. Greenery is what has to be
-  // everywhere and a pump is what one should come round a corner and find,
-  // so the greenery is last and the pump is on eleven.
+  // **Three rhythms sharing one run of cells, in a chain, so the order they
+  // are written in is the order they get first refusal.** A cell is a stall,
+  // else a lamp, else a planter — and because it is a chain rather than
+  // three independent tests, the *last* arm is the common one however small
+  // its modulus looks. Greenery is what has to be everywhere, so it is last.
+  //
+  // A wind pump was on this quay and has gone to the village. A playtest
+  // said it did not make sense here and it does not: a pump lifts water for
+  // something to grow, and what is beside a quay is the sea. The gardens are
+  // where the water is wanted.
   //
   // `put` refuses a cell that is already taken, so nothing here has to be
   // undone: a rhythm that lands on an occupied cell simply does not place,
@@ -775,15 +777,6 @@ export function layoutHarbour(grid: WorldGrid, box: AreaPlacement, rng: Rng): Ha
     } else if (n % 7 === 0) {
       placed.push(
         ...[put(grid, `harbour-lamp-${n}`, FixtureType.Lamp, cell)]
-          .filter(Boolean)
-          .map((o) => o as PlacedObject),
-      );
-    } else if (n % 11 === 0) {
-      // The rare one, and rare on purpose: a quay with a pump every third
-      // cell is a pump farm, and what one wants is to come round the corner
-      // of a warehouse and find one turning.
-      placed.push(
-        ...[put(grid, `harbour-pump-${n}`, FixtureType.Windpump, cell)]
           .filter(Boolean)
           .map((o) => o as PlacedObject),
       );

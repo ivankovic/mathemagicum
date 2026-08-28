@@ -726,6 +726,44 @@ export function layoutVillage(grid: WorldGrid, village: AreaPlacement, seed = 0)
             (isGate && !onSide && cell.col > gate.col),
         });
       }
+      // A wind pump at the far corner of the fence, outside it.
+      //
+      // It was on the quay and a playtest said it did not make sense there,
+      // which is right: a pump lifts water for something to grow, and what
+      // is beside a quay is the sea. A garden is the one place in this world
+      // that actually wants water lifted, so that is where it belongs — and
+      // standing it *outside* the fence keeps every bed inside plantable,
+      // which is the whole point of the enclosure.
+      //
+      // The far corner rather than a near one: the way in faces the square,
+      // so the corner diagonally opposite the gate is the one cell around
+      // this fence that nobody walks through to get anywhere.
+      const pump = {
+        col: gate.col > gardenCenter.col ? left - 1 : right + 1,
+        row: gate.row > gardenCenter.row ? topRow - 1 : bottomRow + 1,
+      };
+      // Checked rather than assumed, exactly as the square's lamps are: that
+      // a corner is clear is a property of today's layout and not a law of
+      // it, and a pump dropped on a path would wall a garden off from its
+      // own house.
+      if (
+        grid.inBounds(pump.col, pump.row) &&
+        grid.isPassable(pump.col, pump.row) &&
+        !grid.getObjectAt(pump.col, pump.row)
+      ) {
+        grid.placeObject({
+          id: `${spec.id}-windpump`,
+          type: FixtureType.Windpump,
+          col: pump.col,
+          row: pump.row,
+          width: 1,
+          height: 1,
+          blocksMovement: true,
+          anchorCol: pump.col,
+          anchorRow: pump.row,
+        });
+      }
+
       // Standing in their own beds, inside their own fence: the first thing
       // the game is about is the thing the player is stood in. Recorded for
       // every house rather than only the first, because there are four

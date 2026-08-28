@@ -2726,7 +2726,34 @@ arithmetic in a machine belongs to what it *does* — a sorter deals a heap
 into equal shares, which is the share spell — and a lock on the door of the
 classroom is not a lesson.
 
-**The first one is a sorter**: a hopper, a wheel that turns, and three crates
+**Where the solarpunk went, second time round.** The first pass put sun
+panels on city crossings and wind pumps on the quay, and a playtest called
+both: panels scattered about the place do not look good, and a pump makes no
+sense beside the sea. Both notes were right, and neither wanted a better
+scatter.
+
+A **panel belongs on a roof** — that is where the sun is and where anybody
+would put one — so it is not a placeable thing at all any more. It is drawn
+into the townhouse, on the `"panel"` feature, out of the building's own
+palette. That deletes the whole class of problem rather than tuning it: no
+cell, no blocking, nothing for a connectivity carve to knock down, and one
+fixture, one price and three noun tables gone with it. Every city roof
+carries one, because a city where only some houses have a panel reads as a
+city where somebody could not afford one.
+
+A **pump lifts water for something to grow**, and what is beside a quay is
+the sea. The gardens are the one place in this world that actually wants
+water lifted, so each village garden has one at the far corner of its fence
+— outside it, so every bed inside stays plantable, and diagonally opposite
+the way in, which is the one cell around a fence nobody walks through to get
+anywhere.
+
+What is left on the ground is greenery: planters between the fish stalls and
+at every third city crossing. The lamp keeps the other two of every three,
+because it is the one that does something, and a city that swapped half its
+lamps for scenery would be a city that got darker to look nicer.
+
+**The first machine is a sorter**: a hopper, a wheel that turns, and three crates
 under it. Its silhouette is its arithmetic — one mouth at the top, three
 boxes at the bottom, the wheel between them doing the dividing — and a child
 who has never tapped it should be able to guess what it is for. It is the
