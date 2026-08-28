@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
+import { ROLE_SPRITES } from "../world/buildings";
+import { LANDMARK_TYPES } from "../world/landmarks";
 import {
   KNOWN_FROM_THE_START,
   SPELLS,
   Spell,
+  TAUGHT_BESIDE,
   TAUGHT_BY,
   knowsSpell,
   learnSpell,
@@ -67,5 +70,39 @@ describe("reading it back from a save", () => {
 
   test("the same spell twice comes back once", () => {
     expect(readLearned(["portal", "portal"])).toEqual(["portal"]);
+  });
+});
+
+describe("what to look for", () => {
+  /**
+   * Every spell that has to be learned says where, and nothing else does.
+   *
+   * Held to `TAUGHT_BY` rather than written out, because the failure is
+   * silent: a spell that gained a teacher and no landmark would be a rune
+   * that refuses with nothing to say, and refusing is exactly what a rune
+   * does when it has not been taught — so it would look like the feature
+   * working.
+   */
+  test("is named for every spell that is taught, and only those", () => {
+    expect(Object.keys(TAUGHT_BESIDE).sort()).toEqual(Object.keys(TAUGHT_BY).sort());
+  });
+
+  test("and the two known from the start have nowhere to be found", () => {
+    for (const spell of KNOWN_FROM_THE_START) {
+      expect({ spell, sight: TAUGHT_BESIDE[spell] }).toEqual({ spell, sight: undefined });
+    }
+  });
+
+  /**
+   * And each names something the game can actually draw: a landmark or a
+   * building role. Checked against those two lists rather than against a
+   * copy of them, so a typo is a failure here and not a missing texture in
+   * a browser.
+   */
+  test("each names a landmark or a building the game has art for", () => {
+    for (const [spell, sight] of Object.entries(TAUGHT_BESIDE)) {
+      const known = (LANDMARK_TYPES as readonly string[]).includes(sight) || sight in ROLE_SPRITES;
+      expect({ spell, sight, known }).toEqual({ spell, sight, known: true });
+    }
   });
 });

@@ -107,6 +107,7 @@ import {
   KNOWN_FROM_THE_START,
   SPELLS,
   Spell,
+  TAUGHT_BESIDE,
   knowsSpell,
   learnSpell,
   spellTaughtBy,
@@ -1168,11 +1169,15 @@ type Armed =
  * here is what lets the drawing pick the right texture without a naming
  * convention nobody would remember.
  */
-type Thought = { readonly ui: string } | { readonly ground: TerrainType };
+type Thought =
+  | { readonly ui: string }
+  | { readonly ground: TerrainType }
+  | { readonly sheet: string; readonly frame?: number; readonly tag: string };
 
 /** What a cloud's contents are called, for the seam and for tests. */
 function thoughtTag(thought: Thought): string {
-  return "ground" in thought ? thought.ground : thought.ui;
+  if ("ground" in thought) return thought.ground;
+  return "sheet" in thought ? thought.tag : thought.ui;
 }
 
 /**
@@ -4575,7 +4580,7 @@ export class GameScene extends Phaser.Scene {
     if (this.modalOpen) return;
     this.spellTray?.setOpen(false);
     if (!this.knowsArray) {
-      this.showRefusalOnPlayer(UiAsset.RuneTimes);
+      this.showWhereToLearn(Spell.Array);
       return;
     }
     // Indoors it marks out floor to build rather than ground to plant, and
@@ -4619,7 +4624,7 @@ export class GameScene extends Phaser.Scene {
     if (this.modalOpen) return;
     this.spellTray?.setOpen(false);
     if (!this.knowsShare) {
-      this.showRefusalOnPlayer(UiAsset.RuneDivide);
+      this.showWhereToLearn(Spell.Share);
       return;
     }
     if (this.interior) {
@@ -5321,10 +5326,11 @@ export class GameScene extends Phaser.Scene {
   private castPortalSpell(): void {
     if (this.modalOpen) return;
     this.spellTray?.setOpen(false);
-    // Refused with a reason, and the reason says where to go. A rune that
-    // did nothing when tapped would read as a broken button.
+    // Refused with a reason, and the reason really does say where to go
+    // now — it used to cross the rune out, which says no and stops. A rune
+    // that did nothing at all would read as a broken button.
     if (!this.knowsPortal) {
-      this.showRefusalOnPlayer(UiAsset.RunePortal);
+      this.showWhereToLearn(Spell.Portal);
       return;
     }
     if (this.interior) {
@@ -5769,7 +5775,7 @@ export class GameScene extends Phaser.Scene {
     if (this.modalOpen) return;
     this.spellTray?.setOpen(false);
     if (!this.knowsHourglass) {
-      this.showRefusalOnPlayer(UiAsset.RuneHourglass);
+      this.showWhereToLearn(Spell.Hourglass);
       return;
     }
     // No other gate, and there used to be three: something must have been
@@ -5803,7 +5809,7 @@ export class GameScene extends Phaser.Scene {
     if (this.modalOpen) return;
     if (!this.knowsMirror) {
       this.spellTray?.setOpen(false);
-      this.showRefusalOnPlayer(UiAsset.RuneMirror);
+      this.showWhereToLearn(Spell.Mirror);
       return;
     }
     // Both, and the second one matters: a child who chose *copy* off the
@@ -6360,6 +6366,61 @@ export class GameScene extends Phaser.Scene {
    * fixes by *moving* belongs over her, and this is the one refusal in the
    * game whose answer is "try it somewhere else".
    */
+  /**
+   * Where to go and find a spell nobody has taught her yet.
+   *
+   * A crossed-out rune says no and stops, which for a child who cannot read
+   * is a button that does not work. This says where instead: the tower, the
+   * great tree, the beacon, the town clock, the dome — whichever is the
+   * thing you can see from outside and walk at. See `TAUGHT_BESIDE`, and see
+   * there why it is a building rather than a region.
+   *
+   * Falls back to the crossed-out rune when a spell has no sight named for
+   * it. A unit test says that cannot happen; a refusal that silently drew
+   * nothing would be worse than the one this replaces.
+   */
+  private showWhereToLearn(spell: Spell): void {
+    const sight = TAUGHT_BESIDE[spell];
+    const seen = sight ? this.sightOf(sight) : null;
+    if (!seen) {
+      this.showRefusalOnPlayer(RUNE_OF[spell]);
+      return;
+    }
+    this.showThoughtOnPlayer([seen, { ui: UiAsset.MarkQuestion }], false);
+  }
+
+  /** The sheet a named building or landmark is drawn from, if it is loaded. */
+  private sightOf(sight: string): Thought | null {
+    const landmark = landmarkFor(sight);
+    const sheet = landmark
+      ? landmarkSheetKey(landmark)
+      : ROLE_SPRITES[sight as BuildingRole]
+        ? spriteSheetKey(ROLE_SPRITES[sight as BuildingRole])
+        : null;
+    if (!sheet || !this.textures.exists(sheet)) return null;
+    return { sheet, tag: sight };
+  }
+
+  /**
+   * And what a flower she has not found yet looks like where it grows.
+   *
+   * The pouch button is a picture drawn *for* the pouch; this is a frame of
+   * the flower's own sheet, which is what she will walk past in the grass. A
+   * refusal that showed the button again would be showing her the thing she
+   * had just tapped.
+   */
+  private showWhereToFind(flower: FlowerType): void {
+    const sheet = flowerSheetKey(flower);
+    if (!this.textures.exists(sheet)) {
+      this.showRefusalOnPlayer(flowerIcon(flower));
+      return;
+    }
+    this.showThoughtOnPlayer(
+      [{ sheet, frame: 0, tag: flower }, { ui: UiAsset.MarkQuestion }],
+      false,
+    );
+  }
+
   private showWonderOnPlayer(plant: PlantType): void {
     this.showThoughtOnPlayer(
       [...groundFor(plant).map((ground) => ({ ground })), { ui: UiAsset.MarkQuestion }],
@@ -6397,8 +6458,18 @@ export class GameScene extends Phaser.Scene {
       const image =
         "ground" in icon
           ? this.add.image(cx, middle, TERRAIN_ATLAS_KEY, plainTerrainFrame(icon.ground))
-          : this.add.image(cx, middle, uiTextureKey(icon.ui));
-      return image.setDisplaySize(slot, slot);
+          : "sheet" in icon
+            ? this.add.image(cx, middle, icon.sheet, icon.frame ?? 0)
+            : this.add.image(cx, middle, uiTextureKey(icon.ui));
+      // Kept in proportion rather than squashed into a square. A tower is
+      // four times taller than it is wide and a lighthouse more, and forced
+      // to a square slot the two become grey blocks a child cannot tell
+      // apart — what identifies a building at this size is its outline.
+      const wide = image.width >= image.height;
+      return image.setDisplaySize(
+        wide ? slot : (slot * image.width) / image.height,
+        wide ? (slot * image.height) / image.width : slot,
+      );
     });
     // And the cross, beside the cloud rather than over it. Over the top it
     // would hide the half that says *which* things are wanted, which is the
@@ -8852,7 +8923,7 @@ export class GameScene extends Phaser.Scene {
     if (this.modalOpen) return;
     this.seedTray?.setOpen(false);
     if (!this.hasFoundFlower(flower)) {
-      this.showRefusalOnPlayer(flowerIcon(flower));
+      this.showWhereToFind(flower);
       return;
     }
     const above = this.screenOfPoint(this.player.x, this.player.y - TILE_SIZE);

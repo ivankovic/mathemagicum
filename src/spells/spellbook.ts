@@ -90,6 +90,40 @@ export const TAUGHT_BY: Partial<Record<Spell, string>> = {
   [Spell.Mirror]: "astronomer",
 };
 
+/**
+ * What to look for, for each spell that has to be learned.
+ *
+ * A rune nobody has taught yet is refused, and a refusal that only says no
+ * is the game being broken to a child who cannot read. So it says *where*,
+ * in the one language this game speaks: a picture of the thing to walk
+ * towards.
+ *
+ * **A building or a landmark rather than a place.** The obvious version of
+ * this names the region — the harbour, the city, the forest — and it falls
+ * apart on the first entry: the geometer is up the tower in the village,
+ * which is where the child already is, so "go to the village" is no help at
+ * all. What is always useful is the thing you can see from outside and walk
+ * at, and every one of these has one.
+ *
+ * The names are the game's own for those things, so the scene can look each
+ * up without a table of its own: three are `LandmarkType`s and two are
+ * `BuildingRole`s. Kept here rather than in the scene because *which sight
+ * belongs to which spell* is a fact about the spells, and a test can hold
+ * this to `TAUGHT_BY` — a spell that gains a teacher and no landmark would
+ * otherwise be a rune that refuses with nothing to say.
+ */
+export const TAUGHT_BESIDE: Partial<Record<Spell, string>> = {
+  // The tower over the post office, which is the sight; the geometer is
+  // inside it and the map on its wall is why he is.
+  [Spell.Portal]: "post-office",
+  [Spell.Array]: "great-tree",
+  // The quay has no building of its own worth pointing at, and the beacon on
+  // the headland is what a harbour looks like from a long way off.
+  [Spell.Share]: "lighthouse",
+  [Spell.Hourglass]: "clock-tower",
+  [Spell.Mirror]: "observatory",
+};
+
 export function knowsSpell(learned: Iterable<string>, spell: Spell): boolean {
   if (KNOWN_FROM_THE_START.includes(spell)) return true;
   for (const known of learned) if (known === spell) return true;

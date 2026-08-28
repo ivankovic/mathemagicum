@@ -383,6 +383,13 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
   );
   const page = await bounded("a tab to open", context.newPage(), SETUP_MS);
   const complaints: string[] = [];
+  COMPLAINTS.set(page, complaints);
+  // A file the page asked for and did not get, which is the other way a game
+  // ends up with no canvas: nothing threw, because the script that would
+  // have thrown never arrived.
+  page.on("requestfailed", (request) => {
+    complaints.push(`could not fetch ${request.url()}: ${request.failure()?.errorText ?? "?"}`);
+  });
   page.on("pageerror", (error) => complaints.push(`page error: ${error.message}`));
   page.on("console", (message) => {
     if (message.type() === "error") complaints.push(`console: ${message.text().slice(0, 200)}`);
@@ -498,6 +505,28 @@ const ANSWER_MS = 30_000;
 const SETUP_MS = 180_000;
 
 /**
+ * What each page has complained about, reachable from anywhere that has one.
+ *
+ * These are gathered as they happen and checked at the *end* of a scenario,
+ * which is right for a run that gets that far and useless for one that does
+ * not. A boot that fails leaves the game with no canvas and the reason
+ * sitting in this list, thrown away when the wait times out instead — which
+ * is exactly what happened on a run whose whole evidence was "the document
+ * is complete and has no canvas".
+ *
+ * A `WeakMap` rather than a parameter, because `reload` is a method on
+ * `Game` and has a page and nothing else; threading the array to it would
+ * mean threading it through everything that can reload.
+ */
+const COMPLAINTS = new WeakMap<Page, string[]>();
+
+/** Whatever this page has complained about so far, as one line. */
+function saidSoFar(page: Page): string {
+  const said = COMPLAINTS.get(page) ?? [];
+  return said.length > 0 ? ` It complained: ${said.join(" / ")}` : " It said nothing at all.";
+}
+
+/**
  * Wait until the game is not merely loaded but *running*.
  *
  * The handle appearing says the scene reached the line that puts it there,
@@ -532,13 +561,12 @@ async function running(page: Page): Promise<void> {
         url: location.href,
       }))
       .catch(() => null);
-    throw new Error(
-      state
-        ? `no game handle after ${SETUP_MS}ms: the document is "${state.ready}" and ` +
-            `${state.canvas ? "has" : "has no"} canvas (${state.url})`
-        : `no game handle after ${SETUP_MS}ms, and the page would not answer at all`,
-      { cause: whyNot },
-    );
+    const how = state
+      ? `the document is "${state.ready}" and ${state.canvas ? "has" : "has no"} canvas (${state.url})`
+      : "the page would not answer at all";
+    throw new Error(`no game handle after ${SETUP_MS}ms: ${how}.${saidSoFar(page)}`, {
+      cause: whyNot,
+    });
   }
   try {
     await page.waitForFunction(
@@ -570,9 +598,10 @@ async function running(page: Page): Promise<void> {
         return stats ? stats().frames : -1;
       })
       .catch(() => -1);
+    const why =
+      reached === 0 ? "it never started" : reached < 0 ? "the handle went away" : "it is only slow";
     throw new Error(
-      `the scene drew ${reached} frames in ${SETUP_MS}ms, wanted more than 20 ` +
-        `(${reached === 0 ? "it never started" : reached < 0 ? "the handle went away" : "it is only slow"})`,
+      `the scene drew ${reached} frames in ${SETUP_MS}ms, wanted more than 20 (${why}).${saidSoFar(page)}`,
       { cause: whyNot },
     );
   }

@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { Spell, TAUGHT_BESIDE } from "../src/spells/spellbook";
 import { UiAsset } from "../src/ui/assets";
+import { RUNE_OF } from "../src/ui/runes";
 import { FLOWER_LOOKS, FLOWER_TYPES, type FlowerType } from "../src/world/flowers";
 import { PlantType, groundFor } from "../src/world/plants";
 import { TerrainType } from "../src/world/terrain";
-import { type Game, play, seedButton, shutDown } from "./harness";
+import { type Game, play, runeButton, seedButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -259,6 +261,79 @@ describe("a seed that will not go in here", () => {
         await game.tapNear(0, 1);
         expect(await game.seam("thought")).toBeNull();
         expect(await plantedBeside(game)).toBe(PlantType.Carrot);
+      });
+    },
+    5 * MINUTES,
+  );
+});
+
+/**
+ * The two other things a child can be told no about, and where to go for them.
+ *
+ * A crossed-out picture says *no* and stops, which to a child who cannot read
+ * is a button that does not work. Both of these say where instead: the spell
+ * points at the thing you walk towards to be taught it, and the flower shows
+ * what it looks like growing so she knows what she is looking for.
+ *
+ * Through the seam, for the reason the ground hint is: a cloud fades in four
+ * hundred milliseconds and every tap helper here waits five hundred.
+ */
+describe("being told where to go", () => {
+  test(
+    "a spell nobody has taught her points at where she can be",
+    async () => {
+      await play({ seams: "&hour=12&freezeNpcs" }, async (game) => {
+        await game.tap("spellbook");
+        await game.tap(runeButton(Spell.Mirror));
+
+        const thought = await game.seam<{ icons: string[]; crossed: boolean } | null>("thought");
+        if (!thought) throw new Error("the unlearned rune said nothing");
+        expect(thought.crossed).toBe(false);
+        const sight = TAUGHT_BESIDE[Spell.Mirror];
+        if (!sight) throw new Error("the mirror spell has nowhere to be learned");
+        expect(thought.icons).toEqual([sight, UiAsset.MarkQuestion]);
+        // Not the rune she just tapped, which is the thing she already knows.
+        expect(thought.icons).not.toContain(RUNE_OF[Spell.Mirror]);
+      });
+    },
+    5 * MINUTES,
+  );
+
+  test(
+    "and each spell points somewhere of its own",
+    async () => {
+      await play({ seams: "&hour=12&freezeNpcs" }, async (game) => {
+        const seen: string[] = [];
+        for (const spell of [Spell.Share, Spell.Hourglass, Spell.Array]) {
+          await game.tap("spellbook");
+          await game.tap(runeButton(spell));
+          const thought = await game.seam<{ icons: string[] } | null>("thought");
+          seen.push(thought?.icons[0] ?? "nothing");
+          await game.settle(700);
+        }
+        // Three different sights. A single fallback picture for every
+        // unlearned spell would satisfy the test above and tell a child
+        // nothing, which is the failure worth guarding.
+        expect(new Set(seen).size).toBe(seen.length);
+        expect(seen).not.toContain("nothing");
+      });
+    },
+    5 * MINUTES,
+  );
+
+  test(
+    "and a flower she has not found shows what to look for",
+    async () => {
+      await play({ seams: "&hour=12&freezeNpcs" }, async (game) => {
+        const flower = FLOWER_TYPES[0];
+        if (!flower) throw new Error("no flowers in this game");
+        await game.tap("seeds");
+        await game.tap(seedButton(flower));
+
+        const thought = await game.seam<{ icons: string[]; crossed: boolean } | null>("thought");
+        if (!thought) throw new Error("the unfound flower said nothing");
+        expect(thought.crossed).toBe(false);
+        expect(thought.icons).toEqual([flower, UiAsset.MarkQuestion]);
       });
     },
     5 * MINUTES,
