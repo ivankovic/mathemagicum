@@ -1,7 +1,7 @@
 {
   "sheet": {
     "file": "blimp_sheet.png",
-    "frame_width": 96,
+    "frame_width": 128,
     "frame_height": 224,
     "frame_count": 16,
     "columns": 16,
@@ -34,11 +34,11 @@
     ]
   ],
   "sprite_offset_px": {
-    "x": -16,
+    "x": -32,
     "y": -160
   },
   "sprite_size_px": {
-    "width": 96,
+    "width": 128,
     "height": 224
   },
   "frame_count": 16,
