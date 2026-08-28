@@ -479,6 +479,12 @@ export interface DevHandle {
     addend: number;
     stops: readonly number[];
     index: number;
+    readonly bare: {
+      readonly start: number;
+      readonly addend: number;
+      readonly total: number;
+      readonly unknown: string;
+    } | null;
   } | null;
   /**
    * What the portal spell is asking, once a destination has been picked.
@@ -553,6 +559,8 @@ export interface DevHandle {
    * knowing what it asked, and the only other way to find out is to count
    * apples in a screenshot.
    */
+  /** The help line under the addition parchment, if one is open. */
+  readonly spellHint: () => string;
   readonly share: () => {
     total: number;
     parts: number;

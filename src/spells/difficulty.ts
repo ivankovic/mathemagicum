@@ -56,6 +56,33 @@
  * scaled onto whichever ladder is asking — see `bandOn`.
  */
 
+/**
+ * How a sum is put to the child once the number line has been taken away.
+ *
+ * The line is the scaffold — it breaks a sum into one jump per place and
+ * asks for each landing in turn — so withdrawing it is what the top of this
+ * ladder had left to do. A six-digit number line is six jumps and a great
+ * deal of drawing; what it teaches at that size is bookkeeping, because a
+ * child who has got that far has had the method for a thousand casts.
+ *
+ * `Total` is the sum as anybody writes it: `A + B = ?`, one box.
+ *
+ * `Any` hides one of the three terms instead of always the last, so `? + B =
+ * C` and `A + ? = C` come up as often as `A + B = ?`. That is a genuinely
+ * different question rather than a harder one of the same kind — it is the
+ * first time this game asks a child to *undo* an addition, which is the
+ * thing subtraction is for and the reason the two spells are one instrument
+ * walked two ways.
+ */
+export const BareForm = {
+  /** `A + B = ?`. The answer is where it always was. */
+  Total: "total",
+  /** Any one of the three terms is the box. */
+  Any: "any",
+} as const;
+
+export type BareForm = (typeof BareForm)[keyof typeof BareForm];
+
 export interface Rung {
   /** How many jumps the number line is broken into: ones, tens, hundreds. */
   readonly places: number;
@@ -69,6 +96,24 @@ export interface Rung {
    * `places`, or there would be nothing to do.
    */
   readonly given: number;
+  /**
+   * Set on the rungs where the number line comes off altogether.
+   *
+   * Absent everywhere else, which is most of the ladder, so this reads as
+   * the exception it is rather than as a field every rung has to answer.
+   *
+   * **`given` is not read when this is set.** A bare sum is one box; there
+   * is nothing to arrive already done. The `given` values are left on these
+   * rungs as they were rather than zeroed, because they are still true of
+   * the number-line form of a sum that size, and lifting `bare` again would
+   * want them back.
+   *
+   * **The clearing spell does not read it.** It shares this ladder — the
+   * same instrument walked the other way — but taking the line off a
+   * subtraction is a separate decision about a separate spell, and nobody
+   * has asked for it.
+   */
+  readonly bare?: BareForm;
 }
 
 /**
@@ -110,10 +155,40 @@ export const RUNGS: readonly Rung[] = [
   { places: 5, crossing: true, given: 0 }, //  34715 + 26538
   { places: 6, crossing: true, given: 1 }, //  347156 + 265382, ones done
   { places: 6, crossing: true, given: 0 }, //  347156 + 265382
+  // And at the very top the number line comes off.
+  //
+  // **The numbers stop growing here, and that is the discipline of this
+  // whole table rather than a shortage of ideas.** Two things climb and they
+  // climb alternately; a rung that took the scaffold away *and* changed the
+  // size would be the step this ladder has been careful never to take. So
+  // these are the same six-digit carrying sum the two rungs below are, put
+  // the way anybody writes one.
+  //
+  // `Total` first, then `Any`, which is the same scaffolded-then-not pairing
+  // every size gets, in the only currency left once the line has gone: the
+  // answer where the answer has always been, and then the answer anywhere.
+  // See `BareForm`.
+  { places: 6, crossing: true, given: 0, bare: BareForm.Total }, // 347156 + 265382 = ?
+  { places: 6, crossing: true, given: 0, bare: BareForm.Any }, //   347156 + ? = 612538
 ];
 
 /** The hardest rung there is. */
 export const HARDEST_RUNG = RUNGS.length - 1;
+
+/**
+ * The hardest rung that still draws a number line.
+ *
+ * Read off the table rather than written down, so it cannot drift. Worth a
+ * name because it is what "the longest line the parchment ever draws" means
+ * now that the top of the ladder draws none: six jumps and six boxes are
+ * still reachable, still shipped and still the thing the panel's furniture
+ * was sized for, and a scenario that wanted to exercise them used to be able
+ * to say `HARDEST_RUNG` and cannot any more.
+ */
+export const LONGEST_LINE_RUNG = RUNGS.reduce(
+  (last, rung, at) => (rung.bare === undefined ? at : last),
+  0,
+);
 
 /**
  * The hardest rung the other spells' ladders have anything to answer to.

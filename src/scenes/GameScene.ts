@@ -51,7 +51,7 @@ import {
   writeSettings,
 } from "../settings";
 import { CURRENCY, totalOf as coinTotal, largestCoin } from "../shop/currency";
-import { makeAdditionProblem, movedBy } from "../spells/addition";
+import { type AdditionCast, additionCastFor, movedBy } from "../spells/addition";
 import {
   HARDEST_BRICK_RUNG,
   brickBeingAsked,
@@ -2134,8 +2134,15 @@ export class GameScene extends Phaser.Scene {
           addend: movedBy(cast.problem),
           stops: cast.problem.stops,
           index: cast.index,
+          // The three numbers and which of them is the box, when the rung
+          // asks for a sum with no line under it. Null otherwise, so a
+          // scenario can tell the two forms apart — which it otherwise
+          // could not: a bare cast runs on a one-jump line, and a one-jump
+          // line is also what the gentlest rung in the game sets.
+          bare: this.spellPopup?.bareSum ?? null,
         };
       },
+      spellHint: () => this.spellPopup?.hintText ?? "",
       share: () => {
         const cast = this.sharePopup?.cast;
         if (!cast) return null;
@@ -4289,10 +4296,16 @@ export class GameScene extends Phaser.Scene {
     // and the player walks off the moment the popup closes.
     this.joystick?.release();
     const rung = rungAt(this.dev.rung ?? this.profile.rung);
-    this.spellPopup.open(makeAdditionProblem(this.spellRng, rung), rung.given, (result) => {
-      if (result.solved) this.growCropAt(col, row);
-      this.noteCast(result);
-    });
+    const cast = additionCastFor(this.spellRng, rung);
+    this.spellPopup.open(
+      cast.problem,
+      cast.given,
+      (result) => {
+        if (result.solved) this.growCropAt(col, row);
+        this.noteCast(result);
+      },
+      cast.bare,
+    );
   }
 
   /**
@@ -5125,14 +5138,23 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const rung = rungAt(this.dev.rung ?? this.profile.rung);
-    const problem =
+    // The clearing spell keeps its number line at every rung. It shares this
+    // ladder — the same instrument walked the other way — but taking the
+    // line off a subtraction is a separate decision about a separate spell,
+    // and nobody has asked for it.
+    const cast: AdditionCast =
       action === PatchAction.Grow
-        ? makeAdditionProblem(this.spellRng, rung)
-        : makeSubtractionProblem(this.spellRng, rung);
-    this.spellPopup.open(problem, rung.given, (result) => {
-      this.noteCast(result);
-      done(result.solved);
-    });
+        ? additionCastFor(this.spellRng, rung)
+        : { problem: makeSubtractionProblem(this.spellRng, rung), given: rung.given, bare: null };
+    this.spellPopup.open(
+      cast.problem,
+      cast.given,
+      (result) => {
+        this.noteCast(result);
+        done(result.solved);
+      },
+      cast.bare,
+    );
   }
 
   /**

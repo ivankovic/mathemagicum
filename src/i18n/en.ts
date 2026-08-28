@@ -429,4 +429,5 @@ export const EN: Phrases = {
   jumpPrompt: (index) => `Jump the ${PLACES[index] ?? ""}. Where do you land?`,
   addPlace: (index, from) => `Add the ${PLACES[index] ?? ""} to ${from}.`,
   sumQuestion: (from, jump) => `${from} + ${jump} = ?`,
+  takeQuestion: (total, known) => `${total} − ${known} = ?`,
 };

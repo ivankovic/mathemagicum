@@ -4,11 +4,14 @@
 import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import {
+  type BareSum,
   type CastResult,
   type CastState,
   type NumberLine,
   PLACES,
   backspace,
+  bareHintFor,
+  bareSumText,
   beginCast,
   castResult,
   hintFor,
@@ -113,6 +116,35 @@ interface PadKey {
 }
 
 export class SpellPopup {
+  /**
+   * The sum being asked, when the rung asks for one without a number line.
+   *
+   * Held beside `state` rather than folded into it, because the cast
+   * machinery is deliberately blind to what a line *means* — it compares
+   * typed digits against a stop and nothing else. This is the panel's
+   * business: the three numbers it needs to write the equation and to hint
+   * about it, which the degenerate one-box line it is cast through cannot
+   * carry.
+   */
+  private bare: BareSum | null = null;
+
+  /** The bare sum being asked, or null on a number line. A dev seam. */
+  get bareSum(): BareSum | null {
+    return this.bare;
+  }
+
+  /**
+   * The line of help currently under the sum. A dev seam.
+   *
+   * Worth exposing because it is the one thing on this parchment that can be
+   * *wrong in the child's favour*: a hint that contains the answer would
+   * look like a working game to every other check there is, since it only
+   * appears after a wrong answer and the next one would then be right.
+   */
+  get hintText(): string {
+    return this.hint.text;
+  }
+
   private readonly parts: PanelPart[] = [];
   private readonly paper: ParchmentPanel;
   private readonly ink: Phaser.GameObjects.Graphics;
@@ -235,7 +267,13 @@ export class SpellPopup {
    * draw a subtraction under a plus sign; the stops cannot, because they are
    * the same numbers the boxes are checked against.
    */
-  open(problem: NumberLine, given: number, onDone: (result: CastResult) => void): void {
+  open(
+    problem: NumberLine,
+    given: number,
+    onDone: (result: CastResult) => void,
+    bare: BareSum | null = null,
+  ): void {
+    this.bare = bare;
     this.state = beginCast(problem, given);
     this.finish = onDone;
     this.paper.setVisible(true);
@@ -252,6 +290,7 @@ export class SpellPopup {
       this.keyHandler = null;
     }
     this.state = null;
+    this.bare = null;
     this.finish = null;
     this.paper.setVisible(false);
     for (const part of this.parts) part.setVisible(false);
@@ -404,7 +443,14 @@ export class SpellPopup {
 
     const problem = state.problem;
     const sign = runsDown(problem) ? "−" : "+";
-    this.title.setText(`${problem.start} ${sign} ${movedBy(problem)}`).setPosition(cx, top + PAD);
+    // A bare sum writes the whole equation across the top with a blank where
+    // the answer goes; a number line writes only the sum being worked,
+    // because the line underneath is already showing where it is going.
+    this.title
+      .setText(
+        this.bare ? bareSumText(this.bare, "?") : `${problem.start} ${sign} ${movedBy(problem)}`,
+      )
+      .setPosition(cx, top + PAD);
 
     this.hint
       .setText(this.hintLine(state))
@@ -463,6 +509,43 @@ export class SpellPopup {
     const stopX = (i: number) => (backwards ? lineRight - spacing * i : lineLeft + spacing * i);
 
     this.ink.clear();
+
+    // --- and the same panel with no line on it at all ----------------------
+    //
+    // The top of the ladder asks a sum the way anybody writes one, so there
+    // is nothing to draw: no line, no ticks, no arcs, no start label, and
+    // one box under the equation rather than one per place.
+    //
+    // A branch here rather than a second panel. Everything above this point
+    // — the parchment, the keypad, the entry, the close button, the sizing
+    // against a phone — is shared, and what differs is one picture. The
+    // division spell got a panel of its own because it is a different
+    // *spell*; this is the same spell with its scaffold taken away.
+    if (this.bare) {
+      this.startLabel.setVisible(false);
+      for (let i = 0; i < PLACES; i++) {
+        this.jumpLabels[i]?.setVisible(false);
+        const inUse = i === 0;
+        this.boxes[i]?.setVisible(inUse);
+        this.boxTexts[i]?.setVisible(inUse);
+      }
+      const box = this.boxes[0];
+      const text = this.boxTexts[0];
+      const wide = Math.min(panelW - PAD * 2, BOX_W * 3);
+      const middle = contentTop + (contentBottom - contentTop) / 2;
+      box?.setSize(wide, BOX_H)?.setPosition(cx, middle);
+      box?.setStrokeStyle(3, state.wrong ? WRONG_HEX : ACTIVE_HEX);
+      text
+        ?.setFontSize(
+          Math.min(BOX_SIZE, Math.floor((wide - 8) / (Math.max(1, state.entry.length) * CHAR_W))),
+        )
+        .setPosition(cx, middle)
+        .setText(state.entry === "" ? "_" : state.entry)
+        .setColor(INK);
+      return;
+    }
+
+    this.startLabel.setVisible(true);
     this.ink.lineStyle(2, INK_HEX, 1);
     this.ink.lineBetween(lineLeft - 10, lineY, lineRight + 10, lineY);
     // Ticks, so the points read as places on a line rather than as free
@@ -543,6 +626,14 @@ export class SpellPopup {
   }
 
   private hintLine(state: CastState): string {
+    const bare = this.bare;
+    if (bare) {
+      // Solved, the equation is written out whole with the answer in the gap
+      // it was asking about — which is the point of the line being read back
+      // rather than a tick: the child sees the thing they made true.
+      if (isSolved(state)) return bareSumText(bare, String(state.solved.at(-1)));
+      return bareHintFor(bare, state.attempts, this.words) ?? bareSumText(bare, "?");
+    }
     if (isSolved(state)) {
       const sign = runsDown(state.problem) ? "−" : "+";
       return `${state.problem.start} ${sign} ${movedBy(state.problem)} = ${state.solved.at(-1)}`;

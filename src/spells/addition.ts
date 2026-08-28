@@ -5,7 +5,7 @@ import { EN } from "../i18n/en";
 import type { Phrases } from "../i18n/phrases";
 import { type Rng, randInt } from "../world/rng";
 import { type CastResult, castResult } from "./cast";
-import { HARDEST_RUNG, type Rung, rungAt } from "./difficulty";
+import { BareForm, HARDEST_RUNG, type Rung, rungAt } from "./difficulty";
 
 /**
  * The addition spell: column addition, worked on a number line.
@@ -317,6 +317,114 @@ export function makeAdditionProblem(rng: Rng, rung: Rung = rungAt(HARDEST_RUNG))
 }
 
 /**
+ * Which of the three terms is the box.
+ *
+ * `A + B = C` has three numbers in it and only ever one of them missing,
+ * and which one changes what is being asked. Finding `C` is adding. Finding
+ * `A` or `B` is *undoing* an addition, which is the same thing subtraction
+ * does and is the first time this game asks for it from the addition side.
+ */
+export const Unknown = {
+  /** `A + B = ?` — the sum, where it always was. */
+  Total: "total",
+  /** `A + ? = C` — the second term. */
+  Addend: "addend",
+  /** `? + B = C` — the first. */
+  Start: "start",
+} as const;
+
+export type Unknown = (typeof Unknown)[keyof typeof Unknown];
+
+export const UNKNOWNS: readonly Unknown[] = Object.values(Unknown);
+
+/**
+ * A sum with the number line taken away, and one of its terms hidden.
+ *
+ * All three numbers are carried, whichever one is being asked for, because
+ * *drawing* the equation needs the other two and there is no sense in which
+ * the hidden one is unknown to the game. `start + addend === total` is an
+ * invariant of this type, not something a caller arranges.
+ */
+export interface BareSum {
+  readonly start: number;
+  readonly addend: number;
+  readonly total: number;
+  readonly unknown: Unknown;
+}
+
+/** The number the child has to type. */
+export function bareAnswer(sum: BareSum): number {
+  if (sum.unknown === Unknown.Total) return sum.total;
+  return sum.unknown === Unknown.Addend ? sum.addend : sum.start;
+}
+
+/**
+ * The equation as it is written on the parchment.
+ *
+ * `filled` is what stands in the hidden term's place — a question mark while
+ * it is being asked, the answer once it has been got. Built here rather than
+ * in the panel that draws it so it can be tested, and because "which slot is
+ * blank" is arithmetic about the sum rather than a fact about a font.
+ *
+ * No words in it, in any language: an equation is the same sentence
+ * everywhere, which is the same reason `sumQuestion` is shared.
+ */
+export function bareSumText(sum: BareSum, filled: string): string {
+  const start = sum.unknown === Unknown.Start ? filled : String(sum.start);
+  const addend = sum.unknown === Unknown.Addend ? filled : String(sum.addend);
+  const total = sum.unknown === Unknown.Total ? filled : String(sum.total);
+  return `${start} + ${addend} = ${total}`;
+}
+
+/**
+ * The one-box cast a bare sum is answered through.
+ *
+ * A *degenerate* number line, and deliberately so rather than a second
+ * machinery beside the first. Everything that types digits, submits them,
+ * counts missteps and knows when a cast is finished works by comparing what
+ * was typed against `stops[index]` — it never asks what the line means. So a
+ * one-jump line whose only stop is the answer gets all of it for nothing,
+ * and what is genuinely new about a bare sum stays where it belongs, which
+ * is in what gets *drawn*.
+ *
+ * It starts at nought because a bare sum has no journey. Reading the line
+ * would say "from nothing, move by the answer, arrive at the answer", which
+ * is true and is also why nothing draws it.
+ */
+export function bareLine(sum: BareSum): NumberLine {
+  const answer = bareAnswer(sum);
+  return { start: 0, jumps: [answer], stops: [answer] };
+}
+
+/** Whether a cast is being run on one of those rather than on a real line. */
+export function isBareLine(problem: NumberLine): boolean {
+  return problem.start === 0 && problem.jumps.length === 1;
+}
+
+/**
+ * A bare sum at one difficulty.
+ *
+ * The pair is drawn exactly as the number line's is — same weighted table,
+ * same reasoning about why an evenly drawn addend skews the start — because
+ * what changes at these rungs is how a sum is *put*, not which sums exist.
+ * A bare rung that drew its numbers some other way would be a different
+ * ladder wearing the same one's name.
+ *
+ * `Total` asks for the sum. `Any` draws one of the three uniformly, so two
+ * casts in three are the undoing kind — which is the point of that rung, and
+ * why it is the harder of each pair.
+ */
+export function makeBareSum(rng: Rng, rung: Rung = rungAt(HARDEST_RUNG)): BareSum {
+  const problem = makeAdditionProblem(rng, rung);
+  const total = problem.stops[problem.stops.length - 1] ?? problem.start + problem.addend;
+  const unknown =
+    rung.bare === BareForm.Any
+      ? (UNKNOWNS[randInt(rng, 0, UNKNOWNS.length - 1)] as Unknown)
+      : Unknown.Total;
+  return { start: problem.start, addend: problem.addend, total, unknown };
+}
+
+/**
  * The same problem from a chosen pair — used by tests and worked examples.
  *
  * How many places it has comes from the addend by default, because that is
@@ -342,6 +450,34 @@ export function problemFor(
     stops.push(at);
   }
   return { start, addend, jumps, stops };
+}
+
+/**
+ * One cast of the addition spell, whichever form the rung asks for.
+ *
+ * Both places that cast this spell used to build a problem and read
+ * `rung.given` themselves, which was fine while there was one form of a
+ * problem. There are two now, and the second needs a different `given`, a
+ * different line and an extra thing handed to the parchment — so the choice
+ * is made once, here, and a third form later changes one function rather
+ * than two call sites and whatever the next one is.
+ */
+export interface AdditionCast {
+  readonly problem: NumberLine;
+  readonly given: number;
+  /** Set when this rung asks for a bare sum; null when it asks for a line. */
+  readonly bare: BareSum | null;
+}
+
+export function additionCastFor(rng: Rng, rung: Rung): AdditionCast {
+  if (rung.bare === undefined) {
+    return { problem: makeAdditionProblem(rng, rung), given: rung.given, bare: null };
+  }
+  const sum = makeBareSum(rng, rung);
+  // Nought given, always: a bare sum is one box, and there is nothing to
+  // arrive already done. `beginCast` would clamp it anyway; saying it here
+  // is what stops a reader wondering whether the rung's `given` was missed.
+  return { problem: bareLine(sum), given: 0, bare: sum };
 }
 
 /**
@@ -483,11 +619,49 @@ export function submit(state: CastState): CastState {
  */
 export function hintFor(state: CastState, words: Phrases = EN): string | null {
   if (isSolved(state) || state.attempts === 0) return null;
+  // A bare sum is answered through a degenerate line whose one jump *is* the
+  // answer, so the second hint here would have read `0 + 612538 = ?` and
+  // handed it over. Refused rather than patched: this function reads a line
+  // and a bare sum has none. `bareHintFor` is the one that knows the three
+  // numbers and can say something useful about them.
+  if (isBareLine(state.problem)) return null;
   const from = state.index === 0 ? state.problem.start : state.problem.stops[state.index - 1];
   const jump = state.problem.jumps[state.index];
   if (from === undefined || jump === undefined) return null;
   if (state.attempts === 1) return words.addPlace(state.index, from);
   return words.sumQuestion(from, jump);
+}
+
+/**
+ * The hint for a bare sum, which needs the numbers rather than the line.
+ *
+ * Two, like the line's own. The first says how to start; the second turns
+ * the question into one the child can already answer.
+ *
+ * **For a missing addend that second hint is a subtraction**, and showing it
+ * is the whole lesson: `? + 265382 = 612538` is undone by taking the term
+ * you have off the total. It is also the only place in this spell that draws
+ * a minus sign, which is right — undoing an addition is what the clearing
+ * spell does, and a child who sees the two are the same instrument can do
+ * every version of this.
+ *
+ * The first hint for a missing addend is deliberately *not* "break it into
+ * places". That is the method for adding, and a child who applies it to a
+ * subtraction gets the wrong answer confidently.
+ */
+export function bareHintFor(sum: BareSum, attempts: number, words: Phrases = EN): string | null {
+  if (attempts <= 0) return null;
+  if (sum.unknown === Unknown.Total) {
+    // The method, then the sum restated. Both are true of a bare total and
+    // neither gives it away.
+    return attempts === 1 ? words.addPlace(0, sum.start) : words.sumQuestion(sum.start, sum.addend);
+  }
+  const known = sum.unknown === Unknown.Addend ? sum.start : sum.addend;
+  // The first attempt gets the same subtraction as the second. There is no
+  // gentler true thing to say about a missing addend — every step of the
+  // method *is* the subtraction — and a first hint that only said "think
+  // about it" would be a hint the child learns to tap through.
+  return words.takeQuestion(sum.total, known);
 }
 
 /** `nthStart`, for the test that checks the counting against counting. */

@@ -578,4 +578,5 @@ export const HR: Phrases = {
   jumpPrompt: (index) => `Preskoči ${PLACES[index] ?? ""}. Gdje si sletio?`,
   addPlace: (index, from) => `Dodaj ${PLACES[index] ?? ""} na ${from}.`,
   sumQuestion: (from, jump) => `${from} + ${jump} = ?`,
+  takeQuestion: (total, known) => `${total} − ${known} = ?`,
 };

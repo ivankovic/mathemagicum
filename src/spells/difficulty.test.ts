@@ -6,9 +6,11 @@ import { createRng } from "../world/rng";
 import { makeAdditionProblem, problemFor } from "./addition";
 import {
   BANDS,
+  BareForm,
   CLEAN_TO_CLIMB,
   DEFAULT_BAND,
   HARDEST_RUNG,
+  LONGEST_LINE_RUNG,
   RECENT_CASTS,
   RUNGS,
   SHARED_TOP_RUNG,
@@ -46,6 +48,19 @@ describe("the ladder", () => {
   // added a carry would be two changes at once, and neither would be
   // teachable.
   test("nothing ever gets easier as you go up", () => {
+    // How much help a rung gives, at a fixed size and carry. Three settings
+    // on one dial, easiest first: the line with some of it done, the line
+    // with none of it done, and no line at all. `given` used to be the whole
+    // dial; the top of the ladder takes the line away as well, which is more
+    // help withdrawn than any `given` can express and has to be counted as
+    // such or the rung reads as a repeat of the one below. `Any` is harder
+    // again than `Total`, because hiding the first term asks the child to
+    // *undo* the addition rather than to do it.
+    const helpGiven = (rung: (typeof RUNGS)[number]): number => {
+      if (rung.bare === BareForm.Any) return -2;
+      if (rung.bare === BareForm.Total) return -1;
+      return rung.given;
+    };
     for (let at = 1; at < RUNGS.length; at++) {
       const under = RUNGS[at - 1];
       const over = RUNGS[at];
@@ -54,10 +69,27 @@ describe("the ladder", () => {
       if (over.places === under.places) {
         const harder =
           (over.crossing && !under.crossing) ||
-          (over.crossing === under.crossing && over.given < under.given);
+          (over.crossing === under.crossing && helpGiven(over) < helpGiven(under));
         expect({ at, harder }).toEqual({ at, harder: true });
       }
     }
+  });
+
+  /**
+   * And the line never comes off in the middle of the ladder.
+   *
+   * Bare is the *top*, and everything above the first bare rung is bare too.
+   * A `bare` that appeared, went away and came back would be a child shown a
+   * number line, then not, then one again — the game looking random at
+   * exactly the point where it is asking the most of them.
+   */
+  test("the line comes off once, at the top, and stays off", () => {
+    const first = RUNGS.findIndex((rung) => rung.bare !== undefined);
+    expect(first).toBeGreaterThan(0);
+    for (const [at, rung] of RUNGS.entries()) {
+      expect({ at, bare: rung.bare !== undefined }).toEqual({ at, bare: at >= first });
+    }
+    expect(LONGEST_LINE_RUNG).toBe(first - 1);
   });
 
   // What every player had before any of this existed, and what a saved
@@ -73,9 +105,11 @@ describe("the ladder", () => {
     expect(DEFAULT_BAND).toBeLessThan(BANDS.length - 1);
   });
 
-  // The ladder above three places is addition getting longer, and nothing
-  // else. Every rung up there carries, because a longer sum that does not
-  // carry is an easier sum than the one below it.
+  // The ladder above three places is addition getting longer *and* losing
+  // its scaffold. Every rung up there carries, because a longer sum that
+  // does not carry is an easier sum than the one below it; and every one of
+  // them is bare, because a six-jump number line teaches bookkeeping rather
+  // than addition to a child who has had the method for a thousand casts.
   test("and the ladder above it grows by places alone", () => {
     for (const rung of RUNGS.filter((one) => one.places > 3)) {
       expect({ places: rung.places, crossing: rung.crossing }).toEqual({
@@ -83,7 +117,45 @@ describe("the ladder", () => {
         crossing: true,
       });
     }
-    expect(rungAt(HARDEST_RUNG)).toEqual({ places: 6, crossing: true, given: 0 });
+    expect(rungAt(LONGEST_LINE_RUNG)).toEqual({ places: 6, crossing: true, given: 0 });
+  });
+
+  /**
+   * The two rungs at the very top, and that they change one thing.
+   *
+   * They are the same six-digit carrying sum as the rung below with the
+   * number line taken away, then the same again with the answer moved. Their
+   * *size* is asserted as much as their form: taking the scaffold off and
+   * changing the numbers in one step is the two-things-at-once this whole
+   * table is arranged to avoid, and it would be easy to do by accident while
+   * adding a third bare rung later.
+   */
+  test("the bare rungs take the line off without changing the sum", () => {
+    const line = rungAt(LONGEST_LINE_RUNG);
+    const bare = RUNGS.filter((rung) => rung.bare !== undefined);
+    expect(bare.map((rung) => rung.bare)).toEqual([BareForm.Total, BareForm.Any]);
+    for (const rung of bare) {
+      expect({ places: rung.places, crossing: rung.crossing }).toEqual({
+        places: line.places,
+        crossing: line.crossing,
+      });
+    }
+    expect(rungAt(HARDEST_RUNG).bare).toBe(BareForm.Any);
+  });
+
+  /**
+   * And nothing below that point is bare.
+   *
+   * The half worth asserting, because it is the half a mistake would take.
+   * The number line *is* how this game teaches addition — it is the whole
+   * method, drawn — and a `bare` that slipped down the ladder would hand a
+   * six-year-old `7 + 5 = ?` with nothing to count along and no way to see
+   * why the answer is the answer.
+   */
+  test("and nothing at or below the shared top rung is", () => {
+    for (const [at, rung] of RUNGS.entries()) {
+      if (at <= SHARED_TOP_RUNG) expect({ at, bare: rung.bare }).toEqual({ at, bare: undefined });
+    }
   });
 
   test("a rung index from anywhere is clamped rather than trusted", () => {

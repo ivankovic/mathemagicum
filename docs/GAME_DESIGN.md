@@ -2812,6 +2812,58 @@ a shelf. A machine is placeable and is not for sale, so the two lists have
 come apart — left alone, the first machine landed on the village shelf
 priced at infinity, which is a button that can only refuse.
 
+### The top of the addition ladder, where the line comes off
+
+**Asked for in a playtest:** at the highest setting, addition should be just
+`A + B = ?`, and maybe every version of `? + B = C` as well.
+
+The number line *is* the scaffold. It breaks a sum into one jump per place
+and asks for each landing in turn, which is the method drawn — so taking it
+away is what this ladder had left to do at the top, and it is the only thing
+left that is not "the same sum with more digits in it".
+
+**Two rungs, added above the existing ones rather than replacing them.** The
+six-jump number line is still reachable and still the thing the parchment's
+furniture was built for; `LONGEST_LINE_RUNG` names it, because a scenario
+that wanted to exercise it used to be able to say `HARDEST_RUNG` and cannot
+any more. Extending upward is safe by construction: `bandOn` scales the other
+spells' ladders against `SHARED_TOP_RUNG`, never against the top, precisely
+so that addition can grow without a clock having to grow with it.
+
+**The numbers stop growing at the top, and that is the discipline rather than
+a shortage of ideas.** Two things climb and they climb alternately; a rung
+that took the scaffold away *and* changed the size would be the
+two-things-at-once this table is arranged to avoid. So both bare rungs are
+the same six-digit carrying sum as the rung below.
+
+The scaffolded-then-not pairing survives in the only currency left once the
+line has gone. `Total` asks `A + B = ?` — the answer where the answer has
+always been. `Any` hides one of the three terms, so two casts in three ask
+the child to *undo* an addition, which is what subtraction does and the first
+time this game asks for it from the addition side.
+
+**The hint for a missing addend is a subtraction, and showing it is the
+lesson.** `? + 265382 = 612538` is undone by taking the term you have off the
+total, and that is the one place in this spell that draws a minus sign.
+
+**A bare sum is cast through a degenerate number line** — one jump, whose
+only stop is whatever term was hidden. That is not a trick: the cast
+machinery never asks what a line *means*, only whether the typed digits match
+the stop, so the whole of typing, submitting, counting missteps and knowing
+when a cast is done comes for free, and what is genuinely new stays where it
+belongs, which is in what gets drawn.
+
+It also nearly shipped a bug. The number line's own second hint prints
+`from + jump = ?`, which on that degenerate line reads `0 + 612538 = ?` and
+hands the answer over. It appears only after a wrong answer, so the next
+answer would have been right every time and nothing would have looked broken.
+`hintFor` now refuses to speak about a bare line at all, and a test asserts
+that no bare hint ever contains the answer.
+
+**What this does not yet cover:** the teacher still teaches the number line
+at every rung, which is right for `A + B = ?` and says nothing about finding
+a missing addend.
+
 ## Current milestone
 
 Several children on one device, each with a name, a character they made, a

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { HARDEST_RUNG, SHARED_TOP_RUNG, rungAt } from "../src/spells/difficulty";
+import { UNKNOWNS } from "../src/spells/addition";
+import { HARDEST_RUNG, LONGEST_LINE_RUNG, SHARED_TOP_RUNG, rungAt } from "../src/spells/difficulty";
 import { Spell } from "../src/spells/spellbook";
 import { PlantType } from "../src/world/plants";
 import { type Game, play, runeButton, seedButton, shutDown } from "./harness";
@@ -29,6 +30,8 @@ interface Line {
   start: number;
   stops: number[];
   index: number;
+  /** Set only at the rungs that ask a sum with no number line under it. */
+  bare: { start: number; addend: number; total: number; unknown: string } | null;
 }
 
 /**
@@ -69,11 +72,16 @@ describe("six-digit sums", () => {
    * Six jumps, six boxes, and numbers up to a million — drawn on a parchment
    * whose furniture was built for three of each, and answered through a
    * keypad that has to take six digits into a box that used to take three.
+   *
+   * Cast at `LONGEST_LINE_RUNG` rather than at `HARDEST_RUNG`, which is no
+   * longer the same rung: the two above it take the number line away
+   * altogether. Named rather than numbered so this cannot go stale again the
+   * next time something is added on top.
    */
   test(
     "six jumps, all of them answerable",
     async () => {
-      await play({ seams: `&learned=all&hour=12&rung=${HARDEST_RUNG}` }, async (game) => {
+      await play({ seams: `&learned=all&hour=12&rung=${LONGEST_LINE_RUNG}` }, async (game) => {
         const line = await castGrowth(game);
         const jumps = jumpsOf(line);
         expect(jumps).toHaveLength(6);
@@ -112,6 +120,79 @@ describe("six-digit sums", () => {
         expect(rungAt(SHARED_TOP_RUNG).places).toBe(3);
         await game.solveNumberLine();
         expect(await game.seam<Line | null>("spell")).toBeNull();
+      });
+    },
+    5 * MINUTES,
+  );
+});
+
+describe("the sum with no line under it", () => {
+  /**
+   * The top of the ladder, where the scaffold comes off.
+   *
+   * Everything the parchment does for a number line — the line, the ticks,
+   * the arcs, a box per place — is gone here, and what is left is one box
+   * and an equation. That is a branch inside `render`, so the failure it can
+   * produce is a panel that draws neither form properly, and no unit test
+   * can see a panel.
+   */
+  test(
+    "asks a whole equation, takes one answer, and closes",
+    async () => {
+      await play({ seams: `&learned=all&hour=12&rung=${HARDEST_RUNG}` }, async (game) => {
+        const cast = await castGrowth(game);
+        const bare = cast.bare;
+        if (!bare) throw new Error("the hardest rung did not ask a bare sum");
+
+        // The three numbers make a true sum, whichever of them is hidden.
+        expect(bare.start + bare.addend).toBe(bare.total);
+        expect(UNKNOWNS as readonly string[]).toContain(bare.unknown);
+        // Six digits on both sides: taking the line off did not shrink the
+        // sum, which is the discipline the ladder is arranged on.
+        expect(bare.start).toBeGreaterThanOrEqual(100_000);
+        expect(bare.total).toBeLessThan(1_000_000);
+
+        // One box, not six. The cast runs on a degenerate one-jump line
+        // whose only stop is whatever term was hidden.
+        expect(cast.stops).toHaveLength(1);
+        const answer =
+          bare.unknown === "total"
+            ? bare.total
+            : bare.unknown === "addend"
+              ? bare.addend
+              : bare.start;
+        expect(cast.stops[0]).toBe(answer);
+
+        await game.solveNumberLine();
+        expect(await game.seam<Line | null>("spell")).toBeNull();
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * And the hint never gives it away.
+   *
+   * The bug this nearly shipped with: a bare cast runs on a line whose one
+   * jump *is* the answer, and the number line's own second hint prints
+   * "from + jump = ?" — which on that line reads `0 + 612538 = ?`. It only
+   * appears after a wrong answer, so the next one would have been right
+   * every time and nothing would ever have looked broken.
+   */
+  test(
+    "and a wrong answer is not answered for her",
+    async () => {
+      await play({ seams: `&learned=all&hour=12&rung=${HARDEST_RUNG}` }, async (game) => {
+        const cast = await castGrowth(game);
+        if (!cast.bare) throw new Error("the hardest rung did not ask a bare sum");
+        const answer = String(cast.stops[0]);
+
+        // A wrong answer, so the parchment offers what help it has.
+        await game.type(1);
+        await game.press("Enter");
+        await game.settle(300);
+        const hint = await game.seam<string>("spellHint");
+        expect(hint).not.toContain(answer);
       });
     },
     5 * MINUTES,

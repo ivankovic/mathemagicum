@@ -574,4 +574,17 @@ export interface Phrases {
   jumpPrompt: (index: number) => string;
   addPlace: (index: number, from: number) => string;
   sumQuestion: (from: number, jump: number) => string;
+  /**
+   * The hint for a sum with one of its *first two* terms hidden.
+   *
+   * `? + 265382 = 612538` is undone by taking the term you have off the
+   * total, so what this says is `612538 - 265382 = ?`. It is the only hint
+   * in the addition spell that shows a subtraction, and that is the lesson
+   * rather than a slip: finding a missing addend is the one place the two
+   * spells meet, and a child who sees why can do every version of it.
+   *
+   * Bare of words in all three languages, like `sumQuestion`, because an
+   * equation is the same sentence everywhere.
+   */
+  takeQuestion: (total: number, known: number) => string;
 }

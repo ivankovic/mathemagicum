@@ -232,6 +232,7 @@ function sample(p: Phrases): Record<string, string> {
     jumpPrompt: p.jumpPrompt(0),
     addPlace: p.addPlace(1, 234),
     sumQuestion: p.sumQuestion(234, 5),
+    takeQuestion: p.takeQuestion(612538, 265382),
   };
 }
 
@@ -295,7 +296,8 @@ describe("every language says everything", () => {
    */
   test("no two languages say the same thing", () => {
     // Lines that are legitimately identical everywhere. `sumQuestion` and
-    // `lessonExample` are digits and a plus sign; `arrayTitle` is a
+    // `takeQuestion` are digits and a sign; `lessonExample` is digits and a
+    // plus sign; `arrayTitle` is a
     // multiplication sign, which is not a word in any of these; "Portal" is
     // the same word in all three, the way a currency's name is; `copyright`
     // is a name and a year; and `sponsorLink` is what GitHub calls its own
@@ -303,6 +305,7 @@ describe("every language says everything", () => {
     // somebody's name or for a trademark.
     const shared = [
       "sumQuestion",
+      "takeQuestion",
       "lessonExample",
       "portalTitle",
       "arrayTitle",

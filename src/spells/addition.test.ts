@@ -5,19 +5,26 @@ import { describe, expect, test } from "bun:test";
 import { createRng } from "../world/rng";
 import {
   PLACES,
+  UNKNOWNS,
+  Unknown,
   additionPairCount,
   backspace,
+  bareAnswer,
+  bareHintFor,
+  bareLine,
   beginCast,
   castResult,
   hintFor,
+  isBareLine,
   isSolved,
   makeAdditionProblem,
+  makeBareSum,
   nthStartForTest,
   problemFor,
   submit,
   typeDigit,
 } from "./addition";
-import { HARDEST_RUNG, RUNGS, SHARED_TOP_RUNG, rungAt } from "./difficulty";
+import { BareForm, HARDEST_RUNG, RUNGS, SHARED_TOP_RUNG, rungAt } from "./difficulty";
 
 const SEEDS = Array.from({ length: 200 }, (_, i) => i * 7919 + 3);
 
@@ -535,4 +542,113 @@ describe("counting the pairs without listing them", () => {
       });
     }
   }
+});
+
+describe("a sum with the number line taken off", () => {
+  const bareRungs = RUNGS.filter((rung) => rung.bare !== undefined);
+
+  test("every bare rung there is makes a sum that adds up", () => {
+    for (const rung of bareRungs) {
+      for (const seed of SEEDS.slice(0, 40)) {
+        const sum = makeBareSum(createRng(seed), rung);
+        expect(sum.start + sum.addend).toBe(sum.total);
+      }
+    }
+  });
+
+  test("the answer is whichever term is hidden", () => {
+    const sum = { start: 3471, addend: 2653, total: 6124, unknown: Unknown.Total };
+    expect(bareAnswer(sum)).toBe(6124);
+    expect(bareAnswer({ ...sum, unknown: Unknown.Addend })).toBe(2653);
+    expect(bareAnswer({ ...sum, unknown: Unknown.Start })).toBe(3471);
+  });
+
+  /**
+   * The `Total` rungs ask for the sum and nothing else; the `Any` rungs
+   * reach all three. Asserted over enough seeds that a slot which could
+   * never come up would show as an absence rather than as bad luck.
+   */
+  test("Total asks only for the sum, and Any asks for all three", () => {
+    for (const rung of bareRungs) {
+      const seen = new Set(
+        SEEDS.slice(0, 120).map((seed) => makeBareSum(createRng(seed), rung).unknown),
+      );
+      if (rung.bare === BareForm.Total) expect([...seen]).toEqual([Unknown.Total]);
+      else expect([...seen].sort()).toEqual([...UNKNOWNS].sort());
+    }
+  });
+
+  test("its numbers are the same numbers the number line would have set", () => {
+    for (const rung of bareRungs) {
+      for (const seed of SEEDS.slice(0, 30)) {
+        const sum = makeBareSum(createRng(seed), rung);
+        const line = makeAdditionProblem(createRng(seed), rung);
+        expect({ start: sum.start, addend: sum.addend }).toEqual({
+          start: line.start,
+          addend: line.addend,
+        });
+      }
+    }
+  });
+
+  test("the cast machinery answers it through a one-box line", () => {
+    for (const rung of bareRungs) {
+      for (const seed of SEEDS.slice(0, 30)) {
+        const sum = makeBareSum(createRng(seed), rung);
+        const line = bareLine(sum);
+        expect(isBareLine(line)).toBe(true);
+        let state = beginCast(line);
+        expect(isSolved(state)).toBe(false);
+        for (const digit of String(bareAnswer(sum))) {
+          state = typeDigit(state, Number(digit));
+        }
+        state = submit(state);
+        expect({ solved: isSolved(state), missteps: state.missteps }).toEqual({
+          solved: true,
+          missteps: 0,
+        });
+      }
+    }
+  });
+
+  /**
+   * The bug this very nearly shipped with.
+   *
+   * A bare cast runs on a line whose single jump *is* the answer, and the
+   * line's own second hint prints "from + jump = ?" — which on that line
+   * reads `0 + 612538 = ?` and simply hands the answer over. Nothing else in
+   * the game would have said so: the hint only appears after a wrong answer,
+   * and the next one would have been right every time.
+   */
+  test("the number line's hint refuses to speak about a bare one", () => {
+    for (const rung of bareRungs) {
+      const sum = makeBareSum(createRng(11), rung);
+      let state = beginCast(bareLine(sum));
+      state = submit(typeDigit(state, 1));
+      expect(state.attempts).toBeGreaterThan(0);
+      expect(hintFor(state)).toBeNull();
+    }
+  });
+
+  test("and the bare hint never contains the answer", () => {
+    for (const rung of bareRungs) {
+      for (const seed of SEEDS.slice(0, 60)) {
+        const sum = makeBareSum(createRng(seed), rung);
+        const answer = String(bareAnswer(sum));
+        for (const attempts of [1, 2, 3]) {
+          const hint = bareHintFor(sum, attempts);
+          expect(hint).not.toBeNull();
+          expect(hint ?? "").not.toContain(answer);
+        }
+      }
+    }
+  });
+
+  test("a missing addend is hinted as the subtraction that undoes it", () => {
+    const sum = { start: 3471, addend: 2653, total: 6124, unknown: Unknown.Addend };
+    expect(bareHintFor(sum, 1)).toBe("6124 − 3471 = ?");
+    expect(bareHintFor({ ...sum, unknown: Unknown.Start }, 1)).toBe("6124 − 2653 = ?");
+    // And no hint before anything has been got wrong.
+    expect(bareHintFor(sum, 0)).toBeNull();
+  });
 });
