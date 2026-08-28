@@ -22,6 +22,9 @@ coverage/
 .idea/
 .DS_Store
 *.swp
+# A local diff viewer's own preferences: a theme and a palette, which are
+# whose machine this is rather than what this project is.
+.codediff.toml
 
 # Local env
 .env
