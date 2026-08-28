@@ -420,6 +420,8 @@ export const EN: Phrases = {
     `Start at ${start} and jump the small part first: ${jumps.map((jump) => `+${jump}`).join(", then ")}. Type the number you land on into each box.`,
   lessonAnswer: (answer) =>
     `The last box is the answer: ${answer}. Small jumps first means only one part of the number changes each time, so there is nothing to carry and nothing to hold in your head.`,
+  lessonUndo: (total, addend, start) =>
+    `Sometimes the missing number is at the front: ? + ${addend} = ${total}. Walk the same jumps backwards from ${total} instead of forwards, and you land on where it must have started: ${start}.`,
   lessonNext: "next",
   lessonBack: "back",
   lessonDone: "off you go",

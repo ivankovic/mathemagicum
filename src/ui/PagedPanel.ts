@@ -129,7 +129,15 @@ export abstract class PagedPanel<TPage> {
 
   // --- what a subclass answers ----------------------------------------------
 
-  /** Every page, in order. Called during construction, so it must be pure. */
+  /**
+   * Every page, in order.
+   *
+   * Called during construction — before the subclass's own fields are
+   * initialised — so it must be pure and must survive being asked before
+   * anybody has told the panel anything. It may return a *different* length
+   * later, once it has been told: the dot pool is topped up at layout for
+   * exactly that, and the page it is on is re-checked against the deck.
+   */
   protected abstract deck(): readonly TPage[];
   /**
    * The heading, for the page being shown.
@@ -238,6 +246,22 @@ export abstract class PagedPanel<TPage> {
     // Where you are in the deck, as one dot per page: four pages is few
     // enough to show rather than to count in words.
     const deck = this.deck();
+    // Top the pool up first, because a deck may be longer now than it was
+    // when this panel was built.
+    //
+    // The dots used to be made once from `deck().length` in the constructor,
+    // on the fair assumption that a deck is a fixed thing. It is not any
+    // more: the addition lesson gains a fifth page at the rungs that ask for
+    // a number missing from the front of a sum, and which rung a child is on
+    // is not known until `setRung`, which is necessarily later. Built once,
+    // the fifth page had no dot — it could still be turned to, so nothing
+    // failed and nothing threw; the row of dots simply lied about how much
+    // there was left, which is the one thing it is for.
+    while (this.dots.length < this.deck().length) {
+      this.dots.push(
+        this.own(this.scene.add.rectangle(0, 0, 7, 7, PAPER_PALE_HEX).setStrokeStyle(2, INK_HEX)),
+      );
+    }
     const dotsY = rect.top + rect.height - PAD - 44;
     for (const [i, dot] of this.dots.entries()) {
       const spread = (this.dots.length - 1) * DOT_GAP;

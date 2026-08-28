@@ -169,6 +169,7 @@ function sample(p: Phrases): Record<string, string> {
     lessonSplit: `${p.lessonSplit(114, [100, 10, 4])} ${p.lessonSplit(14, [10, 4])} ${p.lessonSplit(4, [4])}`,
     lessonJump: p.lessonJump(148, [4, 10, 100]),
     lessonAnswer: p.lessonAnswer(262),
+    lessonUndo: p.lessonUndo(262, 114, 148),
     lessonNext: p.lessonNext,
     lessonBack: p.lessonBack,
     lessonDone: p.lessonDone,

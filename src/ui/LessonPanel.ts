@@ -6,7 +6,7 @@ import type { Phrases } from "../i18n/phrases";
 import { PLACES } from "../spells/addition";
 import type { AdditionProblem } from "../spells/addition";
 import { HARDEST_RUNG, type Rung, rungAt } from "../spells/difficulty";
-import { LESSON_BEATS, LessonBeat, lessonFor, partsOf } from "../spells/lesson";
+import { LessonBeat, lessonBeatsFor, lessonFor, partsOf } from "../spells/lesson";
 import { type Chip, PagedPanel } from "./PagedPanel";
 import type { PanelRect } from "./ParchmentPanel";
 import { UiAsset, type UiIndex } from "./assets";
@@ -96,7 +96,10 @@ export class LessonPanel extends PagedPanel<LessonBeat> {
   }
 
   protected deck(): readonly LessonBeat[] {
-    return LESSON_BEATS;
+    // `this.rung` is genuinely undefined here the first time: `PagedPanel`
+    // asks for the deck from its own constructor, which runs before this
+    // subclass's fields are initialised. `lessonBeatsFor` takes that.
+    return lessonBeatsFor(this.rung);
   }
 
   protected titleText(): string {
@@ -112,6 +115,8 @@ export class LessonPanel extends PagedPanel<LessonBeat> {
         return this.words.lessonSplit(example.addend, partsOf(example));
       case LessonBeat.Jump:
         return this.words.lessonJump(example.start, example.jumps);
+      case LessonBeat.Undo:
+        return this.words.lessonUndo(example.stops.at(-1) as number, example.addend, example.start);
       default:
         return this.words.lessonAnswer(example.stops.at(-1) as number);
     }
@@ -127,7 +132,11 @@ export class LessonPanel extends PagedPanel<LessonBeat> {
       this.drawSplit(rect, middle, bottom);
       return;
     }
-    this.drawNumberLine(rect, middle, beat === LessonBeat.Answer);
+    // The finished line for both of the last two beats. The undo beat is the
+    // same picture on purpose: what it has to show is that the line already
+    // holds the answer to a question read the other way round, and drawing
+    // it differently would suggest there was a second line to learn.
+    this.drawNumberLine(rect, middle, beat === LessonBeat.Answer || beat === LessonBeat.Undo);
   }
 
   /** The addend in pieces, biggest first — which is how a number is read out. */

@@ -448,6 +448,8 @@ export const DE: Phrases = {
     `Fang bei ${start} an und spring zuerst den kleinen Teil: ${jumps.map((jump) => `+${jump}`).join(", dann ")}. Schreib in jedes Kästchen die Zahl, auf der du landest.`,
   lessonAnswer: (answer) =>
     `Im letzten Kästchen steht die Lösung: ${answer}. Weil du klein anfängst, ändert sich jedes Mal nur ein Teil der Zahl — nichts zu übertragen, nichts im Kopf zu behalten.`,
+  lessonUndo: (total, addend, start) =>
+    `Manchmal fehlt die Zahl ganz vorne: ? + ${addend} = ${total}. Dann springst du dieselben Sprünge rückwärts von ${total} statt vorwärts und landest da, wo es angefangen haben muss: ${start}.`,
   lessonNext: "weiter",
   lessonBack: "zurück",
   lessonDone: "ab in den Garten",

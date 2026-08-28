@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
+import { EN } from "../i18n/en";
 import { createRng } from "../world/rng";
 import { PLACES, makeAdditionProblem, problemFor } from "./addition";
-import { RUNGS, SHARED_TOP_RUNG, rungAt } from "./difficulty";
+import { BareForm, HARDEST_RUNG, RUNGS, SHARED_TOP_RUNG, rungAt } from "./difficulty";
 import {
   LESSON_ADDEND,
   LESSON_BEATS,
@@ -12,6 +13,7 @@ import {
   LESSON_START,
   LessonBeat,
   isLastBeat,
+  lessonBeatsFor,
   lessonFor,
   nextBeat,
   partsOf,
@@ -165,6 +167,44 @@ describe("the example at six places", () => {
       // And an answer that still fits the width it was set at.
       expect(wide.stops.at(-1)).toBeLessThan(10 ** places);
       expect(wide.start).toBeGreaterThanOrEqual(10 ** (places - 1));
+    }
+  });
+});
+
+describe("the beat that only the top of the ladder gets", () => {
+  test("the four beats everywhere the spell asks for a sum", () => {
+    for (const [at, rung] of RUNGS.entries()) {
+      if (rung.bare === BareForm.Any) continue;
+      expect({ at, beats: lessonBeatsFor(rung) }).toEqual({ at, beats: LESSON_BEATS });
+    }
+  });
+
+  test("and a fifth where it hides a number at the front", () => {
+    const beats = lessonBeatsFor(rungAt(HARDEST_RUNG));
+    expect(beats.slice(0, LESSON_BEATS.length)).toEqual([...LESSON_BEATS]);
+    expect(beats.at(-1)).toBe(LessonBeat.Undo);
+    expect(beats).toHaveLength(LESSON_BEATS.length + 1);
+  });
+
+  /**
+   * The one that has already broken the game once.
+   *
+   * `PagedPanel` asks its subclass for the deck from its own constructor,
+   * which runs before the subclass's fields are initialised — so the panel's
+   * rung really is undefined at that moment. A version of this that read
+   * `rung.bare` threw during construction, took the whole game down on boot,
+   * and passed every unit test in the repository while doing it.
+   */
+  test("and it survives being asked before anybody has said which rung", () => {
+    expect(lessonBeatsFor(undefined)).toEqual(LESSON_BEATS);
+  });
+
+  test("the undo caption names all three numbers and gives the missing one", () => {
+    const example = lessonFor(rungAt(HARDEST_RUNG));
+    const total = example.stops.at(-1) as number;
+    const said = EN.lessonUndo(total, example.addend, example.start);
+    for (const number of [total, example.addend, example.start]) {
+      expect(said).toContain(String(number));
     }
   });
 });

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { type AdditionProblem, problemFor } from "./addition";
-import type { Rung } from "./difficulty";
+import { BareForm, type Rung } from "./difficulty";
 
 /**
  * What the teacher explains, and the example she explains it on.
@@ -102,6 +102,18 @@ export const LessonBeat = {
   Jump: "jump",
   /** Where you land is the answer, and why the order is that way round. */
   Answer: "answer",
+  /**
+   * And the same line walked backwards, to find a number that is missing
+   * from the *front* of a sum.
+   *
+   * Only ever shown at the rungs that ask `? + B = C`, because until then
+   * there is nothing to undo. It is the same picture as the beat before it
+   * and that is the argument rather than a saving: if you know where you
+   * landed and how far you jumped, walking the jumps back is where you
+   * started, and a child who sees that on the line they already know can do
+   * every version of it.
+   */
+  Undo: "undo",
 } as const;
 
 export type LessonBeat = (typeof LessonBeat)[keyof typeof LessonBeat];
@@ -112,6 +124,27 @@ export const LESSON_BEATS: readonly LessonBeat[] = [
   LessonBeat.Jump,
   LessonBeat.Answer,
 ];
+
+/**
+ * The beats this child gets, which is the four above and sometimes a fifth.
+ *
+ * The lesson has to teach what the spell actually asks. At the top of the
+ * ladder the spell hides any one of the three terms, so two casts in three
+ * want a number taken *off* a total — and a teacher who only ever
+ * demonstrated adding would be demonstrating the wrong operation to the
+ * child who most needs the right one.
+ *
+ * **Takes an optional rung, and that is load-bearing rather than
+ * defensive.** `PagedPanel` asks its subclass for the deck from its own
+ * constructor, which runs before the subclass's fields are initialised — so
+ * the panel's `rung` really is `undefined` at that moment. A version of this
+ * that read `rung.bare` crashed the whole game on boot once already, passed
+ * every one of sixteen hundred unit tests while doing it, and was caught
+ * only by a browser.
+ */
+export function lessonBeatsFor(rung: Rung | undefined): readonly LessonBeat[] {
+  return rung?.bare === BareForm.Any ? [...LESSON_BEATS, LessonBeat.Undo] : LESSON_BEATS;
+}
 
 /**
  * The parts of the addend, biggest first: how a person reads a number out.

@@ -569,6 +569,8 @@ export const HR: Phrases = {
     `Kreni od ${start} i prvo preskoči mali dio: ${jumps.map((jump) => `+${jump}`).join(", pa ")}. Upiši broj na koji si sletio u svaki okvir.`,
   lessonAnswer: (answer) =>
     `Zadnji okvir je odgovor: ${answer}. Kad prvo skačeš male dijelove, svaki put se mijenja samo jedan dio broja, pa nema ništa za prenositi ni za pamtiti.`,
+  lessonUndo: (total, addend, start) =>
+    `Ponekad broj nedostaje na početku: ? + ${addend} = ${total}. Onda iste skokove skačeš unatrag od ${total} umjesto naprijed i sletiš ondje gdje je moralo početi: ${start}.`,
   lessonNext: "dalje",
   lessonBack: "natrag",
   lessonDone: "sad idi",

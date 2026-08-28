@@ -561,6 +561,15 @@ export interface Phrases {
   lessonJump: (start: number, jumps: readonly number[]) => string;
   /** Beat four: where you land, and why the order is that way round. */
   lessonAnswer: (answer: number) => string;
+  /**
+   * The fifth beat, shown only where the spell hides a number at the front
+   * of a sum: the same line walked backwards.
+   *
+   * Takes all three numbers because the sentence names all three — where she
+   * landed, how far she jumped, and where that means she started. A caption
+   * that only gave the answer would be telling rather than showing.
+   */
+  lessonUndo: (total: number, addend: number, start: number) => string;
   lessonNext: string;
   lessonBack: string;
   lessonDone: string;
