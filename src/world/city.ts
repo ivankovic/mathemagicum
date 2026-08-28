@@ -125,8 +125,28 @@ export interface CityLayout {
   readonly clockTower: PlacedObject | null;
   /** A clear cell of the plaza, for anything that needs to stand on it. */
   readonly plazaCell: GridPoint;
-  /** Every piece of the ring wall, the gate among them. */
+  /** Every piece of the ring wall, the gates among them. */
   readonly wall: readonly PlacedObject[];
+  /**
+   * Every way through it: one to each side of the compass that has one.
+   *
+   * A city with a single gate is a city with a back. Walk round it from the
+   * north and the wall runs on and on, and the way in is wherever you did
+   * not start — which is a long walk to learn a fact the place could simply
+   * have told you.
+   *
+   * A side is skipped where the cell outside it is water, or is the world's
+   * own rim — which stands a step above everything and cannot be walked on.
+   * Both are gates onto nothing, and a gate that cannot be walked through is
+   * a door that lies about being one.
+   *
+   * They are not all *routed* to. `doorstep` is still one cell and the
+   * connectivity pass still carves to that one; the others open onto
+   * whatever the world put there, which may be sand or a lake. That is what
+   * a city gate is — a way through the wall, not a promise about the country
+   * outside it.
+   */
+  readonly gates: readonly GridPoint[];
   /**
    * The cell in front of the gate, and the world generator's route anchor.
    *
@@ -165,7 +185,10 @@ function pave(grid: WorldGrid, col: number, row: number, terrain: TerrainType): 
  * piece of the ring that does not block — carries the route the rest of the
  * way in.
  */
-function chooseGate(grid: WorldGrid, box: AreaPlacement): { gate: GridPoint; doorstep: GridPoint } {
+function chooseGates(
+  grid: WorldGrid,
+  box: AreaPlacement,
+): { gates: GridPoint[]; doorstep: GridPoint } {
   const midCol = box.col + Math.floor(box.width / 2);
   const midRow = box.row + Math.floor(box.height / 2);
   const left = box.col + RING_INSET - 1;
@@ -183,14 +206,39 @@ function chooseGate(grid: WorldGrid, box: AreaPlacement): { gate: GridPoint; doo
   // and no route may run along it — so a doorstep laid there is a doorstep
   // nothing can reach, and world generation says so by failing to find any
   // route at all.
+  // Two things make a side worth a gate, and both are about the cell
+  // *outside* it.
+  //
+  // It must be one cell in from the world's own rim, not merely in bounds:
+  // that ring stands a step above everything inside it so it cannot be
+  // walked onto, and no route may run along it — a doorstep laid there is a
+  // doorstep nothing can reach, and world generation says so by failing to
+  // find any route at all.
+  //
+  // And it must be dry. The first city this was tried on sits with its back
+  // to the sea, and the west gate opened straight onto deep water: a gate
+  // that cannot be walked through is a door that lies about being one.
+  // Trees are allowed — they can be cleared, and a wood outside a city gate
+  // is a wood outside a city gate.
   const clear = ({ col, row }: GridPoint) =>
-    col > 0 && row > 0 && col < grid.width - 1 && row < grid.height - 1;
-  const usable = sides.find(({ doorstep }) => clear(doorstep));
-  return usable ?? (sides[0] as { gate: GridPoint; doorstep: GridPoint });
+    col > 0 &&
+    row > 0 &&
+    col < grid.width - 1 &&
+    row < grid.height - 1 &&
+    grid.getTerrain(col, row) !== TerrainType.Water;
+  const usable = sides.filter(({ doorstep }) => clear(doorstep));
+  // Every side that has an outside gets a gate. The *route* still goes to
+  // one of them — the south by preference, since every door in the city
+  // faces that way and arriving there is arriving at the fronts of things.
+  const opened = usable.length > 0 ? usable : [sides[0] as (typeof sides)[number]];
+  return {
+    gates: opened.map(({ gate }) => gate),
+    doorstep: (opened[0] as (typeof sides)[number]).doorstep,
+  };
 }
 
 /**
- * The ring wall, with one gate in it.
+ * The ring wall, with a gate on every side that has one.
  *
  * Laid on the outermost ring of cells rather than on the ring road, so the
  * road runs *inside* the wall the way a city's does — a wall standing in the
@@ -202,13 +250,18 @@ function chooseGate(grid: WorldGrid, box: AreaPlacement): { gate: GridPoint; doo
  * fence does and for the same reason — a corner drawn as a side run leaves
  * the horizontal stopping in mid-air.
  *
- * **The gate cell is the one thing here that does not block.** A closed gate
+ * **The gate cells are the only ones here that do not block.** A closed gate
  * on this grid either walls the city off or lets the player walk through
  * solid stone; drawn open and left passable, it says "this is the way in"
  * and means it. Exactly what the village garden's gate does, one scale up.
  */
-function buildWall(grid: WorldGrid, box: AreaPlacement, gate: GridPoint): PlacedObject[] {
+function buildWall(
+  grid: WorldGrid,
+  box: AreaPlacement,
+  gates: readonly GridPoint[],
+): PlacedObject[] {
   const built: PlacedObject[] = [];
+  const ways = new Set(gates.map(({ col, row }) => `${col},${row}`));
   const left = box.col + RING_INSET - 1;
   const right = box.col + box.width - RING_INSET;
   const top = box.row + RING_INSET - 1;
@@ -221,7 +274,7 @@ function buildWall(grid: WorldGrid, box: AreaPlacement, gate: GridPoint): Placed
       // The gateway is one named cell of the ring, and which piece it is
       // drawn as follows from which run it lands in — so a gate in the east
       // wall gets the side view without anything having to be told.
-      const isGate = col === gate.col && row === gate.row;
+      const isGate = ways.has(`${col},${row}`);
       const acrossCamera = row === top || row === bottom;
       const type = isGate
         ? acrossCamera
@@ -459,12 +512,15 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
 
   // --- the wall, and the way through it -----------------------------------
 
-  const { gate, doorstep } = chooseGate(grid, box);
-  const wall = buildWall(grid, box, gate);
+  const { gates, doorstep } = chooseGates(grid, box);
+  const wall = buildWall(grid, box, gates);
   placed.push(...wall);
   grid.removeObjectAt(doorstep.col, doorstep.row);
   pave(grid, doorstep.col, doorstep.row, TerrainType.Cobble);
-  pave(grid, gate.col, gate.row, TerrainType.Cobble);
+  // Every gateway is paved, not only the one the road arrives at: a way
+  // through the wall that is still grass underfoot reads as a gap somebody
+  // forgot to build rather than as a gate.
+  for (const gate of gates) pave(grid, gate.col, gate.row, TerrainType.Cobble);
 
   if (clockTower) placed.push(clockTower);
 
@@ -531,7 +587,18 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
     });
   }
 
-  return { blocks, buildings, placed, plaza, clockTower, plazaCell, doorstep, wall, npcs };
+  return {
+    blocks,
+    buildings,
+    placed,
+    plaza,
+    clockTower,
+    plazaCell,
+    doorstep,
+    wall,
+    gates,
+    npcs,
+  };
 }
 
 /**

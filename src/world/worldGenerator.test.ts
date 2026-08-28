@@ -214,7 +214,7 @@ function assertYouCanGetIntoTheSettlements(
 }
 
 /**
- * The city wall is unbroken, and there is exactly one way through it.
+ * The city wall is unbroken, and the only ways through it are its gates.
  *
  * The failure this exists for is the one the village's garden gate had:
  * `ensureConnectivity` carves by *removing whatever is in the way*, so a
@@ -222,17 +222,47 @@ function assertYouCanGetIntoTheSettlements(
  * them — and a hole is invisible to every check that only asks whether the
  * city can be walked into, because a hole is a perfectly good way in.
  *
- * So this counts the pieces. One gap, at the gate, and it is passable;
- * everything else on the ring is wall, and it is not.
+ * So this counts the pieces. The gaps are exactly the gates the layout says
+ * it opened, and they are passable; everything else on the ring is wall, and
+ * it is not. It used to be "exactly one gap", which was the same check while
+ * a city had one gate — and would have gone on passing a hole knocked
+ * anywhere in the ring the moment it had four.
  */
 function assertTheWallIsAWall(
   grid: WorldGrid,
   city: ReturnType<typeof generateWorld>["city"],
 ): void {
+  const opened = new Set(city.gates.map(({ col, row }) => `${col},${row}`));
   const ways = city.wall.filter((piece) => !piece.blocksMovement);
-  expect(ways.length).toBe(1);
-  const gate = ways[0] as (typeof city.wall)[number];
-  expect(grid.isPassable(gate.col, gate.row)).toBe(true);
+  // Named rather than counted: a hole and a gate are both a gap, and only
+  // one of them is on the layout's own list.
+  expect(new Set(ways.map((piece) => `${piece.col},${piece.row}`))).toEqual(opened);
+  // A side is skipped only where its doorstep would fall on the world's rim,
+  // so a city in open country has all four and none has fewer than one.
+  expect(city.gates.length).toBeGreaterThanOrEqual(1);
+  expect(city.gates.length).toBeLessThanOrEqual(4);
+  for (const gate of city.gates) expect(grid.isPassable(gate.col, gate.row)).toBe(true);
+
+  // And every one of them opens onto something a person could stand on.
+  //
+  // The first city this was tried on has its back to the sea, and the west
+  // gate opened straight onto deep water — a gate that cannot be walked
+  // through is a door that lies about being one. Which side is which is not
+  // known here, so this asks the weaker and sufficient question: at least
+  // one of the four cells around a gate is dry land outside the ring.
+  for (const gate of city.gates) {
+    const around = [
+      { col: gate.col, row: gate.row - 1 },
+      { col: gate.col, row: gate.row + 1 },
+      { col: gate.col - 1, row: gate.row },
+      { col: gate.col + 1, row: gate.row },
+    ].filter((at) => grid.inBounds(at.col, at.row));
+    const dry = around.filter((at) => grid.getTerrain(at.col, at.row) !== TerrainType.Water);
+    expect({ gate: `${gate.col},${gate.row}`, dry: dry.length > 1 }).toEqual({
+      gate: `${gate.col},${gate.row}`,
+      dry: true,
+    });
+  }
 
   // Every piece the layout laid is still standing where it laid it. A wall
   // that came back with three of its stones missing would still enclose a
@@ -243,7 +273,7 @@ function assertTheWallIsAWall(
       at: `${piece.col},${piece.row}`,
       type: piece.type,
     });
-    expect(grid.isPassable(piece.col, piece.row)).toBe(piece === gate);
+    expect(grid.isPassable(piece.col, piece.row)).toBe(opened.has(`${piece.col},${piece.row}`));
   }
 
   // And the ring really is a ring: four corners and four runs, so the count
