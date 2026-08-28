@@ -377,6 +377,19 @@ export const HR: Phrases = {
   arrayHintRows: (columns, counted) =>
     `Broji po ${columns}: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
 
+  debugTitle: "Debug postavke",
+  debugHint: "Dodirni naslov ponovno da ih skloniš.",
+  debugFrozen: "Zaustavi selo",
+  debugHungry: "Sve su životinje gladne",
+  debugHour: (hour) => `Sat: ${String(hour).padStart(2, "0")}:00`,
+  debugRung: (rung, of) => `Računanje: stupanj ${rung} od ${of}`,
+  debugPurse: "Napuni novčanik",
+  debugBasket: "Napuni košaru",
+  debugLearn: "Nauči sve, idi svugdje",
+  debugOn: "uključeno",
+  debugOff: "isključeno",
+  debugDone: "gotovo",
+
   shareLessonTitle: "Dijeljenje",
   shareRune: `Crta s dvije točkice u tvojoj knjizi obere cijelu gredicu odjednom — i pita kako se ulov dijeli. ${NAMED_PEOPLE.fisher} to radi svako jutro.`,
   shareHeap: (total, parts) =>

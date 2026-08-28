@@ -281,6 +281,19 @@ export const DE: Phrases = {
   arrayHintRows: (columns, counted) =>
     `Zähl in ${columns}er-Schritten: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
 
+  debugTitle: "Debug-Optionen",
+  debugHint: "Tipp noch einmal auf die Überschrift, um sie wegzulegen.",
+  debugFrozen: "Das Dorf anhalten",
+  debugHungry: "Alle Tiere hungrig",
+  debugHour: (hour) => `Die Stunde: ${String(hour).padStart(2, "0")}:00`,
+  debugRung: (rung, of) => `Die Rechenaufgaben: Stufe ${rung} von ${of}`,
+  debugPurse: "Geldbeutel füllen",
+  debugBasket: "Korb füllen",
+  debugLearn: "Alles lernen, überall hinkommen",
+  debugOn: "an",
+  debugOff: "aus",
+  debugDone: "fertig",
+
   shareLessonTitle: "Aufteilen",
   shareRune: `Der Strich mit den zwei Punkten in deinem Zauberbuch erntet ein ganzes Beet auf einmal — und fragt, wie sich der Fang aufteilt. ${NAMED_PEOPLE.fisher} macht das jeden Morgen.`,
   shareHeap: (total, parts) =>

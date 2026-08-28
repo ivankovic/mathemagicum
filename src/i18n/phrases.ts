@@ -200,6 +200,32 @@ export interface Phrases {
   /** The help that arrives after a wrong answer: count along, row by row. */
   arrayHintRows: (columns: number, counted: number) => string;
 
+  // --- the debug panel ------------------------------------------------------
+
+  /**
+   * The heading the About sheet takes when the seams are showing.
+   *
+   * Translated like everything else, on the same rule: the game speaks the
+   * language it was set to, and a grown-up in Zagreb looking at why the
+   * carrots will not grow is owed the same sentence an English one gets.
+   */
+  debugTitle: string;
+  /** Said once under it, so the gesture can be undone by whoever found it. */
+  debugHint: string;
+  /** The rows, each a thing that can be turned on or handed over. */
+  debugFrozen: string;
+  debugHungry: string;
+  debugHour: (hour: number) => string;
+  debugRung: (rung: number, of: number) => string;
+  debugPurse: string;
+  debugBasket: string;
+  debugLearn: string;
+  /** What a row says when it is on, and when it is off. */
+  debugOn: string;
+  debugOff: string;
+  /** And what a hand-over button says once it has been pressed. */
+  debugDone: string;
+
   // --- the division spell --------------------------------------------------
 
   /** The heading over the fisherman's lesson. */

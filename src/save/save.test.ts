@@ -147,6 +147,7 @@ describe("the list of players", () => {
     lastPlayed,
     house: 0,
     introSeen: false,
+    debug: false,
     band: DEFAULT_BAND,
     rung: HARDEST_RUNG,
     portalRung: 0,

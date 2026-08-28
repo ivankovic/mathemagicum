@@ -61,12 +61,14 @@ import {
 import type { CastResult } from "../spells/cast";
 import {
   DEFAULT_BAND,
+  HARDEST_RUNG,
   type Recent,
   bandAt,
   bandOn,
   nextRung,
   recordCast,
   rungAt,
+  rungInBand,
 } from "../spells/difficulty";
 import { HARDEST_SHARE_RUNG, boxesOf, shareProblemFor, shareRungAt } from "../spells/division";
 import {
@@ -111,7 +113,7 @@ import {
 } from "../spells/spellbook";
 import { makeSubtractionProblem } from "../spells/subtraction";
 import { nextSymmetryRung, symmetryHint, symmetryRungAt } from "../spells/symmetry";
-import { AboutPanel } from "../ui/AboutPanel";
+import { AboutPanel, type DebugControls } from "../ui/AboutPanel";
 import { ArrayPopup } from "../ui/ArrayPopup";
 import { BrickPopup } from "../ui/BrickPopup";
 import { ClockPopup } from "../ui/ClockPopup";
@@ -595,6 +597,15 @@ const HUD_DEPTH = WORLD_DEPTH_CEILING + 2000;
 const TOUCH_UI_DEPTH = WORLD_DEPTH_CEILING + 3000;
 // Above the touch controls: a spell popup covers everything, including the
 // buttons that opened it.
+/**
+ * What "fill it" hands over.
+ *
+ * Generous, because counting money out is the point of the game everywhere
+ * else and this is the button for when it is not.
+ */
+const DEBUG_COINS = 5_000;
+const DEBUG_EACH = 20;
+
 const MODAL_DEPTH = WORLD_DEPTH_CEILING + 4000;
 const CHUNK_DEPTH = -1000;
 
@@ -1605,6 +1616,22 @@ export class GameScene extends Phaser.Scene {
   private traffic?: HarbourTraffic;
   /** A rune over each teacher who still has one to give. */
   private teacherMarks?: TeacherMarks;
+  /**
+   * What the debug panel has been asked for, over and above the address bar.
+   *
+   * Three of the seams are *states* rather than one-off grants — a frozen
+   * village, hungry animals, an hour — so a panel that sets them needs
+   * somewhere to put the answer. The rest of what it offers changes the
+   * child's own things instead: coins into the purse, a rung on the profile,
+   * spells into the book. Those are real and saved, and no override is
+   * wanted or kept.
+   *
+   * `?freezeNpcs` and the rest still work and still win: a script that asked
+   * for a still village gets one whatever a panel says.
+   */
+  private debugFreeze = false;
+  private debugHungry = false;
+  private debugHour: number | null = null;
   /** What the patch menu is currently offering, in the order it drew them. */
   private patchChoices: readonly PatchAction[] = [];
   /** What part each npc plays, for the marks — `spec.role ?? spec.id`. */
@@ -2032,7 +2059,11 @@ export class GameScene extends Phaser.Scene {
     );
     // Over the options rather than instead of them: it was opened from there
     // and closing it should put you back where you were.
-    this.optionsPanel.onAbout = () => this.aboutPanel?.show(() => {});
+    // Which face it opens on is this child's own, saved with everything else
+    // about them; the heading turns it over and says so.
+    this.aboutPanel.onToggleDebug = (on) => this.saveProfileChange({ debug: on });
+    this.aboutPanel.controls = this.debugControls();
+    this.optionsPanel.onAbout = () => this.aboutPanel?.show(() => {}, this.profile.debug);
     // The other half of the notice a parent read while the game was being
     // set up: the world lives on this device, so here is how to take it off.
     this.optionsPanel.onExport = () => exportSaves();
@@ -2448,7 +2479,7 @@ export class GameScene extends Phaser.Scene {
       // The minute to draw is the scene's to decide, not the harbour's: it
       // is the world's clock, unless a script has asked for everything to
       // hold still. See `FROZEN_TIDE`.
-      this.traffic?.sail(this.dev.freezeNpcs ? FROZEN_TIDE : this.worldNow() / 60_000);
+      this.traffic?.sail(this.frozen ? FROZEN_TIDE : this.worldNow() / 60_000);
       this.teacherMarks?.show(this.teachersOnScreen(), (spell) => !this.knows(spell));
       this.cullScenery();
       this.placeArmedRune();
@@ -5556,7 +5587,7 @@ export class GameScene extends Phaser.Scene {
 
   /** The hour the world is at, with the dev seam's override on top. */
   private hourNow(): number {
-    return this.dev.hour ?? timeOfDay(new Date(this.worldNow()));
+    return this.debugHour ?? this.dev.hour ?? timeOfDay(new Date(this.worldNow()));
   }
 
   /**
@@ -6868,6 +6899,10 @@ export class GameScene extends Phaser.Scene {
       positions[`patch.${this.patchChoices[index] ?? index}`] = at;
     }
     if (this.optionsPanel?.isOpen) Object.assign(positions, this.optionsPanel.buttonPositions());
+    // The about sheet's, which nothing could reach until its heading became
+    // a button — and a hidden gesture nothing can drive is a hidden gesture
+    // nothing can check.
+    if (this.aboutPanel?.isOpen) Object.assign(positions, this.aboutPanel.buttonPositions());
     Object.assign(positions, this.shopPanel?.buttonPositions() ?? {});
     return positions;
   }
@@ -7558,7 +7593,7 @@ export class GameScene extends Phaser.Scene {
    * frame.
    */
   private firstMood(): Mood {
-    return firstMood(this.time.now, (min, max) => Phaser.Math.Between(min, max), this.dev.hungry);
+    return firstMood(this.time.now, (min, max) => Phaser.Math.Between(min, max), this.alwaysHungry);
   }
 
   /**
@@ -7603,7 +7638,7 @@ export class GameScene extends Phaser.Scene {
       animal.mood,
       now,
       (min, max) => Phaser.Math.Between(min, max),
-      this.dev.hungry,
+      this.alwaysHungry,
     );
     animal.mood = next.mood;
     animal.moodUntil = next.moodUntil;
@@ -9370,7 +9405,7 @@ export class GameScene extends Phaser.Scene {
     // is a position no script can know: a test that read where the shopkeeper
     // was and then tapped her found she had moved in between, and retrying
     // only widened the window. See devHooks.
-    if (this.dev.freezeNpcs) {
+    if (this.frozen) {
       for (const npc of this.npcs) {
         if (npc.isMoving) continue;
         // ?intro asks for the welcome, and the welcome is a walk across the
@@ -9415,7 +9450,7 @@ export class GameScene extends Phaser.Scene {
       // a test: it is about time passing, not about walking about.
       if (now >= animal.moodUntil) this.turnMood(animal, now);
     }
-    if (this.dev.freezeNpcs) return;
+    if (this.frozen) return;
     for (const animal of this.animals) {
       if (animal.isMoving || now < animal.nextStepAt) continue;
       // Quicker and twitchier than a person's amble. A chicken that moved at
@@ -9650,6 +9685,70 @@ export class GameScene extends Phaser.Scene {
 
   private get purse(): Purse {
     return this.session.purse;
+  }
+
+  /**
+   * The two seams that are read every frame, from either source.
+   *
+   * The address bar wins where it is used at all: a script that asked for a
+   * still village gets one whatever a child has since tapped.
+   */
+  private get frozen(): boolean {
+    return this.dev.freezeNpcs || this.debugFreeze;
+  }
+
+  private get alwaysHungry(): boolean {
+    return this.dev.hungry || this.debugHungry;
+  }
+
+  /**
+   * What the debug panel reaches for.
+   *
+   * Three of these are held here because they are *states* the game reads
+   * every frame. The rest are not overrides at all — they put coins in the
+   * purse, a rung on the profile and spells in the book, which is what those
+   * things are, and they are saved like any other change to them.
+   */
+  private debugControls(): DebugControls {
+    return {
+      frozen: () => this.frozen,
+      setFrozen: (still) => {
+        this.debugFreeze = still;
+      },
+      hungry: () => this.alwaysHungry,
+      setHungry: (hungry) => {
+        this.debugHungry = hungry;
+      },
+      hour: () => this.hourNow(),
+      setHour: (hour) => {
+        this.debugHour = hour;
+      },
+      rung: () => this.profile.rung,
+      rungs: () => HARDEST_RUNG,
+      setRung: (rung) => {
+        this.saveProfileChange({ rung: rungInBand(bandAt(this.profile.band), rung) });
+        this.applyRung();
+      },
+      fillPurse: () => {
+        this.purse.earn(DEBUG_COINS);
+        this.refreshCarried();
+      },
+      fillBasket: () => {
+        for (const plant of PLANT_TYPES) this.inventory.add(plant, DEBUG_EACH);
+        for (const material of MATERIAL_TYPES) this.inventory.add(material, DEBUG_EACH);
+        for (const fixture of PLACEABLE_FIXTURES) this.inventory.add(fixture, DEBUG_EACH);
+        this.refreshCarried();
+      },
+      learnEverything: () => {
+        this.saveProfileChange({
+          learned: [...SPELLS],
+          reached: markedPlaces(this.anchors).map(({ id }) => id),
+          found: [...FLOWER_TYPES],
+        });
+        this.spellTray?.refresh();
+        this.seedTray?.refresh();
+      },
+    };
   }
 
   private get modalOpen(): boolean {

@@ -91,6 +91,20 @@ export interface Progress {
    */
   readonly introSeen: boolean;
   /**
+   * Whether this child's game shows the debug panel.
+   *
+   * Per child rather than per device, and saved like anything else about
+   * them. A grown-up turning the seams on to look at something should not be
+   * turning them on for the sibling who shares the tablet — and a child who
+   * finds the gesture themselves has found it for their own game, which is
+   * the only game it can hurt.
+   *
+   * The seams themselves are not gated on this: `?hour=` works for anybody
+   * with an address bar, deliberately, and `devHooks.ts` says why. This is
+   * only whether the *panel* is there.
+   */
+  readonly debug: boolean;
+  /**
    * Where inside their band the game currently has them.
    *
    * `band` is what somebody picked when the player was made and is a fact
@@ -321,6 +335,7 @@ export function createProfile(
     language: wanted.language,
     lastPlayed: now,
     introSeen: false,
+    debug: false,
     band: wanted.band,
     // The first cottage nobody has taken. Houses are not handed out in the
     // order children are made, because a child removed and replaced would
@@ -381,6 +396,7 @@ export function freshProgress(bandAt_: number): Progress {
   const band = bandAt(bandAt_);
   return {
     introSeen: false,
+    debug: false,
     rung: band.from,
     portalRung: band.from,
     arrayRung: arrayFloor(band),
@@ -530,6 +546,9 @@ export function readProfile(value: unknown): Profile | null {
       ? Math.max(0, Math.min(MAX_PROFILES - 1, record.house as number))
       : 0,
     introSeen: record.introSeen === true,
+    // Absent in every save written before the panel existed, which is the
+    // right answer for all of them: off.
+    debug: record.debug === true,
     // A child saved before there was a choice was playing the hardest sums
     // the game had, because that was the only setting there was. Anything
     // else here would quietly restyle their game on the way in.

@@ -250,6 +250,19 @@ export const EN: Phrases = {
   arrayHintRows: (columns, counted) =>
     `Count along by ${columns}: ${Array.from({ length: counted }, (_, at) => (at + 1) * columns).join(", ")}…`,
 
+  debugTitle: "Debug options",
+  debugHint: "Tap the heading again to put these away.",
+  debugFrozen: "Hold the village still",
+  debugHungry: "Every animal hungry",
+  debugHour: (hour) => `The hour: ${String(hour).padStart(2, "0")}:00`,
+  debugRung: (rung, of) => `The sums: rung ${rung} of ${of}`,
+  debugPurse: "Fill the purse",
+  debugBasket: "Fill the basket",
+  debugLearn: "Learn everything, go everywhere",
+  debugOn: "on",
+  debugOff: "off",
+  debugDone: "done",
+
   shareLessonTitle: "Sharing it out",
   shareRune: `The bar with two dots in your spellbook picks a whole patch at once — and asks how the catch divides up. ${NAMED_PEOPLE.fisher} does it every morning.`,
   shareHeap: (total, parts) =>
