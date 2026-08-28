@@ -98,6 +98,12 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
   // infinity is the belt to that braces: whatever route reaches `priceOf`,
   // there is no coin figure for a machine.
   sorter: Number.POSITIVE_INFINITY,
+  // The quay's and the city's dressing, not for sale for the reason the
+  // market stall is not: it is a piece of a place rather than a thing
+  // somebody owns.
+  "sun-array": Number.POSITIVE_INFINITY,
+  windpump: Number.POSITIVE_INFINITY,
+  planter: Number.POSITIVE_INFINITY,
   fence: 2,
   table: 5,
   lamp: 8,

@@ -93,7 +93,8 @@ for p in carrot sunflower cactus tomato pepper wheat; do
   cp $OUT/terrain_plants/${p}{.json,_sheet.png} public/assets/plants/
 done
 for f in well fence fence-side table lamp gate stall bench scarecrow flowerpot \
-         sorter fence-corner gate-side gate-side-lower glowcap \
+         sorter sun-array windpump planter \
+         fence-corner gate-side gate-side-lower glowcap \
          city-wall city-wall-side city-gate city-gate-side \
          tulip daisy bellflower; do
   cp $OUT/terrain_fixtures/${f}{.json,_sheet.png} public/assets/fixtures/

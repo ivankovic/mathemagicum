@@ -742,8 +742,22 @@ export function layoutHarbour(grid: WorldGrid, box: AreaPlacement, rng: Rng): Ha
     placed.push(building);
   }
 
-  // The fish market: stalls along the front, between the piers, and a lamp
-  // at each pier root so the quay is legible after dark.
+  // The fish market: stalls along the front, between the piers, a lamp at
+  // each pier root so the quay is legible after dark, and — since a playtest
+  // asked for somewhere with a bit more solarpunk in it — the glass and
+  // brass that says a working quay rather than a fishing village.
+  //
+  // **Four rhythms sharing one run of cells, in a chain, so the order they
+  // are written in is the order they get first refusal.** A cell is a
+  // stall, else a lamp, else a pump, else a planter — and because it is a
+  // chain rather than four independent tests, the *last* arm is the common
+  // one however small its modulus looks. Greenery is what has to be
+  // everywhere and a pump is what one should come round a corner and find,
+  // so the greenery is last and the pump is on eleven.
+  //
+  // `put` refuses a cell that is already taken, so nothing here has to be
+  // undone: a rhythm that lands on an occupied cell simply does not place,
+  // and the quay is one prop shorter.
   // Neither the piers nor the gangway: both are runs the player walks, and
   // a stall on one seals it off exactly as it sealed the piers off before
   // their landward ends were counted as part of them.
@@ -761,6 +775,24 @@ export function layoutHarbour(grid: WorldGrid, box: AreaPlacement, rng: Rng): Ha
     } else if (n % 7 === 0) {
       placed.push(
         ...[put(grid, `harbour-lamp-${n}`, FixtureType.Lamp, cell)]
+          .filter(Boolean)
+          .map((o) => o as PlacedObject),
+      );
+    } else if (n % 11 === 0) {
+      // The rare one, and rare on purpose: a quay with a pump every third
+      // cell is a pump farm, and what one wants is to come round the corner
+      // of a warehouse and find one turning.
+      placed.push(
+        ...[put(grid, `harbour-pump-${n}`, FixtureType.Windpump, cell)]
+          .filter(Boolean)
+          .map((o) => o as PlacedObject),
+      );
+    } else if (n % 3 === 0) {
+      // And the common one. Greenery is the half of this that has to be
+      // everywhere — a quay with two machines and no plants on it is an
+      // industrial estate, which is the exact thing solarpunk is not.
+      placed.push(
+        ...[put(grid, `harbour-planter-${n}`, FixtureType.Planter, cell)]
           .filter(Boolean)
           .map((o) => o as PlacedObject),
       );

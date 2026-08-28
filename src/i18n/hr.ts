@@ -134,6 +134,26 @@ const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
     few: "razvrstavača",
     many: "razvrstavača",
   },
+  // Two feminine and one masculine, and the masculine is inanimate, so its
+  // accusative is its nominative — the same shape as *bunar* and the sorter.
+  [FixtureType.SunArray]: {
+    one: "sunčana ploča",
+    acc: "sunčanu ploču",
+    few: "sunčane ploče",
+    many: "sunčanih ploča",
+  },
+  [FixtureType.Windpump]: {
+    one: "vjetrenjača",
+    acc: "vjetrenjaču",
+    few: "vjetrenjače",
+    many: "vjetrenjača",
+  },
+  [FixtureType.Planter]: {
+    one: "sanduk za cvijeće",
+    acc: "sanduk za cvijeće",
+    few: "sanduka za cvijeće",
+    many: "sanduka za cvijeće",
+  },
   // *Vrata* is plural-only in Croatian and cannot be counted, so a gate in a
   // fence is a *vratnica* — the leaf that swings, which is what is drawn.
   [FixtureType.Gate]: { one: "vratnica", acc: "vratnicu", few: "vratnice", many: "vratnica" },

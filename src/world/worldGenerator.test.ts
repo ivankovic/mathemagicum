@@ -6,6 +6,7 @@ import type { AnchorPlacements, AreaPlacement } from "./anchors";
 import { floodFillReachable, isReachable } from "./connectivity";
 import { type HighCorner, highEdges } from "./elevation";
 import type { Grove } from "./enchantedForest";
+import { FixtureType } from "./fixtures";
 import type { WorldGrid } from "./grid";
 import { LANDMARK_FOOTPRINT, LANDMARK_OVERHANG, LandmarkType } from "./landmarks";
 import { TerrainType } from "./terrain";
@@ -97,6 +98,61 @@ function assertTheHarbourHasSeaInIt(grid: WorldGrid, harbour: AreaPlacement): vo
  * pier whose root is not reachable from the shore is a jetty in the middle
  * of a bay.
  */
+/**
+ * The built-up places are dressed, and the dressing survived the carve.
+ *
+ * A playtest asked for a bit more solarpunk, and the answer was regional:
+ * glass and brass on the quay and at the city's crossings, with the village
+ * left as timber. The failure worth a test is the quiet one — connectivity
+ * gets where it is going by removing whatever is in the way, and props that
+ * are not marked unbreakable are exactly what it removes. A feel pass that
+ * half-vanishes into the carve leaves every other assertion in this file
+ * passing and the world looking like it did before.
+ *
+ * Counted rather than located. *Where* a planter lands is a modulus over a
+ * run of quay cells whose length is the coast's business, and pinning a
+ * coordinate here would pin the coastline.
+ *
+ * The wind pump is deliberately not asserted here. It is the rare one —
+ * every eleventh quay cell that is not already something else — and a quay
+ * short enough to have none is a small harbour rather than a bug. It is
+ * asked for at full scale instead, where the harbour is the one the game
+ * ships and "no pump" could only mean the rhythm never fires.
+ */
+function assertTheBuiltUpPlacesAreDressed(
+  grid: WorldGrid,
+  world: ReturnType<typeof generateWorld>,
+): void {
+  const standing = (type: string): number =>
+    grid.listObjects().filter((object) => object.type === type).length;
+
+  // The city crossings run lamp, panel, lamp, planter, so a city with any
+  // crossings at all has some of each. Lamps are asserted too: the rotation
+  // took two of every four away from them, and a city that got darker to
+  // look nicer would be a bad trade made silently.
+  expect(standing(FixtureType.Lamp)).toBeGreaterThan(0);
+  expect(standing(FixtureType.SunArray)).toBeGreaterThan(0);
+
+  // The quay's planters counted *inside the harbour*, which is the whole
+  // point of scoping this rather than counting the world's.
+  //
+  // Found out rather than reasoned about: with a global count of planters,
+  // deleting the quay's arm outright left every test in this file passing,
+  // because the city's own planters answered for them. A count that two
+  // different places can satisfy is a count that neither place has to.
+  const harbour = world.harbour;
+  if (!harbour) return;
+  // Asked of the quay's own cells rather than of a bounding box: the quay is
+  // the run of working front the layout already knows about, and a planter
+  // that is on it is a planter the fish market's rhythm put there.
+  const quay = new Set(harbour.quay.map((at) => `${at.col},${at.row}`));
+  const onTheQuay = grid
+    .listObjects()
+    .filter((object) => object.type === FixtureType.Planter)
+    .filter((object) => quay.has(`${object.col},${object.row}`));
+  expect(onTheQuay.length).toBeGreaterThan(0);
+}
+
 function assertYouCanGetIntoTheSettlements(
   grid: WorldGrid,
   reachable: ReturnType<typeof floodFillReachable>,
@@ -490,6 +546,7 @@ describe("generateWorld seed sweep", () => {
       // there yet, so its middle is open ground.
       expect(isReachable(reachable, grid, centerOf(anchors.observatory))).toBe(true);
       assertYouCanGetIntoTheSettlements(grid, reachable, world);
+      assertTheBuiltUpPlacesAreDressed(grid, world);
       // The forest is asked about its doorstep rather than its centre,
       // because its centre is the great tree and a tree you can walk into is
       // not a tree. This is the invariant that caught the tree being carved
@@ -535,5 +592,15 @@ describe("generateWorld at full target scale", () => {
     expect(isReachable(reachable, grid, centerOf(anchors.observatory))).toBe(true);
     assertYouCanGetIntoTheSettlements(grid, reachable, world);
     assertGroveIsReachedAndStandsThere(grid, reachable, world.grove);
+
+    // And the wind pump, which is asked for *here* rather than in the sweep.
+    // It is the rare one — every eleventh quay cell that is not already
+    // something else — and the sweep's worlds are small enough that a quay
+    // with none on it is a short quay rather than a bug. A five-hundred-cell
+    // world has the harbour the game actually ships, so if the rhythm never
+    // fires here it never fires.
+    expect(
+      grid.listObjects().filter((object) => object.type === FixtureType.Windpump).length,
+    ).toBeGreaterThan(0);
   });
 });

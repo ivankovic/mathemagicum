@@ -488,15 +488,38 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
     n++;
   }
 
-  // Street lamps at the crossings, which is where a city puts them and also
-  // the only cells the grid guarantees are clear.
+  // What the crossings get, which is where a city puts its street furniture
+  // and also the only cells the grid guarantees are clear.
+  //
+  // It was a lamp at every one of them. A playtest asked for somewhere with
+  // a bit more solarpunk about it, and the crossings are where a city says
+  // what kind of city it is — so a lamp, then a sun panel, then greenery,
+  // round and round. Three in rotation rather than a random draw: a child
+  // walking a street should be able to see the pattern, which is also what
+  // stops one crossing looking like a mistake.
+  //
+  // **The lamp keeps its share and keeps its place in the cycle**, because
+  // it is the only one of the three that does something — it lights the
+  // ground, and a city that swapped a third of its lamps for scenery would
+  // be a city that got darker to look nicer.
+  const CROSSING_CYCLE: readonly FixtureType[] = [
+    FixtureType.Lamp,
+    FixtureType.SunArray,
+    FixtureType.Lamp,
+    FixtureType.Planter,
+  ];
+  let crossing = 0;
   for (let row = 0; row < inner.height; row += RHYTHM) {
     for (let col = 0; col < inner.width; col += RHYTHM) {
       const at = { col: inner.col + col, row: inner.row + row };
       if (!grid.inBounds(at.col, at.row) || grid.getObjectAt(at.col, at.row)) continue;
-      const lamp: PlacedObject = {
-        id: `city-lamp-${at.col}-${at.row}`,
-        type: FixtureType.Lamp,
+      // Counted per *placed* thing rather than per crossing considered, so a
+      // run of blocked cells does not silently skip the panel's turn.
+      const type = CROSSING_CYCLE[crossing % CROSSING_CYCLE.length] ?? FixtureType.Lamp;
+      crossing++;
+      const dressing: PlacedObject = {
+        id: `city-${type}-${at.col}-${at.row}`,
+        type,
         col: at.col,
         row: at.row,
         width: 1,
@@ -505,8 +528,8 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
         anchorCol: at.col,
         anchorRow: at.row,
       };
-      grid.placeObject(lamp);
-      placed.push(lamp);
+      grid.placeObject(dressing);
+      placed.push(dressing);
     }
   }
 

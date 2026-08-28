@@ -112,6 +112,22 @@ export const FixtureType = {
    * spell paid rather than bought with what the store paid.
    */
   Sorter: "sorter",
+  /**
+   * The quay and the city, in glass and brass.
+   *
+   * A playtest liked the fairytale look and asked for somewhere with a bit
+   * more solarpunk in it, so the answer is *regional* rather than a repaint:
+   * the village stays timber, because timber is the half that worked, and
+   * these go where the world is already built up.
+   *
+   * World generation's, like the well and the market stall. A child who
+   * could buy a length of solar array could put one in a wood, and what
+   * these are for is saying *what kind of place this is* — which is a fact
+   * about the place rather than about who lives there.
+   */
+  SunArray: "sun-array",
+  Windpump: "windpump",
+  Planter: "planter",
 } as const;
 
 export type FixtureType = (typeof FixtureType)[keyof typeof FixtureType];
