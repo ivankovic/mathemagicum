@@ -102,3 +102,49 @@ describe("marking out a patch on a phone", () => {
     5 * MINUTES,
   );
 });
+
+/**
+ * And the trays stay on the screen they are drawn on.
+ *
+ * Reported from a phone: *items popup goes outside the screen border, to the
+ * left.* The crate wraps into fresh columns to its left as it fills, which
+ * was settled when it held twelve things and had no edge to run into. It
+ * holds twenty now, and on a 390-wide screen its own button sits a hundred
+ * and twenty pixels from the left edge — two columns fit, three were wanted,
+ * and the third was drawn centred at minus twenty-four.
+ *
+ * `IconTray.test.ts` proves the arithmetic with those numbers. This is the
+ * half that cannot be reasoned about: how many things are in the crate, and
+ * how far from the edge it lands, are the game's business rather than the
+ * tray's, and both have changed under it before.
+ */
+describe("the trays on a phone", () => {
+  test(
+    "open without running off the side of the screen",
+    async () => {
+      await play({ seams: "&learned=all&hour=12&freezeNpcs", viewport: PHONE }, async (game) => {
+        for (const tray of ["crate", "seeds", "basket", "spellbook"]) {
+          expect(await game.tap(tray)).toBe(true);
+          await game.settle(250);
+          const open = Object.entries(await game.ui()).filter(([name]) =>
+            name.startsWith(`${tray}.`),
+          );
+          expect({ tray, any: open.length > 0 }).toEqual({ tray, any: true });
+          for (const [name, at] of open) {
+            // Centres, so a button whose centre is on screen can still have
+            // an edge off it — which is why the margin is half a button
+            // rather than nothing.
+            expect({ name, onScreen: at.x > 20 && at.y > 20 }).toEqual({ name, onScreen: true });
+            expect({ name, inside: at.x < PHONE.width && at.y < PHONE.height }).toEqual({
+              name,
+              inside: true,
+            });
+          }
+          await game.tap(tray);
+          await game.settle(150);
+        }
+      });
+    },
+    5 * MINUTES,
+  );
+});

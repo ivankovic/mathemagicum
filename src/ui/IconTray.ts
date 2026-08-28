@@ -89,6 +89,68 @@ export interface Slot {
  * In steps because this is the part that can be wrong without a browser, and
  * it is the part that was.
  */
+/**
+ * The smallest a tray button is allowed to shrink to.
+ *
+ * A floor rather than a limit anybody expects to hit: below this a button is
+ * smaller than a fingertip, and a tray a child cannot hit accurately is no
+ * better than one they cannot see. If a tray ever needs more than this can
+ * give, the answer is fewer things in it rather than smaller buttons.
+ */
+export const TRAY_LEAST = 36;
+
+/**
+ * Whether `count` buttons of this size all land on the screen.
+ *
+ * Rows go up from the tray's button and columns go left from it, so what
+ * bounds them is the distance to the top edge and to the left edge — `y` and
+ * `x` are exactly those, because the button is positioned from the bottom
+ * right. A button's own half-width has to clear the edge too, or the last
+ * one in each direction is half off it.
+ */
+function trayHolds(count: number, size: number, x: number, y: number): boolean {
+  const step = size + GAP;
+  const rows = Math.floor((y - size / 2) / step);
+  // Column nought is the tray's own column, so there is always one more
+  // column than there is room to the left of it.
+  const columns = Math.floor((x - size / 2) / step) + 1;
+  return rows >= 1 && columns >= 1 && rows * columns >= count;
+}
+
+/**
+ * How big a tray's buttons may be and still all be on the screen.
+ *
+ * **Wrapping leftward has no edge to stop at, and that was the bug.** The
+ * tray stacks up from its button and wraps into fresh columns to its left,
+ * which was fixed when the crate held twelve things. It holds twenty now,
+ * and on a phone the crate sits a hundred and twenty pixels from the left
+ * edge: two columns fit, three were needed, and the third was drawn centred
+ * at *minus twenty-four* — a column of buttons entirely off the side of the
+ * screen, reported from a phone as exactly that.
+ *
+ * Capping the columns alone would only lose the items instead of misplacing
+ * them, so the buttons shrink until the grid fits. Two pixels at a time,
+ * biggest first, so a tray that already fits is untouched — every tray on a
+ * desktop, and every tray but the crate on a phone.
+ */
+export function trayButtonSize(
+  count: number,
+  most: number,
+  x: number,
+  y: number,
+  least: number = TRAY_LEAST,
+): number {
+  for (let size = most; size > least; size -= 2) {
+    if (trayHolds(count, size, x, y)) return size;
+  }
+  return least;
+}
+
+/** How many rows of this size stand between the tray's button and the top. */
+export function trayRows(size: number, y: number): number {
+  return Math.max(1, Math.floor((y - size / 2) / (size + GAP)));
+}
+
 export function traySlots(count: number, room: number): Slot[] {
   if (count <= 0) return [];
   const fits = Math.max(1, Math.floor(room));
@@ -369,15 +431,21 @@ export class IconTray {
     this.container.box.setPosition(x, y);
     this.container.icon.setPosition(x, y);
     this.placeBadge(this.container, x, y, size);
-    const step = size + GAP;
-    const slots = traySlots(this.items.length, (y - size) / step);
+    // Sized from the *items*, not from the container's button. Those differ
+    // by eight pixels, and measuring the grid against the bigger of the two
+    // cost a row — which is how twenty things came to need three columns
+    // where two would have held them.
+    const itemSize = trayButtonSize(this.items.length, size - 8, x, y);
+    const step = itemSize + GAP;
+    const slots = traySlots(this.items.length, trayRows(itemSize, y));
     for (const [index, item] of this.items.entries()) {
       const slot = slots[index] as Slot;
       const itemX = x - slot.column * step;
       const itemY = y - slot.row * step;
+      item.box.setSize(itemSize, itemSize);
       item.box.setPosition(itemX, itemY);
       item.icon.setPosition(itemX, itemY);
-      this.placeBadge(item, itemX, itemY, size - 8);
+      this.placeBadge(item, itemX, itemY, itemSize);
     }
     // Content last, and here rather than only in the constructor, so a badge
     // can never be made visible before it has been given a position. The

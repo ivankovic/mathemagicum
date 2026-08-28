@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { type Slot, badgeLabel, traySlots } from "./IconTray";
+import { type Slot, TRAY_LEAST, badgeLabel, trayButtonSize, trayRows, traySlots } from "./IconTray";
 
 // IconTray itself needs a live Phaser scene, but the one rule in it that can
 // be wrong without anything on screen looking broken is what a badge says.
@@ -129,5 +129,60 @@ describe("traySlots", () => {
     const slots = traySlots(4, 0);
     expect(slots.length).toBe(4);
     expect(slots.every((s) => s.row >= 1)).toBe(true);
+  });
+});
+
+/** The gap the tray leaves between buttons, which is not exported. */
+const GAP_FOR_TEST = 8;
+
+describe("a tray that has to fit on the screen", () => {
+  /**
+   * The phone the bug was reported from, with the numbers that produced it.
+   *
+   * A 390-wide screen, the crate in the fourth shelf slot with 64-pixel
+   * buttons, which puts its own button 120 pixels from the left edge. Twenty
+   * things in it. Measured the old way that is nine rows, so three columns,
+   * and the third is centred at minus twenty-four — a whole column of
+   * buttons off the side of the screen.
+   */
+  const PHONE_CRATE = { x: 120, y: 768, size: 56 };
+
+  test("holds twenty things on a phone without going off the left edge", () => {
+    const { x, y, size } = PHONE_CRATE;
+    const chosen = trayButtonSize(20, size, x, y);
+    const step = chosen + GAP_FOR_TEST;
+    const slots = traySlots(20, trayRows(chosen, y));
+    for (const slot of slots) {
+      const left = x - slot.column * step - chosen / 2;
+      const top = y - slot.row * step - chosen / 2;
+      expect({ left: left >= 0, top: top >= 0 }).toEqual({ left: true, top: true });
+    }
+  });
+
+  test("and does not shrink a tray that already fits", () => {
+    // Seven runes, the spellbook's own, in the first shelf slot on a phone.
+    expect(trayButtonSize(7, 56, 358, 768)).toBe(56);
+    // And the whole crate on a desktop, which has always had the room.
+    expect(trayButtonSize(20, 48, 226, 712)).toBe(48);
+  });
+
+  /**
+   * Shrinking has a floor, and past it the answer is fewer things.
+   *
+   * A button smaller than a fingertip is no more use than one off the
+   * screen, so this stops rather than going on shrinking — and says so by
+   * returning the floor, which a caller can compare against if it ever
+   * wants to know that it asked for the impossible.
+   */
+  test("stops shrinking at a size a finger can still hit", () => {
+    expect(trayButtonSize(400, 56, 120, 768)).toBe(TRAY_LEAST);
+  });
+
+  test("never returns a size bigger than it was offered", () => {
+    for (const count of [1, 5, 20, 50]) {
+      for (const most of [40, 48, 56, 64]) {
+        expect(trayButtonSize(count, most, 120, 768)).toBeLessThanOrEqual(most);
+      }
+    }
   });
 });
