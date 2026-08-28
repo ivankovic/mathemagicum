@@ -10,6 +10,7 @@ import { FixtureType } from "./fixtures";
 import type { WorldGrid } from "./grid";
 import { LANDMARK_FOOTPRINT, LANDMARK_OVERHANG, LandmarkType } from "./landmarks";
 import { TerrainType } from "./terrain";
+import type { GridPoint } from "./topdown";
 import { generateWorld } from "./worldGenerator";
 
 // Smaller than the real 500x500 target so a 20-seed sweep stays fast
@@ -343,6 +344,61 @@ function assertTheWallIsAWall(
       gate: `${gate.col},${gate.row}`,
       dry: true,
     });
+  }
+
+  // **A gate on every side that has an outside**, which is the claim the
+  // four-sided wall was built on and the one thing here a picture was
+  // supposed to settle.
+  //
+  // Asserted rather than eyeballed, and it is much the better bargain: a
+  // screenshot shows one city from one viewport, and the city is wider than
+  // the window, so the honest version of the picture is four pictures. This
+  // is the property itself, on twenty worlds, and it says *which* sides are
+  // missing and why.
+  //
+  // The rule is `chooseGates`'s own: a side is worth a gate exactly when the
+  // cell outside it is dry and one clear step in from the world's rim. So
+  // the assertion is an equality in both directions — no side with an
+  // outside goes without a gate, and no gate opens onto a side that has
+  // none. A one-way check would pass a wall with four gates on the south.
+  {
+    const cols = city.wall.map((piece) => piece.col);
+    const rows = city.wall.map((piece) => piece.row);
+    const left = Math.min(...cols);
+    const right = Math.max(...cols);
+    const top = Math.min(...rows);
+    const bottom = Math.max(...rows);
+    const outside = (at: GridPoint) =>
+      at.col > 0 &&
+      at.row > 0 &&
+      at.col < grid.width - 1 &&
+      at.row < grid.height - 1 &&
+      grid.getTerrain(at.col, at.row) !== TerrainType.Water;
+    const sideOf = (gate: GridPoint): string => {
+      if (gate.row === bottom) return "south";
+      if (gate.row === top) return "north";
+      if (gate.col === right) return "east";
+      if (gate.col === left) return "west";
+      return "nowhere";
+    };
+    const midCol = Math.floor((left + right) / 2);
+    const midRow = Math.floor((top + bottom) / 2);
+    const wanted = (
+      [
+        ["south", { col: midCol, row: bottom + 1 }],
+        ["north", { col: midCol, row: top - 1 }],
+        ["east", { col: right + 1, row: midRow }],
+        ["west", { col: left - 1, row: midRow }],
+      ] as const
+    )
+      .filter(([, doorstep]) => outside(doorstep))
+      .map(([side]) => side);
+    const got = city.gates.map(sideOf).sort();
+    // A city with its back to the sea legitimately has fewer than four; a
+    // city in open country has all four and nothing may quietly drop one.
+    expect(got).toEqual([...wanted].sort());
+    // And none of them landed off the ring entirely.
+    expect(got).not.toContain("nowhere");
   }
 
   // Every piece the layout laid is still standing where it laid it. A wall
