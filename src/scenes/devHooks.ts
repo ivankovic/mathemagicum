@@ -22,9 +22,32 @@ import type { GameSession } from "../world/session";
  * still, and a handle to read state and button positions from. Each is a
  * thing a test legitimately needs and cannot get any other way.
  *
- * All of it is gated on `import.meta.env.DEV`, so a production build has no
- * hook and ignores every parameter. That is the whole safety argument — a
- * `?coins=` that survived into a release would be a cheat code.
+ * **All of it ships.** It used to be gated on `import.meta.env.DEV`, on the
+ * argument that a `?coins=` surviving into a release would be a cheat code.
+ * That argument was given up deliberately, and it is worth writing down why
+ * rather than leaving the next reader to assume it was an oversight.
+ *
+ * Nothing here is a security boundary and it never was. There is no server,
+ * no account and no money in this game; a world is a few keys in
+ * `localStorage` on one tablet. Anybody who can open a console could already
+ * write a purse straight into the save. These seams make that *convenient*;
+ * they do not make it possible.
+ *
+ * And what they make convenient is cheating at arithmetic a child is doing
+ * for their own sake. The one who works out that `?learned=all` skips the
+ * geometer has demonstrated something this game would rather reward than
+ * prevent — as the owner put it, a child who can hack the URL does not need
+ * simple arithmetic lessons.
+ *
+ * What it buys is the browser suite: every scenario in `e2e/` is written
+ * against these seams, so with them stripped from a build the suite can only
+ * ever be run against a dev server — which is slower, is not what ships, and
+ * degrades under repeated page loads until whole files fail. See `serve`.
+ *
+ * The one cost worth naming, because it is not the cheating one: `session`
+ * is the live object and the game autosaves. A poke through it can persist a
+ * world the restore path never expected, and the child at the other end has
+ * no way to know what happened.
  */
 
 export interface DevOptions {
@@ -200,34 +223,7 @@ export interface DevOptions {
   readonly share: number | null;
 }
 
-const NONE: DevOptions = {
-  seed: null,
-  freezeNpcs: false,
-  coins: 0,
-  crops: 0,
-  hungry: false,
-  language: null,
-  intro: false,
-  wall: false,
-  materials: 0,
-  reached: [],
-  portalRung: null,
-  arrayRung: null,
-  shareRung: null,
-  rung: null,
-  clockRung: null,
-  symmetryRung: null,
-  brickRung: null,
-  learned: [],
-  flowers: [],
-  hour: null,
-  skipTitle: false,
-  at: null,
-  share: null,
-};
-
 export function devOptions(search = globalThis.location?.search ?? ""): DevOptions {
-  if (!import.meta.env.DEV) return NONE;
   return parseDevOptions(search);
 }
 
@@ -712,7 +708,6 @@ export interface DevHandle {
 const HANDLE_KEY = "__mathemagicum";
 
 export function exposeForTests(handle: DevHandle): void {
-  if (!import.meta.env.DEV) return;
   (globalThis as unknown as Record<string, unknown>)[HANDLE_KEY] = handle;
 }
 
@@ -737,11 +732,9 @@ const MAKING_KEY = "__mathemagicum_making";
  * without anything noticing.
  */
 export function exposeMakingForTests(handle: MakingHandle): void {
-  if (!import.meta.env.DEV) return;
   (globalThis as unknown as Record<string, unknown>)[MAKING_KEY] = handle;
 }
 
 export function forgetMakingForTests(): void {
-  if (!import.meta.env.DEV) return;
   (globalThis as unknown as Record<string, unknown>)[MAKING_KEY] = undefined;
 }

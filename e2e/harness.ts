@@ -47,7 +47,7 @@ import type { PatchAction } from "../src/world/selection";
  * twelve blow past forty-five seconds. See the note on `ANSWER_MS` for where
  * that actually comes from.
  */
-const PORT = Number(process.env.E2E_PORT ?? 5178);
+const PORT = Number(process.env.E2E_PORT ?? 0);
 
 /** Where the server actually ended up, which is not always where it was asked. */
 let origin: string | null = null;
@@ -65,7 +65,7 @@ const TRACE = process.env.E2E_TRACE === "1";
  */
 const SERVER_LOG = process.env.E2E_SERVER_LOG ?? `e2e/shots/server-${process.pid}.log`;
 
-let serving: ReturnType<typeof Bun.spawn> | null = null;
+let serving: ReturnType<typeof Bun.serve> | null = null;
 
 /**
  * Anything that must not be allowed to wait forever, and what to call it.
@@ -137,65 +137,71 @@ async function listeningOn(): Promise<string | null> {
  * outside the run. See `PORT` for what inheriting cost.
  */
 export async function serve(): Promise<string> {
-  // **Serving the built site instead of this was tried, and cannot work.**
+  // **The built site, served as files. Not Vite.**
   //
-  // The reasoning was sound and the measurement was real — Vite is what
-  // accumulates, a reload re-boots the whole game, and a directory of files
-  // has nothing to accumulate — and it was twice as fast. It is also
-  // impossible: every dev seam in `devHooks.ts` is gated on
-  // `import.meta.env.DEV`, so a production build has none of them, and this
-  // entire suite is written against those seams. `__mathemagicum` is simply
-  // never put out, and every scenario times out waiting for a scene that
-  // started perfectly well.
+  // Vite is what accumulates, and the comment that used to be here said so —
+  // "whatever accumulates in a Vite that has served the same heavy page ten
+  // times, the cure is not to find out but to stop asking it to" — and then
+  // went on asking it to, once per scenario instead of once per file. That
+  // moved the wall rather than removing it: a scenario that *reloads* boots
+  // the game two or three times over, and a reload is not a reload. It is
+  // the whole game again — a world generated, several sheets recoloured, and
+  // several hundred separate module requests. Measured: opening the game
+  // takes seven to ten seconds, opening it and reloading twice takes forty,
+  // and two of eight went past a ninety-second budget.
   //
-  // Anything down that road has to make the seams survive a build first —
-  // a mode, a flag, a separate entry — and that is a change to what ships,
-  // not to the tests.
+  // A directory of files has nothing to accumulate. It is about twice as
+  // fast, and it is the artefact that actually ships.
   //
-  // A server per scenario, torn down and started again each time.
+  // This was tried once before and reverted, because every seam in
+  // `devHooks.ts` was gated on `import.meta.env.DEV` and a production build
+  // therefore had none of them — `__mathemagicum` was never put out and
+  // every scenario timed out waiting for a handle, on a game that had booted
+  // perfectly well. The seams ship now, deliberately; see that file for the
+  // argument. This works because of that decision and not otherwise.
   //
-  // It was one for the whole file, and the ninth scenario in a file stalled
-  // — reproducibly, at the same place, on a machine with nothing else
-  // running. A standalone loop of nothing but page loads had already shown
-  // the same shape: eleven fine and the twelfth never finishing. Whatever
-  // accumulates in a Vite that has served the same heavy page ten times, the
-  // cure is not to find out but to stop asking it to. Vite is ready in about
-  // three hundred milliseconds, against a scenario that takes twelve
-  // seconds, so this is the cheapest hermetic thing available.
-  //
-  // Dead handles are cleared rather than trusted for the same reason they
-  // always were: bun kills processes a test file spawned when that file
-  // ends, and a handle held past that made `??=` skip the respawn.
-  serving?.kill();
-  serving = null;
-  origin = null;
+  // Started once per process and left up. There is nothing to restart.
+  if (origin) return origin;
+  await built();
 
-  // A clean log, because the port is read back out of it and last run's
-  // address is not this run's.
-  //
-  // Redirected by the shell rather than handed a pair of writers: two sinks
-  // on one path have two buffers and two offsets, and a sink nobody drains
-  // fills its pipe and stops the child dead — which is the very failure this
-  // log exists to explain, manufactured by the logging.
-  await Bun.write(SERVER_LOG, "");
-  // Vite's own binary, exec'd, so the handle below *is* the server.
-  //
-  // It was `bunx --bun vite`, which spawns node as a grandchild — so killing
-  // the handle killed the launcher and left the server running, holding the
-  // port, outliving the run that made it. That orphan is what later runs
-  // then found answering and quietly used.
-  const start = `exec ./node_modules/.bin/vite --port ${PORT} >${SERVER_LOG} 2>&1`;
-  serving ??= Bun.spawn(["sh", "-c", start], { stdout: "ignore", stderr: "ignore" });
+  const root = `${process.cwd()}/dist`;
+  serving = Bun.serve({
+    // Any free port, not a fixed one. Vite was *asked* for 5178 and quietly
+    // moved along when it was taken, which is why the port used to be read
+    // back out of its log. `Bun.serve` does not move along, it throws — and
+    // twenty files each starting a server on the same number find it still
+    // held by the file before often enough to fail most of them. Nothing
+    // needs the number to be memorable: the origin is read off the server.
+    port: PORT,
+    development: false,
+    async fetch(request) {
+      const path = new URL(request.url).pathname;
+      // Everything is a real file except the entry, and the entry is asked
+      // for under a query string on every load — see the dev seams.
+      const file = Bun.file(`${root}${path === "/" ? "/index.html" : path}`);
+      if (await file.exists()) return new Response(file);
+      return new Response("not found", { status: 404 });
+    },
+  });
+  origin = `http://localhost:${serving.port}`;
+  if (!(await answering(origin))) throw new Error("the built site would not answer");
+  return origin;
+}
 
-  for (let wait = 0; wait < 60; wait++) {
-    const at = await listeningOn();
-    if (at && (await answering(at))) {
-      origin = at;
-      return at;
-    }
-    await Bun.sleep(500);
-  }
-  throw new Error(`the dev server never came up — see ${SERVER_LOG}`);
+/**
+ * Build the site, unless the run has already done it.
+ *
+ * Once per *run* rather than once per file: twenty files each spending ten
+ * seconds on the same build is three minutes of a suite that is slow enough
+ * already, so `run.ts` builds first and says so. A single file run on its
+ * own builds for itself, because the alternative is a scenario passing
+ * against yesterday's code — which has happened here, cost an afternoon, and
+ * is the one failure this suite must never have.
+ */
+async function built(): Promise<void> {
+  if (process.env.E2E_PREBUILT === "1") return;
+  const build = Bun.spawn(["bun", "run", "build"], { stdout: "ignore", stderr: "inherit" });
+  if ((await build.exited) !== 0) throw new Error("the build failed, so there is nothing to serve");
 }
 
 /**
@@ -207,7 +213,7 @@ export async function serve(): Promise<string> {
  * exported for a script that wants to be explicit about it.
  */
 export async function shutDown(): Promise<void> {
-  serving?.kill();
+  serving?.stop(true);
   serving = null;
   origin = null;
 }
@@ -224,7 +230,7 @@ export async function shutDown(): Promise<void> {
 // file, which is only safe because `run.ts` gives each file its own process.
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
-    serving?.kill();
+    serving?.stop(true);
     process.exit(130);
   });
 }
@@ -359,6 +365,12 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
     browser.newContext({
       viewport: { ...(opening.viewport ?? { width: 1000, height: 760 }) },
       ...(opening.touch ? { hasTouch: true } : {}),
+      // The built site registers a service worker and precaches two hundred
+      // and twenty files. That is right for a child on a tablet and wrong
+      // here: a scenario would be reading whatever the worker had cached
+      // rather than what the build just produced, which is the exact shape
+      // of the stale-code failure this suite exists to catch.
+      serviceWorkers: "block",
     }),
     SETUP_MS,
   );
