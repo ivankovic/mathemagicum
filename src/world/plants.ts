@@ -43,6 +43,17 @@ export function canPlantOn(plant: PlantType, terrain: TerrainType): boolean {
   return PLANT_DEFINITIONS[plant].allowedTerrain.includes(terrain);
 }
 
+/**
+ * The ground this crop will take, for showing rather than for checking.
+ *
+ * `canPlantOn` answers "may this go here", which is what the rules want. A
+ * child who has just been told no wants the other question answered — *then
+ * where* — and that needs the list itself rather than a yes or a no.
+ */
+export function groundFor(plant: PlantType): readonly TerrainType[] {
+  return PLANT_DEFINITIONS[plant].allowedTerrain;
+}
+
 export const PLANT_TYPES: readonly PlantType[] = Object.values(PlantType);
 
 // How grown a crop is. The generator ships one row of frames per stage (see

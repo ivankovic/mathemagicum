@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { UiAsset, cropIcon } from "../src/ui/assets";
+import { UiAsset } from "../src/ui/assets";
 import { FLOWER_LOOKS, FLOWER_TYPES, type FlowerType } from "../src/world/flowers";
-import { PlantType } from "../src/world/plants";
+import { PlantType, groundFor } from "../src/world/plants";
+import { TerrainType } from "../src/world/terrain";
 import { type Game, play, seedButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
@@ -221,11 +222,16 @@ describe("a seed that will not go in here", () => {
 
         const thought = await game.seam<{ icons: string[]; crossed: boolean } | null>("thought");
         if (!thought) throw new Error("nothing was thought about the cactus");
-        // The seed itself, so a child who cannot read knows which one, and a
-        // question rather than a cross: carrots are fine here and a cactus is
-        // fine somewhere, which is not what a cross says.
+        // The *ground it wants*, not the seed she picked. She knows which
+        // seed — she has just tapped it — and what she does not know is
+        // where to take it. A question rather than a cross, because carrots
+        // are fine here and a cactus is fine somewhere, which is not what a
+        // cross says.
         expect(thought.crossed).toBe(false);
-        expect(thought.icons).toEqual([cropIcon(PlantType.Cactus), UiAsset.MarkQuestion]);
+        expect(thought.icons).toEqual([...groundFor(PlantType.Cactus), UiAsset.MarkQuestion]);
+        // And that really is a different square of ground from the one she
+        // is standing on, or the hint would be telling her to stay put.
+        expect(thought.icons).not.toContain(TerrainType.Dirt);
         // And nothing went in the ground.
         //
         // Asked of the square rather than of the basket: planting spends no

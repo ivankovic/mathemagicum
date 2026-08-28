@@ -358,6 +358,7 @@ import {
   PLANT_TYPES,
   PlantStage,
   type PlantType,
+  groundFor,
   plantAnimKey,
   plantSheetKey,
   plantSidecarKey,
@@ -418,6 +419,7 @@ import {
   buildVariationIndex,
   cornerTerrainsFor,
   frameFor,
+  frameName,
   variationFor,
 } from "../world/terrainAtlas";
 import {
@@ -1156,6 +1158,36 @@ type Armed =
  * `armed` the seam it has always been: the scenarios that assert `"growth"`
  * were written before any of this and are not about it.
  */
+/**
+ * One picture in a thought cloud: something from the interface, or a square
+ * of actual ground.
+ *
+ * Two kinds because they come from two atlases and there is no honest way to
+ * flatten them into one string — a crop icon is drawn *for* the interface
+ * and a square of sand is the terrain itself, borrowed. Keeping them apart
+ * here is what lets the drawing pick the right texture without a naming
+ * convention nobody would remember.
+ */
+type Thought = { readonly ui: string } | { readonly ground: TerrainType };
+
+/** What a cloud's contents are called, for the seam and for tests. */
+function thoughtTag(thought: Thought): string {
+  return "ground" in thought ? thought.ground : thought.ui;
+}
+
+/**
+ * The atlas frame for a square that is all one terrain.
+ *
+ * The atlas is built for *corners* — every cell is drawn from the four
+ * terrains meeting at it — so a plain square of sand is the combination
+ * where all four corners are sand. Variation nought, because a bubble wants
+ * the same picture every time and the variations exist to stop a field
+ * looking tiled.
+ */
+function plainTerrainFrame(ground: TerrainType): string {
+  return frameName([ground, ground, ground, ground], 0);
+}
+
 function armedTag(what: Armed | null): string | null {
   if (!what) return null;
   switch (what.kind) {
@@ -6230,8 +6262,13 @@ export class GameScene extends Phaser.Scene {
    * `icon` is what the action was about — a crop or a fixture — and is the
    * caller's to supply, because only the caller knows whether `place` was
    * asked for a fence or a lamp.
+   *
+   * `plant` is supplied only by planting, and only so that ground it will
+   * not take can be answered with the ground it *will*. The icon cannot
+   * stand in for it: a picture of a carrot says which seed was refused, and
+   * the question a refused seed raises is where to take it instead.
    */
-  private report(result: ActionResult, icon?: string): void {
+  private report(result: ActionResult, icon?: string, plant?: PlantType): void {
     if (result.ok) {
       if (icon && result.tile) this.showResult(icon, result.tile.col, result.tile.row);
       return;
@@ -6244,8 +6281,8 @@ export class GameScene extends Phaser.Scene {
     // about *where she is standing* rather than about the square. A cactus
     // wants sand; the answer is a walk, not a different tap. So it is asked
     // as a question over her head rather than crossed out on the square.
-    if (result.outcome === Outcome.WrongGround && icon) {
-      this.showWonderOnPlayer(icon);
+    if (result.outcome === Outcome.WrongGround && plant) {
+      this.showWonderOnPlayer(plant);
       return;
     }
     const tile = result.tile;
@@ -6301,7 +6338,10 @@ export class GameScene extends Phaser.Scene {
    * hides the half that says *which* thing they have none of.
    */
   private showCostOnPlayer(icons: readonly string[]): void {
-    this.showThoughtOnPlayer(icons, true);
+    this.showThoughtOnPlayer(
+      icons.map((ui) => ({ ui })),
+      true,
+    );
   }
 
   /**
@@ -6320,31 +6360,46 @@ export class GameScene extends Phaser.Scene {
    * fixes by *moving* belongs over her, and this is the one refusal in the
    * game whose answer is "try it somewhere else".
    */
-  private showWonderOnPlayer(icon: string): void {
-    this.showThoughtOnPlayer([icon, UiAsset.MarkQuestion], false);
+  private showWonderOnPlayer(plant: PlantType): void {
+    this.showThoughtOnPlayer(
+      [...groundFor(plant).map((ground) => ({ ground })), { ui: UiAsset.MarkQuestion }],
+      false,
+    );
   }
 
-  private showThoughtOnPlayer(icons: readonly string[], crossed: boolean): void {
-    this.lastThought = { icons: [...icons], crossed };
+  private showThoughtOnPlayer(icons: readonly Thought[], crossed: boolean): void {
+    this.lastThought = { icons: icons.map(thoughtTag), crossed };
     // Centred over her, the way an animal's cloud is centred over the animal.
     // The cloud is drawn from its bottom-left, so without the half-width it
     // hangs off her right shoulder — which nobody had noticed because it is
     // gone again in under a second.
     const x = this.player.x - BUBBLE_W / 2;
     const y = this.player.y - TILE_SIZE - BUBBLE_H / 2;
-    const span = icons.length * BUBBLE_SLOT + (icons.length - 1) * BUBBLE_SLOT_GAP;
+    // Shrunk to fit rather than fixed at `BUBBLE_SLOT`.
+    //
+    // Two full-size slots are all the cloud's interior holds, which was
+    // enough while everything shown in one was a pair. A crop that grows on
+    // two kinds of ground wants three — both grounds and the question — and
+    // a third slot at full size runs out through the side of the cloud.
+    const gaps = Math.max(0, icons.length - 1) * BUBBLE_SLOT_GAP;
+    const slot = Math.min(BUBBLE_SLOT, Math.floor((BUBBLE_INNER_W - gaps) / icons.length));
+    const span = icons.length * slot + gaps;
     const left = BUBBLE_INNER_X + (BUBBLE_INNER_W - span) / 2;
     const middle = -BUBBLE_H + BUBBLE_INNER_Y + BUBBLE_INNER_H / 2;
     const cloud = this.add.image(0, 0, uiTextureKey(UiAsset.ThoughtBubble)).setOrigin(0, 1);
-    const drawn = icons.map((icon, at) =>
-      this.add
-        .image(
-          left + at * (BUBBLE_SLOT + BUBBLE_SLOT_GAP) + BUBBLE_SLOT / 2,
-          middle,
-          uiTextureKey(icon),
-        )
-        .setDisplaySize(BUBBLE_SLOT, BUBBLE_SLOT),
-    );
+    const drawn = icons.map((icon, at) => {
+      const cx = left + at * (slot + BUBBLE_SLOT_GAP) + slot / 2;
+      // A square of ground is a frame of the terrain atlas rather than a
+      // picture drawn for the interface: there is no icon of "sand" and
+      // there should not be one, because the thing a child has to go and
+      // find is the ground itself and a stylised version of it would be a
+      // second drawing to keep in step with the first.
+      const image =
+        "ground" in icon
+          ? this.add.image(cx, middle, TERRAIN_ATLAS_KEY, plainTerrainFrame(icon.ground))
+          : this.add.image(cx, middle, uiTextureKey(icon.ui));
+      return image.setDisplaySize(slot, slot);
+    });
     // And the cross, beside the cloud rather than over it. Over the top it
     // would hide the half that says *which* things are wanted, which is the
     // only part a child who cannot read the word "stone" can use.
@@ -7536,7 +7591,7 @@ export class GameScene extends Phaser.Scene {
     if (this.modalOpen) return;
 
     const result = this.session.plant(plant);
-    this.report(result, cropIcon(plant));
+    this.report(result, cropIcon(plant), plant);
     if (!result.ok || !result.tile) return;
 
     const { col, row } = result.tile;
