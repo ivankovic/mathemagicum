@@ -137,6 +137,21 @@ async function listeningOn(): Promise<string | null> {
  * outside the run. See `PORT` for what inheriting cost.
  */
 export async function serve(): Promise<string> {
+  // **Serving the built site instead of this was tried, and cannot work.**
+  //
+  // The reasoning was sound and the measurement was real — Vite is what
+  // accumulates, a reload re-boots the whole game, and a directory of files
+  // has nothing to accumulate — and it was twice as fast. It is also
+  // impossible: every dev seam in `devHooks.ts` is gated on
+  // `import.meta.env.DEV`, so a production build has none of them, and this
+  // entire suite is written against those seams. `__mathemagicum` is simply
+  // never put out, and every scenario times out waiting for a scene that
+  // started perfectly well.
+  //
+  // Anything down that road has to make the seams survive a build first —
+  // a mode, a flag, a separate entry — and that is a change to what ships,
+  // not to the tests.
+  //
   // A server per scenario, torn down and started again each time.
   //
   // It was one for the whole file, and the ninth scenario in a file stalled
