@@ -6,6 +6,7 @@ import { type Page, chromium } from "playwright";
 // idea of how far a swipe goes is a harness that silently stops matching.
 import { SWIPE_PER_TICK, TICK_MINUTES } from "../src/spells/hourglass";
 import { SPELLS, type Spell } from "../src/spells/spellbook";
+import { groupOf } from "../src/world/crate";
 import { DECOR_TYPES, type DecorType } from "../src/world/decor";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../src/world/fixtures";
 import { FLOWER_TYPES, type FlowerType } from "../src/world/flowers";
@@ -332,11 +333,41 @@ export function patchButton(action: PatchAction): string {
   return `patch.${action}`;
 }
 
+/**
+ * The name of a thing's button in the crate.
+ *
+ * **By name, not by position, and that is the whole of the change.** This
+ * counted along `PLACEABLE_FIXTURES` and then `DECOR_TYPES`, which is a
+ * promise about order that nothing keeps: adding the sorter moved every
+ * furniture slot by one, and adding a rune to the spellbook once had five
+ * scenarios tapping the wrong button while looking like they passed. The
+ * crate now shows one group at a time, so a position is not even stable
+ * within a single run.
+ *
+ * The button only exists while its own group is open — see `crateGroup`.
+ */
 export function crateButton(thing: FixtureType | DecorType): string {
-  const fixture = PLACEABLE_FIXTURES.indexOf(thing as FixtureType);
-  const at =
-    fixture >= 0 ? fixture : PLACEABLE_FIXTURES.length + DECOR_TYPES.indexOf(thing as DecorType);
-  return `crate.${at}`;
+  return `crate.${thing}`;
+}
+
+/** The name of the group button a thing lives behind. */
+export function crateGroup(thing: FixtureType | DecorType): string {
+  return `crate.${groupOf(thing)}`;
+}
+
+/**
+ * Open the crate at the group holding this thing, and tap it.
+ *
+ * Two taps rather than one, which is what the crate now costs: a group, then
+ * the thing. Here rather than in each scenario so that a third level, or a
+ * regrouping, is one edit — the crate has been rearranged twice already and
+ * both times the scenarios found out by tapping something else.
+ */
+export async function takeFromCrate(game: Game, thing: FixtureType | DecorType): Promise<boolean> {
+  await game.tap("crate");
+  if (!(await game.tap(crateGroup(thing)))) return false;
+  await game.settle(200);
+  return game.tap(crateButton(thing));
 }
 
 /**

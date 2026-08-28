@@ -5,7 +5,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
 import { DecorType } from "../src/world/decor";
 import { PatchAction } from "../src/world/selection";
-import { type Game, crateButton, patchButton, play, runeButton, shutDown } from "./harness";
+import { type Game, patchButton, play, runeButton, shutDown, takeFromCrate } from "./harness";
 
 /**
  * Building a house, and coming back to it tomorrow.
@@ -91,18 +91,15 @@ async function tapPlan(game: Game, house: House, col: number, row: number): Prom
   await game.tapCell(at.col, at.row);
 }
 
-/**
- * The chair's slot in the crate.
+/*
+ * The crate's buttons were named by position here — "the tenth: seven
+ * fixtures, then bed, table, chair" — which stopped being true when a
+ * machine joined the fixtures, and stopped being *meaningful* when the crate
+ * grew a second level and showed one group at a time.
  *
- * Was written down as "the tenth: seven fixtures, then bed, table, chair",
- * which stopped being true the day a machine joined the fixtures. The number
- * comes from `crateButton` and always did; only the sentence was countable.
+ * `takeFromCrate` opens the group a thing lives in and taps the thing, which
+ * is what a child does and what these scenarios now say.
  */
-const CHAIR_SLOT = crateButton(DecorType.Chair);
-/** And the one after it: rug. */
-const RUG_SLOT = crateButton(DecorType.Rug);
-/** Then bookshelf, then stove — the room's own pieces in the order they are declared. */
-const STOVE_SLOT = crateButton(DecorType.Stove);
 
 describe("building a room out", () => {
   test(
@@ -316,8 +313,7 @@ describe("furnishing it", () => {
         // One colour owned is not a choice, so it goes straight down.
         const standing = grid(house, 2, 2);
         await game.standAt(standing.col, standing.row, "down");
-        await game.tap("crate");
-        await game.tap(CHAIR_SLOT);
+        await takeFromCrate(game, DecorType.Chair);
         // Armed, not placed. Furniture goes down the way a spell is cast
         // now — pick it up, then tap the square — so the chair waits over
         // her head until she says where.
@@ -347,8 +343,7 @@ describe("furnishing it", () => {
         // so its corner is (3,2) and none of it is under her feet.
         const under = grid(house, 3, 4);
         await game.standAt(under.col, under.row, "up");
-        await game.tap("crate");
-        await game.tap(RUG_SLOT);
+        await takeFromCrate(game, DecorType.Rug);
         expect(await game.seam<string | null>("armed")).toBe("rug~0");
         // The square in front of her, which for a piece two cells across is
         // the near corner of where it lands rather than the whole of it.
@@ -409,8 +404,7 @@ describe("furnishing it", () => {
         // solid and will not go under her.
         const standing = grid(house, 2, 2);
         await game.standAt(standing.col, standing.row, "down");
-        await game.tap("crate");
-        await game.tap(STOVE_SLOT);
+        await takeFromCrate(game, DecorType.Stove);
         expect(await game.seam<string | null>("armed")).toBe("stove~0");
         await tapPlan(game, house, 2, 3);
         await game.settle(700);
@@ -464,8 +458,7 @@ describe("furnishing it", () => {
         // which is exactly the shape that used to be refused.
         const her = grid(house, 3, 4);
         await game.standAt(her.col, her.row, "up");
-        await game.tap("crate");
-        await game.tap(RUG_SLOT);
+        await takeFromCrate(game, DecorType.Rug);
         expect(await game.seam<string | null>("armed")).toBe("rug~0");
         await game.tapCell(her.col, her.row);
         await game.settle(700);
@@ -483,8 +476,7 @@ describe("furnishing it", () => {
         await tapPlan(game, house, chair.col, chair.row);
         await game.settle(600);
         expect(await game.held("chair~0")).toBe(1);
-        await game.tap("crate");
-        await game.tap(CHAIR_SLOT);
+        await takeFromCrate(game, DecorType.Chair);
         expect(await game.seam<string | null>("armed")).toBe("chair~0");
         await game.tapCell(her.col, her.row);
         await game.settle(700);
@@ -531,8 +523,7 @@ describe("furnishing it", () => {
         await game.settle(600);
         const standing = grid(house, 2, 2);
         await game.standAt(standing.col, standing.row, "down");
-        await game.tap("crate");
-        await game.tap(CHAIR_SLOT);
+        await takeFromCrate(game, DecorType.Chair);
         // Armed, not placed. Furniture goes down the way a spell is cast
         // now — pick it up, then tap the square — so the chair waits over
         // her head until she says where.
@@ -595,8 +586,7 @@ describe("coming back tomorrow", () => {
         expect(await game.held("chair~0")).toBe(1);
         const standing = grid(grown, 2, 2);
         await game.standAt(standing.col, standing.row, "down");
-        await game.tap("crate");
-        await game.tap(CHAIR_SLOT);
+        await takeFromCrate(game, DecorType.Chair);
         // Armed, not placed. Furniture goes down the way a spell is cast
         // now — pick it up, then tap the square — so the chair waits over
         // her head until she says where.

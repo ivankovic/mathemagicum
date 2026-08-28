@@ -191,11 +191,41 @@ interface Button {
   readonly icon: Phaser.GameObjects.Image;
   readonly badge?: Badge;
   readonly available?: () => boolean;
+  readonly shown?: () => boolean;
+  readonly name?: string;
 }
 
 export interface TrayItem {
   /** Texture key for the icon drawn on the button. */
   readonly texture: string;
+  /**
+   * What this button is called, for `uiPositions` and so for every scenario
+   * that taps it.
+   *
+   * **A name rather than a position, and that is not a convenience.** Tray
+   * buttons were published as `crate.0`, `crate.1` and so on, which is a
+   * promise about *order* that nothing keeps: inserting the division rune
+   * into the spellbook renumbered every button after it and five scenarios
+   * carried on tapping the fourth while meaning the fifth, landing on a rune
+   * nobody had been taught — and a refusal looks exactly like a spell that
+   * did not open. A tray whose contents come and go, as the crate's now do,
+   * would make that a certainty rather than a risk.
+   *
+   * Falls back to the index when absent, so the trays that have not needed
+   * naming are unchanged.
+   */
+  readonly name?: string;
+  /**
+   * Whether this button is in the tray at all just now.
+   *
+   * Different from `available`, which dims a button that is *there* and not
+   * usable. This one is about presence: the crate shows three group buttons
+   * or one group's things, never both, and what is not shown takes no slot,
+   * is not drawn, and — importantly — is not published as a position a
+   * script could tap. The About panel had that bug the other way round and
+   * it is the kind that only a scenario finds.
+   */
+  readonly shown?: () => boolean;
   /** What tapping it does. The tray closes itself first. */
   readonly act: () => void;
   /**
@@ -268,6 +298,14 @@ export interface IconTrayOptions {
    * touch users.
    */
   readonly canOpen?: () => boolean;
+  /**
+   * A step back inside the tray, if it has levels.
+   *
+   * Called when the tray's own button is tapped while it is open. Returning
+   * true means "handled, stay open"; false means close as usual. Only the
+   * crate has anything to go back from.
+   */
+  readonly back?: () => boolean;
   /** Called after any change, open or closed, so a caption can follow it. */
   readonly onChange?: () => void;
 }
@@ -286,6 +324,8 @@ export class IconTray {
       size: number,
       count?: () => number,
       available?: () => boolean,
+      shown?: () => boolean,
+      name?: string,
     ): Button => {
       const box = scene.add
         .rectangle(0, 0, size, size, BUTTON_FILL, BUTTON_ALPHA)
@@ -299,7 +339,7 @@ export class IconTray {
         .setDepth(options.depth + 1);
       options.register(box);
       options.register(icon);
-      if (!count) return { box, icon, available };
+      if (!count) return { box, icon, available, shown, name };
 
       const badgeSize = Math.max(BADGE_MIN, Math.round(size * BADGE_SCALE));
       // Neither the bubble nor the number is interactive, so a tap on the
@@ -325,6 +365,8 @@ export class IconTray {
         box,
         icon,
         available,
+        shown,
+        name,
         badge: { bubble, text, size: badgeSize, count, right: 0, middle: 0 },
       };
     };
@@ -335,13 +377,30 @@ export class IconTray {
     // coins were four buttons that did nothing when tapped, which is worse
     // than no button at all because it invites the tap.
     if (options.items.length > 0) {
-      this.container.box.on("pointerdown", () => this.setOpen(!this.open));
+      this.container.box.on("pointerdown", () => {
+        // Its own button is always "back one step": out of a group first,
+        // and only then shut. A tray that closed straight from inside a
+        // group would make the one obvious gesture destroy the child's place
+        // in it, and there is no other button here to be a back button.
+        if (this.open && options.back?.()) {
+          this.restack();
+          return;
+        }
+        this.setOpen(!this.open);
+      });
     } else {
       this.container.box.disableInteractive();
     }
 
     for (const item of options.items) {
-      const button = make(item.texture, options.size - 8, item.count, item.available);
+      const button = make(
+        item.texture,
+        options.size - 8,
+        item.count,
+        item.available,
+        item.shown,
+        item.name,
+      );
       button.box.on("pointerdown", () => {
         // Closed before acting, not after: acting can open a popup over the
         // top, and a tray left open behind it is live the moment it closes.
@@ -361,8 +420,11 @@ export class IconTray {
     if (open && this.options.canOpen && !this.options.canOpen()) return;
     this.open = open;
     for (const item of this.items) {
-      item.box.setVisible(open);
-      item.icon.setVisible(open);
+      // Open *and* on the tray: a button belonging to a group nobody has
+      // opened is not merely dim, it is not there.
+      const here = open && (item.shown?.() ?? true);
+      item.box.setVisible(here);
+      item.icon.setVisible(here);
     }
     this.container.box.setStrokeStyle(
       2,
@@ -397,6 +459,7 @@ export class IconTray {
   // *could* be in it, and the spellbook what could be in that.
   private paint(button: Button, visible: boolean): void {
     const badge = button.badge;
+    const here = visible && (button.shown?.() ?? true);
     // Two ways to be dim and one look for both: nothing of it in the basket,
     // or nobody has taught it yet.
     const label = badge ? badgeLabel(badge.count(), this.options.mostShown) : "";
@@ -404,8 +467,8 @@ export class IconTray {
     const allowed = button.available ? button.available() : true;
     button.icon.setAlpha((badge ? label !== "" : true) && allowed ? 1 : EMPTY_ALPHA);
     if (!badge) return;
-    badge.bubble.setVisible(visible && label !== null);
-    badge.text.setVisible(visible && label !== null);
+    badge.bubble.setVisible(here && label !== null);
+    badge.text.setVisible(here && label !== null);
   }
 
   toggle(): void {
@@ -419,12 +482,43 @@ export class IconTray {
   }
 
   /** Where each item sits, in the order they were given. */
-  itemPositions(): { x: number; y: number }[] {
-    return this.items.map((item) => ({ x: item.box.x, y: item.box.y }));
+  /**
+   * Where each button in the tray is, and what it is called.
+   *
+   * Only the ones actually on the tray. A position published for a button
+   * that is not there is a tap a scenario can make and a child cannot, which
+   * is the worst kind of seam: it passes.
+   */
+  itemPositions(): { name: string; x: number; y: number }[] {
+    return this.items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item.shown?.() ?? true)
+      .map(({ item, index }) => ({
+        name: item.name ?? String(index),
+        x: item.box.x,
+        y: item.box.y,
+      }));
   }
+
+  /**
+   * Lay the tray out again for whatever it is showing now.
+   *
+   * Wanted when a tray's *contents* change without the window doing — which
+   * is a thing only the crate does, when a group is opened or stepped out
+   * of. The last size is remembered rather than passed, because the thing
+   * that knows the viewport is `EdgeAnchored` and the thing that knows the
+   * group is a button inside this tray.
+   */
+  restack(): void {
+    this.setOpen(this.open);
+    if (this.lastSize) this.place(this.lastSize.width, this.lastSize.height);
+  }
+
+  private lastSize: { width: number; height: number } | null = null;
 
   /** Re-place for a viewport of this size. Matches GameScene's EdgeAnchored. */
   place(width: number, height: number): void {
+    this.lastSize = { width, height };
     const { size, right, bottom } = this.options;
     const x = width - right;
     const y = height - bottom;
@@ -435,10 +529,14 @@ export class IconTray {
     // by eight pixels, and measuring the grid against the bigger of the two
     // cost a row — which is how twenty things came to need three columns
     // where two would have held them.
-    const itemSize = trayButtonSize(this.items.length, size - 8, x, y);
+    // Only what is on the tray now takes a slot. The crate shows three group
+    // buttons or one group's things, and a hidden button that still held a
+    // place would leave a gap in the grid where nothing is.
+    const here = this.items.filter((item) => item.shown?.() ?? true);
+    const itemSize = trayButtonSize(here.length, size - 8, x, y);
     const step = itemSize + GAP;
-    const slots = traySlots(this.items.length, trayRows(itemSize, y));
-    for (const [index, item] of this.items.entries()) {
+    const slots = traySlots(here.length, trayRows(itemSize, y));
+    for (const [index, item] of here.entries()) {
       const slot = slots[index] as Slot;
       const itemX = x - slot.column * step;
       const itemY = y - slot.row * step;

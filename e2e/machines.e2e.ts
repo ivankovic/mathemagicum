@@ -4,7 +4,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { FixtureType } from "../src/world/fixtures";
 import { MachineType, recipeFor } from "../src/world/machines";
-import { type Game, crateButton, play, shutDown } from "./harness";
+import { type Game, play, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -27,7 +27,10 @@ afterAll(shutDown);
  * happen again; these say a child can actually get one.
  */
 
-const SORTER = crateButton(FixtureType.Sorter);
+/*
+ * The sorter is behind the crate's "makers" group now — `takeFromCrate`
+ * opens it and taps the machine, which is the two taps a child makes.
+ */
 
 /**
  * Noon so nothing is dark, the village still so nobody walks through the
@@ -97,8 +100,7 @@ describe("building a machine", () => {
 
         // The slot is in the crate before she owns one — the spellbook's
         // dimmed rune, one tray along — and tapping it is what builds it.
-        await game.tap("crate");
-        expect(await game.tap(SORTER)).toBe(true);
+        expect(await takeFromCrate(game, FixtureType.Sorter)).toBe(true);
         await game.settle(400);
 
         // One machine in hand, and the timber gone out of the basket.
@@ -137,8 +139,7 @@ describe("building a machine", () => {
         expect(await game.held("wood")).toBe(3);
         expect(await game.held("stone")).toBe(3);
 
-        await game.tap("crate");
-        expect(await game.tap(SORTER)).toBe(true);
+        expect(await takeFromCrate(game, FixtureType.Sorter)).toBe(true);
         await game.settle(400);
 
         expect(await game.held(FixtureType.Sorter)).toBe(0);

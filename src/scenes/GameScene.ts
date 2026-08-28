@@ -210,6 +210,14 @@ import {
 } from "../world/chunks";
 import type { CityLayout } from "../world/city";
 import { CLIFF_ATLAS_KEY, cliffFrameFor, cornerLevelsFor } from "../world/cliffAtlas";
+import {
+  CRATE_GROUPS,
+  type CrateGroup,
+  type CrateThing,
+  faceOf,
+  groupOf,
+  thingsIn,
+} from "../world/crate";
 import { DECK_SHEET_KEY, DECK_SIDECAR_KEY, type DeckSidecar } from "../world/decking";
 import {
   DECOR_LOOKS,
@@ -1243,6 +1251,15 @@ export class GameScene extends Phaser.Scene {
   private spellTray?: IconTray;
   private basketTray?: IconTray;
   private crateTray?: IconTray;
+  /**
+   * Which group of the crate is open, or null for the groups themselves.
+   *
+   * The scene's rather than the tray's, because what the groups *are* is a
+   * fact about the things in them and `IconTray` knows nothing about
+   * fixtures or furniture. The tray is told only which of its buttons are on
+   * it just now.
+   */
+  private crateGroup: CrateGroup | null = null;
   private purseTray?: IconTray;
   private shopPanel!: ShopPanel;
   /**
@@ -4230,27 +4247,59 @@ export class GameScene extends Phaser.Scene {
     // more rows in the basket: six items stacked upward from the corner
     // overflow a phone held sideways, and a tray whose top row is off screen
     // is worse than one more button.
+    //
+    // **In two levels, because twenty buttons is a wall.** A playtest called
+    // it clunky and it was: a child looking for a chair had to read past a
+    // scarecrow. Tapping the crate offers three groups; tapping a group
+    // shows what is in it and nothing else. See `world/crate.ts` for the
+    // split, which is one the game already drew — things that go on the
+    // ground outdoors and things that go on a floor indoors.
+    //
+    // Every button exists all the time and `shown` decides which are on the
+    // tray, rather than the tray being rebuilt. A button carries a closure
+    // over the thing it puts down, and rebuilding them per group would mean
+    // rebuilding those on every tap.
     this.crateTray = new IconTray(this, {
       texture: uiTextureKey(UiAsset.Crate),
-      items: PLACEABLE_FIXTURES.map((fixture) => ({
-        texture: uiTextureKey(itemIcon(fixture)),
-        count: () => this.inventory.count(fixture),
-        act: () => this.armFixture(fixture),
-      })).concat(
+      items: [
+        ...CRATE_GROUPS.map((group) => ({
+          texture: this.crateFace(group),
+          name: group,
+          shown: () => this.crateGroup === null,
+          // How many things are in this group, so a group with nothing in it
+          // says so before it is opened rather than after.
+          count: () => thingsIn(group).reduce((sum, thing) => sum + this.crateHeld(thing), 0),
+          act: () => this.openCrateGroup(group),
+        })),
+        ...PLACEABLE_FIXTURES.map((fixture) => ({
+          texture: uiTextureKey(itemIcon(fixture)),
+          name: fixture,
+          shown: () => this.crateGroup === groupOf(fixture),
+          count: () => this.inventory.count(fixture),
+          act: () => this.armFixture(fixture),
+        })),
         // Furniture goes in the crate with everything else a player puts
         // down: it is the same verb and it should live in the same place.
         // Its own picture is its icon — a bed at tray size reads as a bed,
         // and drawing a second one for the button would be two drawings to
         // keep in step.
-        DECOR_TYPES.map((piece) => ({
+        ...DECOR_TYPES.map((piece) => ({
           texture: growablePieceKey(GROWABLE_ROOM, pieceArt(piece)),
+          name: piece,
+          shown: () => this.crateGroup === groupOf(piece),
           count: () => this.decorHeld(piece),
           act: () => this.chooseDecorColour(piece),
         })),
-      ),
+      ],
       count: () =>
         PLACEABLE_FIXTURES.reduce((sum, f) => sum + this.inventory.count(f), 0) +
         DECOR_TYPES.reduce((sum, piece) => sum + this.decorHeld(piece), 0),
+      // Out of a group before out of the crate. See `IconTrayOptions.back`.
+      back: () => {
+        if (this.crateGroup === null) return false;
+        this.crateGroup = null;
+        return true;
+      },
       ...this.trayShelf("crate", 3),
     });
 
@@ -7117,8 +7166,11 @@ export class GameScene extends Phaser.Scene {
     for (const [name, tray] of Object.entries(this.trays())) {
       if (!tray) continue;
       positions[name] = tray.containerPosition();
-      for (const [index, item] of tray.itemPositions().entries()) {
-        positions[`${name}.${index}`] = item;
+      // Named by the tray, which names its buttons for what they are rather
+      // than for where they sit. See `TrayItem.name`: a position is a promise
+      // about order that inserting anything breaks, and it has broken twice.
+      for (const item of tray.itemPositions()) {
+        positions[`${name}.${item.name}`] = { x: item.x, y: item.y };
       }
     }
     for (const [index, at] of (this.decorMenu?.buttonPositions() ?? []).entries()) {
@@ -7498,6 +7550,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private closeTrays(): void {
+    // Whatever the crate was showing, it opens on the groups next time. A
+    // tray that remembered would open onto furniture for a child who had
+    // walked outside and wanted a fence.
+    this.crateGroup = null;
     for (const tray of Object.values(this.trays())) tray?.setOpen(false);
     this.flowerMenu?.close();
     // And the array spell's marker, if one is half drawn. State surviving a
@@ -9034,6 +9090,35 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** A fixture, lit and waiting for a square. */
+  /**
+   * Open one group of the crate, without shutting the crate.
+   *
+   * The tray is re-stacked rather than closed and reopened: reopening would
+   * run `onOpen`, which shuts every other tray, and shutting things that
+   * are already shut is how a tray ends up flickering.
+   */
+  private openCrateGroup(group: CrateGroup): void {
+    this.crateGroup = group;
+    this.crateTray?.setOpen(true);
+    this.crateTray?.restack();
+  }
+
+  /** The picture on a group's button: the first thing in it, as the crate draws it. */
+  private crateFace(group: CrateGroup): string {
+    const face = faceOf(group);
+    if (face === null) return uiTextureKey(UiAsset.Crate);
+    return (DECOR_TYPES as readonly string[]).includes(face)
+      ? growablePieceKey(GROWABLE_ROOM, pieceArt(face as DecorType))
+      : uiTextureKey(itemIcon(face as FixtureType));
+  }
+
+  /** How many of one crate thing she has, whichever kind of thing it is. */
+  private crateHeld(thing: CrateThing): number {
+    return (DECOR_TYPES as readonly string[]).includes(thing)
+      ? this.decorHeld(thing as DecorType)
+      : this.inventory.count(thing as FixtureType);
+  }
+
   private armFixture(fixture: FixtureType): void {
     if (this.inventory.count(fixture) <= 0 && !this.buildMachine(fixture)) {
       this.showRefusalOnPlayer(itemIcon(fixture));
