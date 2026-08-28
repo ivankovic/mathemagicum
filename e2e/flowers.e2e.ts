@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { UiAsset, cropIcon } from "../src/ui/assets";
 import { FLOWER_LOOKS, FLOWER_TYPES, type FlowerType } from "../src/world/flowers";
+import { PlantType } from "../src/world/plants";
 import { type Game, play, seedButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
@@ -176,6 +178,81 @@ describe("planting one", () => {
         // And a bed that vanished overnight is a bed nobody plants twice.
         await game.reload();
         expect((await game.seam<Flowers>("flowers")).planted).toEqual(before.planted);
+      });
+    },
+    5 * MINUTES,
+  );
+});
+
+/**
+ * A seed the ground will not take, asked as a question rather than refused.
+ *
+ * The cactus wants sand and the garden is dirt, so this is the one refusal
+ * in the game whose answer is *go somewhere else* — and it says so with the
+ * same cloud the animals ask for food in: the seed, and a question mark.
+ *
+ * **Asserted through a seam and not a screenshot, which cost me an
+ * afternoon.** The cloud fades in four hundred milliseconds and every tap
+ * helper in this harness waits five hundred before it looks, so a picture
+ * taken the obvious way is a picture of an empty field. I read three of
+ * those as "the bubble is broken" before catching one with a raw click.
+ */
+/** What is growing on the square she just aimed at, if anything. */
+function plantedBeside(game: Game): Promise<string | null> {
+  return game.tab.evaluate(() => {
+    const handle = (globalThis as never as Record<string, Record<string, unknown>>).__mathemagicum;
+    if (!handle) throw new Error("the game has not put its handle out");
+    const session = handle.session as {
+      tile: { col: number; row: number };
+      grid: { getPlant: (col: number, row: number) => string | null };
+    };
+    return session.grid.getPlant(session.tile.col, session.tile.row + 1);
+  });
+}
+
+describe("a seed that will not go in here", () => {
+  test(
+    "is wondered about, not crossed out",
+    async () => {
+      await play({ seams: "&hour=12&learned=all&freezeNpcs&crops=5" }, async (game) => {
+        await game.tap("seeds");
+        await game.tap(seedButton(PlantType.Cactus));
+        await game.tapNear(0, 1);
+
+        const thought = await game.seam<{ icons: string[]; crossed: boolean } | null>("thought");
+        if (!thought) throw new Error("nothing was thought about the cactus");
+        // The seed itself, so a child who cannot read knows which one, and a
+        // question rather than a cross: carrots are fine here and a cactus is
+        // fine somewhere, which is not what a cross says.
+        expect(thought.crossed).toBe(false);
+        expect(thought.icons).toEqual([cropIcon(PlantType.Cactus), UiAsset.MarkQuestion]);
+        // And nothing went in the ground.
+        //
+        // Asked of the square rather than of the basket: planting spends no
+        // seed — they are free, by design — so a basket count is the same
+        // number whether the cactus went in or not, and would have passed
+        // this test without testing anything.
+        expect(await plantedBeside(game)).toBeNull();
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * And a crop that *does* belong here is not wondered about at all.
+   *
+   * The half that stops the assertion above being satisfied by a game that
+   * puts a cloud over her head whatever happens.
+   */
+  test(
+    "while one that will go in simply goes in",
+    async () => {
+      await play({ seams: "&hour=12&learned=all&freezeNpcs&crops=5" }, async (game) => {
+        await game.tap("seeds");
+        await game.tap(seedButton(PlantType.Carrot));
+        await game.tapNear(0, 1);
+        expect(await game.seam("thought")).toBeNull();
+        expect(await plantedBeside(game)).toBe(PlantType.Carrot);
       });
     },
     5 * MINUTES,

@@ -1394,6 +1394,16 @@ export class GameScene extends Phaser.Scene {
    * states of its own and keeps them in `marking`.
    */
   private armed: Armed | null = null;
+  /**
+   * What was last thought over her head, and whether it was crossed out.
+   *
+   * A dev seam, and one that earned itself. These clouds live for four
+   * hundred milliseconds and every tap in the browser harness waits five
+   * hundred before it looks — so a screenshot taken the obvious way catches
+   * an empty field and says the feature is broken. It is not a thing a
+   * picture can settle, which is exactly what a seam is for.
+   */
+  private lastThought: { icons: string[]; crossed: boolean } | null = null;
   /** The rune hanging over her head while a spell waits for a tap. */
   private armedRune?: Phaser.GameObjects.Image;
   /** The square she is pointing at, and the ground an armed spell may reach. */
@@ -2143,6 +2153,7 @@ export class GameScene extends Phaser.Scene {
         };
       },
       spellHint: () => this.spellPopup?.hintText ?? "",
+      thought: () => this.lastThought,
       share: () => {
         const cast = this.sharePopup?.cast;
         if (!cast) return null;
@@ -6229,6 +6240,14 @@ export class GameScene extends Phaser.Scene {
       this.showRefusalOnPlayer(result.outcome === Outcome.NoneLeft ? icon : undefined);
       return;
     }
+    // The ground will not take this crop, which is the one refusal that is
+    // about *where she is standing* rather than about the square. A cactus
+    // wants sand; the answer is a walk, not a different tap. So it is asked
+    // as a question over her head rather than crossed out on the square.
+    if (result.outcome === Outcome.WrongGround && icon) {
+      this.showWonderOnPlayer(icon);
+      return;
+    }
     const tile = result.tile;
     if (!tile) return;
     this.markRefusal(tile.col, tile.row);
@@ -6282,7 +6301,36 @@ export class GameScene extends Phaser.Scene {
    * hides the half that says *which* thing they have none of.
    */
   private showCostOnPlayer(icons: readonly string[]): void {
-    const x = this.player.x;
+    this.showThoughtOnPlayer(icons, true);
+  }
+
+  /**
+   * And the same cloud without a cross, for a refusal that is a *question*.
+   *
+   * The two are not the same message and should not look the same. A cross
+   * means no: you have not got the stone, and no amount of trying here will
+   * change that. A crop the ground will not take is a different thing —
+   * carrots are fine, this ground is not, and somewhere a few steps away is.
+   * So the cloud holds the seed and a question mark, which is exactly the
+   * sentence the animals already use to ask for something, and a child who
+   * has fed a chicken has read it before.
+   *
+   * Reported over her head rather than as a cross on the square, which is
+   * where it used to go. `report`'s own rule decides that: a refusal she
+   * fixes by *moving* belongs over her, and this is the one refusal in the
+   * game whose answer is "try it somewhere else".
+   */
+  private showWonderOnPlayer(icon: string): void {
+    this.showThoughtOnPlayer([icon, UiAsset.MarkQuestion], false);
+  }
+
+  private showThoughtOnPlayer(icons: readonly string[], crossed: boolean): void {
+    this.lastThought = { icons: [...icons], crossed };
+    // Centred over her, the way an animal's cloud is centred over the animal.
+    // The cloud is drawn from its bottom-left, so without the half-width it
+    // hangs off her right shoulder — which nobody had noticed because it is
+    // gone again in under a second.
+    const x = this.player.x - BUBBLE_W / 2;
     const y = this.player.y - TILE_SIZE - BUBBLE_H / 2;
     const span = icons.length * BUBBLE_SLOT + (icons.length - 1) * BUBBLE_SLOT_GAP;
     const left = BUBBLE_INNER_X + (BUBBLE_INNER_W - span) / 2;
@@ -6300,14 +6348,18 @@ export class GameScene extends Phaser.Scene {
     // And the cross, beside the cloud rather than over it. Over the top it
     // would hide the half that says *which* things are wanted, which is the
     // only part a child who cannot read the word "stone" can use.
-    const half = RESULT_ICON * 0.4;
-    const mark = this.add.graphics().setPosition(-half * 1.6, -BUBBLE_H / 2);
-    mark.lineStyle(3, REFUSAL_COLOR, 1);
-    mark.lineBetween(-half, -half, half, half);
-    mark.lineBetween(half, -half, -half, half);
+    const parts: Phaser.GameObjects.GameObject[] = [];
+    if (crossed) {
+      const half = RESULT_ICON * 0.4;
+      const mark = this.add.graphics().setPosition(-half * 1.6, -BUBBLE_H / 2);
+      mark.lineStyle(3, REFUSAL_COLOR, 1);
+      mark.lineBetween(-half, -half, half, half);
+      mark.lineBetween(half, -half, -half, half);
+      parts.push(mark);
+    }
 
     const shown = this.world(
-      this.add.container(x, y, [mark, cloud, ...drawn]).setDepth(this.player.depth + 1),
+      this.add.container(x, y, [...parts, cloud, ...drawn]).setDepth(this.player.depth + 1),
     );
     this.tweens.add({
       targets: shown,

@@ -561,6 +561,15 @@ export interface DevHandle {
    */
   /** The help line under the addition parchment, if one is open. */
   readonly spellHint: () => string;
+  /**
+   * The last thing thought over her head: which pictures, and whether they
+   * were crossed out.
+   *
+   * A cloud lasts four hundred milliseconds and every tap in the harness
+   * waits five hundred before it looks, so this is the one piece of feedback
+   * in the game a screenshot genuinely cannot catch.
+   */
+  readonly thought: () => { icons: string[]; crossed: boolean } | null;
   readonly share: () => {
     total: number;
     parts: number;
