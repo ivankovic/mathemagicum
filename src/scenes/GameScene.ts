@@ -389,6 +389,13 @@ import {
 import { VISIT, alongLane, shipsAt } from "../world/shipping";
 import type { Purse } from "../world/shop";
 import {
+  CITY_HOUSE_ID,
+  SKY_THINGS,
+  skyAnimKey,
+  skySheetKey,
+  skySidecarKey,
+} from "../world/skyline";
+import {
   type BuildingSidecar,
   type CharacterSidecar,
   type EffectSidecar,
@@ -444,6 +451,7 @@ import { type VillageNpcSpec, houseIdFor } from "../world/villageLayout";
 import { type Direction, STEP_DIRECTIONS, insideWander, stepsToward } from "../world/wander";
 import { type GeneratedWorld, generateWorld } from "../world/worldGenerator";
 import { sidecarKey } from "./BootScene";
+import { CityBlimps } from "./cityBlimps";
 import { type DevOptions, devOptions, exposeForTests } from "./devHooks";
 import { FROZEN_TIDE, HarbourTraffic } from "./harbourTraffic";
 import { type Standing, TeacherMarks } from "./teacherMarks";
@@ -1615,6 +1623,7 @@ export class GameScene extends Phaser.Scene {
   private harbourFront: HarbourLayout | null = null;
   /** The hulls that come and go at the harbour's piers. */
   private traffic?: HarbourTraffic;
+  private blimps?: CityBlimps;
   /** A rune over each teacher who still has one to give. */
   private teacherMarks?: TeacherMarks;
   /**
@@ -1868,6 +1877,16 @@ export class GameScene extends Phaser.Scene {
         (object) => this.world(object),
       );
     }
+    // The airships over the city, which are sprites over rooftops in exactly
+    // the way the harbour's hulls are sprites over berths — no cell, no save,
+    // nothing to carve away. Made here rather than in `spawnPlacedObjects`
+    // because they are hung on the *sprites* of the city's houses, so every
+    // one of those has to exist first.
+    this.blimps = new CityBlimps(
+      this,
+      this.buildings.filter((building) => building.id.startsWith(CITY_HOUSE_ID)),
+      (object) => this.world(object),
+    );
     // Anything this child had already planted. Their fences came back with
     // the line above — objects are spawned from the grid — but a crop is
     // drawn as a sprite of its own, and one that exists only in the grid is
@@ -2136,6 +2155,7 @@ export class GameScene extends Phaser.Scene {
       },
       mapMark: () => this.whereOnTheMap(),
       ships: () => this.traffic?.positions() ?? [],
+      blimps: () => this.blimps?.positions() ?? [],
       scenery: () => [...this.liveScenery.values()].reduce((n, list) => n + list.length, 0),
       sceneryOnScreen: () => {
         const view = this.cameras.main.worldView;
@@ -3242,6 +3262,25 @@ export class GameScene extends Phaser.Scene {
       this.anims.create({
         key,
         frames: this.anims.generateFrameNumbers(landmarkSheetKey(landmark), {
+          start: 0,
+          end: sidecar.frame_count - 1,
+        }),
+        frameRate: LANDMARK_ANIM_FPS,
+        repeat: -1,
+      });
+    }
+    // And the skyline, which is drawn by the same generator module and is
+    // not a landmark. Registered here rather than in a routine of its own
+    // because it is the same three lines and the same sidecar shape — what
+    // differs about a blimp is that nothing ever places one.
+    for (const thing of SKY_THINGS) {
+      const sidecar = this.cache.json.get(skySidecarKey(thing)) as LandmarkSidecar | undefined;
+      if (!sidecar) throw new Error(`missing sidecar for the skyline's "${thing}"`);
+      const key = skyAnimKey(thing);
+      if (this.anims.exists(key)) continue;
+      this.anims.create({
+        key,
+        frames: this.anims.generateFrameNumbers(skySheetKey(thing), {
           start: 0,
           end: sidecar.frame_count - 1,
         }),

@@ -99,6 +99,7 @@ for f in well fence fence-side table lamp gate stall bench scarecrow flowerpot \
          tulip daisy bellflower; do
   cp $OUT/terrain_fixtures/${f}{.json,_sheet.png} public/assets/fixtures/
 done
+cp $OUT/terrain_landmarks/blimp{.json,_sheet.png}   public/assets/skyline/
 cp $OUT/terrain_effects/plus{.json,_sheet.png} public/assets/effects/
 for t in grass woodland dirt hilly mountain sand; do
   cp $OUT/terrain_objects/${t}{.json,_sheet.png} public/assets/objects/

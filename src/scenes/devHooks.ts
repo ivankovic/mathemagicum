@@ -511,6 +511,15 @@ export interface DevHandle {
    */
   readonly ships: () => { x: number; y: number }[];
   /**
+   * Where the city's airships are, in world pixels.
+   *
+   * A seam because a blimp is the one thing in this world a screenshot
+   * genuinely cannot settle: it is drawn in the sky over a roof, and a sky
+   * is the same colour as a sky whether the sprite is over the right house,
+   * the wrong house, or nothing at all.
+   */
+  readonly blimps: () => { x: number; y: number }[];
+  /**
    * The cell the world map puts its you-are-here mark on.
    *
    * Not the same question as "where is she standing", which is the whole

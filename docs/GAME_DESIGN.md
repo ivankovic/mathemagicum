@@ -2732,14 +2732,42 @@ both: panels scattered about the place do not look good, and a pump makes no
 sense beside the sea. Both notes were right, and neither wanted a better
 scatter.
 
-A **panel belongs on a roof** — that is where the sun is and where anybody
-would put one — so it is not a placeable thing at all any more. It is drawn
-into the townhouse, on the `"panel"` feature, out of the building's own
-palette. That deletes the whole class of problem rather than tuning it: no
-cell, no blocking, nothing for a connectivity carve to knock down, and one
-fixture, one price and three noun tables gone with it. Every city roof
-carries one, because a city where only some houses have a panel reads as a
-city where somebody could not afford one.
+The panel then went **on a roof**, which was a better place for the same
+object and still did not look good — and that was the useful signal. A third
+attempt at placing it would have been the wrong move: what was wanted was
+*whimsy*, not tidier hardware. So the city makes its power **overhead**.
+Small airships ride at anchor above the rooftops, each with a wind turbine on
+its back and a wire down to a house. Same idea, told as something a child
+would point at.
+
+**A blimp is never placed**, and that is what makes it cheap. It is not a
+`PlacedObject`, not in the grid, not in a save; it blocks nothing and no
+route can carve it away. Everything that made the panels awkward — a cell, a
+price, a name in three languages, a connectivity pass that could delete them
+— follows from being a thing the game *puts down*, and none of it applies.
+The sprites are a pool the scene owns, in the same shape as the harbour's
+ships over their berths. See `src/world/skyline.ts`, which is its own module
+for the reason the generator keeps its own `SKYLINE` dict: two tests state
+what a landmark is, and a blimp fails both, correctly.
+
+**Nothing about it drifts.** The mooring wire is drawn into the sprite,
+rigid with the hull, so bobbing the envelope two pixels lifts the tether two
+pixels clear of the roof — a wire visibly unsticking itself once a second, at
+a tile size where two pixels is plenty to see. The turbine spins instead. One
+moving element is enough to stop a thing reading as frozen, which is the same
+lesson the generator's still-props rule already carried.
+
+That rigid tether is only possible because the blimp's canvas is the
+townhouse's made taller and the two are lined up by their **bottoms**, which
+puts the roof ridge at a row the generator has worked out —
+`BLIMP_MOORING_ABOVE_FOOT`, asserted against the house's own geometry rather
+than trusted, since the ridge moves if anybody changes a wall height in a
+file that knows nothing about airships.
+
+One to every five houses, spaced rather than drawn at random, and picked off
+a *sorted* list: the order buildings come back in is world generation's
+business, and a positional pick would rearrange a child's sky every time they
+opened the game.
 
 A **pump lifts water for something to grow**, and what is beside a quay is
 the sea. The gardens are the one place in this world that actually wants

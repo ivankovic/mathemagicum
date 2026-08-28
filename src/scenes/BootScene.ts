@@ -29,6 +29,7 @@ import {
 import { LANDMARK_TYPES, landmarkSheetKey, landmarkSidecarKey } from "../world/landmarks";
 import { PLANT_TYPES, plantSheetKey, plantSidecarKey } from "../world/plants";
 import { SCENERY_KINDS, scenerySheetKey, scenerySidecarKey } from "../world/scenery";
+import { SKY_THINGS, skySheetKey, skySidecarKey } from "../world/skyline";
 import type {
   BuildingSidecar,
   CharacterSidecar,
@@ -146,6 +147,11 @@ export class BootScene extends Phaser.Scene {
         `${this.base()}assets/landmarks/${landmark}.json`,
       );
     }
+    // The skyline: drawn by the generator's landmark module, shipped under
+    // its own name because it is not one. See `src/world/skyline.ts`.
+    for (const thing of SKY_THINGS) {
+      this.load.json(skySidecarKey(thing), `${this.base()}assets/skyline/${thing}.json`);
+    }
     for (const kind of SCENERY_KINDS) {
       this.load.json(scenerySidecarKey(kind), `${this.base()}assets/objects/${kind}.json`);
     }
@@ -249,6 +255,10 @@ export class BootScene extends Phaser.Scene {
         | ObjectSidecar
         | undefined;
       this.queueSheet(landmarkSheetKey(landmark), "landmarks", landmark, sidecar?.sheet);
+    }
+    for (const thing of SKY_THINGS) {
+      const sidecar = this.cache.json.get(skySidecarKey(thing)) as ObjectSidecar | undefined;
+      this.queueSheet(skySheetKey(thing), "skyline", thing, sidecar?.sheet);
     }
     {
       const sidecar = this.cache.json.get(DECK_SIDECAR_KEY) as DeckSidecar | undefined;
@@ -460,6 +470,10 @@ export class BootScene extends Phaser.Scene {
     for (const landmark of LANDMARK_TYPES) {
       const sidecar = this.cache.json.get(landmarkSidecarKey(landmark)) as ObjectSidecar;
       expected.push([landmark, landmarkSheetKey(landmark), sidecar.frame_count]);
+    }
+    for (const thing of SKY_THINGS) {
+      const sidecar = this.cache.json.get(skySidecarKey(thing)) as ObjectSidecar;
+      expected.push([thing, skySheetKey(thing), sidecar.frame_count]);
     }
     {
       const sidecar = this.cache.json.get(DECK_SIDECAR_KEY) as DeckSidecar;
