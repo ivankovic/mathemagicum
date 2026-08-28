@@ -126,6 +126,14 @@ const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
     many: "strašila",
   },
   [FixtureType.Flowerpot]: { one: "tegla", acc: "teglu", few: "tegle", many: "tegli" },
+  // Masculine and inanimate, so the accusative is the nominative — the same
+  // shape as *bunar* above, and the reason neither needs a second form.
+  [FixtureType.Sorter]: {
+    one: "razvrstavač",
+    acc: "razvrstavač",
+    few: "razvrstavača",
+    many: "razvrstavača",
+  },
   // *Vrata* is plural-only in Croatian and cannot be counted, so a gate in a
   // fence is a *vratnica* — the leaf that swings, which is what is drawn.
   [FixtureType.Gate]: { one: "vratnica", acc: "vratnicu", few: "vratnice", many: "vratnica" },

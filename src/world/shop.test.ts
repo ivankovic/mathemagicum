@@ -8,6 +8,7 @@ import { BANDS } from "../spells/difficulty";
 import { DecorType, decorItem } from "./decor";
 import { FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import { Inventory } from "./inventory";
+import { MACHINE_TYPES } from "./machines";
 import { PLANT_TYPES, PlantType } from "./plants";
 import { createRng } from "./rng";
 import {
@@ -43,8 +44,23 @@ describe("prices", () => {
     }
   });
 
-  test("stock is exactly what the player can put down", () => {
-    expect(SHOP_STOCK).toEqual(PLACEABLE_FIXTURES);
+  // It used to be *exactly* what she can put down, and that held while
+  // everything placeable came off a shelf. A machine is placeable and is
+  // built rather than bought, so the two lists have come apart — and what
+  // is worth pinning is the direction they came apart in: everything on the
+  // shelf is placeable, and what is missing from it is machines and only
+  // machines.
+  test("stock is everything the player can put down except the machines", () => {
+    for (const fixture of SHOP_STOCK) expect(PLACEABLE_FIXTURES).toContain(fixture);
+    expect(PLACEABLE_FIXTURES.filter((fixture) => !SHOP_STOCK.includes(fixture))).toEqual([
+      ...MACHINE_TYPES,
+    ]);
+  });
+
+  // And no route reaches a coin figure for one, whichever list a caller
+  // came in from.
+  test("a machine has no price at all", () => {
+    for (const machine of MACHINE_TYPES) expect(() => priceOf(machine)).toThrow();
   });
 
   // The village has the one well and it is not merchandise.

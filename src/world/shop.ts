@@ -6,6 +6,7 @@ import { MOST_COUNTER_COINS } from "../shop/tender";
 import { DECOR_TYPES, DecorType, decorItem } from "./decor";
 import { FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import type { Inventory, ItemType } from "./inventory";
+import { isMachine } from "./machines";
 import { MATERIAL_TYPES, type MaterialType } from "./materials";
 import { PLANT_TYPES, type PlantType } from "./plants";
 
@@ -90,6 +91,13 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
   "city-wall-side": Number.POSITIVE_INFINITY,
   "city-gate": Number.POSITIVE_INFINITY,
   "city-gate-side": Number.POSITIVE_INFINITY,
+  // Not for sale, and the first thing in this table that is priced out
+  // because of *how it is come by* rather than because it belongs to a
+  // place. A sorter is built out of fifteen wood and six stone — see
+  // `machines.ts` — and `SHOP_STOCK` below keeps it off the shelf, so this
+  // infinity is the belt to that braces: whatever route reaches `priceOf`,
+  // there is no coin figure for a machine.
+  sorter: Number.POSITIVE_INFINITY,
   fence: 2,
   table: 5,
   lamp: 8,
@@ -142,7 +150,20 @@ const FURNITURE_COST_IN_CROPS: Record<DecorType, number> = {
   [DecorType.Bath]: 7,
 };
 
-export const SHOP_STOCK: readonly FixtureType[] = PLACEABLE_FIXTURES;
+/**
+ * What is actually on the shelf.
+ *
+ * Was `PLACEABLE_FIXTURES` outright, which held while every placeable thing
+ * was something the store sold. A machine is placeable and is *not* for
+ * sale — it is built out of what the clearing spell paid, see
+ * `src/world/machines.ts` — so the two lists have come apart, and this is
+ * the one the shop reads. Left as `PLACEABLE_FIXTURES` it would have put a
+ * sorter on the shelf priced at infinity, which is a button that can only
+ * refuse.
+ */
+export const SHOP_STOCK: readonly FixtureType[] = PLACEABLE_FIXTURES.filter(
+  (fixture) => !isMachine(fixture),
+);
 export const FURNITURE_STOCK: readonly DecorType[] = DECOR_TYPES;
 
 /**

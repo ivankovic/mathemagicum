@@ -187,6 +187,11 @@
       "width": 32,
       "height": 32
     },
+    "item-sorter": {
+      "file": "item_sorter.png",
+      "width": 32,
+      "height": 32
+    },
     "coin-50": {
       "file": "coin_50.png",
       "width": 32,

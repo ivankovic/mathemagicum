@@ -57,6 +57,9 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Bench]: noun("bench", "benches"),
   [FixtureType.Scarecrow]: noun("scarecrow"),
   [FixtureType.Flowerpot]: noun("flowerpot"),
+  // The first machine. Named for what it does rather than for what it is
+  // made of, which is how a child will point at it.
+  [FixtureType.Sorter]: noun("sorter"),
   [FixtureType.Gate]: noun("gate"),
   [FixtureType.FenceSide]: noun("fence"),
   // Still a fence. What a corner is, is a fact about the picture.

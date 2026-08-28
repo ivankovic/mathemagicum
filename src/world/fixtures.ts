@@ -102,6 +102,16 @@ export const FixtureType = {
    */
   CityGate: "city-gate",
   CityGateSide: "city-gate-side",
+  /**
+   * The first machine, and the first fixture that is *for* something.
+   *
+   * A hopper, a wheel and three crates. Everything else in this list is
+   * either a piece of a place or a thing a garden is dressed with; this one
+   * has a job, and it is the only fixture nobody sells — see
+   * `src/world/machines.ts` for why it is built out of what the clearing
+   * spell paid rather than bought with what the store paid.
+   */
+  Sorter: "sorter",
 } as const;
 
 export type FixtureType = (typeof FixtureType)[keyof typeof FixtureType];
@@ -132,6 +142,11 @@ export const PLACEABLE_FIXTURES: readonly FixtureType[] = [
   FixtureType.Bench,
   FixtureType.Scarecrow,
   FixtureType.Flowerpot,
+  // Placeable but not stock, which is a distinction this list does not draw
+  // and `SHOP_STOCK` now does. What "placeable" means here is that a player
+  // may put it down and pick it up again — the crate, the world, the save.
+  // How it got into the crate is the shop's business and the workshop's.
+  FixtureType.Sorter,
 ];
 
 export function isPlaceable(fixture: FixtureType): boolean {

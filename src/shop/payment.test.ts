@@ -3,9 +3,8 @@
 
 import { describe, expect, test } from "bun:test";
 import { BANDS } from "../spells/difficulty";
-import { PLACEABLE_FIXTURES } from "../world/fixtures";
 import { createRng } from "../world/rng";
-import { CROP_PRICE, MAX_TRADE, priceOf } from "../world/shop";
+import { CROP_PRICE, MAX_TRADE, SHOP_STOCK, priceOf } from "../world/shop";
 import { CURRENCY, coinsFor, smallestCoin, stacksOf, totalOf } from "./currency";
 import { MISTAKE_IN, MISTAKE_MAX_COINS, judgeOffer, makeOffer } from "./payment";
 
@@ -284,7 +283,9 @@ describe("counting out at every band", () => {
   // and never more than three.
   test("nothing at the gentlest band is paid with a single coin", () => {
     const price = BANDS[0]?.cropPrice ?? 0;
-    for (const fixture of PLACEABLE_FIXTURES) {
+    // What is on the shelf, not everything she can put down: a machine is
+    // built out of wood and stone and has no coin price to count out.
+    for (const fixture of SHOP_STOCK) {
       const coins = coinsFor(CURRENCY, priceOf(fixture, price));
       expect({ fixture, coins: coins.length }).toEqual({
         fixture,

@@ -2678,6 +2678,85 @@ reason it lives in `src/spells/lesson.ts` rather than in the panel that draws
 it — an example with its jumps written out by hand is an example that can
 quietly stop matching the thing it teaches.
 
+### Machines, and the difference between built and bought
+
+**Reported from a playtest:** the whimsical fairytale look is good, but the
+players would like a bit more solarpunk about it, some machines, and the
+ability to build things that *do* something. Three asks in one sentence, and
+they cost wildly different amounts. This is the first of them to ship.
+
+**A machine changes what one cast does. It never removes the cast.** That is
+the rule everything here is filtered through, and it is derived from the
+pillars rather than invented beside them: the doc blesses unlimited earning
+only with the clause *"requires actually solving a minigame every time — the
+friction is real engagement, not a timer"*, and bans daily-login hooks
+outright. Most machine designs default to accrual — a thing that produces
+while you are away — and that is the banned shape, not a variant of it.
+
+**The world clock makes that non-negotiable.** `timeOfDay` reads the
+player's own wall clock, local time, deliberately not simulated. A game day
+is a real day. So a greenhouse that advances crops each dawn is not merely
+accrual-shaped, it is literally a daily-login hook, and "set the machine to
+water at six" is an errand at real-life six in the morning. Every design
+keyed to the world clock was dropped on that.
+
+**A machine is built out of what the world gave up, not bought off a shelf.**
+Everything a child could put down until now came from the store: they earned
+coins, the shopkeeper took them, a fence came back. A machine built that way
+would be one more line on that shelf. So the recipe is wood and stone — the
+things the *clearing spell* pays — and that is not decoration on the economy.
+Subtraction is the spell this game under-uses, and the only thing wood and
+stone could do until now was be sold, which makes them coins with an extra
+step. Giving them somewhere else to go is the cheapest honest reason to cast
+the spell.
+
+**Fifteen wood and six stone, which is about five trees and three rocks.**
+Sized against a walk rather than a wallet: a five-hundred-cell world carries
+thirteen thousand scattered objects, so there is no wall to hit, and the
+child will have cast the clearing spell a dozen times getting there. It asks
+for *two* materials on purpose. A recipe in one material is a number; a
+recipe in two is a plan, because the trees are in the woodland and the
+boulders are up the hills — the first time this game has asked a child to go
+to two places for one thing, and the cheapest way to make terrain matter to
+something other than what will grow on it.
+
+**There is no assembly puzzle, and that is deliberate.** No parts to
+fabricate, no stages, no sum standing between a child and the machine. The
+arithmetic in a machine belongs to what it *does* — a sorter deals a heap
+into equal shares, which is the share spell — and a lock on the door of the
+classroom is not a lesson.
+
+**The first one is a sorter**: a hopper, a wheel that turns, and three crates
+under it. Its silhouette is its arithmetic — one mouth at the top, three
+boxes at the bottom, the wheel between them doing the dividing — and a child
+who has never tapped it should be able to guess what it is for. It is the
+first brass in a world dressed entirely in timber, because a machine has to
+be told from a bench across a garden, and it has a vine growing up it, which
+is the difference between a machine in this world and a machine in a factory.
+It also inverts the art rule that placeable props stand still: that rule is
+about props with nothing that could move, and a wheel standing still is what
+would read as broken.
+
+**How a child gets one.** The slot is in the crate whether they own one or
+not — the spellbook's dimmed rune, one tray along, on the same argument that
+a container with a gap in it says there is something to go and fetch.
+Tapping it builds one and arms it in the same tap; there is no workshop to
+walk to and no second panel. Tapping it without the materials puts the same
+thought bubble over her head that a room she cannot afford to grow into
+does: the materials wanted, with a cross beside them rather than over them.
+
+**What it does not do yet is deal anything.** This is the built-placed-and-
+still-there-tomorrow half; the share cast that gives it a job is next.
+Sequencing it that way was the point — the unknowns were the sibling
+repository's art pipeline and the save path, and the arithmetic was the part
+that already existed.
+
+**The one integration that had to change.** `SHOP_STOCK` was
+`PLACEABLE_FIXTURES` itself, which held while everything placeable came off
+a shelf. A machine is placeable and is not for sale, so the two lists have
+come apart — left alone, the first machine landed on the village shelf
+priced at infinity, which is a button that can only refuse.
+
 ## Current milestone
 
 Several children on one device, each with a name, a character they made, a

@@ -91,7 +91,13 @@ async function tapPlan(game: Game, house: House, col: number, row: number): Prom
   await game.tapCell(at.col, at.row);
 }
 
-/** The crate's tenth slot: seven fixtures, then bed, table, chair. */
+/**
+ * The chair's slot in the crate.
+ *
+ * Was written down as "the tenth: seven fixtures, then bed, table, chair",
+ * which stopped being true the day a machine joined the fixtures. The number
+ * comes from `crateButton` and always did; only the sentence was countable.
+ */
 const CHAIR_SLOT = crateButton(DecorType.Chair);
 /** And the one after it: rug. */
 const RUG_SLOT = crateButton(DecorType.Rug);

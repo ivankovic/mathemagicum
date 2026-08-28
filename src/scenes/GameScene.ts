@@ -344,6 +344,7 @@ import {
   landmarkSidecarKey,
 } from "../world/landmarks";
 import { hasStep } from "../world/levels";
+import { build, isMachine, recipeFor } from "../world/machines";
 import { MATERIAL_TYPES, MaterialType, yieldOf } from "../world/materials";
 import { markedPlaces } from "../world/minimap";
 import { NAMED_PEOPLE, nameCast } from "../world/names";
@@ -8795,11 +8796,40 @@ export class GameScene extends Phaser.Scene {
 
   /** A fixture, lit and waiting for a square. */
   private armFixture(fixture: FixtureType): void {
-    if (this.inventory.count(fixture) <= 0) {
+    if (this.inventory.count(fixture) <= 0 && !this.buildMachine(fixture)) {
       this.showRefusalOnPlayer(itemIcon(fixture));
       return;
     }
     this.arm({ kind: "fixture", fixture }, uiTextureKey(itemIcon(fixture)));
+  }
+
+  /**
+   * Make one, out of what the world gave up, and put it in her hands.
+   *
+   * The slot for a machine is in the crate whether she has one or not — the
+   * spellbook's dimmed rune, in the tray next door — so tapping it is what
+   * *builds* one, and the same tap then arms it. There is no workshop to
+   * walk to and no second panel: a child with fifteen wood and six stone
+   * taps the picture of the thing and is holding one.
+   *
+   * What it refuses with is the same thought bubble a room she cannot afford
+   * to grow into puts over her head: the materials wanted, and a cross
+   * beside them rather than over them. That is the difference between "you
+   * cannot have this" and "this is made of wood and stone" in a game that
+   * says nothing in words, and it is already the answer everywhere else
+   * something costs materials.
+   */
+  private buildMachine(fixture: FixtureType): boolean {
+    if (!isMachine(fixture)) return false;
+    if (!build(this.inventory, fixture)) {
+      this.showCostOnPlayer(recipeFor(fixture).map(([material]) => materialIcon(material)));
+      // Handled either way: the bubble has already said what is wanted, and
+      // falling through would cross out the machine on top of it.
+      return false;
+    }
+    this.inventory.add(fixture, 1);
+    this.refreshCarried();
+    return true;
   }
 
   /** A piece of furniture, in the colour she picked, waiting for a square. */
