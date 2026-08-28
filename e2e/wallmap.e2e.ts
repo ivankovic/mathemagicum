@@ -43,7 +43,7 @@ describe("the you-are-here mark", () => {
 
         // In through the door, and the mark stays on the building.
         await game.walk("ArrowUp", 700);
-        await game.settle(900);
+        await game.stopped();
         const inside = await game.seam<{ room: string } | null>("inside");
         if (!inside) throw new Error("walking through the door did not go indoors");
 

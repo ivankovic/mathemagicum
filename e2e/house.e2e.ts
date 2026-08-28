@@ -69,7 +69,7 @@ async function goHome(game: Game): Promise<House> {
   if (!door) throw new Error("the village has no house for the player");
   await game.standAt(door.col, door.row + 2, "up");
   await game.walk("ArrowUp", 900);
-  await game.settle(800);
+  await game.stopped();
   const house = await game.seam<House | null>("house");
   if (!house) throw new Error("walking through the front door did not go indoors");
   return house;

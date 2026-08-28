@@ -39,7 +39,7 @@ async function theDome(
   // and does not reliably step into this one — the climb is dirt on a
   // plateau and one keystroke's worth of movement lands short.
   await game.walk("ArrowUp", 700);
-  await game.settle(900);
+  await game.stopped();
   // The *room*, not the seam's `building`: that field is the house id and is
   // only ever set for somewhere a child lives, so it is null for the dome
   // whether she got in or not — which is a check that passes either way.

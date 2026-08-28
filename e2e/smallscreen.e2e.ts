@@ -37,7 +37,7 @@ async function intoTheHouse(game: Game): Promise<void> {
   if (!door) throw new Error("no house in this world");
   await game.reload(`&learned=all&hour=12&at=${door.col},${door.row + 1}`);
   await game.walk("ArrowUp", 700);
-  await game.settle(900);
+  await game.stopped();
 }
 
 /**

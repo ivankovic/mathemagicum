@@ -513,17 +513,42 @@ const SETUP_MS = 180_000;
  */
 async function running(page: Page): Promise<void> {
   await page.waitForFunction(() => "__mathemagicum" in globalThis, null, { timeout: SETUP_MS });
-  await page.waitForFunction(
-    () => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
-      if (!handle) throw new Error("the game has not put its handle out");
-      const stats = handle.stats as () => { frames: number };
-      return stats().frames > 20;
-    },
-    null,
-    { timeout: SETUP_MS },
-  );
+  try {
+    await page.waitForFunction(
+      () => {
+        const handle = (globalThis as never as Record<string, Record<string, unknown>>)
+          .__mathemagicum;
+        if (!handle) throw new Error("the game has not put its handle out");
+        const stats = handle.stats as () => { frames: number };
+        return stats().frames > 20;
+      },
+      null,
+      { timeout: SETUP_MS },
+    );
+  } catch (whyNot) {
+    // Say how far it actually got, because the two failures behind this
+    // wait need telling apart and the timeout alone cannot do it.
+    //
+    // A scene that never started — a sheet that failed to load, a throw in
+    // `create` — sits at nought frames forever. A machine simply too busy
+    // gets there slowly and would have arrived. One is a bug in this
+    // repository and the other is somebody's build hogging the box, and
+    // `parents.e2e.ts` failed this way once in a suite run with two JVMs on
+    // the machine, leaving nothing behind to say which it had been.
+    const reached = await page
+      .evaluate(() => {
+        const handle = (globalThis as never as Record<string, Record<string, unknown>>)
+          .__mathemagicum;
+        const stats = handle?.stats as (() => { frames: number }) | undefined;
+        return stats ? stats().frames : -1;
+      })
+      .catch(() => -1);
+    throw new Error(
+      `the scene drew ${reached} frames in ${SETUP_MS}ms, wanted more than 20 ` +
+        `(${reached === 0 ? "it never started" : reached < 0 ? "the handle went away" : "it is only slow"})`,
+      { cause: whyNot },
+    );
+  }
 }
 
 /**
@@ -779,6 +804,46 @@ export class Game {
     await this.page.waitForTimeout(ms);
     await this.ask(`letting ${key} go`, (page) => page.keyboard.up(key));
     await this.settle(350);
+  }
+
+  /**
+   * Wait until she has stopped moving, so whatever is read next is settled.
+   *
+   * **Why this exists, and why it is not "wait until she is indoors".** Five
+   * scenarios walk her at a door and then read whether she got in, and each
+   * used a fixed `settle(800)` or `settle(900)` to cover the last step and
+   * the threshold. That budget held on an idle machine and did not on a busy
+   * one: `curfew.e2e.ts` failed a full suite run at two in the morning, on a
+   * door it had already opened twice in the same run at other hours. The
+   * same geometry, the same code path, a different clock reading — which is
+   * how a fixed wait fails and nothing else does.
+   *
+   * The obvious repair is to wait for the thing being asked about. It does
+   * not work here, because *not getting in is a real answer*: the school is
+   * shut in the evening and the scenario that proves it would hang until its
+   * ceiling. What is always eventually true is that she stops moving, so
+   * that is what is waited on.
+   *
+   * Two readings that agree, not one. A single reading can catch her between
+   * two tiles at the moment the key went up and before the last step began.
+   *
+   * The tail is what is left of the old fixed wait and it stays small: once
+   * she is standing still, crossing a threshold is the next thing the scene
+   * does rather than something it gets round to.
+   */
+  async stopped(tail = 150): Promise<void> {
+    const deadline = Date.now() + ANSWER_MS;
+    let last: { col: number; row: number } | null = null;
+    for (;;) {
+      const at = await this.where();
+      if (last && last.col === at.col && last.row === at.row) break;
+      last = at;
+      if (Date.now() > deadline) {
+        throw new Error(`gave up waiting for her to stand still after ${ANSWER_MS}ms`);
+      }
+      await this.page.waitForTimeout(80);
+    }
+    await this.settle(tail);
   }
 
   /**

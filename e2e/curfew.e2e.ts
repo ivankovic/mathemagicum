@@ -55,7 +55,7 @@ async function tryTheDoor(game: Game, hour: number, wanted: string): Promise<Ins
   const door = await doorOf(game, wanted);
   await game.reload(`&learned=all&hour=${hour}&at=${door.col},${door.row + 1}`);
   await game.press("ArrowUp");
-  await game.settle(800);
+  await game.stopped();
   return game.seam<Inside | null>("inside");
 }
 
