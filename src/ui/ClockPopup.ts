@@ -21,6 +21,7 @@ import {
   submitClock,
   turnBy,
   typeClockDigit,
+  windMinutes,
 } from "../spells/hourglass";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
@@ -137,7 +138,8 @@ export class ClockPopup {
   private state: HourglassCast | null = null;
   private moveHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
   private downHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
-  private finish: ((result: CastResult, to: ClockTime | null) => void) | null = null;
+  private finish: ((result: CastResult, to: ClockTime | null, minutes: number) => void) | null =
+    null;
   private keyHandler: ((event: KeyboardEvent) => void) | null = null;
 
   constructor(
@@ -236,7 +238,7 @@ export class ClockPopup {
   open(
     from: ClockTime,
     rung: ClockRung,
-    onDone: (result: CastResult, to: ClockTime | null) => void,
+    onDone: (result: CastResult, to: ClockTime | null, minutes: number) => void,
   ): void {
     this.state = beginHourglassCast(from, rung);
     this.finish = onDone;
@@ -295,8 +297,13 @@ export class ClockPopup {
     // which nobody would see at the gentlest rung and everybody would at the
     // hardest.
     const to = solved && this.state ? this.state.to : null;
+    // And how far she said, which the face alone cannot carry: hands taken
+    // all the way round point at the time they started from, so "land on
+    // that face" is a move of nothing and she asked for twelve hours. See
+    // `windMinutes`.
+    const minutes = solved && this.state ? windMinutes(this.state) : 0;
     this.close();
-    done?.(result, to);
+    done?.(result, to, minutes);
   }
 
   private onKeyDown(event: KeyboardEvent): void {

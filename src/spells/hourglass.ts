@@ -155,7 +155,7 @@ export function handAngles(at: ClockTime): { hour: number; minute: number } {
  * nought.
  */
 export function asksMinutes(cast: HourglassCast): boolean {
-  return forwardMinutes(cast.from, cast.to) % 60 !== 0;
+  return windMinutes(cast) % 60 !== 0;
 }
 
 /**
@@ -239,6 +239,20 @@ export interface HourglassCast {
   readonly rung: ClockRung;
   readonly hours: string;
   readonly minutes: string;
+  /**
+   * How far the hands have been turned, in ticks, counting both ways.
+   *
+   * Carried because *where the hands are* cannot answer the question the
+   * spell asks. A face holds twelve hours, so hands taken all the way round
+   * land back where they started and read as a move of nothing — which is
+   * also what untouched hands read as, and the two want opposite answers.
+   * Reported from a playtest as *jumping for more than 12 hours does not
+   * work*: it could not, because the clock had no way to say so.
+   *
+   * Net, so a child who winds forward and then winds back has not moved
+   * them. See `windMinutes`.
+   */
+  readonly turned: number;
   /** Which box the digits are going into. */
   readonly box: "hours" | "minutes";
   readonly done: boolean;
@@ -254,6 +268,7 @@ export function beginHourglassCast(from: ClockTime, rung: ClockRung): HourglassC
     rung,
     hours: "",
     minutes: "",
+    turned: 0,
     box: "hours",
     done: false,
     missteps: 0,
@@ -279,17 +294,46 @@ export function turnBy(cast: HourglassCast, ticks: number): HourglassCast {
   const to = { hour: Math.floor(whole / 60) % 12, minute: whole % 60 };
   // Anything typed was about the old span, so it goes. A child who turns the
   // clock after answering has asked a different question.
-  return { ...cast, to, hours: "", minutes: "", box: "hours", wrong: false };
+  return {
+    ...cast,
+    to,
+    turned: cast.turned + Math.trunc(ticks),
+    hours: "",
+    minutes: "",
+    box: "hours",
+    wrong: false,
+  };
+}
+
+/** Twelve hours, which is as much as a face can say and the most it may ask. */
+export const FULL_CIRCLE = 720;
+
+/**
+ * How far the world is to be wound, in minutes.
+ *
+ * The face's own arithmetic, except for the one thing a face cannot express:
+ * hands taken all the way round read as nought, and they mean *twelve
+ * hours*. Whether they were taken round or simply never touched is not a
+ * question about where they are, so it is answered by `turned`.
+ *
+ * More than one circle still means twelve. The face holds twelve hours and
+ * cannot show thirteen — a child who keeps dragging is asking for as far as
+ * it goes, and as far as it goes is once round.
+ */
+export function windMinutes(cast: HourglassCast): number {
+  const round = forwardMinutes(cast.from, cast.to);
+  return round === 0 && cast.turned !== 0 ? FULL_CIRCLE : round;
 }
 
 /** The answer the hands are currently asking for. */
 export function askedOf(cast: HourglassCast): { hours: number; minutes: number } {
-  return spanOf(cast.from, cast.to);
+  const minutes = windMinutes(cast);
+  return { hours: Math.floor(minutes / 60), minutes: minutes % 60 };
 }
 
 /** Whether the hands have been moved at all. */
 export function moved(cast: HourglassCast): boolean {
-  return forwardMinutes(cast.from, cast.to) > 0;
+  return windMinutes(cast) > 0;
 }
 
 export function typeClockDigit(cast: HourglassCast, digit: number): HourglassCast {

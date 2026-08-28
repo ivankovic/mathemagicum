@@ -73,6 +73,7 @@ import {
 import { HARDEST_SHARE_RUNG, boxesOf, shareProblemFor, shareRungAt } from "../spells/division";
 import {
   type ClockTime,
+  FULL_CIRCLE,
   HARDEST_CLOCK_RUNG,
   askedOf,
   asksMinutes,
@@ -5773,7 +5774,7 @@ export class GameScene extends Phaser.Scene {
    * shows twelve hours, so "put the hands there" always means the next time
    * it will be.
    */
-  private windClockTo(face: ClockTime, over: number): void {
+  private windClockTo(face: ClockTime, over: number, asked: number): void {
     const now = new Date(this.worldNow());
     // Where the world stands on a twelve-hour face, to the minute — not to
     // whatever the rung rounds to. The child answered about two rounded
@@ -5781,7 +5782,12 @@ export class GameScene extends Phaser.Scene {
     // difference between "the clock says twenty past" and "the clock says
     // twenty past, give or take the rounding nobody told her about".
     const standing = (now.getHours() * 60 + now.getMinutes()) % 720;
-    const forward = (face.hour * 60 + face.minute - standing + 720) % 720;
+    const round = (face.hour * 60 + face.minute - standing + 720) % 720;
+    // A face cannot say twelve hours: hands taken all the way round point at
+    // the time they started from, so landing on them is a move of nothing.
+    // `asked` is what the child actually answered, and it is the only thing
+    // that can tell that apart from hands nobody touched.
+    const forward = round === 0 && asked >= FULL_CIRCLE ? FULL_CIRCLE : round;
     if (forward <= 0) return;
     // Poured rather than set. The world's light is drawn from the hour every
     // frame, so running the offset up over the same seconds the sand takes
@@ -5851,8 +5857,8 @@ export class GameScene extends Phaser.Scene {
     const rung = clockRungAt(this.dev.clockRung ?? this.profile.clockRung);
     this.joystick?.release();
     const from = readClock(this.worldNow(), rung.reading);
-    this.clockPopup?.open(from, rung, (result, to) => {
-      if (result.solved && to) this.windClockTo(to, sandFor(forwardMinutes(from, to)));
+    this.clockPopup?.open(from, rung, (result, to, minutes) => {
+      if (result.solved && to) this.windClockTo(to, sandFor(minutes), minutes);
       this.noteClockCast(result);
     });
   }

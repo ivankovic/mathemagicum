@@ -5,10 +5,13 @@ import { describe, expect, test } from "bun:test";
 import {
   CLOCK_RUNGS,
   type ClockTime,
+  FULL_CIRCLE,
+  HARDEST_CLOCK_RUNG,
   Reading,
   SAND_LEAST_MS,
   SAND_MOST_MS,
   SWIPE_PER_TICK,
+  TICK_MINUTES,
   askedOf,
   asksMinutes,
   backspaceClock,
@@ -27,6 +30,7 @@ import {
   swipeTicks,
   turnBy,
   typeClockDigit,
+  windMinutes,
 } from "./hourglass";
 
 const HOUR_RUNG = clockRungAt(0);
@@ -435,5 +439,84 @@ describe("how long the sand runs", () => {
   test("survives nonsense rather than running forever", () => {
     expect(sandFor(Number.NaN)).toBe(SAND_LEAST_MS);
     expect(sandFor(Number.POSITIVE_INFINITY)).toBe(SAND_MOST_MS);
+  });
+});
+
+describe("all the way round the face", () => {
+  const RUNG = clockRungAt(HARDEST_CLOCK_RUNG);
+  const NOON: ClockTime = { hour: 0, minute: 0 };
+
+  /**
+   * Reported from a playtest: *jumping for more than 12 hours doesn't work.*
+   *
+   * It could not. A face holds twelve hours, so hands taken all the way
+   * round land back where they started — and `forwardMinutes` quite
+   * correctly calls that nought. The spell then refused to cast, because a
+   * move of nothing is not a move.
+   *
+   * What the face cannot say, the *turning* can: hands that have been taken
+   * round are not hands nobody touched, and that difference is the whole
+   * fix.
+   */
+  test("hands taken right round ask for twelve hours, not none", () => {
+    const untouched = beginHourglassCast(NOON, RUNG);
+    expect(askedOf(untouched)).toEqual({ hours: 0, minutes: 0 });
+    expect(moved(untouched)).toBe(false);
+
+    const round = turnBy(untouched, FULL_CIRCLE / TICK_MINUTES);
+    // Back where they started, and that is the point.
+    expect(round.to).toEqual(untouched.to);
+    expect(askedOf(round)).toEqual({ hours: 12, minutes: 0 });
+    expect(moved(round)).toBe(true);
+    expect(windMinutes(round)).toBe(FULL_CIRCLE);
+  });
+
+  test("and it is answered as twelve, with no minutes asked for", () => {
+    let cast = turnBy(beginHourglassCast(NOON, RUNG), FULL_CIRCLE / TICK_MINUTES);
+    expect(asksMinutes(cast)).toBe(false);
+    cast = submitClock({ ...cast, hours: "12" });
+    expect({ done: cast.done, missteps: cast.missteps }).toEqual({ done: true, missteps: 0 });
+  });
+
+  test("but nought is still refused, because nought is what it was", () => {
+    const cast = submitClock({ ...beginHourglassCast(NOON, RUNG), hours: "0" });
+    expect(cast.done).toBe(false);
+  });
+
+  /**
+   * Turned out and back again is not a move.
+   *
+   * The counter is *net*, so a child who winds the hands forward and then
+   * changes her mind has not asked for twelve hours — she has asked for
+   * nothing, which is what the face says too.
+   */
+  test("turned out and back again is not a move at all", () => {
+    let cast = turnBy(beginHourglassCast(NOON, RUNG), 36);
+    cast = turnBy(cast, -36);
+    expect(cast.turned).toBe(0);
+    expect(moved(cast)).toBe(false);
+    expect(askedOf(cast)).toEqual({ hours: 0, minutes: 0 });
+  });
+
+  /**
+   * More than one circle is still twelve hours.
+   *
+   * A face holds twelve and cannot show thirteen. A child who keeps dragging
+   * is asking for as far as it goes, and as far as it goes is once round —
+   * which is also the plainest thing to answer.
+   */
+  test("two circles is still twelve hours", () => {
+    const cast = turnBy(beginHourglassCast(NOON, RUNG), (2 * FULL_CIRCLE) / TICK_MINUTES);
+    expect(askedOf(cast)).toEqual({ hours: 12, minutes: 0 });
+  });
+
+  test("and a circle and a bit is the bit", () => {
+    const cast = turnBy(beginHourglassCast(NOON, RUNG), FULL_CIRCLE / TICK_MINUTES + 6);
+    expect(askedOf(cast)).toEqual({ hours: 0, minutes: 30 });
+    expect(asksMinutes(cast)).toBe(true);
+  });
+
+  test("the longest move the sand runs for is a whole circle", () => {
+    expect(sandFor(FULL_CIRCLE)).toBe(SAND_MOST_MS);
   });
 });
