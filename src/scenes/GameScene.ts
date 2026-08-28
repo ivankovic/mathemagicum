@@ -220,6 +220,7 @@ import {
 } from "../world/crate";
 import { DECK_SHEET_KEY, DECK_SIDECAR_KEY, type DeckSidecar } from "../world/decking";
 import {
+  DECOR_ITEMS,
   DECOR_LOOKS,
   DECOR_TYPES,
   type DecorItem,
@@ -1733,16 +1734,21 @@ export class GameScene extends Phaser.Scene {
    */
   private readonly lampGlows = new Map<string, Phaser.GameObjects.Image>();
   /**
-   * The halo over a fireplace, while the player is in a room that has one.
+   * A halo over every fireplace in the room she is standing in.
    *
    * Kept apart from `lampGlows` rather than filed as a lamp at a tile. The
    * lamps are a fact about the world — the astronomer counts them, the
    * player carries them about — and a hearth is a fact about a picture that
    * is on screen for as long as somebody is standing in it.
+   *
+   * **A list, because a stove is furniture and a child may own several.**
+   * It was one cell and one halo, which was right while a fireplace was
+   * built into the wall and there was exactly one. Reported from a
+   * playtest: only one stove per house lights up. Only one could — the
+   * routine that lit a stove put out the last one first, so a room with
+   * three of them drew three stoves and one fire.
    */
-  private hearthGlow?: Phaser.GameObjects.Image;
-  /** Which cell it is over, or null in a room with no fire. */
-  private hearth: GridPoint | null = null;
+  private hearths: { cell: GridPoint; glow: Phaser.GameObjects.Image }[] = [];
   /**
    * The lamps, tubes and orbs in whatever room is on screen.
    *
@@ -1869,6 +1875,9 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.dev.materials > 0) {
       for (const material of MATERIAL_TYPES) this.inventory.add(material, this.dev.materials);
+    }
+    if (this.dev.furniture > 0) {
+      for (const item of DECOR_ITEMS) this.inventory.add(item, this.dev.furniture);
     }
 
     const bounds = computeMapScreenBounds(this.grid.width, this.grid.height);
@@ -2181,12 +2190,13 @@ export class GameScene extends Phaser.Scene {
         updating: this.sys.updateList.length,
         view: { width: this.scale.width, height: this.scale.height },
       }),
-      hearth: () => {
-        const glow = this.hearthGlow;
-        const at = this.hearth;
-        if (!glow || !at || !glow.visible) return null;
-        return { col: at.col, row: at.row, alpha: glow.alpha };
-      },
+      // Every fire alight in the room she is in. Was one or none, which is
+      // the shape the bug had: a scenario could not have told a room with
+      // three stoves from a room with one.
+      hearths: () =>
+        this.hearths
+          .filter(({ glow }) => glow.visible)
+          .map(({ cell, glow }) => ({ col: cell.col, row: cell.row, alpha: glow.alpha })),
       doors: () =>
         Object.fromEntries(this.buildings.map((b) => [b.id, { col: b.doorCol, row: b.doorRow }])),
       screenOf: (col, row) => this.screenOf(col, row),
@@ -2970,12 +2980,6 @@ export class GameScene extends Phaser.Scene {
    * when the flame does. See `HEARTH_FLICKER`.
    */
   private paintHearth(strength: number): void {
-    const glow = this.hearthGlow;
-    if (!glow) return;
-    const cell = this.hearth;
-    glow.setVisible(cell !== null && strength > 0);
-    if (!cell || strength <= 0) return;
-    const at = this.screenOf(cell.col, cell.row);
     // The flame that drives the flicker. In a room that is one animated
     // picture it is the picture; in a room assembled from parts it is the
     // fireplace, which is the only piece that moves — and a RenderTexture
@@ -2984,14 +2988,24 @@ export class GameScene extends Phaser.Scene {
     const frames = flame?.anims?.currentAnim?.frames.length ?? 1;
     const index = flame?.anims?.currentFrame?.index ?? 1;
     const phase = frames > 1 ? ((index - 1) % frames) / frames : 0;
-    const flicker = 1 - (HEARTH_FLICKER * (1 - Math.cos(phase * Math.PI * 2))) / 2;
-    glow
-      .setPosition(at.x, at.y - TILE_SIZE)
-      .setDisplaySize(
-        HEARTH_LIGHT_RADIUS * 2 * this.lightScale,
-        HEARTH_LIGHT_RADIUS * 2 * this.lightScale,
-      )
-      .setAlpha(strength * HEARTH_GLOW_ALPHA * flicker);
+    for (const [at, { cell, glow }] of this.hearths.entries()) {
+      glow.setVisible(strength > 0);
+      if (strength <= 0) continue;
+      const where = this.screenOf(cell.col, cell.row);
+      // Each fire a third of a beat behind the one before it. They are all
+      // driven by the same animation, so left alone a room of stoves would
+      // pulse in unison — which reads as the *room* dimming rather than as
+      // several fires burning.
+      const own = phase + (at % 3) / 3;
+      const flicker = 1 - (HEARTH_FLICKER * (1 - Math.cos(own * Math.PI * 2))) / 2;
+      glow
+        .setPosition(where.x, where.y - TILE_SIZE)
+        .setDisplaySize(
+          HEARTH_LIGHT_RADIUS * 2 * this.lightScale,
+          HEARTH_LIGHT_RADIUS * 2 * this.lightScale,
+        )
+        .setAlpha(strength * HEARTH_GLOW_ALPHA * flicker);
+    }
   }
 
   /**
@@ -3120,23 +3134,26 @@ export class GameScene extends Phaser.Scene {
    * nothing here — and a kind this game has not learned yet is dropped by
    * `roomLights` rather than drawn in some default colour.
    */
-  /** The fire in a room that has one, at a cell the caller has worked out. */
+  /**
+   * One more fire, at a cell the caller has worked out.
+   *
+   * **Adds rather than replaces**, which is the whole of the stove fix. It
+   * used to snuff the room first, on the argument that `paintPlan` runs once
+   * per square built and nine squares would otherwise leave nine orphaned
+   * glows. That argument is sound and the snuff was in the wrong place for
+   * it: the routine that redraws the furniture already clears the room once
+   * before its loop, so putting the last fire out on the way to lighting the
+   * next only ever meant a room could have one.
+   */
   private lightHearthAt(cell: GridPoint): void {
-    // Snuffed first, exactly as `lightHearth` does. `paintPlan` runs on every
-    // square built, so without this a child who adds nine squares in one
-    // multiplication cast leaves nine orphaned glows behind — hidden, so
-    // nothing on screen would ever have shown it.
-    this.snuffHearth();
-    this.hearth = cell;
-    this.hearthGlow = this.newGlow(HEARTH_GLOW_COLOR);
+    this.hearths.push({ cell, glow: this.newGlow(HEARTH_GLOW_COLOR) });
   }
 
   private lightHearth(sidecar: InteriorSidecar): void {
     this.snuffHearth();
     for (const light of roomLights(sidecar)) {
       if (light.kind === LightKind.Fire) {
-        this.hearth = light.cell;
-        this.hearthGlow = this.newGlow(HEARTH_GLOW_COLOR);
+        this.lightHearthAt(light.cell);
         continue;
       }
       const how = ROOM_LIGHTS[light.kind];
@@ -3168,9 +3185,8 @@ export class GameScene extends Phaser.Scene {
    * the screen over open country.
    */
   private snuffHearth(): void {
-    this.hearthGlow?.destroy();
-    this.hearthGlow = undefined;
-    this.hearth = null;
+    for (const { glow } of this.hearths) glow.destroy();
+    this.hearths = [];
     for (const { glow } of this.roomGlows) glow.destroy();
     this.roomGlows = [];
   }
@@ -10091,6 +10107,12 @@ export class GameScene extends Phaser.Scene {
         for (const plant of PLANT_TYPES) this.inventory.add(plant, DEBUG_EACH);
         for (const material of MATERIAL_TYPES) this.inventory.add(material, DEBUG_EACH);
         for (const fixture of PLACEABLE_FIXTURES) this.inventory.add(fixture, DEBUG_EACH);
+        // And the furniture, which this did not give and should have: a
+        // basket that fills with everything except the things a room is
+        // furnished with is a basket that is nearly full. It is the same
+        // inventory — a piece in a colour is one item — so this is the same
+        // line as the fixtures above.
+        for (const item of DECOR_ITEMS) this.inventory.add(item, DEBUG_EACH);
         this.refreshCarried();
       },
       learnEverything: () => {

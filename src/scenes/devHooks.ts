@@ -112,6 +112,15 @@ export interface DevOptions {
    */
   readonly materials: number;
   /**
+   * How many of every piece of furniture, in every colour, to start with.
+   *
+   * The counterpart of `materials` for the things a room is furnished with.
+   * Added because a scenario about *several* stoves could not get a second
+   * one: furniture is bought, and walking a child to the shop and counting
+   * out coins is a different scenario wearing this one's clothes.
+   */
+  readonly furniture: number;
+  /**
    * Places to count as already walked into, for the portal spell.
    *
    * `?reached=all`, or a comma-separated list of anchor ids. Without it a
@@ -298,6 +307,7 @@ export function parseDevOptions(search: string): DevOptions {
     intro: params.has("intro"),
     wall: params.has("wall"),
     materials: Math.max(0, number("materials") ?? 0),
+    furniture: Math.max(0, number("furniture") ?? 0),
     reached: places(params.get("reached")),
     portalRung: number("portalRung"),
     arrayRung: number("arrayRung"),
@@ -413,14 +423,17 @@ export interface DevHandle {
    */
   readonly grove: () => { col: number; row: number };
   /**
-   * The fire in the room she is standing in: where it is and how brightly it
-   * is throwing light, or null if there is no room, no fireplace, or no
-   * night to see it against.
+   * Every fire alight in the room she is standing in: where each is and how
+   * brightly it is throwing light. Empty if there is no room, no fireplace,
+   * or no night to see one against.
    *
    * A glow is an additive sprite over a tint, so a screenshot can say the
-   * room looks warm but not why. This says whether the fire is what did it.
+   * room looks warm but not why. This says which fires did it — and it is a
+   * *list* because it was one, which is the shape the stove bug had: a
+   * scenario could not have told a room with three stoves from a room with
+   * one, and neither could a picture, because they were the same picture.
    */
-  readonly hearth: () => { col: number; row: number; alpha: number } | null;
+  readonly hearths: () => { col: number; row: number; alpha: number }[];
   /**
    * What the scene is costing right now.
    *
