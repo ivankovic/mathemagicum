@@ -6470,6 +6470,13 @@ export class GameScene extends Phaser.Scene {
     // has no other way to unmake it.
     if (this.unbuildCastAt(at)) return;
 
+    // And out of doors it takes a machine back, for exactly the same reason.
+    // Tapping a machine is how it is *used* — woken, filled, emptied — so a
+    // machine cannot also be picked up by tapping it, and putting one down
+    // had no undo at all. This is the rune that undoes things, and it is
+    // already how a crop comes back out of the ground it was dropped on.
+    if (this.unmakeMachineAt(at)) return;
+
     const target = this.session.checkClearing(at);
     if (!target.ok || !target.tile) {
       this.report(target);
@@ -6482,6 +6489,57 @@ export class GameScene extends Phaser.Scene {
       if (result.solved) this.clearAt(col, row);
       this.noteCast(result);
     });
+  }
+
+  /**
+   * Take a machine back, and everything that was inside it.
+   *
+   * Costs the same subtraction the rune always costs — a machine is not
+   * exempt from the spell that unmakes things, and a free undo would be the
+   * one action in the garden that asked nothing.
+   *
+   * **Nothing in it is destroyed.** The heap in the mouth and every crate
+   * come back to the basket along with the machine, because everything in
+   * there was put there by casting: a sorter that ate a child's wood when it
+   * was moved would be punishing them for changing their mind about where a
+   * thing stands.
+   */
+  private unmakeMachineAt(at: GridPoint): boolean {
+    const object = this.grid.getObjectAt(at.col, at.row);
+    const fixture = object ? fixtureFor(object.type) : null;
+    if (!fixture || !isMachine(fixture)) return false;
+    if (!withinReach(this.session.tile, at)) {
+      this.markTooFar(at.col, at.row);
+      return true;
+    }
+    this.joystick?.release();
+    const rung = rungAt(this.dev.rung ?? this.profile.rung);
+    this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, (result) => {
+      if (result.solved) this.takeMachineBack(fixture, at.col, at.row);
+      this.noteCast(result);
+    });
+    return true;
+  }
+
+  private takeMachineBack(fixture: FixtureType, col: number, row: number): void {
+    const key = tileKey(col, row);
+    const state = this.machines.get(key);
+    // Emptied before it is lifted, so that a `takeBack` which refuses — she
+    // stepped away while the parchment was open — leaves the machine
+    // standing there with its contents still in it.
+    const result = this.session.takeBack(fixture, col, row);
+    this.report(result, itemIcon(fixture));
+    if (!result.ok) return;
+    if (state?.holding) {
+      const back = state.heap + state.crates.reduce((all, count) => all + count, 0);
+      if (back > 0) this.inventory.add(state.holding as ItemType, back);
+    }
+    this.machines.delete(key);
+    this.placedFixtures.get(key)?.destroy();
+    this.placedFixtures.delete(key);
+    this.refreshCarried();
+    this.paintSockets();
+    this.autosave();
   }
 
   /** Lift what stood there out of the world, sprite and all. */
@@ -8758,7 +8816,13 @@ export class GameScene extends Phaser.Scene {
       // and there is no telling a child's fence from the generator's once
       // both are standing on the grid. Nothing generates a machine, so every
       // one of these is hers. See `watchMachine`.
-      if (isMachine(fixture)) this.watchMachine(sprite, object.col, object.row);
+      if (isMachine(fixture)) {
+        this.watchMachine(sprite, object.col, object.row);
+        // And into the map the take-back reaches for. Without this a machine
+        // could be unmade the day after it was built and its picture would
+        // stay standing in the garden.
+        this.placedFixtures.set(tileKey(object.col, object.row), sprite);
+      }
       // A lamp has a flame in it and a glowcap glows: both light the ground
       // around them. Noted here rather than by walking the grid every frame:
       // the scene already sees every one of them exactly once, as it puts it

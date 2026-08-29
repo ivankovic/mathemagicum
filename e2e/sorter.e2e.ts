@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { Spell } from "../src/spells/spellbook";
 import { FixtureType } from "../src/world/fixtures";
 import { MINUTES_PER_ROUND, SHARES } from "../src/world/machines";
-import { type Game, play, shutDown, takeFromCrate } from "./harness";
+import { type Game, play, runeButton, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -181,6 +182,55 @@ describe("the first machine that does something", () => {
           heap: left?.heap ?? -1,
         });
         expect(remembered?.crates).toEqual(left?.crates ?? []);
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * And the minus rune takes it back, with everything that was in it.
+   *
+   * Tapping a machine is how it is *used*, so it cannot also be how a
+   * machine is picked up — which left putting one down with no undo at all,
+   * the same complaint that got crops theirs. This is the rune that unmakes
+   * things and it already lifts a carrot out of the ground it was dropped
+   * on.
+   *
+   * The contents coming back is the half worth asserting. Everything in
+   * there was put there by casting, so a sorter that ate a child's heap when
+   * they moved it would be punishing them for changing their mind about
+   * where a thing stands.
+   */
+  test(
+    "and the minus rune takes it back, heap and all",
+    async () => {
+      await play({ seams: WITH_TIMBER }, async (game) => {
+        const at = await aSorterBeside(game);
+        await game.tapCell(at.col, at.row);
+        await game.settle(400);
+        await game.solveShare();
+        await game.settle(400);
+        await game.tapCell(at.col, at.row);
+        await game.settle(500);
+
+        const filled = (await machines(game))[0];
+        if (!filled?.holding) throw new Error("the sorter took nothing at all");
+        expect(await game.held(filled.holding)).toBe(0);
+        expect(await game.held(FixtureType.Sorter)).toBe(0);
+
+        await game.tap("spellbook");
+        await game.tap(runeButton(Spell.Clearing));
+        await game.tapCell(at.col, at.row);
+        await game.settle(400);
+        expect(await game.seam("spell")).not.toBeNull();
+        await game.solveNumberLine();
+        await game.settle(600);
+
+        // The machine is back in the basket, the heap is back in the basket,
+        // and nothing of it is left standing in the garden.
+        expect(await game.held(FixtureType.Sorter)).toBe(1);
+        expect(await game.held(filled.holding)).toBe(filled.heap);
+        expect(await machines(game)).toEqual([]);
       });
     },
     5 * MINUTES,
