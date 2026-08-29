@@ -143,6 +143,7 @@ import {
   coinIcon,
   cropIcon,
   flowerIcon,
+  iconForItem,
   itemIcon,
   materialIcon,
   uiTextureKey,
@@ -363,7 +364,21 @@ import {
   landmarkSidecarKey,
 } from "../world/landmarks";
 import { hasStep } from "../world/levels";
-import { build, isMachine, recipeFor } from "../world/machines";
+import {
+  type MachineState,
+  SPARK,
+  advance as advanceMachine,
+  build,
+  feed,
+  fullestCrate,
+  isMachine,
+  machinesFromSave,
+  machinesToSave,
+  newMachine,
+  recipeFor,
+  takeShare,
+  wake,
+} from "../world/machines";
 import { MATERIAL_TYPES, MaterialType, yieldOf } from "../world/materials";
 import { markedPlaces } from "../world/minimap";
 import { NAMED_PEOPLE, nameCast } from "../world/names";
@@ -1592,6 +1607,23 @@ export class GameScene extends Phaser.Scene {
   // up. Deliberately not the village well: it was placed by generation and
   // is not hers to take.
   private placedFixtures = new Map<string, Phaser.GameObjects.Sprite>();
+  /**
+   * What every machine in the world is holding, by the square it stands on.
+   *
+   * Its own map rather than a field on the placed object, for the reason
+   * `machinesToSave` gives: a placed object is a fact about how the world was
+   * generated and is diffed against the generator's own baseline, and what a
+   * sorter happens to have in its mouth this minute has no business in that
+   * comparison.
+   */
+  private machines = new Map<string, MachineState>();
+  /**
+   * The world's clock, last time a machine was told about it.
+   *
+   * Null until the first frame with a machine in the world. See `workMachines`
+   * for why this is sampled rather than accumulated.
+   */
+  private machinesTold: number | null = null;
   // Problems vary from cast to cast, so this is seeded from the clock rather
   // than from the world's seed: a world is meant to be reproducible, a lesson is
   // meant not to be. A driving script can pin it with `?seed=`, which is the
@@ -2235,6 +2267,23 @@ export class GameScene extends Phaser.Scene {
       marking: () => this.marking?.action ?? null,
       teaching: () => this.teacherMarks?.showing() ?? [],
       grove: () => ({ col: this.grove.doorstep.col, row: this.grove.doorstep.row }),
+      /**
+       * Every machine in the world and what it is holding.
+       *
+       * Nothing else can see this. A machine's state is not an object on the
+       * grid, not in the basket and not on screen beyond three little heaps
+       * of pixels in three crates — so a sorter that had quietly stopped
+       * dealing, or one that dealt without ever being woken, would look
+       * exactly like one that was working.
+       */
+      machines: () =>
+        [...this.machines].map(([where, state]) => ({
+          where,
+          awake: state.awake,
+          holding: state.holding,
+          heap: state.heap,
+          crates: [...state.crates],
+        })),
       sea: () => {
         const tiles = [...this.liveWater.values()].flat();
         return {
@@ -2679,6 +2728,9 @@ export class GameScene extends Phaser.Scene {
       if (this.armed) this.paintAim();
       this.checkAim();
     }
+    // Indoors as well as out: she is present either way, and a sorter in the
+    // garden goes on dealing while she is upstairs.
+    this.workMachines();
     // Indoors as well as out, which it was not.
     //
     // The rune lived inside the outdoor branch above, so a chair armed in a
@@ -7567,6 +7619,10 @@ export class GameScene extends Phaser.Scene {
       const stored = decorFromSave(pieces);
       this.decor.set(house, beforeTheStove ? hearthRestored(stored, this.growable) : stored);
     }
+    // And what every machine was holding. Not repaired and not defaulted: a
+    // square with no entry is a machine nobody has woken, which is what a
+    // machine built and never tapped actually is.
+    this.machines = machinesFromSave(saved?.world?.machines);
     // The child's own things come from their progress in this game, never
     // from the ground — which is why a world the generator can no longer
     // rebuild cannot cost them a coin. `loadGame` drops such a world and
@@ -7605,6 +7661,7 @@ export class GameScene extends Phaser.Scene {
       this.savedPlans(),
       this.savedDecor(),
       this.paintedTiles(),
+      machinesToSave(this.machines),
     );
     // And this child's own things, which nobody else's game may touch. Kept
     // separate all the way down: a shared purse would let one child spend
@@ -7860,7 +7917,12 @@ export class GameScene extends Phaser.Scene {
       false,
       drawnFlip(turn),
     );
-    this.watchPlacedFixture(sprite, fixture, col, row);
+    // A machine is tapped for what it *does*, so it gets that handler instead
+    // of the take-it-back one — not as well as. Phaser runs every handler on
+    // a sprite, so registering both meant one tap picked the sorter up into
+    // the basket and then woke a machine that was no longer standing there.
+    if (isMachine(fixture)) this.watchMachine(sprite, col, row);
+    else this.watchPlacedFixture(sprite, fixture, col, row);
     this.placedFixtures.set(tileKey(col, row), sprite);
     if (fixture === FixtureType.Lamp) this.lightLamp(col, row);
     this.playGesture(PLANT); // she bends to set it down, same as planting
@@ -7889,6 +7951,168 @@ export class GameScene extends Phaser.Scene {
       if (this.pointerIsSpokenFor) return;
       this.takeFixture(fixture, col, row);
     });
+  }
+
+  // --- Machines -----------------------------------------------------------
+  //
+  // A machine embodies arithmetic where a spell tests it — see `machines.ts`.
+  // So there is no parchment in any of this but one: the sorter is shown the
+  // sum it is about to spend its life doing, once, and after that it deals in
+  // silence for ever.
+
+  /**
+   * Make a machine tappable, which every one of them is.
+   *
+   * Unlike `watchPlacedFixture`, this is safe to do on the way back from a
+   * save as well as on the way down, because the generator never puts a
+   * machine anywhere: every sorter in the world is one a child built, so
+   * there is no village property to protect from a tap.
+   *
+   * **Instead of that one, never as well as it.** Phaser calls every handler
+   * a sprite has, so a machine carrying both had its first tap pick it up
+   * into the basket and then wake a machine that was no longer standing
+   * there. Which means a machine cannot yet be taken back once it is down —
+   * a real gap, and the next thing this wants.
+   */
+  private watchMachine(sprite: Phaser.GameObjects.Sprite, col: number, row: number): void {
+    const frame = sprite.frame;
+    sprite.setInteractive(
+      new Phaser.Geom.Rectangle(0, frame.realHeight - TILE_SIZE, TILE_SIZE, TILE_SIZE),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    sprite.on("pointerdown", () => {
+      if (this.pointerIsSpokenFor) return;
+      this.tapMachine(col, row);
+    });
+  }
+
+  /**
+   * One tap on a machine, and what it means depends on what the machine has.
+   *
+   * Three answers, in the order a child meets them: wake it, empty it, fill
+   * it. No menu and no panel — a machine that opened a window to be operated
+   * would put an interface between a child and a thing standing in their own
+   * garden, and the whole appeal of the thing is that it is standing there.
+   */
+  private tapMachine(col: number, row: number): void {
+    if (this.modalOpen) return;
+    const key = tileKey(col, row);
+    const state = this.machines.get(key) ?? newMachine();
+    if (!state.awake) {
+      this.showTheSum(key, state);
+      return;
+    }
+    const crate = fullestCrate(state);
+    if ((state.crates[crate] ?? 0) > 0) {
+      const taken = takeShare(state, crate);
+      const item = taken.item as ItemType | null;
+      if (item) {
+        this.machines.set(key, taken.state);
+        this.inventory.add(item, taken.count);
+        this.showResult(iconForItem(item), col, row);
+        this.refreshCarried();
+        this.autosave();
+      }
+      return;
+    }
+    this.tipIn(key, state);
+  }
+
+  /**
+   * The one sum a machine ever asks for: the one it does.
+   *
+   * Casting `÷` on the thing that divides, to wake it. It is not a toll on
+   * the machine — it is the machine asking to be shown its own arithmetic,
+   * and it asks exactly once in its life. A wrong answer costs nothing but
+   * the tap: the machine is still there and still asleep, which is where it
+   * started.
+   */
+  private showTheSum(key: string, state: MachineState): void {
+    if (!this.knowsShare) {
+      this.showWhereToLearn(Spell.Share);
+      return;
+    }
+    const rung = shareRungAt(this.dev.shareRung ?? this.profile.shareRung);
+    this.sharePopup?.open(shareProblemFor(this.spellRng, rung), (result) => {
+      if (!result.solved) return;
+      this.machines.set(key, wake(state));
+      this.showEarned(UiAsset.RuneDivide);
+      this.autosave();
+    });
+  }
+
+  /**
+   * Tip the biggest heap of one thing she is carrying into the mouth.
+   *
+   * The biggest rather than a chosen one, because choosing is a menu and a
+   * menu is the thing this interaction is trying not to be. A child with
+   * twelve wood and three stone taps a sorter and the wood goes in, which is
+   * what they meant: the reason to walk to a machine is the heap you are
+   * carrying, and it is nearly always the big one.
+   */
+  private tipIn(key: string, state: MachineState): void {
+    let best: { item: ItemType; count: number } | null = null;
+    for (const [item, count] of this.inventory.entries()) {
+      if (count <= 0) continue;
+      if (state.holding !== null && state.holding !== item) continue;
+      if (!best || count > best.count) best = { item, count };
+    }
+    if (!best) {
+      this.showRefusalOnPlayer(UiAsset.RuneDivide);
+      return;
+    }
+    const fed = feed(state, best.item, best.count);
+    if (!fed) {
+      this.showRefusalOnPlayer(UiAsset.RuneDivide);
+      return;
+    }
+    this.inventory.remove(best.item, best.count);
+    this.machines.set(key, fed);
+    this.playGesture(PLANT); // she bends to tip it in, same as planting
+    this.refreshCarried();
+    this.autosave();
+  }
+
+  /**
+   * Give every machine the minutes that have passed, and only those.
+   *
+   * **Sampled, never accumulated, and that is the whole design of it.** The
+   * world's clock is `Date.now()` plus whatever the hourglass has wound, so a
+   * machine paid by elapsed time would be a machine that paid a child for
+   * having the tab shut — which is the accrual mechanic this game does not
+   * have and does not want. Reading the clock every frame and taking the
+   * *difference since the last frame* gives minutes she was there for, and
+   * nothing else: the gap while the page was closed is never sampled across,
+   * because there was no frame in it.
+   *
+   * The hourglass falls out of this for free, and that is the pleasure of it.
+   * Winding the clock forward moves `worldNow` while she watches the sand
+   * pour, so the difference is large for a few seconds and every machine in
+   * the world deals a heap. Speeding a machine up is casting a spell.
+   */
+  private workMachines(): void {
+    if (this.machines.size === 0) {
+      this.machinesTold = null;
+      return;
+    }
+    const now = this.worldNow();
+    const told = this.machinesTold;
+    this.machinesTold = now;
+    if (told === null) return;
+    const minutes = (now - told) / 60_000;
+    // Backwards is impossible — the hourglass only winds forward — but a
+    // clock nobody controls is worth not trusting: a machine that dealt a
+    // heap because a device's own clock was corrected would be a bug nobody
+    // could reproduce.
+    if (minutes <= 0) return;
+    let dealt = false;
+    for (const [key, state] of this.machines) {
+      const worked = advanceMachine(state, minutes);
+      if (worked === state) continue;
+      this.machines.set(key, worked);
+      if (worked.crates.some((count, at) => count !== (state.crates[at] ?? 0))) dealt = true;
+    }
+    if (dealt) this.autosave();
   }
 
   private takeFixture(fixture: FixtureType, col: number, row: number): void {
@@ -8521,7 +8745,7 @@ export class GameScene extends Phaser.Scene {
       // the way round it was put down. Both fall out of the turn; nothing
       // below this line has to know what a turn is.
       const turn = turnFrom(object.turn);
-      this.spawnFootprintSprite(
+      const sprite = this.spawnFootprintSprite(
         object,
         sidecar,
         fixtureSheetKey(fixture),
@@ -8529,6 +8753,12 @@ export class GameScene extends Phaser.Scene {
         false,
         drawnFlip(turn),
       );
+      // Machines only. Everything else that comes through here might be the
+      // village's own — the well, the fences round somebody else's garden —
+      // and there is no telling a child's fence from the generator's once
+      // both are standing on the grid. Nothing generates a machine, so every
+      // one of these is hers. See `watchMachine`.
+      if (isMachine(fixture)) this.watchMachine(sprite, object.col, object.row);
       // A lamp has a flame in it and a glowcap glows: both light the ground
       // around them. Noted here rather than by walking the grid every frame:
       // the scene already sees every one of them exactly once, as it puts it

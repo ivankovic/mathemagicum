@@ -4,8 +4,8 @@
 import { type Page, chromium } from "playwright";
 // The game's own feel constant rather than a copy: a harness holding its own
 // idea of how far a swipe goes is a harness that silently stops matching.
-import { SWIPE_PER_TICK, TICK_MINUTES } from "../src/spells/hourglass";
-import { SPELLS, type Spell } from "../src/spells/spellbook";
+import { SAND_MOST_MS, SWIPE_PER_TICK, TICK_MINUTES } from "../src/spells/hourglass";
+import { SPELLS, Spell } from "../src/spells/spellbook";
 import { groupOf } from "../src/world/crate";
 import { DECOR_TYPES, type DecorType } from "../src/world/decor";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../src/world/fixtures";
@@ -1101,6 +1101,53 @@ export class Game {
     await this.type(array.answer);
     await this.press("Enter");
     await this.settle(900);
+  }
+
+  /**
+   * Answer whatever heap the division parchment is asking about.
+   *
+   * Both boxes when it draws both: the harder rungs ask for the leftovers as
+   * well as the share, and typing only the first leaves a parchment sitting
+   * open with a cursor in it — which reads, from the outside, exactly like a
+   * spell that refused.
+   */
+  async solveShare(): Promise<void> {
+    const asked = await this.seam<{
+      each: number;
+      left: number;
+      boxes: string[];
+    } | null>("share");
+    if (!asked) return;
+    for (const box of asked.boxes) {
+      await this.type(box === "left" ? asked.left : asked.each);
+      await this.press("Enter");
+    }
+    await this.settle(900);
+  }
+
+  /**
+   * Cast the hourglass and wind the world on by this many hours.
+   *
+   * The spell's own control is a swipe — see `swipeClock` — so this is the
+   * whole cast: open it, turn the hands that far, and answer. Twelve is the
+   * most a face can say, and the most one cast can buy.
+   */
+  async windClock(hours: number): Promise<void> {
+    await this.tap("spellbook");
+    await this.tap(runeButton(Spell.Hourglass));
+    await this.settle(500);
+    if (!(await this.seam<unknown>("clock"))) throw new Error("the hourglass did not open");
+    await this.swipeClock(Math.round((hours * 60) / TICK_MINUTES));
+    // The hands are the question and the number is the answer: the child
+    // says how far they turned them. Read back rather than assumed, because
+    // a swipe lands where it lands and the parchment is asking about where
+    // the hands *are*.
+    const asked = await this.seam<{ hours: number }>("clock");
+    await this.type(asked.hours);
+    await this.press("Enter");
+    // Long enough for the sand to finish pouring, which is when the wind is
+    // banked — see `windClockTo`.
+    await this.settle(SAND_MOST_MS + 900);
   }
 
   /**

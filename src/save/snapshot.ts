@@ -80,6 +80,21 @@ export interface WorldSnapshot {
    */
   readonly painted?: PaintedTiles;
   /**
+   * What every machine is holding, by the square it stands on.
+   *
+   * Here rather than on the placed object it belongs to, and the placement
+   * is the point: `placed` is a *difference against how the world was
+   * generated*, compared by a signature, and what a sorter has in its mouth
+   * this minute is not a fact about generation. It is also unvalidated on
+   * the way in — `isPlacedObject` waves unknown fields through — where this
+   * goes through `machinesFromSave` and drops anything mangled.
+   *
+   * A fact about the world rather than about the child, for the reason
+   * `plans` is: two siblings on one tablet share a garden, and a machine one
+   * of them built and filled is standing there for the other.
+   */
+  readonly machines?: Readonly<Record<string, string>>;
+  /**
    * The floor plan of every house somebody has added a room to, by building.
    *
    * Here rather than with the child, and the placement is the whole of it: a
@@ -205,6 +220,7 @@ export function snapshotWorld(
   plans: Readonly<Record<string, readonly string[]>> = {},
   decor: Readonly<Record<string, readonly string[]>> = {},
   painted: PaintedTiles = [],
+  machines: Readonly<Record<string, string>> = {},
 ): WorldSnapshot {
   const placed: PlacedObject[] = [];
   const standing = new Map<string, string>();
@@ -227,6 +243,7 @@ export function snapshotWorld(
     ...(Object.keys(plans).length > 0 ? { plans } : {}),
     ...(Object.keys(decor).length > 0 ? { decor } : {}),
     ...(painted.length > 0 ? { painted } : {}),
+    ...(Object.keys(machines).length > 0 ? { machines } : {}),
   };
 }
 
@@ -259,12 +276,13 @@ export function snapshotGame(
   plans: Readonly<Record<string, readonly string[]>> = {},
   decor: Readonly<Record<string, readonly string[]>> = {},
   painted: PaintedTiles = [],
+  machines: Readonly<Record<string, string>> = {},
 ): GameSnapshot {
   return {
     snapshotVersion: SNAPSHOT_VERSION,
     generatorVersion: GENERATOR_VERSION,
     seed,
-    world: snapshotWorld(grid, baseline, plans, decor, painted),
+    world: snapshotWorld(grid, baseline, plans, decor, painted, machines),
     savedAt,
   };
 }

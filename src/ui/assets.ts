@@ -14,8 +14,10 @@
 
 import { LANGUAGES, type Language } from "../settings";
 import { CURRENCY } from "../shop/currency";
+import { itemParts } from "../world/decor";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import { FLOWER_TYPES, type FlowerType } from "../world/flowers";
+import type { ItemType } from "../world/inventory";
 import { MATERIAL_TYPES, type MaterialType } from "../world/materials";
 import { PLANT_TYPES, type PlantType } from "../world/plants";
 
@@ -132,6 +134,27 @@ export function coinIcon(value: number): string {
 /** The icon for something the store sells, as it appears in the crate. */
 export function itemIcon(fixture: FixtureType): string {
   return `item-${fixture}`;
+}
+
+/**
+ * The icon for whatever it is, when the caller does not know which kind.
+ *
+ * The basket holds crops, materials, fixtures and furniture, and each of
+ * those has its own naming above for its own reasons. Nearly everything in
+ * the game knows which sort of thing it is holding and calls the right one
+ * directly — this is for the few that do not, like a machine handing back a
+ * share of whatever was tipped into it.
+ *
+ * Furniture is the odd one: a basket entry names a piece *and a colour*, so
+ * the icon is the piece's, with the colour dropped.
+ */
+export function iconForItem(item: ItemType): string {
+  if ((PLANT_TYPES as readonly string[]).includes(item)) return cropIcon(item as PlantType);
+  if ((MATERIAL_TYPES as readonly string[]).includes(item)) {
+    return materialIcon(item as MaterialType);
+  }
+  const piece = itemParts(item);
+  return itemIcon((piece ? piece.piece : item) as FixtureType);
 }
 
 /**

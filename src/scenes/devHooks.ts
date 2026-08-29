@@ -466,6 +466,14 @@ export interface DevHandle {
    * what only a browser can say, is that there are tiles of sea on screen and
    * that they are not all showing the same picture for ever.
    */
+  /** Every machine in the world and what it is holding. See `machines.ts`. */
+  readonly machines: () => {
+    where: string;
+    awake: boolean;
+    holding: string | null;
+    heap: number;
+    crates: number[];
+  }[];
   readonly sea: () => {
     /** How many tiles of water are laid under the chunks on screen. */
     tiles: number;
