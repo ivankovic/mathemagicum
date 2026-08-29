@@ -6,7 +6,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { LANGUAGES } from "../settings";
 import { UI_ASSETS, UiAsset, type UiIndex, flagIcon, uiEntry } from "../ui/assets";
-import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, DOOR_STATES, ROLE_SPRITES } from "./buildings";
+import {
+  BUILDING_FOOTPRINTS,
+  BUILDING_SPRITES,
+  BuildingSprite,
+  DOOR_STATES,
+  ROLE_SPRITES,
+} from "./buildings";
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
 import { floodFillReachable, isReachable } from "./connectivity";
 import { EFFECT_TYPES, effectAnimKey, effectSidecarKey } from "./effects";
@@ -23,6 +29,7 @@ import { INTERIOR_ROOMS, hearthCell, interiorFor } from "./interiors";
 import { LANDMARK_OVERHANG, LANDMARK_TYPES, landmarkFor } from "./landmarks";
 import { PLANT_STAGES, PLANT_TYPES } from "./plants";
 import { SCENERY_KINDS, sceneryKind } from "./scenery";
+import { Canvas } from "./shipping";
 import type {
   BuildingSidecar,
   CharacterSidecar,
@@ -293,10 +300,15 @@ describe("the shipped building doors", () => {
   test("ship a frame range for every door state the game asks for", () => {
     for (const [name, sidecar] of sidecars) {
       const named = new Set(Object.keys(sidecar.animations));
-      expect({ name, named }).toEqual({
-        name,
-        named: new Set(DOOR_STATES.map((s) => `door_${s}`)),
-      });
+      // Every building has its three doors. The ship has three sail
+      // positions as well, and is the only one that does — canvas is a
+      // second axis on the one building that draws itself, and a facade with
+      // sails would be a facade that could not be drawn.
+      const wanted = new Set<string>(DOOR_STATES.map((s) => `door_${s}`));
+      if (name === BuildingSprite.Ship) {
+        for (const canvas of Object.values(Canvas)) wanted.add(`sail_${canvas}`);
+      }
+      expect({ name, named }).toEqual({ name, named: wanted });
     }
   });
 
@@ -316,11 +328,18 @@ describe("the shipped building doors", () => {
     }
   });
 
-  test("put each door state on its own sheet row", () => {
-    for (const sidecar of sidecars.values()) {
+  test("put each state on its own sheet row", () => {
+    for (const [name, sidecar] of sidecars) {
       const sheet = sidecar.sheet;
       if (!sheet) throw new Error("no sheet");
-      expect(sheet.rows).toBe(DOOR_STATES.length);
+      // One row per animation, whatever the animations are. This said
+      // `DOOR_STATES.length`, which was the same number while doors were the
+      // only state a building had — and stopped being the same number the
+      // day the ship could set sail.
+      expect({ name, rows: sheet.rows }).toEqual({
+        name,
+        rows: Object.keys(sidecar.animations).length,
+      });
       for (const range of Object.values(sidecar.animations)) {
         expect(range.start % sheet.columns).toBe(0);
         expect(range.frame_count).toBe(sheet.columns);

@@ -202,6 +202,32 @@ export function doorStateForDistance(distance: number): DoorState {
 }
 
 // Matches the sidecar's own animation names: `door_{state}`.
+/**
+ * The key for one row of a building's sheet, named as the sidecar names it.
+ *
+ * Everything below goes through this rather than assembling its own string,
+ * because the registration used to strip `door_` off the sidecar's name and
+ * put it back — which was the same string while doors were the only rows a
+ * building had, and quietly wrong the day the ship gained `sail_furled`. It
+ * registered that as `door_sail_furled`, nothing ever asked for that key,
+ * and the harbour drew no ships at all.
+ */
+export function buildingRowKey(sprite: string, row: string): string {
+  return `building-${sprite}-${row}`;
+}
+
 export function buildingAnimKey(sprite: string, state: DoorState): string {
-  return `building-${sprite}-door_${state}`;
+  return buildingRowKey(sprite, `door_${state}`);
+}
+
+/**
+ * The animation for one sail position, on the one building that has canvas.
+ *
+ * Its own row on the sheet rather than a door state, because the two are
+ * separate axes: the ship a child boards is moored and never sails, and the
+ * ships that come and go are nobody's door. See the generator's note on why
+ * the sheet does not carry every door crossed with every sail.
+ */
+export function shipSailAnimKey(sprite: string, canvas: string): string {
+  return buildingRowKey(sprite, `sail_${canvas}`);
 }

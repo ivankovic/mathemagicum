@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type Phaser from "phaser";
-import { BuildingSprite, DoorState, buildingAnimKey, spriteSheetKey } from "../world/buildings";
+import { BuildingSprite, shipSailAnimKey, spriteSheetKey } from "../world/buildings";
 import type { Berth } from "../world/harbour";
-import { VISIT, alongLane, shipsAt } from "../world/shipping";
+import { Canvas, VISIT, alongLane, canvasAt, shipsAt } from "../world/shipping";
 import { type SpriteSidecar, footprintBottomY, spriteOrigin } from "../world/spriteSidecar";
 import { depthFor } from "../world/topdown";
 
@@ -27,6 +27,13 @@ import { depthFor } from "../world/topdown";
  */
 export class HarbourTraffic {
   private readonly ships: Phaser.GameObjects.Sprite[] = [];
+  /**
+   * The repainted sheet each hull is drawn from, kept because the sail is a
+   * *row* of that sheet and switching canvas means switching rows.
+   */
+  private readonly painted: string[] = [];
+  /** What each is showing now, so a row is only swapped when it changes. */
+  private readonly canvas: Canvas[] = [];
 
   /**
    * One hull per berth, made once and moved for the rest of the game.
@@ -49,16 +56,21 @@ export class HarbourTraffic {
     paint: (name: string, sprite: BuildingSprite) => string,
     place: <T extends Phaser.GameObjects.GameObject>(object: T) => T,
   ) {
-    if (!scene.anims.exists(buildingAnimKey(BuildingSprite.Ship, DoorState.Closed))) return;
+    // Asked about the *sail* row rather than the door: that is the one this
+    // class plays, and a harbour whose hulls were checked against an
+    // animation they never use would have shipped four invisible ships the
+    // day the sheet gained a row and lost one.
+    if (!scene.anims.exists(shipSailAnimKey(BuildingSprite.Ship, Canvas.Furled))) return;
     for (const [n] of berths.entries()) {
       const painted = paint(`harbour-visitor-${n}`, BuildingSprite.Ship);
+      this.painted.push(painted);
       this.ships.push(
         place(
           scene.add
             .sprite(0, 0, spriteSheetKey(painted))
             .setOrigin(0, 0)
             .setVisible(false)
-            .play(buildingAnimKey(painted, DoorState.Closed)),
+            .play(shipSailAnimKey(painted, Canvas.Furled)),
         ),
       );
     }
@@ -80,6 +92,17 @@ export class HarbourTraffic {
       if (!lane || !ship) continue;
       const at = alongLane(lane, sailing.along);
       const where = spriteOrigin(this.sidecar, at.col, at.row);
+      // Canvas set out in the bay and furled alongside, which is the same
+      // rule coming in and going out — see `canvasAt`. Only swapped when it
+      // actually changes: restarting an animation every frame would freeze
+      // the pennant on its first frame, which is the one thing aboard that
+      // is supposed to move.
+      const wanted = canvasAt(sailing.along);
+      if (this.canvas[sailing.berth] !== wanted) {
+        this.canvas[sailing.berth] = wanted;
+        const sheet = this.painted[sailing.berth];
+        if (sheet) ship.play(shipSailAnimKey(sheet, wanted));
+      }
       ship
         .setPosition(this.origin.x + where.x, this.origin.y + where.y)
         .setDepth(depthFor(footprintBottomY(this.sidecar, at.row)))
@@ -88,9 +111,24 @@ export class HarbourTraffic {
     void this.scene;
   }
 
-  /** Where every hull currently in port is, in world pixels. A dev seam. */
-  positions(): { x: number; y: number }[] {
-    return this.ships.filter((ship) => ship.visible).map((ship) => ({ x: ship.x, y: ship.y }));
+  /**
+   * Where every hull currently in port is, and what canvas she is showing.
+   *
+   * The canvas is here because it is the one thing about these ships a
+   * picture cannot settle on demand: whether a hull has her sails set
+   * depends on the minute, and a scenario cannot wait four minutes of world
+   * time to see all three. Positions alone would let a harbour ship four
+   * hulls with bare yards and pass.
+   */
+  positions(): { x: number; y: number; canvas: Canvas }[] {
+    return this.ships
+      .map((ship, berth) => ({ ship, berth }))
+      .filter(({ ship }) => ship.visible)
+      .map(({ ship, berth }) => ({
+        x: ship.x,
+        y: ship.y,
+        canvas: this.canvas[berth] ?? Canvas.Furled,
+      }));
   }
 }
 

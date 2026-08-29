@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { VISIT, alongLane, shipsAt } from "./shipping";
+import { Canvas, VISIT, alongLane, canvasAt, shipsAt } from "./shipping";
 
 const SEED = 12345;
 
@@ -159,5 +159,70 @@ describe("where along the lane that is", () => {
 
   test("an empty lane puts nobody anywhere rather than throwing", () => {
     expect(alongLane([], 0.5)).toEqual({ col: 0, row: 0 });
+  });
+});
+
+describe("how much canvas a ship is showing", () => {
+  test("furled alongside, set out in the bay", () => {
+    expect(canvasAt(0)).toBe(Canvas.Furled);
+    expect(canvasAt(1)).toBe(Canvas.Set);
+  });
+
+  /**
+   * The same rule read twice, which is the point of taking it off `along`.
+   *
+   * A ship comes in with `along` falling from one to nought and goes out
+   * with it rising the other way, so furling on the way in and setting on
+   * the way out are one rule rather than two — and there is no way for the
+   * two to disagree, which is what a `leaving` flag here would have invited.
+   */
+  test("every position is reached both coming in and going out", () => {
+    // The function cannot see which way she is going, so "the same answer
+    // both ways" is true by construction and worth nothing to assert. What
+    // is worth asserting is that the *timetable* hands it the numbers for
+    // all three, in both directions — a visit that only ever showed full
+    // sail on the way out would satisfy a weaker test and look wrong.
+    const bands = new Set<string>();
+    for (let minute = 0; minute < VISIT; minute += VISIT / 400) {
+      for (const ship of shipsAt(minute, 1, 0))
+        bands.add(`${ship.leaving}:${canvasAt(ship.along)}`);
+    }
+    for (const leaving of [true, false]) {
+      for (const canvas of Object.values(Canvas)) {
+        expect({ leaving, canvas, seen: bands.has(`${leaving}:${canvas}`) }).toEqual({
+          leaving,
+          canvas,
+          seen: true,
+        });
+      }
+    }
+  });
+
+  /**
+   * The middle one has to actually happen, and for long enough to see.
+   *
+   * It is the state that says the canvas is *moving*; a ship that passed
+   * through it in a frame would appear to teleport between bare yards and
+   * full sail. Counted over a whole visit at a fine step.
+   */
+  test("half-set canvas is on screen for a decent part of every arrival", () => {
+    let half = 0;
+    let sailing = 0;
+    const step = VISIT / 2000;
+    for (let minute = 0; minute < VISIT; minute += step) {
+      for (const ship of shipsAt(minute, 1, 0)) {
+        if (ship.along <= 0) continue;
+        sailing++;
+        if (canvasAt(ship.along) === Canvas.Half) half++;
+      }
+    }
+    expect(sailing).toBeGreaterThan(0);
+    expect(half / sailing).toBeGreaterThan(0.3);
+  });
+
+  test("nonsense is furled, which is what a ship sitting still shows", () => {
+    for (const along of [Number.NaN, Number.POSITIVE_INFINITY * 0, -1]) {
+      expect(canvasAt(along)).toBe(Canvas.Furled);
+    }
   });
 });

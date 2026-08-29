@@ -3,9 +3,9 @@
     "file": "ship_sheet.png",
     "frame_width": 160,
     "frame_height": 188,
-    "frame_count": 24,
+    "frame_count": 48,
     "columns": 8,
-    "rows": 3,
+    "rows": 6,
     "margin": 1,
     "spacing": 2
   },
@@ -71,7 +71,7 @@
     "width": 160,
     "height": 188
   },
-  "frame_count": 24,
+  "frame_count": 48,
   "animations": {
     "door_closed": {
       "start": 0,
@@ -86,6 +86,21 @@
     "door_open": {
       "start": 16,
       "end": 23,
+      "frame_count": 8
+    },
+    "sail_furled": {
+      "start": 24,
+      "end": 31,
+      "frame_count": 8
+    },
+    "sail_half": {
+      "start": 32,
+      "end": 39,
+      "frame_count": 8
+    },
+    "sail_set": {
+      "start": 40,
+      "end": 47,
       "frame_count": 8
     }
   },

@@ -120,3 +120,42 @@ describe("ships come and go", () => {
     5 * MINUTES,
   );
 });
+
+/**
+ * And her sails, which are the other half of a ship that is going somewhere.
+ *
+ * Reported from a playtest: ships leaving or arriving should have their
+ * sails open, and the opening and closing should be animated. They do and it
+ * is — canvas is set out in the bay and furled alongside, which is the same
+ * rule coming in and going out because `along` runs the same way both times.
+ *
+ * **A picture cannot settle this on demand.** Whether a hull has her canvas
+ * set depends on the minute, and a scenario cannot stand on the quay for
+ * four minutes of world time waiting to see all three. So the seam reports
+ * what each hull is showing, and this watches the harbour until it has seen
+ * every position — which is also the assertion: a harbour that sailed every
+ * ship in with bare yards would sit here showing `furled` until it timed
+ * out.
+ */
+describe("ships under sail", () => {
+  test(
+    "set their canvas in the bay and furl it alongside",
+    async () => {
+      await play({ seams: QUAY }, async (game) => {
+        await toTheQuay(game);
+        const seen = new Set<string>();
+        // A whole visit is four minutes of world time; this watches a good
+        // part of one, which is enough because four berths are on different
+        // clocks and one of them is always arriving or leaving.
+        for (let look = 0; look < 60 && seen.size < 3; look++) {
+          for (const ship of await game.seam<{ canvas: string }[]>("ships")) {
+            seen.add(ship.canvas);
+          }
+          await game.settle(1000);
+        }
+        expect([...seen].sort()).toEqual(["furled", "half", "set"]);
+      });
+    },
+    5 * MINUTES,
+  );
+});

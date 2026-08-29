@@ -109,6 +109,40 @@ export function shipsAt(minutes: number, berths: number, seed: number): Sailing[
 }
 
 /**
+ * How much canvas a ship is showing.
+ *
+ * The same three the generator draws, and the game names them because it is
+ * the game that decides when each is right.
+ */
+export const Canvas = {
+  Furled: "furled",
+  Half: "half",
+  Set: "set",
+} as const;
+
+export type Canvas = (typeof Canvas)[keyof typeof Canvas];
+
+/**
+ * Which of them, from how far along her lane she is.
+ *
+ * **`along` is already the answer**, which is the pleasing part: it runs
+ * from one out at the lane's end to nought tied up, coming in *and* going
+ * out. A ship far from the quay is under sail and a ship alongside has furled
+ * — so the canvas falls out of the position she is already drawn at, and
+ * furling on the way in and setting on the way out are the same rule read
+ * twice rather than two rules.
+ *
+ * Three bands rather than a continuous number because there are three
+ * pictures. The middle band is deliberately the widest of the three in
+ * *time*: it is the one that says the canvas is moving, and a state a ship
+ * passes through in a frame is a state nobody sees.
+ */
+export function canvasAt(along: number): Canvas {
+  if (!Number.isFinite(along) || along <= 0.25) return Canvas.Furled;
+  return along >= 0.75 ? Canvas.Set : Canvas.Half;
+}
+
+/**
  * Where along a lane that puts her, in cells.
  *
  * Between the two ends rather than between neighbouring cells: a lane is

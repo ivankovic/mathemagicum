@@ -177,6 +177,7 @@ import {
   type Entrance,
   ROLE_SPRITES,
   buildingAnimKey,
+  buildingRowKey,
   doorStateForDistance,
   entranceFor,
   isEntrance,
@@ -3524,9 +3525,13 @@ export class GameScene extends Phaser.Scene {
     // One looping smoke animation per door position, built from the ranges
     // the sidecar names — so the door opens by switching animation, and the
     // smoke keeps drifting either way.
+    // Keyed by the row's own name, whatever it is. This took the name apart
+    // and put it back together — `door_half` stripped to `half` and rebuilt
+    // as `door_half` — which is the same string right up until a row is not
+    // a door. The ship's `sail_furled` came back as `door_sail_furled`,
+    // nothing asked for that, and the harbour drew no ships.
     for (const [animation, range] of Object.entries(sidecar.animations)) {
-      const state = animation.replace(/^door_/, "") as DoorState;
-      const key = buildingAnimKey(name, state);
+      const key = buildingRowKey(name, animation);
       if (this.anims.exists(key)) continue;
       this.anims.create({
         key,

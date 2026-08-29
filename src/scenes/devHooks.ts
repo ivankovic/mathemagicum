@@ -538,7 +538,7 @@ export interface DevHandle {
    * Pixels rather than cells, and one entry per ship *currently in port*, so
    * a script can watch one move without having to know the timetable.
    */
-  readonly ships: () => { x: number; y: number }[];
+  readonly ships: () => { x: number; y: number; canvas: string }[];
   /**
    * Where the city's airships are, in world pixels.
    *
