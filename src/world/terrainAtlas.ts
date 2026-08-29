@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { WorldGrid } from "./grid";
-import type { TerrainType } from "./terrain";
+import { TerrainType } from "./terrain";
 import { TILE_SIZE } from "./topdown";
 
 // Terrain rendering, in full: read the terrain at a tile's four corners,
@@ -109,8 +109,92 @@ export function frameFor(
   row: number,
   variations: ReadonlyMap<string, number>,
 ): string | null {
-  const combo = comboKey(corners);
+  const combo = stillCombo(corners);
+  if (combo === null) return null;
   const count = variations.get(combo);
   if (count === undefined || count <= 0) return null;
   return `${combo}_${variationFor(col, row, count)}`;
+}
+
+// --- water that moves -------------------------------------------------------
+//
+// The sea is drawn in two halves, and this is the game's half of that
+// bargain. A chunk is baked once and never touched again — rebaking the ones
+// on screen measured at twenty-odd milliseconds, a dropped frame every tick —
+// so the ground cannot animate by being redrawn. What animates is a sprite
+// *under* the chunk, and the chunk is baked with a hole in it.
+//
+// So a tile that touches water bakes its `dry_` frame: the land, the rim and
+// the foam, with the open water cut out and left transparent. A tile of
+// nothing but sea bakes nothing at all. Underneath both, one wave sprite per
+// tile, cycling.
+//
+// The generator holds up the other end and asserts it exactly: a wave frame
+// with its cutout laid over the top is the tile the atlas used to ship, pixel
+// for pixel. It costs fifty-six frames more than the still world did, because
+// a coastline's land is drawn once rather than once per phase.
+
+/** Whether any of a tile's corners is sea. */
+export function touchesWater(corners: CornerTerrains): boolean {
+  return corners.includes(TerrainType.Water);
+}
+
+/**
+ * The still half of a tile: what gets baked into the chunk.
+ *
+ * Null for open sea, which has no still half — the wave sprite is the whole
+ * picture there, and baking a fully transparent frame over it would be a
+ * draw call to say nothing.
+ */
+export function stillCombo(corners: CornerTerrains): string | null {
+  if (!touchesWater(corners)) return comboKey(corners);
+  if (corners.every((corner) => corner === TerrainType.Water)) return null;
+  return `dry_${comboKey(corners)}`;
+}
+
+/** How many wave frames there are, and how many steps round they go. */
+export interface WaterFrames {
+  variations: number;
+  phases: number;
+}
+
+/**
+ * Read the sea's shape out of the loaded atlas, the way everything else here
+ * is read: from the frame names, rather than from a number written down on
+ * both sides of a language boundary.
+ */
+export function waterFrames(frameNames: Iterable<string>): WaterFrames {
+  let variations = 0;
+  let phases = 0;
+  for (const name of frameNames) {
+    const parts = name.split("_");
+    if (parts.length !== 3 || parts[0] !== "wave") continue;
+    const variation = Number(parts[1]);
+    const phase = Number(parts[2]);
+    if (!Number.isInteger(variation) || !Number.isInteger(phase)) continue;
+    variations = Math.max(variations, variation + 1);
+    phases = Math.max(phases, phase + 1);
+  }
+  return { variations, phases };
+}
+
+/**
+ * Which sea to draw under a tile, this many steps into the cycle.
+ *
+ * The phase is offset per tile rather than shared. A whole sea stepping
+ * together reads as a flicker; the same ripples starting at different points
+ * read as water. The offset is a hash of the coordinates for the same reason
+ * the variation is — a tile whose sea jumped when the camera came back would
+ * be worse than one that never moved.
+ *
+ * The variation is hashed apart from the still half's, because the two do not
+ * have the same number to choose from: open water is one terrain and gets
+ * eight variants, a coastline is two and gets four. They need not agree — the
+ * cutout's hole is exactly the open water either way, and one set of ripples
+ * fills it as well as another.
+ */
+export function waveFrameFor(col: number, row: number, phase: number, water: WaterFrames): string {
+  const variation = variationFor(col, row, water.variations);
+  const offset = variationFor(row, col, water.phases);
+  return `wave_${variation}_${(phase + offset) % water.phases}`;
 }

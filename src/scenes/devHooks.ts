@@ -452,6 +452,28 @@ export interface DevHandle {
    * only because a chunk of woodland is on screen. "It felt laggy" is not
    * something anybody can act on; "seven thousand sprites" is.
    */
+  /**
+   * The moving sea, which is drawn by nothing else on screen.
+   *
+   * Water is the one thing in the world that is a sprite *under* the ground
+   * — see `WATER_DEPTH` — and nothing else can see it. It is not an object
+   * on the grid, not in the save, and not in the scenery buckets, which is
+   * exactly what would let it quietly stop being laid down while every test
+   * in the suite went on passing. `terrainAtlas.test.ts` proves the frame
+   * names and the generator proves the two halves compose; what is left, and
+   * what only a browser can say, is that there are tiles of sea on screen and
+   * that they are not all showing the same picture for ever.
+   */
+  readonly sea: () => {
+    /** How many tiles of water are laid under the chunks on screen. */
+    tiles: number;
+    /** Which step of the swell the sea is on. */
+    phase: number;
+    /** The distinct frames those tiles are showing between them. */
+    showing: readonly string[];
+    /** A few of them by name and frame, so a script can watch one move. */
+    sample: readonly string[];
+  };
   readonly stats: () => {
     fps: number;
     /** Frames this scene has drawn, so a script can divide by it exactly. */

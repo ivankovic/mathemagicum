@@ -41,7 +41,13 @@ import type {
   PlantSidecar,
 } from "./spriteSidecar";
 import { TERRAIN_TYPES } from "./terrain";
-import { TERRAIN_ATLAS_KEY, buildVariationIndex, comboKey } from "./terrainAtlas";
+import {
+  TERRAIN_ATLAS_KEY,
+  buildVariationIndex,
+  comboKey,
+  stillCombo,
+  waterFrames,
+} from "./terrainAtlas";
 import type { CornerTerrains } from "./terrainAtlas";
 import { TILE_SIZE } from "./topdown";
 import { generateWorld } from "./worldGenerator";
@@ -93,23 +99,93 @@ describe("the shipped terrain atlas", () => {
   // bitmask representation, and the game cannot composite one at runtime.
   // If any combination were missing, frameFor would return null there and
   // the world would have an unpainted hole wherever those regions touch.
-  test("has art for every combination of terrains at a tile's four corners", () => {
-    const missing: string[] = [];
+  /** Every assignment of terrains to a tile's four corners, all 7^4 of them. */
+  function everyCombination(): CornerTerrains[] {
+    const all: CornerTerrains[] = [];
     for (const nw of TERRAIN_TYPES) {
       for (const ne of TERRAIN_TYPES) {
         for (const se of TERRAIN_TYPES) {
-          for (const sw of TERRAIN_TYPES) {
-            const key = comboKey([nw, ne, se, sw] as CornerTerrains);
-            if (!variations.has(key)) missing.push(key);
-          }
+          for (const sw of TERRAIN_TYPES) all.push([nw, ne, se, sw] as CornerTerrains);
         }
       }
     }
+    return all;
+  }
+
+  test("has art for every combination of terrains at a tile's four corners", () => {
+    // The whole reason the atlas exports all 7^4 assignments rather than just
+    // the two-terrain ones: a cell where three or four regions meet has no
+    // bitmask representation, and the game cannot composite one at runtime.
+    // If any combination were missing, frameFor would return null there and
+    // the world would have an unpainted hole wherever those regions touch.
+    const missing = everyCombination()
+      .map(stillCombo)
+      .filter((combo) => combo !== null && !variations.has(combo));
     expect(missing).toEqual([]);
   });
 
+  /**
+   * The sea is the one thing with no still half, and that has to be on
+   * purpose rather than by omission.
+   *
+   * `stillCombo` answers null for open water because the wave sprite under
+   * the chunk is the whole picture there. If the atlas were simply *missing*
+   * those frames the game would behave identically — right up until somebody
+   * decided open water should have a still half after all, and found the
+   * frames were never exported.
+   */
+  test("and open sea is drawn from the waves alone", () => {
+    const sea = ["water", "water", "water", "water"] as unknown as CornerTerrains;
+    expect(stillCombo(sea)).toBeNull();
+    expect(variations.has(comboKey(sea))).toBe(false);
+  });
+
   test("covers exactly the combinations the game can ask for, and no others", () => {
-    expect(variations.size).toBe(TERRAIN_TYPES.length ** 4);
+    const wanted = new Set(
+      everyCombination()
+        .map(stillCombo)
+        .filter((c) => c !== null),
+    );
+    // The waves are the exception: they are not a corner combination at all,
+    // they are the one thing every water tile in the world shares.
+    const shipped = new Set([...variations.keys()].filter((c) => !c.startsWith("wave")));
+    expect(shipped).toEqual(wanted);
+  });
+
+  /**
+   * The sea moves, and the atlas is where the two halves of that meet.
+   *
+   * The generator asserts the decomposition is exact — a wave frame with its
+   * cutout over the top is the tile the atlas used to ship, pixel for pixel.
+   * What is asserted here is that the shipped art actually has both halves in
+   * it, at matching counts, since a `dry_` frame with no sea under it is a
+   * hole in the world and a sea with one phase is a sea that does not move.
+   */
+  test("ships a sea that moves, in whole steps", () => {
+    const water = waterFrames(frameNames);
+    expect(water.phases).toBeGreaterThan(1);
+    expect(water.variations).toBeGreaterThan(1);
+    for (let variation = 0; variation < water.variations; variation++) {
+      for (let phase = 0; phase < water.phases; phase++) {
+        expect(frameNames).toContain(`wave_${variation}_${phase}`);
+      }
+    }
+  });
+
+  /**
+   * And the saving that pays for it.
+   *
+   * Drawing a coastline once per phase would be twelve thousand frames and
+   * three more atlas pages, for land that does not move. Cutting the water
+   * out instead costs fifty-six frames in total. If the undivided tiles came
+   * back alongside the cut ones, that saving would be quietly given back and
+   * nothing would look any different.
+   */
+  test("without drawing any shoreline twice", () => {
+    const undivided = everyCombination()
+      .map(comboKey)
+      .filter((combo) => combo.includes("water") && variations.has(combo));
+    expect(undivided).toEqual([]);
   });
 
   test("gives uniform fills more variants than the rare multi-terrain cells", () => {
@@ -117,14 +193,19 @@ describe("the shipped terrain atlas", () => {
     // whole fields while a four-way corner occurs a handful of times in a
     // world. If this inverted, large areas would visibly tile.
     const fill = variations.get(comboKey(["grass", "grass", "grass", "grass"] as CornerTerrains));
-    const quad = variations.get(comboKey(["grass", "water", "sand", "mountain"] as CornerTerrains));
+    const quad = variations.get(
+      stillCombo(["grass", "water", "sand", "mountain"] as CornerTerrains) ?? "",
+    );
     expect(fill).toBeGreaterThan(quad as number);
   });
 
   test("every frame name parses back into four known terrains", () => {
     const known = new Set<string>(TERRAIN_TYPES);
     for (const combo of variations.keys()) {
-      const parts = combo.split("_");
+      // A cut-out coastline says so in front of the four terrains it is cut
+      // from; the waves are not a combination at all and are checked above.
+      if (combo.startsWith("wave")) continue;
+      const parts = combo.replace(/^dry_/, "").split("_");
       expect(parts.length).toBe(4);
       for (const part of parts) expect(known.has(part)).toBe(true);
     }

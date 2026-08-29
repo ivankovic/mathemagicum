@@ -12,8 +12,13 @@ import {
   cornerTerrainsFor,
   frameFor,
   frameName,
+  stillCombo,
+  touchesWater,
   variationFor,
+  waterFrames,
+  waveFrameFor,
 } from "./terrainAtlas";
+import type { CornerTerrains } from "./terrainAtlas";
 import { TILE_SIZE } from "./topdown";
 
 const { Grass, Water, Sand, Dirt } = TerrainType;
@@ -147,5 +152,87 @@ describe("every terrain combination the game can produce", () => {
     // this number moves again, the shipped atlas is stale, and the contract
     // test in assets.test.ts will say so in the same breath.
     expect(TERRAIN_TYPES.length ** 4).toBe(4096);
+  });
+});
+
+const SEA = ["water", "water", "water", "water"] as unknown as CornerTerrains;
+const SHORE = ["water", "water", "sand", "sand"] as unknown as CornerTerrains;
+const FIELD = ["grass", "grass", "grass", "grass"] as unknown as CornerTerrains;
+
+describe("the sea, which is drawn under the ground", () => {
+  test("a tile with no water in it is the tile it always was", () => {
+    expect(stillCombo(FIELD)).toBe(comboKey(FIELD));
+    expect(touchesWater(FIELD)).toBe(false);
+  });
+
+  /**
+   * A coastline is baked with a hole in it, and the hole is what the moving
+   * water shows through. The name says `dry` because that is what is left.
+   */
+  test("a coastline bakes only its dry half", () => {
+    expect(touchesWater(SHORE)).toBe(true);
+    expect(stillCombo(SHORE)).toBe("dry_water_water_sand_sand");
+  });
+
+  /**
+   * Open sea has no still half at all. Baking a fully transparent frame over
+   * the water would be a draw call per tile of ocean to say nothing, and on a
+   * screen that is all sea that is thousands of them.
+   */
+  test("and open sea bakes nothing", () => {
+    expect(stillCombo(SEA)).toBeNull();
+  });
+
+  test("the sea's shape is read out of the atlas, not written down here", () => {
+    const names = [
+      "wave_0_0",
+      "wave_0_1",
+      "wave_1_0",
+      "wave_1_1",
+      "wave_1_2",
+      "grass_grass_grass_grass_3",
+    ];
+    expect(waterFrames(names)).toEqual({ variations: 2, phases: 3 });
+    // An atlas with no waves in it says so rather than guessing, so a game
+    // loading one lays no water instead of asking for frames that are not
+    // there. See `spawnWaterIn`.
+    expect(waterFrames(["grass_grass_grass_grass_0"])).toEqual({ variations: 0, phases: 0 });
+  });
+
+  const water = { variations: 4, phases: 8 };
+
+  /**
+   * Every tile steps at the same moment, but not to the same picture.
+   *
+   * A sea showing one frame everywhere reads as the screen flickering rather
+   * than as water, and it is the kind of wrong that is obvious in motion and
+   * invisible in a screenshot — which is most of why this is asserted here.
+   */
+  test("neighbouring tiles are at different points in the same swell", () => {
+    const along = [0, 1, 2, 3, 4, 5].map((col) => waveFrameFor(col, 40, 0, water));
+    expect(new Set(along).size).toBeGreaterThan(1);
+  });
+
+  /**
+   * The cycle closes, because the drawings do: the generator holds each
+   * ripple to a whole number of cycles across the tile, so the eighth step is
+   * the first one again. A tile that jumped at the wrap would tick once every
+   * two seconds, for ever.
+   */
+  test("and a whole turn round brings a tile back to where it began", () => {
+    expect(waveFrameFor(3, 9, water.phases, water)).toBe(waveFrameFor(3, 9, 0, water));
+  });
+
+  /**
+   * The same tile has to answer the same thing every time it is asked.
+   *
+   * Water is spawned when a chunk comes on screen and destroyed when it goes
+   * off, so a tile whose ripples were rolled rather than derived would show a
+   * different sea every time the camera came back to it.
+   */
+  test("and a tile that scrolls away and back is the same water", () => {
+    for (let phase = 0; phase < water.phases; phase++) {
+      expect(waveFrameFor(12, 7, phase, water)).toBe(waveFrameFor(12, 7, phase, water));
+    }
   });
 });

@@ -431,11 +431,15 @@ import {
   DUAL_OFFSET,
   DUAL_ORIGIN,
   TERRAIN_ATLAS_KEY,
+  type WaterFrames,
   buildVariationIndex,
   cornerTerrainsFor,
   frameFor,
   frameName,
+  touchesWater,
   variationFor,
+  waterFrames,
+  waveFrameFor,
 } from "../world/terrainAtlas";
 import {
   CopyRefusal,
@@ -634,6 +638,26 @@ const DEBUG_EACH = 20;
 
 const MODAL_DEPTH = WORLD_DEPTH_CEILING + 4000;
 const CHUNK_DEPTH = -1000;
+/**
+ * The sea, under the ground.
+ *
+ * Not a typo. A tile that touches water is baked into its chunk with the
+ * open water cut out of it and left transparent, so what shows through the
+ * hole is whatever is behind the chunk — and what is behind the chunk is the
+ * water, moving. See `stillCombo`.
+ */
+const WATER_DEPTH = CHUNK_DEPTH - 1;
+/**
+ * How long the sea holds each step of its cycle.
+ *
+ * Eight steps at this rate is a two-second swell, which is about the pace of
+ * water in a harbour and slow enough that a screen full of it reads as calm
+ * rather than as something demanding attention. The whole point of the world
+ * is the arithmetic on top of it.
+ */
+const WAVE_STEP_MS = 250;
+/** How many named tiles of sea the dev seam hands back. See `sea`. */
+const SEA_SAMPLE = 8;
 
 // The portal's gold: the rune's own, so the doorway and the icon that opened
 // it are plainly the same magic.
@@ -1137,6 +1161,13 @@ interface InteriorRuntime {
   decor: Phaser.GameObjects.Image[];
 }
 
+/** One tile of sea, and where it is — which is what decides its ripples. */
+interface WaterTile {
+  image: Phaser.GameObjects.Image;
+  col: number;
+  row: number;
+}
+
 interface ActiveChunk {
   texture: Phaser.GameObjects.RenderTexture;
   lastUsedAt: number;
@@ -1613,12 +1644,23 @@ export class GameScene extends Phaser.Scene {
    */
   private readonly sceneryByChunk = new Map<string, PlacedObject[]>();
   private readonly liveScenery = new Map<string, Phaser.GameObjects.Sprite[]>();
+  /**
+   * The moving water under each on-screen chunk.
+   *
+   * Kept on the same short lease as the scenery rather than the long one the
+   * chunk textures get, and for the same reason: this is hundreds of sprites,
+   * cheap to remake and expensive to hold. A chunk's ground is one texture.
+   */
+  private readonly liveWater = new Map<string, WaterTile[]>();
+  /** Which step of the swell the whole sea is on. */
+  private wavePhase = 0;
   private frameCounter = 0;
 
   // How many variants the atlas ships per corner combination, read from the
   // loaded texture rather than hardcoded — see terrainAtlas.ts.
   private cliffVariations: ReadonlyMap<string, number> = new Map();
   private terrainVariations = new Map<string, number>();
+  private waterFrames: WaterFrames = { variations: 0, phases: 0 };
   private buildingSidecars = new Map<BuildingSprite, BuildingSidecar>();
   private fixtureSidecars = new Map<string, FixtureSidecar>();
   private scenerySidecars = new Map<string, ObjectSidecar>();
@@ -2189,6 +2231,22 @@ export class GameScene extends Phaser.Scene {
       marking: () => this.marking?.action ?? null,
       teaching: () => this.teacherMarks?.showing() ?? [],
       grove: () => ({ col: this.grove.doorstep.col, row: this.grove.doorstep.row }),
+      sea: () => {
+        const tiles = [...this.liveWater.values()].flat();
+        return {
+          tiles: tiles.length,
+          phase: this.wavePhase,
+          showing: [...new Set(tiles.map((tile) => tile.image.frame.name))],
+          // A handful of named tiles rather than a count, because with sixty
+          // frames of sea on screen the *set* of them saturates: every frame
+          // there is is showing somewhere, before and after, and a sea that
+          // had frozen solid would look identical by that measure. What moves
+          // is which tile shows which.
+          sample: tiles
+            .slice(0, SEA_SAMPLE)
+            .map((tile) => `${tile.col},${tile.row}=${tile.image.frame.name}`),
+        };
+      },
       stats: () => ({
         fps: Math.round(this.game.loop.actualFps),
         frames: this.frameCounter,
@@ -2588,6 +2646,7 @@ export class GameScene extends Phaser.Scene {
     const hour = this.hourNow();
     if (!this.interior) {
       this.refreshVisibleChunks();
+      this.driftWater(time);
       this.updateNpcs(isOpenHours(hour));
       // Called from here rather than from inside `updateNpcs`, which returns
       // early on `?freezeNpcs` — and did so before it ever reached the
@@ -3273,6 +3332,7 @@ export class GameScene extends Phaser.Scene {
   private loadAssetMetadata(): void {
     const texture = this.textures.get(TERRAIN_ATLAS_KEY);
     this.terrainVariations = buildVariationIndex(texture.getFrameNames());
+    this.waterFrames = waterFrames(texture.getFrameNames());
     if (this.terrainVariations.size === 0) {
       throw new Error(`terrain atlas "${TERRAIN_ATLAS_KEY}" loaded no frames`);
     }
@@ -3779,7 +3839,10 @@ export class GameScene extends Phaser.Scene {
       } else {
         this.activateChunk(chunk);
       }
-      if (onScreen.has(key)) this.spawnSceneryIn(key);
+      if (onScreen.has(key)) {
+        this.spawnSceneryIn(key);
+        this.spawnWaterIn(key, chunk);
+      }
     }
 
     for (const [key, entry] of this.activeChunks) {
@@ -3795,6 +3858,9 @@ export class GameScene extends Phaser.Scene {
     // sprites after a few portal jumps, none of them on screen.
     for (const key of [...this.liveScenery.keys()]) {
       if (!onScreen.has(key)) this.despawnSceneryIn(key);
+    }
+    for (const key of [...this.liveWater.keys()]) {
+      if (!onScreen.has(key)) this.despawnWaterIn(key);
     }
     this.evictColdChunks(visibleKeys);
   }
@@ -3999,6 +4065,68 @@ export class GameScene extends Phaser.Scene {
   private despawnSceneryIn(key: string): void {
     for (const sprite of this.liveScenery.get(key) ?? []) sprite.destroy();
     this.liveScenery.delete(key);
+  }
+
+  /**
+   * Lay the moving sea under one chunk.
+   *
+   * One image per tile that touches water, which for a chunk out at sea is
+   * every tile in it. Images rather than Sprites because the cycle is driven
+   * from `update` for the whole sea at once: a Sprite each would put an
+   * animation component on every tile of the ocean to tell them all the same
+   * thing.
+   */
+  private spawnWaterIn(key: string, chunk: ChunkCoord): void {
+    if (this.liveWater.has(key) || this.waterFrames.phases <= 0) return;
+    const range = dualTileRange(chunk);
+    const minCol = Math.max(range.minCol, DUAL_ORIGIN);
+    const minRow = Math.max(range.minRow, DUAL_ORIGIN);
+    const maxCol = Math.min(range.maxCol, this.grid.width - 1);
+    const maxRow = Math.min(range.maxRow, this.grid.height - 1);
+
+    const tiles: WaterTile[] = [];
+    for (let row = minRow; row <= maxRow; row++) {
+      for (let col = minCol; col <= maxCol; col++) {
+        if (!touchesWater(cornerTerrainsFor(this.grid, col, row))) continue;
+        const at = gridToScreen(col, row);
+        const image = this.add.image(
+          this.originX + at.x + DUAL_OFFSET,
+          this.originY + at.y + DUAL_OFFSET,
+          TERRAIN_ATLAS_KEY,
+          waveFrameFor(col, row, this.wavePhase, this.waterFrames),
+        );
+        image.setOrigin(0, 0);
+        image.setDepth(WATER_DEPTH);
+        this.world(image);
+        tiles.push({ image, col, row });
+      }
+    }
+    this.liveWater.set(key, tiles);
+  }
+
+  private despawnWaterIn(key: string): void {
+    for (const tile of this.liveWater.get(key) ?? []) tile.image.destroy();
+    this.liveWater.delete(key);
+  }
+
+  /**
+   * Step the whole sea together.
+   *
+   * Together, but not in unison — each tile's phase is offset by a hash of
+   * where it is, so what steps at the same moment is a set of ripples at
+   * different points in the same swell. A sea that all showed the same frame
+   * would read as the screen flickering rather than as water.
+   */
+  private driftWater(time: number): void {
+    if (this.waterFrames.phases <= 0) return;
+    const phase = Math.floor(time / WAVE_STEP_MS) % this.waterFrames.phases;
+    if (phase === this.wavePhase) return;
+    this.wavePhase = phase;
+    for (const tiles of this.liveWater.values()) {
+      for (const tile of tiles) {
+        tile.image.setFrame(waveFrameFor(tile.col, tile.row, phase, this.waterFrames));
+      }
+    }
   }
 
   private evictColdChunks(protectedKeys: ReadonlySet<string>): void {
