@@ -2242,7 +2242,14 @@ export class GameScene extends Phaser.Scene {
           // there is is showing somewhere, before and after, and a sea that
           // had frozen solid would look identical by that measure. What moves
           // is which tile shows which.
+          //
+          // Sorted before it is cut down, so the same tiles come back each
+          // time. Unsorted this is Map insertion order — which chunk came on
+          // screen first — and a script comparing two readings would see the
+          // names change whenever a chunk did, which is a green test on a
+          // frozen sea.
           sample: tiles
+            .sort((a, b) => a.col - b.col || a.row - b.row)
             .slice(0, SEA_SAMPLE)
             .map((tile) => `${tile.col},${tile.row}=${tile.image.frame.name}`),
         };
@@ -4142,6 +4149,7 @@ export class GameScene extends Phaser.Scene {
       entry.texture.destroy();
       this.activeChunks.delete(key);
       this.despawnSceneryIn(key);
+      this.despawnWaterIn(key);
     }
   }
 
@@ -6212,6 +6220,12 @@ export class GameScene extends Phaser.Scene {
       entry.texture.destroy();
       this.activeChunks.delete(key);
       this.despawnSceneryIn(key);
+      // The sea with it. A chunk is thrown away here because the ground
+      // under it has changed, and water that was laid for the old ground
+      // would not be relaid — `spawnWaterIn` returns early for a key it
+      // already holds — so the coast would keep its old shape while the
+      // land changed underneath it.
+      this.despawnWaterIn(key);
     }
   }
 

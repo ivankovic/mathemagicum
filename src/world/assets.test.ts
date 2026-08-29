@@ -16,7 +16,7 @@ import {
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
 import { floodFillReachable, isReachable } from "./connectivity";
 import { EFFECT_TYPES, effectAnimKey, effectSidecarKey } from "./effects";
-import { FIXTURE_TYPES, fixtureFor, turnsOf } from "./fixtures";
+import { FIXTURE_TYPES, PLACEABLE_FIXTURES, fixtureFor, turnsOf } from "./fixtures";
 import {
   FLOWER_LOOKS,
   FLOWER_TYPES,
@@ -678,10 +678,17 @@ describe("the shipped fixtures", () => {
         count: sidecar.looks * sidecar.frames_per_look,
       });
     }
-    // And a fixture the game says turns really does ship more than one
-    // drawing. Without this the table above would be satisfied by claiming
-    // nothing turns.
-    expect(FIXTURE_TYPES.filter((one) => turnsOf(one) > 1).length).toBeGreaterThan(0);
+    // And everything a child can put down really does turn. Without this the
+    // table above would be satisfied by claiming nothing turns at all.
+    //
+    // Every placeable rather than "at least one", because that is the rule
+    // now: a thing you can set down is a thing you can face. The failure it
+    // is here for is the quiet one — somebody adds a placeable, ships one
+    // drawing of it, and it is the single item in the crate that ignores a
+    // tap, which reads as a broken control rather than as a thing that does
+    // not turn.
+    const still = PLACEABLE_FIXTURES.filter((one) => turnsOf(one) <= 1);
+    expect(still).toEqual([]);
     for (const flower of FLOWER_TYPES) {
       expect((FIXTURE_TYPES as readonly string[]).includes(flower)).toBe(false);
     }

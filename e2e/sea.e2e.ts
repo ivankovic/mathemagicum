@@ -36,6 +36,16 @@ interface Sea {
   sample: readonly string[];
 }
 
+/** The sample, as the tile it names to the sea it is showing. */
+function framesByTile(sea: Sea): Map<string, string> {
+  return new Map(
+    sea.sample.map((named) => {
+      const split = named.indexOf("=");
+      return [named.slice(0, split), named.slice(split + 1)];
+    }),
+  );
+}
+
 async function toTheQuay(game: Game): Promise<void> {
   const doors = await game.seam<Record<string, { col: number; row: number }>>("doors");
   const door = Object.entries(doors).find(([id]) => id.startsWith("harbour-"))?.[1];
@@ -75,8 +85,17 @@ describe("the sea", () => {
         // a counter that ticked while nothing was repainted is the bug.
         await game.settle(1000);
         const later = await game.seam<Sea>("sea");
-        expect(later.sample).not.toEqual(first.sample);
-        expect(later.sample.length).toBe(first.sample.length);
+
+        // Compared tile by tile, and only for tiles both readings named. The
+        // sample is sorted so it is the same tiles either way, but the sea it
+        // is drawn from is whatever chunks are on screen — and a chunk
+        // arriving between the two readings would otherwise change the sample
+        // for a reason that has nothing to do with the water moving.
+        const before = framesByTile(first);
+        const after = framesByTile(later);
+        const both = [...before.keys()].filter((tile) => after.has(tile));
+        expect(both.length).toBeGreaterThan(0);
+        for (const tile of both) expect(after.get(tile)).not.toBe(before.get(tile));
       });
     },
     5 * MINUTES,

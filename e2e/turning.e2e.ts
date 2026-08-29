@@ -3,7 +3,7 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { TURNS, Turn } from "../src/world/facing";
-import { FixtureType } from "../src/world/fixtures";
+import { FixtureType, PLACEABLE_FIXTURES } from "../src/world/fixtures";
 import { type Game, play, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
@@ -27,16 +27,25 @@ afterAll(shutDown);
  */
 const GARDEN = "&hour=12&freezeNpcs&learned=all";
 
+/** A few of something to put down, without walking her to the shop for them. */
+async function withSome(game: Game, item: string, count = 8): Promise<void> {
+  await game.tab.evaluate(
+    ([name, many]) => {
+      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
+        .__mathemagicum;
+      if (!handle) throw new Error("the game has not put its handle out");
+      (handle.session as { inventory: { add: (item: string, n: number) => void } }).inventory.add(
+        name as string,
+        many as number,
+      );
+    },
+    [item, count] as const,
+  );
+}
+
 /** A few benches to put down, without walking her to the shop for them. */
-async function withBenches(game: Game): Promise<void> {
-  await game.tab.evaluate(() => {
-    const handle = (globalThis as never as Record<string, Record<string, unknown>>).__mathemagicum;
-    if (!handle) throw new Error("the game has not put its handle out");
-    (handle.session as { inventory: { add: (item: string, n: number) => void } }).inventory.add(
-      "bench",
-      8,
-    );
-  });
+function withBenches(game: Game): Promise<void> {
+  return withSome(game, FixtureType.Bench);
 }
 
 /** Every bench standing in the world, and which way round each went down. */
@@ -93,6 +102,53 @@ describe("turning a thing before putting it down", () => {
         expect(seen.slice(0, -1).sort()).toEqual([Turn.Away, Turn.Side, Turn.SideOther]);
         expect(seen.at(-1)).toBe(Turn.Toward);
         expect(await benches(game)).toEqual([]);
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * And it is the rule rather than the bench.
+   *
+   * Everything a child can put down turns now, and the failure this is here
+   * for is one item quietly not doing it — a placeable that shipped a single
+   * drawing, so the tap on its picture does nothing and reads as a broken
+   * control rather than as a thing that does not turn. `assets.test.ts`
+   * holds the sidecars and the game's table together; what only a browser
+   * can say is that the tap actually turns each of them.
+   *
+   * One tap each rather than the full round, which the bench does above.
+   * What is being asked here is "does this one turn at all", and asking it
+   * eight times over would be paying four hundred taps to learn the same
+   * thing eight times.
+   */
+  test(
+    "and everything in the crate turns, not only the bench",
+    async () => {
+      await play({ seams: GARDEN }, async (game) => {
+        for (const fixture of PLACEABLE_FIXTURES) {
+          await withSome(game, fixture, 1);
+          expect(await takeFromCrate(game, fixture)).toBe(true);
+          await game.settle(250);
+          expect(await game.seam<number>("armedTurn")).toBe(Turn.Toward);
+
+          const at = (await game.ui()).armed;
+          if (!at) throw new Error(`nothing in her hands after taking a ${fixture}`);
+          await game.tab.mouse.click(at.x, at.y);
+          await game.tab.waitForTimeout(200);
+
+          expect({ fixture, turn: await game.seam<number>("armedTurn") }).toEqual({
+            fixture,
+            turn: Turn.Away,
+          });
+          // And it is still in her hands: the tap that turns must not be a
+          // tap that puts it down. That is the bug the bench found, and a
+          // new placeable is exactly where it could come back.
+          expect(await game.seam<string | null>("armed")).toBe(fixture);
+          // No need to put it down again: taking the next thing out of the
+          // crate arms that instead. See `arm`, which disarms whatever was
+          // waiting before it raises the new rune.
+        }
       });
     },
     5 * MINUTES,

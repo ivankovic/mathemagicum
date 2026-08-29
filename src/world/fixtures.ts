@@ -194,8 +194,24 @@ export function fixtureSidecarKey(fixture: FixtureType): string {
  * `assets.test.ts` reads the shipped sidecars and fails if the two drift.
  */
 export const FIXTURE_TURNS: Partial<Record<FixtureType, number>> = {
-  // The first thing a player can turn. See `src/world/facing.ts`.
+  // The first thing a player could turn, and now everything a player can put
+  // down. See `src/world/facing.ts`.
+  //
+  // Everything, deliberately, including the two that barely change. A fence
+  // panel is very nearly the same from both sides — the rails are nailed to
+  // one face of the posts and that is the whole of it — and a pot of flowers
+  // is round. Drawing an invented difference to make the turn feel worth it
+  // would be worse than the small one that is really there, and a child who
+  // taps a thing to turn it and finds that this one cannot has learned
+  // nothing except that the rule has exceptions.
   [FixtureType.Bench]: TURNS_DRAWN,
+  [FixtureType.Table]: TURNS_DRAWN,
+  [FixtureType.Lamp]: TURNS_DRAWN,
+  [FixtureType.Scarecrow]: TURNS_DRAWN,
+  [FixtureType.Flowerpot]: TURNS_DRAWN,
+  [FixtureType.Gate]: TURNS_DRAWN,
+  [FixtureType.Fence]: TURNS_DRAWN,
+  [FixtureType.Sorter]: TURNS_DRAWN,
 };
 
 /** How many drawings this fixture has: three if it turns, one if it does not. */
