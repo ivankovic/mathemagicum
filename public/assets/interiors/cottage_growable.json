@@ -50,7 +50,9 @@
       "columns": 1,
       "rows": 1,
       "margin": 1,
-      "spacing": 2
+      "spacing": 2,
+      "looks": 1,
+      "frames_per_look": 1
     },
     "bed": {
       "file": "cottage_piece_bed.png",
@@ -60,87 +62,105 @@
       "columns": 1,
       "rows": 1,
       "margin": 1,
-      "spacing": 2
+      "spacing": 2,
+      "looks": 1,
+      "frames_per_look": 1
     },
     "bookshelf": {
       "file": "cottage_piece_bookshelf.png",
       "frame_width": 32,
       "frame_height": 48,
-      "frame_count": 1,
-      "columns": 1,
+      "frame_count": 3,
+      "columns": 3,
       "rows": 1,
       "margin": 1,
-      "spacing": 2
+      "spacing": 2,
+      "looks": 3,
+      "frames_per_look": 1
     },
     "chair": {
       "file": "cottage_piece_chair.png",
       "frame_width": 32,
       "frame_height": 48,
-      "frame_count": 1,
-      "columns": 1,
+      "frame_count": 3,
+      "columns": 3,
       "rows": 1,
       "margin": 1,
-      "spacing": 2
+      "spacing": 2,
+      "looks": 3,
+      "frames_per_look": 1
     },
     "dresser": {
       "file": "cottage_piece_dresser.png",
       "frame_width": 32,
       "frame_height": 48,
-      "frame_count": 1,
-      "columns": 1,
+      "frame_count": 3,
+      "columns": 3,
       "rows": 1,
       "margin": 1,
-      "spacing": 2
+      "spacing": 2,
+      "looks": 3,
+      "frames_per_look": 1
     },
     "kettle": {
       "file": "cottage_piece_kettle.png",
       "frame_width": 32,
       "frame_height": 48,
-      "frame_count": 1,
-      "columns": 1,
+      "frame_count": 3,
+      "columns": 3,
       "rows": 1,
       "margin": 1,
-      "spacing": 2
+      "spacing": 2,
+      "looks": 3,
+      "frames_per_look": 1
     },
     "privy": {
       "file": "cottage_piece_privy.png",
       "frame_width": 32,
       "frame_height": 48,
-      "frame_count": 1,
-      "columns": 1,
+      "frame_count": 3,
+      "columns": 3,
       "rows": 1,
       "margin": 1,
-      "spacing": 2
+      "spacing": 2,
+      "looks": 3,
+      "frames_per_look": 1
     },
     "rug": {
       "file": "cottage_piece_rug.png",
       "frame_width": 64,
       "frame_height": 80,
-      "frame_count": 1,
-      "columns": 1,
+      "frame_count": 3,
+      "columns": 3,
       "rows": 1,
       "margin": 1,
-      "spacing": 2
+      "spacing": 2,
+      "looks": 3,
+      "frames_per_look": 1
     },
     "sink": {
       "file": "cottage_piece_sink.png",
       "frame_width": 32,
       "frame_height": 48,
-      "frame_count": 1,
-      "columns": 1,
+      "frame_count": 3,
+      "columns": 3,
       "rows": 1,
       "margin": 1,
-      "spacing": 2
+      "spacing": 2,
+      "looks": 3,
+      "frames_per_look": 1
     },
     "stove": {
       "file": "cottage_piece_stove.png",
       "frame_width": 32,
       "frame_height": 48,
-      "frame_count": 8,
-      "columns": 8,
+      "frame_count": 24,
+      "columns": 24,
       "rows": 1,
       "margin": 1,
-      "spacing": 2
+      "spacing": 2,
+      "looks": 3,
+      "frames_per_look": 8
     },
     "table": {
       "file": "cottage_piece_table.png",
@@ -150,17 +170,21 @@
       "columns": 1,
       "rows": 1,
       "margin": 1,
-      "spacing": 2
+      "spacing": 2,
+      "looks": 1,
+      "frames_per_look": 1
     },
     "washstand": {
       "file": "cottage_piece_washstand.png",
       "frame_width": 32,
       "frame_height": 48,
-      "frame_count": 1,
-      "columns": 1,
+      "frame_count": 3,
+      "columns": 3,
       "rows": 1,
       "margin": 1,
-      "spacing": 2
+      "spacing": 2,
+      "looks": 3,
+      "frames_per_look": 1
     }
   },
   "room": "cottage",

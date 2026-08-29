@@ -12,6 +12,7 @@ import {
   anchorFor,
   arrangementIn,
   blockersFor,
+  canTurnPiece,
   cellsUnder,
   colourPlanFor,
   decorFor,
@@ -31,8 +32,10 @@ import {
   roomsAfforded,
   same,
   takesAColour,
+  turnsOfPiece,
   without,
 } from "./decor";
+import { TURNS, TURNS_DRAWN, Turn } from "./facing";
 import { MaterialType } from "./materials";
 import type { GrowableSidecar } from "./spriteSidecar";
 
@@ -175,16 +178,55 @@ describe("putting something down", () => {
 describe("what a save remembers", () => {
   test("an arrangement survives the round trip", () => {
     const room: Placed[] = [
-      { piece: DecorType.Bed, col: 1, row: 2, look: 0 },
-      { piece: DecorType.Rug, col: -3, row: -4, look: 0 },
+      { piece: DecorType.Bed, col: 1, row: 2, look: 0, turn: Turn.Toward },
+      { piece: DecorType.Rug, col: -3, row: -4, look: 0, turn: Turn.Toward },
     ];
     expect(decorFromSave(JSON.parse(JSON.stringify(decorToSave(room))))).toEqual(room);
+  });
+
+  /**
+   * And which way round it was standing.
+   *
+   * This is the half a save is most likely to drop, because it is the half
+   * that is easy to forget: everything about a chair that a room *draws*
+   * comes back without it, so a turn that went missing looks like a chair
+   * that quietly untwisted itself overnight rather than like a broken save.
+   */
+  test("and so does which way round each thing was", () => {
+    const room: Placed[] = TURNS.map((turn) => ({
+      piece: DecorType.Chair,
+      col: turn,
+      row: 0,
+      look: 1,
+      turn,
+    }));
+    expect(decorFromSave(decorToSave(room))).toEqual(room);
+  });
+
+  /**
+   * A turn is *part of* what makes two entries the same thing.
+   *
+   * Not a nicety: a room nobody has rearranged has no stored arrangement and
+   * is rebuilt from the sidecar, so a change only counts as a change if
+   * `same` can see it. A chair turned and put back in the spot it came from
+   * would otherwise compare equal to the chair that was there, register as
+   * no difference at all, and never be written down.
+   */
+  test("and a chair turned round is not the chair that was there", () => {
+    const facing: Placed = { piece: DecorType.Chair, col: 2, row: 2, look: 0, turn: Turn.Toward };
+    const turned: Placed = { ...facing, turn: Turn.Side };
+    expect(same(facing, turned)).toBe(false);
+    expect(without([facing], turned)).toEqual([facing]);
+    // But a save from before any of this compares equal to one facing the
+    // way everything used to, or every old room would rewrite itself.
+    const { turn: _dropped, ...old } = facing;
+    expect(same(old as Placed, facing)).toBe(true);
   });
 
   // One mangled chair must not cost a child the room it stands in.
   test("and anything mangled is dropped rather than repaired", () => {
     expect(decorFromSave(["bed,1,2,0", "nonsense", "chair,x,4", "rug,1", 7, null])).toEqual([
-      { piece: DecorType.Bed, col: 1, row: 2, look: 0 },
+      { piece: DecorType.Bed, col: 1, row: 2, look: 0, turn: Turn.Toward },
     ]);
     expect(decorFromSave(undefined)).toEqual([]);
     expect(decorFromSave("bed,1,2")).toEqual([]);
@@ -239,7 +281,7 @@ describe("a piece in a colour", () => {
   });
 
   test("and the colour survives a save", () => {
-    const room: Placed[] = [{ piece: DecorType.Chair, col: 2, row: 4, look: 3 }];
+    const room: Placed[] = [{ piece: DecorType.Chair, col: 2, row: 4, look: 3, turn: Turn.Toward }];
     expect(decorFromSave(decorToSave(room))).toEqual(room);
   });
 
@@ -248,7 +290,9 @@ describe("a piece in a colour", () => {
    * everything in it is the colour the room shipped in.
    */
   test("and a save from before colours reads as the room's own", () => {
-    expect(decorFromSave(["bed,1,2"])).toEqual([{ piece: DecorType.Bed, col: 1, row: 2, look: 0 }]);
+    expect(decorFromSave(["bed,1,2"])).toEqual([
+      { piece: DecorType.Bed, col: 1, row: 2, look: 0, turn: Turn.Toward },
+    ]);
   });
 });
 
@@ -463,7 +507,7 @@ describe("what a room protects and what it blocks", () => {
     const old: Placed[] = [{ piece: DecorType.Chair, col: 4, row: 4, look: 0 }];
     const mended = hearthRestored(old, sidecar);
     expect(mended.filter((p) => p.piece === DecorType.Stove)).toEqual([
-      { piece: DecorType.Stove, col: 1, row: 1, look: 0 },
+      { piece: DecorType.Stove, col: 1, row: 1, look: 0, turn: Turn.Toward },
     ]);
     // And what she had arranged is untouched.
     expect(mended).toEqual(expect.arrayContaining(old));
@@ -690,6 +734,62 @@ describe("what can be painted", () => {
     // and the one worth being explicit about.
     for (const piece of DECOR_TYPES) {
       expect(typeof takesAColour(piece)).toBe("boolean");
+    }
+  });
+});
+
+/**
+ * Which pieces a child can turn round, and which are the wrong shape for it.
+ *
+ * A bed is one cell by two. Turning it a quarter way makes it two by one,
+ * which is a change to what the *room* is — which cells are taken, whether
+ * it still fits where it stands — rather than to how it is drawn. Those wait;
+ * everything square turns.
+ */
+describe("what can be turned", () => {
+  test("the square things can", () => {
+    for (const piece of [
+      DecorType.Chair,
+      DecorType.Bookshelf,
+      DecorType.Stove,
+      DecorType.Sink,
+      DecorType.Dresser,
+      DecorType.Kettle,
+      DecorType.Washstand,
+      DecorType.Privy,
+      // Two cells by two, and square is what matters rather than small.
+      DecorType.Rug,
+    ]) {
+      expect({ piece, turns: canTurnPiece(piece) }).toEqual({ piece, turns: true });
+      expect({ piece, drawings: turnsOfPiece(piece) }).toEqual({ piece, drawings: TURNS_DRAWN });
+    }
+  });
+
+  test("and the long ones cannot, yet", () => {
+    for (const piece of [DecorType.Bed, DecorType.Table, DecorType.Bath]) {
+      expect({ piece, turns: canTurnPiece(piece) }).toEqual({ piece, turns: false });
+    }
+  });
+
+  /**
+   * And the list is the footprints, not a second opinion about them.
+   *
+   * `TOO_LONG_TO_TURN` is written out rather than derived because the basket
+   * and the shop have to know what a piece can do before any art has loaded.
+   * This is what stops the copy drifting: a piece whose drawn footprint is
+   * square must turn, and one that is longer one way must not — otherwise
+   * either a child is offered a turn that would resize the thing, or a
+   * perfectly square piece quietly refuses to turn for no reason anybody
+   * could see.
+   */
+  test("and the list is exactly the pieces that are not square", () => {
+    for (const [name, size] of Object.entries(SIZES)) {
+      const piece = DECOR_TYPES.find((one) => one === name);
+      if (!piece) continue;
+      expect({ piece, turns: canTurnPiece(piece) }).toEqual({
+        piece,
+        turns: size.cols === size.rows,
+      });
     }
   });
 });

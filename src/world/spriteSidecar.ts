@@ -27,6 +27,17 @@ export interface SheetLayout {
   // margin + col * (frame_width + spacing).
   margin: number;
   spacing: number;
+  /**
+   * How the strip divides, when it divides at all.
+   *
+   * A piece of furniture that can be turned ships its ways round on the same
+   * strip as its motion, facing-major — so a stove with eight frames and a
+   * stove with eight frames in each of three ways round are the same
+   * `frame_count` until one of these says which. Absent means one of each,
+   * which is every sheet that is not a piece of furniture.
+   */
+  looks?: number;
+  frames_per_look?: number;
 }
 
 /**

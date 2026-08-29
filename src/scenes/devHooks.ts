@@ -395,7 +395,9 @@ export interface DevHandle {
     /** Which colourway is chosen, for a thing that comes in colours. */
     look: number;
   } | null;
-  readonly decor: () => { piece: string; col: number; row: number; look: number }[] | null;
+  readonly decor: () =>
+    | { piece: string; col: number; row: number; look: number; turn: number }[]
+    | null;
   readonly bricks: () => {
     values: number[];
     hidden: number[];

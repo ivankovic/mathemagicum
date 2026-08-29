@@ -239,8 +239,10 @@ import {
   decorFromSave,
   decorItem,
   decorToSave,
+  turnOf as decorTurnOf,
   without as decorWithout,
   footprintsOf,
+  framesPerLook,
   hearthRestored,
   inTheWayOf,
   itemParts,
@@ -250,6 +252,7 @@ import {
   protectedCells,
   roomsAfforded,
   startingDecor,
+  turnsOfPiece,
 } from "../world/decor";
 import {
   EFFECT_FPS,
@@ -1194,7 +1197,7 @@ type Armed =
   | { kind: "spell"; spell: Spell }
   | { kind: "seed"; plant: PlantType }
   | { kind: "fixture"; fixture: FixtureType; turn: number }
-  | { kind: "decor"; piece: DecorType; look: number }
+  | { kind: "decor"; piece: DecorType; look: number; turn: number }
   | { kind: "flower"; flower: FlowerType; look: number };
 
 /**
@@ -2364,11 +2367,15 @@ export class GameScene extends Phaser.Scene {
       decor: () => {
         const inside = this.interior;
         if (!inside?.plan || !inside.house) return null;
-        return this.decorIn(inside.house).map(({ piece, col, row, look }) => ({
-          piece,
-          col,
-          row,
-          look,
+        return this.decorIn(inside.house).map((placed) => ({
+          piece: placed.piece,
+          col: placed.col,
+          row: placed.row,
+          look: placed.look,
+          // Normalised rather than passed through, so a script reads the
+          // same number for a chair from an old save as for one just put
+          // down. See `turnOf`.
+          turn: decorTurnOf(placed),
         }));
       },
       bricks: () => {
@@ -2666,12 +2673,20 @@ export class GameScene extends Phaser.Scene {
       this.traffic?.sail(this.frozen ? FROZEN_TIDE : this.worldNow() / 60_000);
       this.teacherMarks?.show(this.teachersOnScreen(), (spell) => !this.knows(spell));
       this.cullScenery();
-      this.placeArmedRune();
       // The reach is drawn round wherever she is standing now, so it follows
       // her while she walks about choosing — the same reason the rune does.
       if (this.armed) this.paintAim();
       this.checkAim();
     }
+    // Indoors as well as out, which it was not.
+    //
+    // The rune lived inside the outdoor branch above, so a chair armed in a
+    // room was never positioned at all and sat at the room's own origin,
+    // over in the corner, while she walked about with nothing over her head.
+    // That was survivable while it was only a *sign* — the thing it stands
+    // for is in her hands either way — and stopped being survivable when it
+    // became the control that turns furniture round.
+    this.placeArmedRune();
     // The tint still applies indoors: it is the time of day, not the weather
     // outside a window.
     this.paintNight(nightTintAlpha(hour), this.settleDusk(time));
@@ -5040,7 +5055,7 @@ export class GameScene extends Phaser.Scene {
     // rune is put out a few lines above this, so by the time anything is
     // placed there is nothing in her hands to ask.
     else if (held.kind === "fixture") this.placeFixture(held.fixture, turnFrom(held.turn));
-    else if (held.kind === "decor") this.putDecorDown(held.piece, held.look);
+    else if (held.kind === "decor") this.putDecorDown(held.piece, held.look, held.turn);
     else this.putFlowerDown(held.flower, held.look);
   }
 
@@ -6822,7 +6837,20 @@ export class GameScene extends Phaser.Scene {
   private placeArmedRune(): void {
     const rune = this.armedRune;
     if (!rune) return;
-    rune.setPosition(this.player.x, this.player.y - TILE_SIZE - RESULT_ICON / 2);
+    // Over her head, but never off the top of the screen.
+    //
+    // It hung a tile and a half above her and that was fine while it was
+    // only a *sign* that something was armed — a sign you cannot see is a
+    // sign you do not need, because the thing it stands for is still in your
+    // hands. It is a control now: tapping it turns what she is holding. A
+    // control that leaves the screen when she stands against the far wall is
+    // a control a child cannot use in half the room, and indoors, where the
+    // camera frames the room exactly, standing against the far wall is where
+    // furniture goes.
+    const view = this.cameras.main.worldView;
+    const above = this.player.y - TILE_SIZE - RESULT_ICON / 2;
+    const lowest = view.y + RESULT_ICON;
+    rune.setPosition(this.player.x, Math.max(above, lowest));
     rune.setDepth(this.player.depth + 1);
   }
 
@@ -8998,25 +9026,31 @@ export class GameScene extends Phaser.Scene {
    */
   private playPiece(
     piece: DecorType,
+    turn: number,
     x: number,
     y: number,
     depth: number,
   ): Phaser.GameObjects.Sprite {
     const art = pieceArt(piece);
     const key = growablePieceKey(GROWABLE_ROOM, art);
-    const animKey = growablePieceAnimKey(GROWABLE_ROOM, art);
+    // One animation per way round, the way a fixture has one per drawing.
+    // A strip with three ways round played end to end is a stove spinning
+    // on the spot — which is what a single animation over `frame_count`
+    // does the moment a piece gains a second look.
+    const look = drawnLook(turn);
+    const animKey = `${growablePieceAnimKey(GROWABLE_ROOM, art)}-${look}`;
     if (!this.anims.exists(animKey)) {
       this.anims.create({
         key: animKey,
         frames: this.anims.generateFrameNumbers(key, {
-          start: 0,
-          end: (this.growable?.piece_sheets[art]?.frame_count ?? 1) - 1,
+          frames: flowerFrames(look, framesPerLook(this.growable?.piece_sheets[art])),
         }),
         frameRate: BUILDING_ANIM_FPS,
         repeat: -1,
       });
     }
     const sprite = this.add.sprite(x, y, key).setOrigin(0, 0).setDepth(depth);
+    sprite.setFlipX(drawnFlip(turn));
     sprite.play(animKey);
     this.interior?.fires.push(sprite);
     return sprite;
@@ -9047,12 +9081,20 @@ export class GameScene extends Phaser.Scene {
       // not read as a fire — and it is drawn *here*, from the arrangement,
       // because it can be carried and a second pass over the sidecar's own
       // placements would draw it a second time in the corner it started in.
+      const turn = decorTurnOf(placed);
       const sprite = this.world(
         art?.animated
-          ? this.playPiece(placed.piece, x, y, depth)
+          ? this.playPiece(placed.piece, turn, x, y, depth)
           : this.add
-              .image(x, y, this.decorTexture(placed.piece, placed.look))
+              .image(
+                x,
+                y,
+                this.decorTexture(placed.piece, placed.look),
+                drawnLook(turn) *
+                  framesPerLook(this.growable?.piece_sheets[pieceArt(placed.piece)]),
+              )
               .setOrigin(0, 0)
+              .setFlipX(drawnFlip(turn))
               .setDepth(depth),
       );
       if (art?.light === LightKind.Fire) {
@@ -9358,7 +9400,8 @@ export class GameScene extends Phaser.Scene {
   /** Which way round the thing in her hands is, or facing us if it is not one that turns. */
   private get armedTurn(): Turn {
     const held = this.armed;
-    return held?.kind === "fixture" ? turnFrom(held.turn) : Turn.Toward;
+    if (held?.kind === "fixture" || held?.kind === "decor") return turnFrom(held.turn);
+    return Turn.Toward;
   }
 
   /**
@@ -9378,8 +9421,29 @@ export class GameScene extends Phaser.Scene {
    */
   private turnArmed(): void {
     const held = this.armed;
-    if (held?.kind !== "fixture" || !canTurn(held.fixture)) return;
-    const turn = nextTurn(turnFrom(held.turn), turnsOf(held.fixture));
+    // Two kinds of thing turn, and turning them is the same gesture: a tap
+    // on the picture of what she is holding. A chair indoors and a bench
+    // outdoors are the same verb and should feel like it, which is why this
+    // is one method rather than a second control that happens to look the
+    // same — and why the drawing and the sheet are worked out here, once,
+    // rather than in two places that agree until they do not.
+    const drawn =
+      held?.kind === "fixture"
+        ? {
+            drawings: turnsOf(held.fixture),
+            sheet: fixtureSheetKey(held.fixture),
+            per: this.fixtureSidecars.get(held.fixture)?.frames_per_look ?? 1,
+          }
+        : held?.kind === "decor"
+          ? {
+              drawings: turnsOfPiece(held.piece),
+              sheet: this.decorTexture(held.piece, held.look),
+              per: framesPerLook(this.growable?.piece_sheets[pieceArt(held.piece)]),
+            }
+          : null;
+    if (!held || !drawn || drawn.drawings <= 1) return;
+    if (held.kind !== "fixture" && held.kind !== "decor") return;
+    const turn = nextTurn(turnFrom(held.turn), drawn.drawings);
     this.armed = { ...held, turn };
     // The same picture repainted, *not* a new one.
     //
@@ -9391,8 +9455,7 @@ export class GameScene extends Phaser.Scene {
     // bench put it on the ground instead.
     const rune = this.armedRune;
     if (!rune) return;
-    const per = this.fixtureSidecars.get(held.fixture)?.frames_per_look ?? 1;
-    rune.setTexture(fixtureSheetKey(held.fixture), drawnLook(turn) * per);
+    rune.setTexture(drawn.sheet, drawnLook(turn) * drawn.per);
     rune.setDisplaySize(RESULT_ICON, RESULT_ICON);
     rune.setFlipX(drawnFlip(turn));
     this.placeArmedRune();
@@ -9437,7 +9500,11 @@ export class GameScene extends Phaser.Scene {
 
   /** A piece of furniture, in the colour she picked, waiting for a square. */
   private armDecor(piece: DecorType, look: number): void {
-    this.arm({ kind: "decor", piece, look }, this.decorTexture(piece, look));
+    this.arm(
+      { kind: "decor", piece, look, turn: Turn.Toward },
+      this.decorTexture(piece, look),
+      drawnLook(Turn.Toward) * framesPerLook(this.growable?.piece_sheets[pieceArt(piece)]),
+    );
   }
 
   /**
@@ -9480,7 +9547,7 @@ export class GameScene extends Phaser.Scene {
    * the game deciding where the furniture goes, which is the whole of what
    * this feature takes back from it.
    */
-  private putDecorDown(piece: DecorType, look: number): void {
+  private putDecorDown(piece: DecorType, look: number, turn: number): void {
     if (this.modalOpen) return;
     const inside = this.interior;
     const parts = this.growable;
@@ -9501,7 +9568,7 @@ export class GameScene extends Phaser.Scene {
       this.session.facing,
       this.pieceSizes(),
     );
-    const at: Placed = { piece, look, col: corner.col, row: corner.row };
+    const at: Placed = { piece, look, turn, col: corner.col, row: corner.row };
     const room = this.decorIn(inside.house);
     // Her own square counts against a bath and not against a rug. Tapping
     // the floor she is standing on is how a child asks for a carpet to go

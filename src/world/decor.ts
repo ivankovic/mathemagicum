@@ -3,10 +3,11 @@
 
 import { type Rgb, rampPlan } from "../render/recolour";
 import type { Facing } from "./characters";
+import { TURNS_DRAWN, Turn, turnFrom } from "./facing";
 import { FABRIC_SLOTS } from "./houses";
 import type { RoomBlocker } from "./interiors";
 import { MaterialType } from "./materials";
-import type { GrowableSidecar } from "./spriteSidecar";
+import type { GrowableSidecar, SheetLayout } from "./spriteSidecar";
 import type { GridPoint } from "./topdown";
 
 /**
@@ -140,6 +141,51 @@ export function takesAColour(piece: DecorType): boolean {
   return !ONE_COLOUR.includes(piece);
 }
 
+/**
+ * The pieces that are longer one way than the other, and so do not turn yet.
+ *
+ * Turning one of these a quarter way round makes a one-by-two piece into a
+ * two-by-one one — a change to what the *room* is rather than to how the
+ * piece is drawn: which cells are taken, whether it still fits where it
+ * stands, what the walkability grid says. And each wants its own second
+ * drawing besides, since a bed drawn into a wide rect by the tall bed's code
+ * is a wide bed with its pillow across the middle of it.
+ *
+ * *Longer one way*, not *large*: the rug is two cells by two and turns
+ * perfectly well, since a quarter turn leaves it covering the same four
+ * squares. It is also the piece whose pattern most obviously has a
+ * direction, so reading this rule as "only small things turn" would have
+ * cost the one that most wanted it.
+ *
+ * Listed here rather than derived from the footprints for the reason
+ * `ONE_COLOUR` is: the basket and the shop have to know what a piece can do
+ * before any art has loaded. `decor.test.ts` checks the list against the
+ * footprints the generator actually ships, so the two cannot drift.
+ */
+const TOO_LONG_TO_TURN: readonly string[] = [DecorType.Bed, DecorType.Table, DecorType.Bath];
+
+/** How many drawings this piece has: three if it turns, one if it does not. */
+export function turnsOfPiece(piece: DecorType): number {
+  return TOO_LONG_TO_TURN.includes(piece) ? 1 : TURNS_DRAWN;
+}
+
+/** Whether a child may turn this one round while they are holding it. */
+export function canTurnPiece(piece: DecorType): boolean {
+  return turnsOfPiece(piece) > 1;
+}
+
+/**
+ * How many frames of a piece's strip belong to one way round.
+ *
+ * Read off the sheet rather than worked out here, because the strip holds a
+ * piece's motion *and* its ways round on one line — a stove has eight frames
+ * in each of three, and everything else has one in each. A sheet from before
+ * any of this says neither, and one frame per look is what it had.
+ */
+export function framesPerLook(sheet: SheetLayout | undefined): number {
+  return Math.max(1, sheet?.frames_per_look ?? 1);
+}
+
 /** Every kind of thing a basket can hold: each piece in each colour. */
 export const DECOR_ITEMS: readonly DecorItem[] = DECOR_TYPES.flatMap((piece) =>
   Array.from({ length: DECOR_LOOKS }, (_, look) => decorItem(piece, look)),
@@ -164,6 +210,17 @@ export interface Placed {
   readonly row: number;
   /** Which colourway it is painted. Nought is the one the room shipped in. */
   readonly look: number;
+  /**
+   * Which way round it was put down. Absent means facing the camera, which
+   * is the way every piece was drawn before any of them could turn.
+   *
+   * A separate fact from `look`, and it has to be: a colour belongs to the
+   * *item* — a child who bought a green chair owns a green chair, and the
+   * basket counts them apart — where a way round belongs to the placing. A
+   * basket that told a chair turned left from a chair turned right would
+   * make a child hunt through four entries for the one they wanted.
+   */
+  readonly turn?: number;
 }
 
 /** How many cells a piece covers, from the art it is drawn as. */
@@ -196,7 +253,12 @@ export function startingDecor(sidecar: GrowableSidecar): Placed[] {
     const decor = decorFor(piece.name);
     if (!decor) continue;
     const [row, col] = piece.cell;
-    placed.push({ piece: decor, col, row, look: 0 });
+    // Facing the camera, said out loud rather than left off. Everything in
+    // a shipped room was drawn one way round, and a `Placed` that came from
+    // the sidecar should have the same shape as one that came back from a
+    // save — two shapes for the same thing is how a round-trip test starts
+    // comparing a chair against itself and failing.
+    placed.push({ piece: decor, col, row, look: 0, turn: Turn.Toward });
   }
   return placed;
 }
@@ -308,8 +370,20 @@ export function same(one: Placed, other: Placed): boolean {
     one.piece === other.piece &&
     one.col === other.col &&
     one.row === other.row &&
-    one.look === other.look
+    one.look === other.look &&
+    turnOf(one) === turnOf(other)
   );
+}
+
+/**
+ * Which way round a piece is standing, however it was written down.
+ *
+ * Every save written before furniture could turn has no turn on it, and
+ * everything in one of those is facing the way it was drawn — which is the
+ * way the single drawing there used to be faced.
+ */
+export function turnOf(placed: Placed): number {
+  return turnFrom(placed.turn);
 }
 
 /**
@@ -329,7 +403,9 @@ export function without(decor: readonly Placed[], taken: Placed): Placed[] {
 
 /** What a save writes down, and what it reads back. */
 export function decorToSave(decor: readonly Placed[]): string[] {
-  return decor.map(({ piece, col, row, look }) => `${piece},${col},${row},${look}`);
+  return decor.map(
+    (placed) => `${placed.piece},${placed.col},${placed.row},${placed.look},${turnOf(placed)}`,
+  );
 }
 
 /**
@@ -344,17 +420,20 @@ export function decorFromSave(saved: unknown): Placed[] {
   const placed: Placed[] = [];
   for (const entry of saved) {
     if (typeof entry !== "string") continue;
-    const [piece, col, row, look] = entry.split(",");
+    const [piece, col, row, look, turn] = entry.split(",");
     const known = DECOR_TYPES.find((one) => one === piece);
     if (!known || col === undefined || row === undefined) continue;
     if (!/^-?\d+$/.test(col) || !/^-?\d+$/.test(row)) continue;
     // A save from before anything could be repainted has no colour on it,
-    // and everything in it is the colour the room shipped in.
+    // and everything in it is the colour the room shipped in. A save from
+    // before anything could be turned has no turn on it, and the same
+    // applies: it faces the way it was drawn.
     placed.push({
       piece: known,
       col: Number(col),
       row: Number(row),
       look: look !== undefined && /^\d+$/.test(look) ? Number(look) : 0,
+      turn: turn !== undefined && /^\d+$/.test(turn) ? turnFrom(Number(turn)) : Turn.Toward,
     });
   }
   return placed;

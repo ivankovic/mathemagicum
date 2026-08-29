@@ -15,6 +15,7 @@ import {
 } from "./buildings";
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
 import { floodFillReachable, isReachable } from "./connectivity";
+import { DECOR_TYPES, canTurnPiece, framesPerLook, pieceArt, turnsOfPiece } from "./decor";
 import { EFFECT_TYPES, effectAnimKey, effectSidecarKey } from "./effects";
 import { FIXTURE_TYPES, PLACEABLE_FIXTURES, fixtureFor, turnsOf } from "./fixtures";
 import {
@@ -26,6 +27,7 @@ import {
 } from "./flowers";
 import { buildInteriorGrid, interiorAttendantCell, interiorDoor } from "./interiors";
 import { INTERIOR_ROOMS, hearthCell, interiorFor } from "./interiors";
+import { GROWABLE_ROOM } from "./interiors";
 import { LANDMARK_OVERHANG, LANDMARK_TYPES, landmarkFor } from "./landmarks";
 import { PLANT_STAGES, PLANT_TYPES } from "./plants";
 import { SCENERY_KINDS, sceneryKind } from "./scenery";
@@ -35,6 +37,7 @@ import type {
   CharacterSidecar,
   EffectSidecar,
   FixtureSidecar,
+  GrowableSidecar,
   InteriorSidecar,
   LandmarkSidecar,
   ObjectSidecar,
@@ -1137,6 +1140,54 @@ describe("the shipped rooms have somewhere to stand behind a counter", () => {
         room,
         far: true,
       });
+    }
+  });
+});
+
+/**
+ * The room a child furnishes, and the two facts about it the game states
+ * without asking the art.
+ *
+ * `turnsOfPiece` and the footprints are both written down in `decor.ts`,
+ * because the basket and the shop have to know what a piece can do before
+ * anything has loaded. This is the guard that keeps those copies honest —
+ * the same one the fixtures, the building footprints and the landmark
+ * overhangs have, for the same reason.
+ */
+describe("the shipped room a child furnishes", () => {
+  const sidecar = readJson<GrowableSidecar>("interiors", `${GROWABLE_ROOM}_growable.json`);
+
+  test("ships as many drawings of each piece as the game turns it through", () => {
+    for (const piece of DECOR_TYPES) {
+      const sheet = sidecar.piece_sheets[pieceArt(piece)];
+      expect({ piece, has: sheet !== undefined }).toEqual({ piece, has: true });
+      if (!sheet) continue;
+      expect({ piece, looks: sheet.looks ?? 1 }).toEqual({ piece, looks: turnsOfPiece(piece) });
+      // And the strip divides exactly: a piece's motion in each of its ways
+      // round, with nothing left over. A remainder here is a sheet the game
+      // would index off the end of.
+      expect({ piece, count: sheet.frame_count }).toEqual({
+        piece,
+        count: (sheet.looks ?? 1) * framesPerLook(sheet),
+      });
+    }
+  });
+
+  /**
+   * And the ones that do not turn are the ones that are not square.
+   *
+   * The rule is about the *footprint*: a quarter turn of a one-by-two bed
+   * makes it two-by-one, which changes which cells it takes and whether it
+   * still fits. A square piece has no such problem, so it turns. If this
+   * drifted, either a child would be offered a turn that silently resized a
+   * bed, or a square piece would refuse to turn for no visible reason.
+   */
+  test("and the ones held back are exactly the ones a turn would resize", () => {
+    for (const [name, piece] of Object.entries(sidecar.pieces)) {
+      const decor = DECOR_TYPES.find((one) => pieceArt(one) === name);
+      if (!decor) continue;
+      const [cols, rows] = (piece as { footprint: readonly [number, number] }).footprint;
+      expect({ decor, turns: canTurnPiece(decor) }).toEqual({ decor, turns: cols === rows });
     }
   });
 });

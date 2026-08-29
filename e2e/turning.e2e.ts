@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { DecorType, decorItem } from "../src/world/decor";
 import { TURNS, Turn } from "../src/world/facing";
 import { FixtureType, PLACEABLE_FIXTURES } from "../src/world/fixtures";
 import { type Game, play, shutDown, takeFromCrate } from "./harness";
@@ -65,6 +66,45 @@ function benches(game: Game): Promise<{ col: number; turn: number }[]> {
 }
 
 /** Tap the picture over her head until it is the way round we want. */
+/** One thing standing in the room she is in, as the seam reports it. */
+interface Furnishing {
+  piece: string;
+  col: number;
+  row: number;
+  look: number;
+  turn: number;
+}
+
+/** The room she lives in, in the coordinates its own sidecar uses. */
+interface House {
+  origin: { col: number; row: number };
+}
+
+/**
+ * In through her own front door, which is where the furniture is.
+ *
+ * Put down on the doorstep rather than walked from the spawn, for the reason
+ * `house.e2e.ts` gives: a child starts eight rows off in their own garden,
+ * and walking that is eight seconds of nothing being tested.
+ */
+async function goHome(game: Game): Promise<House> {
+  const door = (await game.seam<Record<string, { col: number; row: number }>>("doors"))[
+    "player-house"
+  ];
+  if (!door) throw new Error("the village has no house for the player");
+  await game.standAt(door.col, door.row + 2, "up");
+  await game.walk("ArrowUp", 900);
+  await game.stopped();
+  const house = await game.seam<House | null>("house");
+  if (!house) throw new Error("walking through the front door did not go indoors");
+  return house;
+}
+
+/** A square named the way the room's own sidecar names it. */
+async function tapPlan(game: Game, house: House, col: number, row: number): Promise<void> {
+  await game.tapCell(col - house.origin.col, row - house.origin.row);
+}
+
 async function turnTo(game: Game, want: number): Promise<void> {
   for (let taps = 0; taps <= TURNS.length; taps++) {
     if ((await game.seam<number>("armedTurn")) === want) return;
@@ -73,7 +113,7 @@ async function turnTo(game: Game, want: number): Promise<void> {
     await game.tab.mouse.click(at.x, at.y);
     await game.tab.waitForTimeout(200);
   }
-  throw new Error(`the bench would not turn to ${want}`);
+  throw new Error(`it would not turn to ${want}`);
 }
 
 describe("turning a thing before putting it down", () => {
@@ -149,6 +189,60 @@ describe("turning a thing before putting it down", () => {
           // crate arms that instead. See `arm`, which disarms whatever was
           // waiting before it raises the new rune.
         }
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * And indoors, where the same gesture turns a chair.
+   *
+   * A chair and a bench are the same verb — pick it up, tap its picture,
+   * put it down — and the whole point of doing it with one method is that
+   * they cannot drift apart. What could still drift is the *save*: a room
+   * nobody has rearranged has no stored arrangement and is rebuilt from the
+   * sidecar every time, so a turn only survives if `same` counts it as a
+   * difference. It did not, at first, and a chair turned and put back where
+   * it came from registered as no change at all.
+   */
+  test(
+    "and a chair indoors turns by the same tap, and stays turned",
+    async () => {
+      await play({ seams: GARDEN }, async (game) => {
+        const house = await goHome(game);
+        await withSome(game, decorItem(DecorType.Chair, 0), 2);
+
+        // Clear floor, facing clear floor, the way `house.e2e.ts` does it.
+        await game.standAt(2 - house.origin.col, 2 - house.origin.row, "down");
+        expect(await takeFromCrate(game, DecorType.Chair)).toBe(true);
+        await game.settle(300);
+        expect(await game.seam<number>("armedTurn")).toBe(Turn.Toward);
+
+        await turnTo(game, Turn.Side);
+        // Still in her hands, exactly as outdoors: the tap that turns must
+        // never be the tap that puts it down.
+        expect(await game.seam<string | null>("armed")).toContain(DecorType.Chair);
+
+        await tapPlan(game, house, 2, 3);
+        await game.settle(700);
+        expect(
+          ((await game.seam<Furnishing[]>("decor")) ?? []).find(
+            (one) => one.piece === DecorType.Chair && one.col === 2 && one.row === 3,
+          ),
+        ).toMatchObject({ turn: Turn.Side });
+
+        // And tomorrow. This is the half a save forgets: everything about a
+        // chair that a room *draws* comes back without the turn, so one that
+        // went missing looks like a chair that untwisted itself overnight
+        // rather than like a broken save.
+        await game.reload(GARDEN);
+        await game.settle(600);
+        await goHome(game);
+        expect(
+          ((await game.seam<Furnishing[]>("decor")) ?? []).find(
+            (one) => one.piece === DecorType.Chair && one.col === 2 && one.row === 3,
+          ),
+        ).toMatchObject({ turn: Turn.Side });
       });
     },
     5 * MINUTES,

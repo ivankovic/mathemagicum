@@ -13,6 +13,7 @@ import {
   without,
 } from "./decor";
 import { DecorType } from "./decor";
+import { Turn } from "./facing";
 import {
   type CellKey,
   type RoomPlan,
@@ -80,11 +81,11 @@ const SIZES = {
 
 /** The arrangement the cottage ships with, in the same cells the sidecar has. */
 const FURNISHED: Placed[] = [
-  { piece: DecorType.Bookshelf, col: 6, row: 1, look: 0 },
-  { piece: DecorType.Bed, col: 1, row: 2, look: 0 },
-  { piece: DecorType.Table, col: 5, row: 2, look: 0 },
-  { piece: DecorType.Chair, col: 5, row: 3, look: 0 },
-  { piece: DecorType.Rug, col: 3, row: 3, look: 0 },
+  { piece: DecorType.Bookshelf, col: 6, row: 1, look: 0, turn: Turn.Toward },
+  { piece: DecorType.Bed, col: 1, row: 2, look: 0, turn: Turn.Toward },
+  { piece: DecorType.Table, col: 5, row: 2, look: 0, turn: Turn.Toward },
+  { piece: DecorType.Chair, col: 5, row: 3, look: 0, turn: Turn.Toward },
+  { piece: DecorType.Rug, col: 3, row: 3, look: 0, turn: Turn.Toward },
 ];
 
 /** The hearth, which is not furniture and never moves. */
