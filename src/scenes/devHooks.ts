@@ -415,6 +415,16 @@ export interface DevHandle {
    */
   readonly armed: () => string | null;
   /**
+   * Which way round the thing she is holding will go down: nought facing the
+   * camera, then away, then the two side-on ways.
+   *
+   * A seam because turning is the one thing here a picture cannot settle at
+   * a glance — the two side-on ways are the same drawing mirrored, and at
+   * this size telling a mirrored bench from an unmirrored one by eye is a
+   * game of spot-the-difference.
+   */
+  readonly armedTurn: () => number;
+  /**
    * The great tree's doorstep, so a script can go and look at the grove.
    *
    * It is the one place in the world that is neither a building's door nor a

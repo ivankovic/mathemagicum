@@ -50,4 +50,17 @@ export interface PlacedObject {
    * post. The footprint does not move, only the picture.
    */
   flip?: boolean;
+  /**
+   * Which way round it was put down, for the things that can be turned.
+   *
+   * Absent on everything the world generates and on everything that has one
+   * drawing, which is nearly all of it — so a save written before any of
+   * this reads back exactly as it did.
+   *
+   * The *turn*, not the drawing and the mirror it works out to. Those two
+   * are derived at the moment of drawing, and storing them instead would
+   * mean a bench picked up and put down again could not remember which of
+   * the two side-on ways it had been.
+   */
+  turn?: number;
 }

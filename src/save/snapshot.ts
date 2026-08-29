@@ -174,7 +174,12 @@ function tileKey(col: number, row: number): string {
  * enclosure, which is visible.
  */
 function objectSignature(object: PlacedObject): string {
-  return `${object.type}${object.flip ? "|flip" : ""}`;
+  // The turn is part of what a thing *is* here, not decoration on it: a
+  // bench the generator put down facing the camera and a child turned round
+  // is a difference the save has to carry, and this signature is how the
+  // save decides there is one.
+  const turned = object.turn ? `|turn${object.turn}` : "";
+  return `${object.type}${object.flip ? "|flip" : ""}${turned}`;
 }
 
 export function worldBaseline(grid: WorldGrid): WorldBaseline {

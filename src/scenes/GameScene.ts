@@ -259,15 +259,18 @@ import {
   effectSidecarKey,
 } from "../world/effects";
 import { type Grove, GroveTask, duskOver, groveProgress } from "../world/enchantedForest";
+import { Turn, drawnFlip, drawnLook, nextTurn, turnFrom } from "../world/facing";
 import {
   FIXTURE_TYPES,
   FixtureType,
   PLACEABLE_FIXTURES,
+  canTurn,
   fixtureAnimKey,
   fixtureFor,
   fixtureSheetKey,
   fixtureSidecarKey,
   isPlaceable,
+  turnsOf,
 } from "../world/fixtures";
 import {
   FLOWER_LOOKS,
@@ -1158,7 +1161,7 @@ interface ActiveChunk {
 type Armed =
   | { kind: "spell"; spell: Spell }
   | { kind: "seed"; plant: PlantType }
-  | { kind: "fixture"; fixture: FixtureType }
+  | { kind: "fixture"; fixture: FixtureType; turn: number }
   | { kind: "decor"; piece: DecorType; look: number }
   | { kind: "flower"; flower: FlowerType; look: number };
 
@@ -2178,6 +2181,10 @@ export class GameScene extends Phaser.Scene {
       session: this.session,
       ui: () => this.uiPositions(),
       armed: () => armedTag(this.armed),
+      // Which way round the thing in her hands is. Its own seam rather than
+      // part of `armed`, which is a name several scenarios compare against
+      // and which should go on meaning what it has always meant.
+      armedTurn: () => this.armedTurn,
       marking: () => this.marking?.action ?? null,
       teaching: () => this.teacherMarks?.showing() ?? [],
       grove: () => ({ col: this.grove.doorstep.col, row: this.grove.doorstep.row }),
@@ -2537,7 +2544,13 @@ export class GameScene extends Phaser.Scene {
       // `handleTileClick` at all. Checked before the world under the pointer
       // so a crop or a tree — which is to say, the only squares either of
       // these two spells is ever aimed at — cannot swallow the answer.
-      if (this.armed && !this.tappedTheInterface(over)) {
+      // The picture of what she is holding is a control, not ground: tapping
+      // it turns the thing round. It is drawn in the world rather than on
+      // the interface camera — it has to follow her — so it is not in
+      // `uiObjects` and has to be named here. Without this the tap fell
+      // straight through to the placement below and put the bench down,
+      // which is a control that does the opposite of what it says.
+      if (this.armed && !this.tappedTheInterface(over) && !this.tappedTheArmedThing(over)) {
         this.castArmedAt(pointer.worldX, pointer.worldY);
         return;
       }
@@ -2737,6 +2750,18 @@ export class GameScene extends Phaser.Scene {
 
   private tappedTheInterface(over: readonly unknown[]): boolean {
     return over.some((object) => this.uiObjects.has(object as Phaser.GameObjects.GameObject));
+  }
+
+  /**
+   * Whether the tap landed on the picture of what she is holding.
+   *
+   * Its own question rather than a second entry in `uiObjects`: that set is
+   * what the interface camera draws, and this one has to be in the world so
+   * it can hang over her head as she walks.
+   */
+  private tappedTheArmedThing(over: readonly unknown[]): boolean {
+    const rune = this.armedRune;
+    return rune !== undefined && over.includes(rune);
   }
 
   // Everything anchored to a screen edge, re-placed whenever the viewport
@@ -3413,17 +3438,22 @@ export class GameScene extends Phaser.Scene {
       const sidecar = this.cache.json.get(fixtureSidecarKey(fixture)) as FixtureSidecar | undefined;
       if (!sidecar) throw new Error(`missing sidecar for fixture "${fixture}"`);
       this.fixtureSidecars.set(fixture, sidecar);
-      const key = fixtureAnimKey(fixture);
-      if (this.anims.exists(key)) continue;
-      this.anims.create({
-        key,
-        frames: this.anims.generateFrameNumbers(fixtureSheetKey(fixture), {
-          start: 0,
-          end: sidecar.frame_count - 1,
-        }),
-        frameRate: FIXTURE_ANIM_FPS,
-        repeat: -1,
-      });
+      // One animation per drawing, the way the flowers have one per colour.
+      // A sheet with three ways round played end to end is a bench turning
+      // itself round twice a second — which is what a single animation over
+      // `frame_count` does the moment a fixture gains a second look.
+      for (let look = 0; look < Math.max(1, sidecar.looks); look++) {
+        const key = fixtureAnimKey(fixture, look);
+        if (this.anims.exists(key)) continue;
+        this.anims.create({
+          key,
+          frames: this.anims.generateFrameNumbers(fixtureSheetKey(fixture), {
+            frames: flowerFrames(look, sidecar.frames_per_look),
+          }),
+          frameRate: FIXTURE_ANIM_FPS,
+          repeat: -1,
+        });
+      }
     }
   }
 
@@ -4865,7 +4895,10 @@ export class GameScene extends Phaser.Scene {
     this.session.aimAt(at);
     this.paintAim();
     if (held.kind === "seed") this.plantSeed(held.plant);
-    else if (held.kind === "fixture") this.placeFixture(held.fixture);
+    // The turn is handed over rather than read back off `this.armed`: the
+    // rune is put out a few lines above this, so by the time anything is
+    // placed there is nothing in her hands to ask.
+    else if (held.kind === "fixture") this.placeFixture(held.fixture, turnFrom(held.turn));
     else if (held.kind === "decor") this.putDecorDown(held.piece, held.look);
     else this.putFlowerDown(held.flower, held.look);
   }
@@ -6616,11 +6649,18 @@ export class GameScene extends Phaser.Scene {
    * It used to wrap its argument in `uiTextureKey`, which is right for four
    * callers and silently wrong for the two that hand it a sheet.
    */
-  private raiseArmedRune(texture: string, frame?: number): void {
+  private raiseArmedRune(texture: string, frame?: number, mirrored = false): void {
     this.armedRune?.destroy();
     const rune = this.world(
       this.add.image(0, 0, texture, frame).setDisplaySize(RESULT_ICON, RESULT_ICON),
     );
+    rune.setFlipX(mirrored);
+    // Tap it to turn what it is a picture of. Interactive whatever is held,
+    // because a tap that did nothing on a fence and something on a bench
+    // would be a control a child could only find by accident on one of them
+    // — `turnArmed` refuses the ones that cannot turn.
+    rune.setInteractive({ useHandCursor: true });
+    rune.on("pointerdown", () => this.turnArmed());
     this.armedRune = rune;
     this.tweens.add({
       targets: rune,
@@ -7185,6 +7225,12 @@ export class GameScene extends Phaser.Scene {
       const { x, y } = this.optionsButton.box;
       positions.options = { x: x - 37, y: y + 12 };
     }
+    // The picture of what she is holding, which is also the control that
+    // turns it. In world pixels turned into screen ones: it hangs over her
+    // head and moves with her, so it is not on the interface camera and
+    // cannot simply be read off like a tray button.
+    const rune = this.armedRune;
+    if (rune) positions.armed = this.screenOfPoint(rune.x, rune.y);
     for (const [name, tray] of Object.entries(this.trays())) {
       if (!tray) continue;
       positions[name] = tray.containerPosition();
@@ -7602,7 +7648,7 @@ export class GameScene extends Phaser.Scene {
    * it and it returns to the crate. A fence that boxed her in is adjacent by
    * definition, so it is always within reach.
    */
-  private placeFixture(fixture: FixtureType): void {
+  private placeFixture(fixture: FixtureType, turn: Turn = Turn.Toward): void {
     if (this.modalOpen) return;
     const result = this.session.place(fixture);
     this.report(result, itemIcon(fixture));
@@ -7611,11 +7657,18 @@ export class GameScene extends Phaser.Scene {
     const { col, row } = result.tile;
     const sidecar = this.fixtureSidecars.get(fixture);
     if (!sidecar) throw new Error(`no art loaded for fixture "${fixture}"`);
+    // Written onto the object itself, so the grid — and through it the save
+    // — carries which way round it went down. Only when it is turned at all,
+    // so nothing that cannot turn gains a field, and a save from before this
+    // reads back byte for byte.
+    if (turn !== Turn.Toward) result.object.turn = turn;
     const sprite = this.spawnFootprintSprite(
       result.object,
       sidecar,
       fixtureSheetKey(fixture),
-      fixtureAnimKey(fixture),
+      fixtureAnimKey(fixture, drawnLook(turn)),
+      false,
+      drawnFlip(turn),
     );
     this.watchPlacedFixture(sprite, fixture, col, row);
     this.placedFixtures.set(tileKey(col, row), sprite);
@@ -8274,7 +8327,18 @@ export class GameScene extends Phaser.Scene {
     if (fixture) {
       const sidecar = this.fixtureSidecars.get(fixture);
       if (!sidecar) throw new Error(`no art loaded for fixture "${fixture}"`);
-      this.spawnFootprintSprite(object, sidecar, fixtureSheetKey(fixture), fixtureAnimKey(fixture));
+      // Which of its drawings, and whether that drawing is mirrored to get
+      // the way round it was put down. Both fall out of the turn; nothing
+      // below this line has to know what a turn is.
+      const turn = turnFrom(object.turn);
+      this.spawnFootprintSprite(
+        object,
+        sidecar,
+        fixtureSheetKey(fixture),
+        fixtureAnimKey(fixture, drawnLook(turn)),
+        false,
+        drawnFlip(turn),
+      );
       // A lamp has a flame in it and a glowcap glows: both light the ground
       // around them. Noted here rather than by walking the grid every frame:
       // the scene already sees every one of them exactly once, as it puts it
@@ -8348,6 +8412,7 @@ export class GameScene extends Phaser.Scene {
     sheetKey: string,
     animKey: string,
     mirror = false,
+    turned = false,
   ): Phaser.GameObjects.Sprite {
     const origin = spriteOrigin(sidecar, object.col, object.row);
     const sprite = this.world(
@@ -8359,7 +8424,9 @@ export class GameScene extends Phaser.Scene {
     // Either the object says so — the fence's side run, whose right-hand
     // half is the left-hand sprite reversed — or the caller asked for the
     // scenery's own by-the-tile variation.
-    if (object.flip) sprite.setFlipX(true);
+    // Or the way round it was put down asked for it: the two side-on ways
+    // are one drawing and its mirror.
+    if (object.flip || turned) sprite.setFlipX(true);
     else if (mirror && variationFor(object.col, object.row, 2) === 1) {
       // Flipped about the sprite's own centre, so the footprint it covers
       // does not move.
@@ -9141,12 +9208,55 @@ export class GameScene extends Phaser.Scene {
       : this.inventory.count(thing as FixtureType);
   }
 
+  /** Which way round the thing in her hands is, or facing us if it is not one that turns. */
+  private get armedTurn(): Turn {
+    const held = this.armed;
+    return held?.kind === "fixture" ? turnFrom(held.turn) : Turn.Toward;
+  }
+
+  /**
+   * Turn the thing she is holding, by tapping the picture of it.
+   *
+   * **The picture over her head is the control**, which is why there is no
+   * new button anywhere. It is already on screen for exactly as long as the
+   * gesture is available, it is already the thing being talked about, and
+   * tapping it shows the answer rather than describing it — the bench above
+   * her turns, and that *is* the preview. A rotate button beside the aim
+   * square would need an icon nobody has drawn and a corner of a phone that
+   * is already full.
+   *
+   * It also cannot be confused with putting the thing away, which is the
+   * other gesture in reach: that is a second tap on its button in the crate,
+   * and this is a tap on her own hands.
+   */
+  private turnArmed(): void {
+    const held = this.armed;
+    if (held?.kind !== "fixture" || !canTurn(held.fixture)) return;
+    const turn = nextTurn(turnFrom(held.turn), turnsOf(held.fixture));
+    this.armed = { ...held, turn };
+    // The same picture repainted, *not* a new one.
+    //
+    // Destroying it and raising another looked identical and was not: this
+    // runs from the rune's own tap handler, which fires before the scene's,
+    // and the scene then asks whether the tap landed on `this.armedRune` —
+    // by then a different object from the one the pointer actually hit. The
+    // check missed, the tap fell through to the placement, and turning a
+    // bench put it on the ground instead.
+    const rune = this.armedRune;
+    if (!rune) return;
+    const per = this.fixtureSidecars.get(held.fixture)?.frames_per_look ?? 1;
+    rune.setTexture(fixtureSheetKey(held.fixture), drawnLook(turn) * per);
+    rune.setDisplaySize(RESULT_ICON, RESULT_ICON);
+    rune.setFlipX(drawnFlip(turn));
+    this.placeArmedRune();
+  }
+
   private armFixture(fixture: FixtureType): void {
     if (this.inventory.count(fixture) <= 0 && !this.buildMachine(fixture)) {
       this.showRefusalOnPlayer(itemIcon(fixture));
       return;
     }
-    this.arm({ kind: "fixture", fixture }, uiTextureKey(itemIcon(fixture)));
+    this.arm({ kind: "fixture", fixture, turn: Turn.Toward }, uiTextureKey(itemIcon(fixture)));
   }
 
   /**

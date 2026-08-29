@@ -10,7 +10,7 @@ import { BUILDING_FOOTPRINTS, BUILDING_SPRITES, DOOR_STATES, ROLE_SPRITES } from
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
 import { floodFillReachable, isReachable } from "./connectivity";
 import { EFFECT_TYPES, effectAnimKey, effectSidecarKey } from "./effects";
-import { FIXTURE_TYPES, fixtureFor } from "./fixtures";
+import { FIXTURE_TYPES, fixtureFor, turnsOf } from "./fixtures";
 import {
   FLOWER_LOOKS,
   FLOWER_TYPES,
@@ -565,14 +565,23 @@ describe("the shipped fixtures", () => {
    * their own type in the game, so a flower turning up in `FIXTURE_TYPES`
    * would mean the store could sell one and the crate could hold one.
    */
-  test("come in one colour each", () => {
+  test("come in one colour each, and as many ways round as they say", () => {
     for (const [name, sidecar] of sidecars) {
-      expect({ name, looks: sidecar.looks }).toEqual({ name, looks: 1 });
+      // A look is a colourway *and* a way round now. No fixture has two
+      // colourways, so the looks a sidecar ships are exactly the drawings
+      // the game thinks that fixture turns through — and this is the guard
+      // that holds the two halves of that together across two languages,
+      // the way the footprints and the landmark overhangs are held.
+      expect({ name, looks: sidecar.looks }).toEqual({ name, looks: turnsOf(name) });
       expect({ name, count: sidecar.frame_count }).toEqual({
         name,
         count: sidecar.looks * sidecar.frames_per_look,
       });
     }
+    // And a fixture the game says turns really does ship more than one
+    // drawing. Without this the table above would be satisfied by claiming
+    // nothing turns.
+    expect(FIXTURE_TYPES.filter((one) => turnsOf(one) > 1).length).toBeGreaterThan(0);
     for (const flower of FLOWER_TYPES) {
       expect((FIXTURE_TYPES as readonly string[]).includes(flower)).toBe(false);
     }

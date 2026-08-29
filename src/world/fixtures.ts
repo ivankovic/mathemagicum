@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { TURNS_DRAWN, waysRound } from "./facing";
+
 // Built props that are not buildings — a well is furniture for a village
 // square, not architecture. See the asset generator's "Fixtures".
 
@@ -183,6 +185,37 @@ export function fixtureSidecarKey(fixture: FixtureType): string {
   return `fixture-sidecar-${fixture}`;
 }
 
-export function fixtureAnimKey(fixture: FixtureType): string {
-  return `fixture-${fixture}-idle`;
+/**
+ * How many drawings the generator ships for each fixture that turns.
+ *
+ * Absent means one, which is nearly all of them. Written here as well as in
+ * the generator's own spec for the reason the footprints are: world
+ * generation and the placing rules run long before any art is loaded, and
+ * `assets.test.ts` reads the shipped sidecars and fails if the two drift.
+ */
+export const FIXTURE_TURNS: Partial<Record<FixtureType, number>> = {
+  // The first thing a player can turn. See `src/world/facing.ts`.
+  [FixtureType.Bench]: TURNS_DRAWN,
+};
+
+/** How many drawings this fixture has: three if it turns, one if it does not. */
+export function turnsOf(fixture: FixtureType): number {
+  return FIXTURE_TURNS[fixture] ?? 1;
+}
+
+/** Whether a child may turn this one round while placing it. */
+export function canTurn(fixture: FixtureType): boolean {
+  return waysRound(turnsOf(fixture)) > 1;
+}
+
+/**
+ * The idle animation for one of a fixture's drawings.
+ *
+ * One per drawing, not one per sheet. A sheet with three ways round on it
+ * played end to end would show a bench turning itself round twice a second,
+ * which is what happens if this takes no look — the flowers hit the same
+ * thing first and answered it the same way.
+ */
+export function fixtureAnimKey(fixture: FixtureType, look = 0): string {
+  return look > 0 ? `fixture-${fixture}-idle-${look}` : `fixture-${fixture}-idle`;
 }
