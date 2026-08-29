@@ -4,6 +4,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
 import { DecorType } from "../src/world/decor";
+import { Turn } from "../src/world/facing";
 import { PatchAction } from "../src/world/selection";
 import { type Game, patchButton, play, runeButton, shutDown, takeFromCrate } from "./harness";
 
@@ -52,6 +53,8 @@ interface Piece {
   readonly col: number;
   readonly row: number;
   readonly look: number;
+  /** Which way round it is standing. See `turning.e2e.ts`. */
+  readonly turn: number;
 }
 
 /**
@@ -410,7 +413,9 @@ describe("furnishing it", () => {
         await game.settle(700);
         expect(await game.held("stove~0")).toBe(0);
         const moved = (await game.seam<Piece[]>("decor")).filter((one) => one.piece === "stove");
-        expect(moved).toEqual([{ piece: "stove", col: 2, row: 3, look: 0 }]);
+        // Facing the camera, since she never turned it: the way round a
+        // thing went down is part of what the room remembers about it now.
+        expect(moved).toEqual([{ piece: "stove", col: 2, row: 3, look: 0, turn: Turn.Toward }]);
 
         // And it is still there tomorrow — the half that would fail if the
         // repair had merely been moved to the way in rather than gated on
@@ -418,7 +423,7 @@ describe("furnishing it", () => {
         await game.reload(AT_HOME);
         await goHome(game);
         expect((await game.seam<Piece[]>("decor")).filter((one) => one.piece === "stove")).toEqual([
-          { piece: "stove", col: 2, row: 3, look: 0 },
+          { piece: "stove", col: 2, row: 3, look: 0, turn: Turn.Toward },
         ]);
         expect(await game.held("stove~0")).toBe(0);
       });

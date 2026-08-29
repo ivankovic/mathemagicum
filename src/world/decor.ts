@@ -142,36 +142,47 @@ export function takesAColour(piece: DecorType): boolean {
 }
 
 /**
- * The pieces that are longer one way than the other, and so do not turn yet.
+ * How many drawings a piece has. Everything in the house turns.
  *
- * Turning one of these a quarter way round makes a one-by-two piece into a
- * two-by-one one — a change to what the *room* is rather than to how the
- * piece is drawn: which cells are taken, whether it still fits where it
- * stands, what the walkability grid says. And each wants its own second
- * drawing besides, since a bed drawn into a wide rect by the tall bed's code
- * is a wide bed with its pillow across the middle of it.
- *
- * *Longer one way*, not *large*: the rug is two cells by two and turns
- * perfectly well, since a quarter turn leaves it covering the same four
- * squares. It is also the piece whose pattern most obviously has a
- * direction, so reading this rule as "only small things turn" would have
- * cost the one that most wanted it.
- *
- * Listed here rather than derived from the footprints for the reason
- * `ONE_COLOUR` is: the basket and the shop have to know what a piece can do
- * before any art has loaded. `decor.test.ts` checks the list against the
- * footprints the generator actually ships, so the two cannot drift.
+ * There is no exception any more and that is worth saying out loud, because
+ * there was one: the bed, the kitchen table and the bath were held back for
+ * a while, on the grounds that a quarter turn of a one-by-two piece makes it
+ * two-by-one — a change to what the *room* is rather than to how the piece
+ * is drawn. It is, and `sizeOf` is where that change lives.
  */
-const TOO_LONG_TO_TURN: readonly string[] = [DecorType.Bed, DecorType.Table, DecorType.Bath];
-
-/** How many drawings this piece has: three if it turns, one if it does not. */
 export function turnsOfPiece(piece: DecorType): number {
-  return TOO_LONG_TO_TURN.includes(piece) ? 1 : TURNS_DRAWN;
+  return DECOR_TYPES.includes(piece) ? TURNS_DRAWN : 1;
 }
 
 /** Whether a child may turn this one round while they are holding it. */
 export function canTurnPiece(piece: DecorType): boolean {
   return turnsOfPiece(piece) > 1;
+}
+
+/**
+ * How many cells a piece covers, this way round.
+ *
+ * The whole of what a quarter turn does to the room, in one place. A bed is
+ * one cell by two facing either way up the room and two by one lying across
+ * it; a chair is one by one however it is turned. Everything downstream —
+ * which cells are taken, whether it fits, what the walkability grid says,
+ * where the sprite sorts — goes through `cellsUnder`, which goes through
+ * here, so the swap is stated once rather than remembered in six places.
+ *
+ * It has to agree exactly with the generator's `footprint_at`, which decides
+ * what is *drawn*. `assets.test.ts` holds the two together: a piece the two
+ * disagree about is a piece that draws over one square and blocks another.
+ */
+export function sizeOf(
+  piece: DecorType,
+  turn: number,
+  footprints: Footprints,
+): { cols: number; rows: number } {
+  const size = footprints[piece] ?? { cols: 1, rows: 1 };
+  const across = turnFrom(turn);
+  return across === Turn.Side || across === Turn.SideOther
+    ? { cols: size.rows, rows: size.cols }
+    : size;
 }
 
 /**
@@ -267,9 +278,9 @@ export function cellKey(col: number, row: number): string {
   return `${col},${row}`;
 }
 
-/** Every cell one piece covers, top-left first. */
+/** Every cell one piece covers, top-left first, whichever way it is round. */
 export function cellsUnder(placed: Placed, footprints: Footprints): GridPoint[] {
-  const size = footprints[placed.piece] ?? { cols: 1, rows: 1 };
+  const size = sizeOf(placed.piece, turnOf(placed), footprints);
   const cells: GridPoint[] = [];
   for (let dr = 0; dr < size.rows; dr++) {
     for (let dc = 0; dc < size.cols; dc++) {
@@ -330,8 +341,14 @@ export function anchorFor(
   ahead: GridPoint,
   facing: Facing,
   footprints: Footprints,
+  turn: number = Turn.Toward,
 ): GridPoint {
-  const size = footprints[piece] ?? { cols: 1, rows: 1 };
+  // The way round it is being put down, not the way it was drawn. A bed
+  // turned to lie across the room grows two cells to the *right* of the
+  // square she is facing rather than two below it, and anchoring it by the
+  // untuned footprint put it a square out — which reads as the game deciding
+  // where the furniture goes, the one thing this feature takes back from it.
+  const size = sizeOf(piece, turn, footprints);
   return {
     col: facing === "left" ? ahead.col - (size.cols - 1) : ahead.col,
     row: facing === "up" ? ahead.row - (size.rows - 1) : ahead.row,

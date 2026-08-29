@@ -248,6 +248,72 @@ describe("turning a thing before putting it down", () => {
     5 * MINUTES,
   );
 
+  /**
+   * A bed turned is a bed that takes different squares.
+   *
+   * The half of turning that is not about drawing. A one-by-two bed lying
+   * across the room is two-by-one: it covers the cell to its right instead
+   * of the cell below, and everything that asks what is standing where has
+   * to get the turned answer. `decor.test.ts` proves the arithmetic and
+   * `assets.test.ts` holds it against the art; what only a browser can say
+   * is that a child turning a bed and putting it down gets a bed on the two
+   * squares they were looking at.
+   */
+  test(
+    "and a bed turned across the room takes the squares it is lying on",
+    async () => {
+      await play({ seams: GARDEN }, async (game) => {
+        const house = await goHome(game);
+        await withSome(game, decorItem(DecorType.Bed, 0), 2);
+
+        // The clear strip along the top of the cottage: the stove is in one
+        // corner and the bookshelf in the other, and the middle of that row
+        // and the one under it are empty in every seeded cottage.
+        await game.standAt(2 - house.origin.col, 1 - house.origin.row, "down");
+        expect(await takeFromCrate(game, DecorType.Bed)).toBe(true);
+        await game.settle(300);
+
+        await turnTo(game, Turn.Side);
+        await tapPlan(game, house, 2, 2);
+        await game.settle(700);
+
+        expect(
+          ((await game.seam<Furnishing[]>("decor")) ?? []).find(
+            (one) => one.piece === DecorType.Bed && one.col === 2 && one.row === 2,
+          ),
+        ).toMatchObject({ turn: Turn.Side });
+
+        // And the square to its *right* is spoken for, which it would not be
+        // if the bed were still standing on end. Asked by standing in front
+        // of that square with a chair and being refused — a refusal leaves
+        // the chair in her hands, which is a fact a script can read without
+        // looking at pixels.
+        //
+        // A piece goes down on the square she is *facing* rather than the
+        // one that was tapped, so where she stands is the question being
+        // asked here and the tap is only how it is asked.
+        await withSome(game, decorItem(DecorType.Chair, 0), 1);
+        await game.standAt(3 - house.origin.col, 1 - house.origin.row, "down");
+        expect(await takeFromCrate(game, DecorType.Chair)).toBe(true);
+        await game.settle(300);
+        await tapPlan(game, house, 3, 2);
+        await game.settle(500);
+        expect(
+          ((await game.seam<Furnishing[]>("decor")) ?? []).some(
+            (one) => one.piece === DecorType.Chair && one.col === 3 && one.row === 2,
+          ),
+        ).toBe(false);
+        // And she still has it. A refusal is not a spending: turning is
+        // exactly when a piece asks for a square it was not asking for
+        // before, so losing what she was holding on every near miss would
+        // make the long furniture the most annoying thing in the room.
+        expect(await game.seam<string | null>("armed")).toContain(DecorType.Chair);
+        expect(await game.held(decorItem(DecorType.Chair, 0))).toBe(1);
+      });
+    },
+    5 * MINUTES,
+  );
+
   test(
     "and the way round it went down is still true tomorrow",
     async () => {

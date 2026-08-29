@@ -31,6 +31,7 @@ import {
   protectedCells,
   roomsAfforded,
   same,
+  sizeOf,
   takesAColour,
   turnsOfPiece,
   without,
@@ -739,57 +740,89 @@ describe("what can be painted", () => {
 });
 
 /**
- * Which pieces a child can turn round, and which are the wrong shape for it.
+ * Turning, and what a quarter turn does to the room.
  *
- * A bed is one cell by two. Turning it a quarter way makes it two by one,
- * which is a change to what the *room* is — which cells are taken, whether
- * it still fits where it stands — rather than to how it is drawn. Those wait;
- * everything square turns.
+ * Every piece turns. The interesting half is what happens to the cells: a
+ * bed is one by two facing either way up the room and two by one lying
+ * across it, and everything that asks what a piece covers has to get the
+ * turned answer or a piece draws over one square and blocks another.
  */
 describe("what can be turned", () => {
-  test("the square things can", () => {
-    for (const piece of [
-      DecorType.Chair,
-      DecorType.Bookshelf,
-      DecorType.Stove,
-      DecorType.Sink,
-      DecorType.Dresser,
-      DecorType.Kettle,
-      DecorType.Washstand,
-      DecorType.Privy,
-      // Two cells by two, and square is what matters rather than small.
-      DecorType.Rug,
-    ]) {
+  test("everything in the house can", () => {
+    for (const piece of DECOR_TYPES) {
       expect({ piece, turns: canTurnPiece(piece) }).toEqual({ piece, turns: true });
       expect({ piece, drawings: turnsOfPiece(piece) }).toEqual({ piece, drawings: TURNS_DRAWN });
     }
   });
 
-  test("and the long ones cannot, yet", () => {
-    for (const piece of [DecorType.Bed, DecorType.Table, DecorType.Bath]) {
-      expect({ piece, turns: canTurnPiece(piece) }).toEqual({ piece, turns: false });
+  test("a quarter turn swaps a long piece and leaves a square one alone", () => {
+    for (const [piece, drawn] of Object.entries(SIZES) as [DecorType, typeof SIZES.bed][]) {
+      for (const turn of [Turn.Toward, Turn.Away]) {
+        expect({ piece, turn, ...sizeOf(piece, turn, SIZES) }).toEqual({ piece, turn, ...drawn });
+      }
+      for (const turn of [Turn.Side, Turn.SideOther]) {
+        expect({ piece, turn, ...sizeOf(piece, turn, SIZES) }).toEqual({
+          piece,
+          turn,
+          cols: drawn.rows,
+          rows: drawn.cols,
+        });
+      }
     }
   });
 
   /**
-   * And the list is the footprints, not a second opinion about them.
+   * And the squares it stands on follow, which is the whole point.
    *
-   * `TOO_LONG_TO_TURN` is written out rather than derived because the basket
-   * and the shop have to know what a piece can do before any art has loaded.
-   * This is what stops the copy drifting: a piece whose drawn footprint is
-   * square must turn, and one that is longer one way must not — otherwise
-   * either a child is offered a turn that would resize the thing, or a
-   * perfectly square piece quietly refuses to turn for no reason anybody
-   * could see.
+   * `cellsUnder` is the one place a thing standing in a room becomes a list
+   * of squares, and everything else — what is occupied, whether a piece
+   * fits, what the walkability grid says, which row a sprite sorts on — goes
+   * through it. Turning the bed and getting the same two cells back would be
+   * a bed that looked as though it had turned and behaved as though it had
+   * not.
    */
-  test("and the list is exactly the pieces that are not square", () => {
-    for (const [name, size] of Object.entries(SIZES)) {
-      const piece = DECOR_TYPES.find((one) => one === name);
-      if (!piece) continue;
-      expect({ piece, turns: canTurnPiece(piece) }).toEqual({
-        piece,
-        turns: size.cols === size.rows,
-      });
-    }
+  test("and so do the squares it stands on", () => {
+    const bed: Placed = { piece: DecorType.Bed, col: 4, row: 4, look: 0, turn: Turn.Toward };
+    expect(cellsUnder(bed, SIZES)).toEqual([
+      { col: 4, row: 4 },
+      { col: 4, row: 5 },
+    ]);
+    expect(cellsUnder({ ...bed, turn: Turn.Side }, SIZES)).toEqual([
+      { col: 4, row: 4 },
+      { col: 5, row: 4 },
+    ]);
+  });
+
+  /**
+   * The fits check, which is what makes turning a long piece safe.
+   *
+   * A bed standing against the east wall has the room it needs going down
+   * and none going across, so turning it there has to be *refused* rather
+   * than nudged or silently overlapped. Refusal is free once `cellsUnder`
+   * tells the truth — `fits` was already asking the right question — and
+   * this is the test that says so.
+   */
+  test("and a bed that would not fit turned is refused", () => {
+    const room = (col: number, row: number) => col >= 0 && col <= 4 && row >= 0 && row <= 4;
+    const corner: Placed = { piece: DecorType.Bed, col: 4, row: 0, look: 0, turn: Turn.Toward };
+    // Standing up against the east wall it fits: two cells down, both floor.
+    expect(fits(corner, [], SIZES, room)).toBe(true);
+    // Turned across it wants the square outside the wall, and there is none.
+    expect(fits({ ...corner, turn: Turn.Side }, [], SIZES, room)).toBe(false);
+    // And it is the *room* refusing rather than the piece: a bed one square
+    // in has space either way round.
+    const inside: Placed = { ...corner, col: 3 };
+    expect(fits(inside, [], SIZES, room)).toBe(true);
+    expect(fits({ ...inside, turn: Turn.Side }, [], SIZES, room)).toBe(true);
+  });
+
+  test("and one that would land on something else is refused too", () => {
+    const anywhereInside = () => true;
+    const chair: Placed = { piece: DecorType.Chair, col: 6, row: 5, look: 0, turn: Turn.Toward };
+    const bed: Placed = { piece: DecorType.Bed, col: 5, row: 5, look: 0, turn: Turn.Toward };
+    // Head to head down the room, the bed misses the chair beside it.
+    expect(fits(bed, [chair], SIZES, anywhereInside)).toBe(true);
+    // Lying across, it reaches the square the chair is on.
+    expect(fits({ ...bed, turn: Turn.Side }, [chair], SIZES, anywhereInside)).toBe(false);
   });
 });

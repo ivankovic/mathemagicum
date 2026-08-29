@@ -45,25 +45,25 @@
     "bath": {
       "file": "cottage_piece_bath.png",
       "frame_width": 64,
-      "frame_height": 48,
-      "frame_count": 1,
-      "columns": 1,
+      "frame_height": 80,
+      "frame_count": 3,
+      "columns": 3,
       "rows": 1,
       "margin": 1,
       "spacing": 2,
-      "looks": 1,
+      "looks": 3,
       "frames_per_look": 1
     },
     "bed": {
       "file": "cottage_piece_bed.png",
-      "frame_width": 32,
+      "frame_width": 64,
       "frame_height": 80,
-      "frame_count": 1,
-      "columns": 1,
+      "frame_count": 3,
+      "columns": 3,
       "rows": 1,
       "margin": 1,
       "spacing": 2,
-      "looks": 1,
+      "looks": 3,
       "frames_per_look": 1
     },
     "bookshelf": {
@@ -165,13 +165,13 @@
     "table": {
       "file": "cottage_piece_table.png",
       "frame_width": 64,
-      "frame_height": 48,
-      "frame_count": 1,
-      "columns": 1,
+      "frame_height": 80,
+      "frame_count": 3,
+      "columns": 3,
       "rows": 1,
       "margin": 1,
       "spacing": 2,
-      "looks": 1,
+      "looks": 3,
       "frames_per_look": 1
     },
     "washstand": {

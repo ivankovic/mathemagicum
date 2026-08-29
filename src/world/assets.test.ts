@@ -15,8 +15,9 @@ import {
 } from "./buildings";
 import { ALL_CHARACTERS, CHARACTER_ANIMATIONS, Facing } from "./characters";
 import { floodFillReachable, isReachable } from "./connectivity";
-import { DECOR_TYPES, canTurnPiece, framesPerLook, pieceArt, turnsOfPiece } from "./decor";
+import { DECOR_TYPES, footprintsOf, framesPerLook, pieceArt, sizeOf, turnsOfPiece } from "./decor";
 import { EFFECT_TYPES, effectAnimKey, effectSidecarKey } from "./effects";
+import { Turn } from "./facing";
 import { FIXTURE_TYPES, PLACEABLE_FIXTURES, fixtureFor, turnsOf } from "./fixtures";
 import {
   FLOWER_LOOKS,
@@ -1174,20 +1175,57 @@ describe("the shipped room a child furnishes", () => {
   });
 
   /**
-   * And the ones that do not turn are the ones that are not square.
+   * And a turned piece takes the squares the art was drawn into.
    *
-   * The rule is about the *footprint*: a quarter turn of a one-by-two bed
-   * makes it two-by-one, which changes which cells it takes and whether it
-   * still fits. A square piece has no such problem, so it turns. If this
-   * drifted, either a child would be offered a turn that silently resized a
-   * bed, or a square piece would refuse to turn for no visible reason.
+   * This is the guard the whole footprint swap rests on. The generator
+   * decides what a piece *looks* like at each way round — `footprint_at`
+   * gives it a one-by-two box or a two-by-one one — and the game decides
+   * what it *covers*, in `sizeOf`. Nothing forces those to agree, and a
+   * piece they disagree about is a piece that draws over one square and
+   * blocks another: a bed lying across the room, sitting visibly on two
+   * cells, refusing to be picked up from one of them and refusing a chair
+   * on a square that looks empty.
    */
-  test("and the ones held back are exactly the ones a turn would resize", () => {
+  test("and a piece covers the squares the art was drawn into", () => {
+    const drawn = footprintsOf(sidecar);
     for (const [name, piece] of Object.entries(sidecar.pieces)) {
       const decor = DECOR_TYPES.find((one) => pieceArt(one) === name);
       if (!decor) continue;
       const [cols, rows] = (piece as { footprint: readonly [number, number] }).footprint;
-      expect({ decor, turns: canTurnPiece(decor) }).toEqual({ decor, turns: cols === rows });
+      for (const turn of [Turn.Toward, Turn.Away]) {
+        expect({ decor, turn, ...sizeOf(decor, turn, drawn) }).toEqual({ decor, turn, cols, rows });
+      }
+      for (const turn of [Turn.Side, Turn.SideOther]) {
+        expect({ decor, turn, ...sizeOf(decor, turn, drawn) }).toEqual({
+          decor,
+          turn,
+          cols: rows,
+          rows: cols,
+        });
+      }
+    }
+  });
+
+  /**
+   * And the frame is big enough for the widest and the tallest of them.
+   *
+   * One sheet holds every way round, and a spritesheet has one frame size,
+   * so a bed that is one cell by two facing up the room and two by one
+   * lying across it needs a frame that holds both. A frame sized to the
+   * unturned footprint clips a turned bed in half — and it clips it
+   * silently, since the sheet still loads and the game still draws.
+   */
+  test("and one frame holds a piece whichever way it is round", () => {
+    for (const [name, piece] of Object.entries(sidecar.pieces)) {
+      const sheet = sidecar.piece_sheets[name];
+      if (!sheet) continue;
+      const [cols, rows] = (piece as { footprint: readonly [number, number] }).footprint;
+      const widest = Math.max(cols, rows) * TILE_SIZE;
+      expect({ name, width: sheet.frame_width }).toEqual({ name, width: widest });
+      expect({ name, room: sheet.frame_height - widest }).toEqual({
+        name,
+        room: sidecar.piece_rise_px,
+      });
     }
   });
 });

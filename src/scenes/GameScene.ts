@@ -251,6 +251,7 @@ import {
   pieceOn,
   protectedCells,
   roomsAfforded,
+  sizeOf,
   startingDecor,
   turnsOfPiece,
 } from "../world/decor";
@@ -2786,10 +2787,24 @@ export class GameScene extends Phaser.Scene {
    * Not a depth problem: they sit at zero and the room's own picture is at
    * `CHUNK_DEPTH`, a thousand below. A hidden layer draws nothing whatever
    * its contents are sorted to.
+   *
+   * And the rune over her head is a fourth of the same case. It is filed
+   * under whichever layer was showing when it was raised, so a fence armed
+   * in the garden and carried in through the front door had its picture left
+   * outside on the hidden layer. That was a missing *sign* while the rune
+   * only said something was armed; it is a missing *control* now, and a
+   * child who walked indoors holding a chair would find that tapping it did
+   * nothing, in the one room where turning furniture is the whole point.
    */
   private movePlayerToLayer(): void {
     const showing = this.sceneryLayer();
-    for (const object of [this.player, this.patchInk, this.aimInk, this.socketInk]) {
+    for (const object of [
+      this.player,
+      this.patchInk,
+      this.aimInk,
+      this.socketInk,
+      this.armedRune,
+    ]) {
       if (!object) continue;
       this.worldLayer.remove(object);
       this.interiorLayer.remove(object);
@@ -4994,7 +5009,7 @@ export class GameScene extends Phaser.Scene {
    *
    * Tapping the same thing again puts it out.
    */
-  private arm(what: Armed, texture: string, frame?: number): void {
+  private arm(what: Armed, texture: string, frame?: number, mirrored = false): void {
     if (this.modalOpen) return;
     this.closeTrays();
     // One thing waiting at a time. Arming a seed while the array spell is
@@ -5007,7 +5022,7 @@ export class GameScene extends Phaser.Scene {
     // A stick still held when the rune lights never sends its release, and
     // she walks on while the ground she is choosing from slides away.
     this.joystick?.release();
-    this.raiseArmedRune(texture, frame);
+    this.raiseArmedRune(texture, frame, mirrored);
     this.paintAim();
   }
 
@@ -9070,7 +9085,10 @@ export class GameScene extends Phaser.Scene {
     const sizes = this.pieceSizes();
     this.snuffHearth();
     for (const placed of this.decorIn(inside.house)) {
-      const size = sizes[placed.piece] ?? { cols: 1, rows: 1 };
+      // The size it is *lying* at, not the size it was drawn: a bed turned
+      // across the room is two cells wide and one deep, and its depth and
+      // the square a tap on it reaches both follow from that.
+      const size = sizeOf(placed.piece, decorTurnOf(placed), sizes);
       const at = px(placed.col, placed.row);
       const art = parts.furniture.find((piece) => piece.name === pieceArt(placed.piece));
       const x = offsetX + at.x;
@@ -9106,10 +9124,19 @@ export class GameScene extends Phaser.Scene {
       // A tile-sized hit area at its foot, the same as a placed fence has:
       // the art of a bed is eighty pixels tall and a tap anywhere on the
       // bedding should reach it, but a tap on the wall behind it should not.
+      //
+      // Measured *down from the rise* rather than up from the bottom of the
+      // frame, which is the same thing for a piece that fills its frame and
+      // not for one that no longer does. A sheet now holds every way round
+      // of a piece on one frame size — big enough for the widest and the
+      // tallest — so a bed turned across the room leaves a cell of
+      // transparency below it, and a hit area anchored to the frame's foot
+      // landed in that empty strip. The piece was there on screen and could
+      // not be picked up.
       sprite.setInteractive(
         new Phaser.Geom.Rectangle(
           0,
-          sprite.height - size.rows * TILE_SIZE,
+          parts.piece_rise_px,
           size.cols * TILE_SIZE,
           size.rows * TILE_SIZE,
         ),
@@ -9567,6 +9594,7 @@ export class GameScene extends Phaser.Scene {
       { col: ahead.col + inside.origin.col, row: ahead.row + inside.origin.row },
       this.session.facing,
       this.pieceSizes(),
+      turn,
     );
     const at: Placed = { piece, look, turn, col: corner.col, row: corner.row };
     const room = this.decorIn(inside.house);
@@ -9586,6 +9614,20 @@ export class GameScene extends Phaser.Scene {
       isFloor(inside.plan as RoomPlan, col, row) && !taken.has(cellKey(col, row));
     if (!decorFits(at, room, this.pieceSizes(), standable)) {
       this.markRefusal(ahead.col, ahead.row);
+      // And she is still holding it, the way a spell aimed out of reach
+      // stays lit — see `castArmedAt`, which makes exactly this argument
+      // about a finger that lands a square wide. It matters more here than
+      // it did: a piece that has been turned is a piece a child has already
+      // spent taps on, and turning is *when* a refusal happens, because
+      // turning is what makes a bed ask for a square it was not asking for
+      // before. Losing the turn on every near miss would make the two-cell
+      // furniture the most annoying thing in the room.
+      this.arm(
+        { kind: "decor", piece, look, turn },
+        this.decorTexture(piece, look),
+        drawnLook(turn) * framesPerLook(parts?.piece_sheets[pieceArt(piece)]),
+        drawnFlip(turn),
+      );
       return;
     }
     this.inventory.remove(item, 1);
