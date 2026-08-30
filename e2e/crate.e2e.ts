@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { CRATE_GROUPS, thingsIn } from "../src/world/crate";
+import { CRATE_GROUPS, CRATE_WIRE, thingsIn } from "../src/world/crate";
 import { DECOR_TYPES } from "../src/world/decor";
 import { FixtureType, PLACEABLE_FIXTURES } from "../src/world/fixtures";
 import { type Game, play, shutDown, takeFromCrate } from "./harness";
@@ -124,7 +124,10 @@ describe("the crate's two levels", () => {
 
         // And between them the groups hold everything, so nothing is lost
         // behind a level it is not in.
-        expect(seen.sort()).toEqual([...PLACEABLE_FIXTURES, ...DECOR_TYPES].sort());
+        // The coil is in here too, and it is the one entry that is not a
+        // thing a child owns: a wire is a line between two machines rather
+        // than an object, so what the crate holds is the gesture.
+        expect(seen.sort()).toEqual([...PLACEABLE_FIXTURES, ...DECOR_TYPES, CRATE_WIRE].sort());
       });
     },
     5 * MINUTES,
