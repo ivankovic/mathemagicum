@@ -14,6 +14,7 @@
 
 import { LANGUAGES, type Language } from "../settings";
 import { CURRENCY } from "../shop/currency";
+import { CRATE_WIRE } from "../world/crate";
 import { itemParts } from "../world/decor";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import { FLOWER_TYPES, type FlowerType } from "../world/flowers";
@@ -198,6 +199,13 @@ export const UI_ASSETS: readonly string[] = [
   ...Object.values(UiAsset),
   ...PLANT_TYPES.map(cropIcon),
   ...PLACEABLE_FIXTURES.map(itemIcon),
+  // The coil, which is in the crate without being placeable: a wire is a
+  // line between two machines rather than a thing that goes down on a
+  // square. Named here rather than falling out of the list above, and this
+  // comment is the reason — a name that lives beside what a thing *is*
+  // instead of beside the list of icons to load is exactly how the wood and
+  // stone icons came to be drawn, shipped and never loaded.
+  itemIcon(CRATE_WIRE as never),
   ...FLOWER_TYPES.map(flowerIcon),
   ...CURRENCY.denominations.map(coinIcon),
   ...MATERIAL_TYPES.map(materialIcon),

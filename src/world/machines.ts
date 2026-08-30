@@ -393,6 +393,44 @@ export function takeShare(
   };
 }
 
+/**
+ * Draw a few off the crates, for something that is not a child's hand.
+ *
+ * `takeShare` empties one crate because that is what a tap means — an exact
+ * third, counted out by something that cannot miscount. A wire is not
+ * taking a share; it is carrying, a little at a time, and it does not care
+ * which crate a thing came out of. So this takes from the fullest first and
+ * keeps going until it has what it was asked for or the crates are empty.
+ */
+export function drawOff(
+  state: MachineState,
+  many: number,
+): { state: MachineState; item: string | null; count: number } {
+  const item = state.made ?? state.holding;
+  const wanted = Math.max(0, Math.trunc(many));
+  if (item === null || wanted <= 0) return { state, item: null, count: 0 };
+  const crates = [...state.crates];
+  let taken = 0;
+  while (taken < wanted) {
+    const at = crates.reduce((best, count, i) => (count > (crates[best] ?? 0) ? i : best), 0);
+    if ((crates[at] ?? 0) <= 0) break;
+    crates[at] = (crates[at] ?? 0) - 1;
+    taken++;
+  }
+  if (taken <= 0) return { state, item: null, count: 0 };
+  const empty = crates.every((held) => held <= 0) && state.heap <= 0;
+  return {
+    state: {
+      ...state,
+      crates,
+      holding: empty ? null : state.holding,
+      made: empty ? null : state.made,
+    },
+    item,
+    count: taken,
+  };
+}
+
 /** Which crate to take from: the fullest, and the leftmost of a tie. */
 export function fullestCrate(state: MachineState): number {
   let best = 0;

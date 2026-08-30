@@ -475,6 +475,10 @@ export interface DevHandle {
     crates: number[];
     made: string | null;
   }[];
+  /** Every length of wire, and whether it is carrying. See `wires.ts`. */
+  readonly wires: () => { from: string; to: string; moved: number }[];
+  /** Which end of a wire she has hold of, or null. */
+  readonly wiring: () => { col: number; row: number } | null;
   readonly sea: () => {
     /** How many tiles of water are laid under the chunks on screen. */
     tiles: number;

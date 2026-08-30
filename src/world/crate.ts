@@ -40,8 +40,25 @@ export type CrateGroup = (typeof CrateGroup)[keyof typeof CrateGroup];
 
 export const CRATE_GROUPS: readonly CrateGroup[] = Object.values(CrateGroup);
 
+/**
+ * A coil of wire, which is the one thing in the crate that is not a *thing*.
+ *
+ * Everything else in here is an object that goes down on a square and can be
+ * picked up again. A wire is a line between two machines — see `wires.ts` —
+ * so there is nothing to own, nothing to count and nothing to take back into
+ * a basket. What the crate holds is the *gesture*: tap the coil, tap one
+ * machine, tap another.
+ *
+ * It costs nothing, and that is deliberate rather than unfinished. The
+ * expensive things in a garden are the machines at either end; charging for
+ * the line between them would be a third number for a six-year-old to keep
+ * track of, in exchange for a decision nobody would ever agonise over.
+ */
+export const CRATE_WIRE = "wire" as const;
+export type CrateWire = typeof CRATE_WIRE;
+
 /** Everything the crate can hold, whichever group it is in. */
-export type CrateThing = FixtureType | DecorType;
+export type CrateThing = FixtureType | DecorType | CrateWire;
 
 /**
  * Which group a thing belongs to.
@@ -52,13 +69,19 @@ export type CrateThing = FixtureType | DecorType;
  * crate's contents to be written down, and the first one to go stale.
  */
 export function groupOf(thing: CrateThing): CrateGroup {
+  if (thing === CRATE_WIRE) return CrateGroup.Makers;
   if ((DECOR_TYPES as readonly string[]).includes(thing)) return CrateGroup.Room;
   return isMachine(thing as FixtureType) ? CrateGroup.Makers : CrateGroup.Garden;
 }
 
 /** Everything in one group, in the order the crate shows it. */
 export function thingsIn(group: CrateGroup): readonly CrateThing[] {
-  return [...PLACEABLE_FIXTURES, ...DECOR_TYPES].filter((thing) => groupOf(thing) === group);
+  // The coil last, after the machines it joins. A child meets the things
+  // first and the way of joining them second, which is the order they are
+  // any use in: there is nothing to wire together until two machines are
+  // standing there.
+  const all: CrateThing[] = [...PLACEABLE_FIXTURES, ...DECOR_TYPES, CRATE_WIRE];
+  return all.filter((thing) => groupOf(thing) === group);
 }
 
 /**

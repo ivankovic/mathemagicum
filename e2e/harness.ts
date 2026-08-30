@@ -6,7 +6,7 @@ import { type Page, chromium } from "playwright";
 // idea of how far a swipe goes is a harness that silently stops matching.
 import { SAND_MOST_MS, SWIPE_PER_TICK, TICK_MINUTES } from "../src/spells/hourglass";
 import { SPELLS, Spell } from "../src/spells/spellbook";
-import { groupOf } from "../src/world/crate";
+import { type CrateWire, groupOf } from "../src/world/crate";
 import { DECOR_TYPES, type DecorType } from "../src/world/decor";
 import { type FixtureType, PLACEABLE_FIXTURES } from "../src/world/fixtures";
 import { FLOWER_TYPES, type FlowerType } from "../src/world/flowers";
@@ -346,12 +346,12 @@ export function patchButton(action: PatchAction): string {
  *
  * The button only exists while its own group is open — see `crateGroup`.
  */
-export function crateButton(thing: FixtureType | DecorType): string {
+export function crateButton(thing: FixtureType | DecorType | CrateWire): string {
   return `crate.${thing}`;
 }
 
 /** The name of the group button a thing lives behind. */
-export function crateGroup(thing: FixtureType | DecorType): string {
+export function crateGroup(thing: FixtureType | DecorType | CrateWire): string {
   return `crate.${groupOf(thing)}`;
 }
 
@@ -363,10 +363,17 @@ export function crateGroup(thing: FixtureType | DecorType): string {
  * regrouping, is one edit — the crate has been rearranged twice already and
  * both times the scenarios found out by tapping something else.
  */
-export async function takeFromCrate(game: Game, thing: FixtureType | DecorType): Promise<boolean> {
+export async function takeFromCrate(
+  game: Game,
+  thing: FixtureType | DecorType | CrateWire,
+): Promise<boolean> {
   await game.tap("crate");
-  if (!(await game.tap(crateGroup(thing)))) return false;
-  await game.settle(200);
+  // The group button is only on the tray while no group is open, and the
+  // crate remembers which one it was in — so a crate opened for the second
+  // time in a scenario comes back showing that group's things and has no
+  // group button to tap. Its absence is that, not a failure: what matters
+  // is whether the thing itself can be tapped afterwards.
+  if (await game.tap(crateGroup(thing))) await game.settle(200);
   return game.tap(crateButton(thing));
 }
 

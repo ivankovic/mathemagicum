@@ -215,6 +215,7 @@ import type { CityLayout } from "../world/city";
 import { CLIFF_ATLAS_KEY, cliffFrameFor, cornerLevelsFor } from "../world/cliffAtlas";
 import {
   CRATE_GROUPS,
+  CRATE_WIRE,
   type CrateGroup,
   type CrateThing,
   faceOf,
@@ -365,6 +366,7 @@ import {
 } from "../world/landmarks";
 import { hasStep } from "../world/levels";
 import {
+  MINUTES_PER_ROUND,
   type MachineState,
   type MachineType,
   SHARES,
@@ -492,6 +494,16 @@ import {
 } from "../world/topdown";
 import { type VillageNpcSpec, houseIdFor } from "../world/villageLayout";
 import { type Direction, STEP_DIRECTIONS, insideWander, stepsToward } from "../world/wander";
+import {
+  CARRIES_PER_ROUND,
+  type Wire,
+  canString,
+  carry,
+  tileOf,
+  wireKey,
+  wiresFromSave,
+  wiresToSave,
+} from "../world/wires";
 import { type GeneratedWorld, generateWorld } from "../world/worldGenerator";
 import { sidecarKey } from "./BootScene";
 import { CityBlimps } from "./cityBlimps";
@@ -678,6 +690,17 @@ const WATER_DEPTH = CHUNK_DEPTH - 1;
  * is the arithmetic on top of it.
  */
 const WAVE_STEP_MS = 250;
+/**
+ * The two colours a length of wire is drawn in.
+ *
+ * The same pair the coil's own icon uses, so the thing in the crate and the
+ * thing in the garden are plainly one thing. Two lines rather than one — a
+ * dark one and a lit one a pixel above it — because a single stroke at this
+ * zoom is a hair and reads as a scratch on the screen rather than as
+ * something hanging in the world.
+ */
+const WIRE_DARK = 0x60543f;
+const WIRE_LIT = 0xc6ba98;
 /** How many named tiles of sea the dev seam hands back. See `sea`. */
 const SEA_SAMPLE = 8;
 
@@ -1217,6 +1240,14 @@ type Armed =
   | { kind: "seed"; plant: PlantType }
   | { kind: "fixture"; fixture: FixtureType; turn: number }
   | { kind: "decor"; piece: DecorType; look: number; turn: number }
+  /**
+   * A coil, part way through being strung.
+   *
+   * `from` is the machine the first tap landed on, or null before it has. It
+   * is the one armed thing that takes *two* taps, which is why it carries
+   * state at all — everything else in this union is answered by one square.
+   */
+  | { kind: "wire"; from: GridPoint | null }
   | { kind: "flower"; flower: FlowerType; look: number };
 
 /**
@@ -1271,6 +1302,11 @@ function armedTag(what: Armed | null): string | null {
       return what.fixture;
     case "decor":
       return decorItem(what.piece, what.look);
+    case "wire":
+      // Named by what it is rather than by where it is going. A scenario
+      // asking what is in her hands wants "a coil", and the end it has hold
+      // of so far is its own question — see the `wiring` seam.
+      return CRATE_WIRE;
     default:
       return flowerObject(what.flower, what.look);
   }
@@ -1627,6 +1663,22 @@ export class GameScene extends Phaser.Scene {
    * for why this is sampled rather than accumulated.
    */
   private machinesTold: number | null = null;
+  /** Every length of wire in the world. See `wires.ts`. */
+  private wires: Wire[] = [];
+  /**
+   * How much each wire has carried altogether, by its own key.
+   *
+   * Nothing else can see this, and it is a running total rather than a rate
+   * on purpose. A wire that is backed up, a wire that has finished its work
+   * and a wire that was never joined to anything all carry nothing this
+   * second — from outside they are the same picture. What tells them apart
+   * is whether this line has *ever* worked.
+   */
+  private readonly wireCarried = new Map<string, number>();
+  /** Minutes of work banked against each wire's next round. */
+  private readonly wireWork = new Map<string, number>();
+  /** The lines themselves, drawn as ink the way the spells' marks are. */
+  private wireInk?: Phaser.GameObjects.Graphics;
   // Problems vary from cast to cast, so this is seeded from the clock rather
   // than from the world's seed: a world is meant to be reproducible, a lesson is
   // meant not to be. A driving script can pin it with `?seed=`, which is the
@@ -2076,6 +2128,9 @@ export class GameScene extends Phaser.Scene {
     // marker and for the same reason: it is over a piece of ground and has
     // to slide with it.
     this.aimInk = this.world(this.add.graphics().setDepth(0));
+    // Above the ground and below everything standing on it, so a wire runs
+    // *behind* the machines it joins rather than across their faces.
+    this.wireInk = this.world(this.add.graphics().setDepth(CHUNK_DEPTH + 1));
 
     // The empty lamp posts on the climb, for the same reason and in the same
     // layer: a socket a lamp is standing in must be drawn under the lamp.
@@ -2291,6 +2346,28 @@ export class GameScene extends Phaser.Scene {
           // other way. See `MachineState.made`.
           made: state.made,
         })),
+      /**
+       * Every length of wire, and whether it is actually carrying.
+       *
+       * The `moved` is the half nothing else can see. A wire that is backed
+       * up — the machine at the far end is full of something else — and a
+       * wire that was never joined to anything both sit there carrying
+       * nothing, and from outside they are the same picture. Without this a
+       * scenario cannot tell a line that is correctly stopped from one that
+       * never worked at all.
+       */
+      wires: () =>
+        this.wires.map((wire) => ({
+          from: wire.from,
+          to: wire.to,
+          moved: this.wireCarried.get(wireKey(wire.from, wire.to)) ?? 0,
+        })),
+      /** Which end of a wire she has hold of, part way through stringing one. */
+      wiring: () => {
+        const held = this.armed;
+        if (held?.kind !== "wire" || !held.from) return null;
+        return { col: held.from.col, row: held.from.row };
+      },
       sea: () => {
         const tiles = [...this.liveWater.values()].flat();
         return {
@@ -4567,6 +4644,17 @@ export class GameScene extends Phaser.Scene {
           count: () => this.decorHeld(piece),
           act: () => this.chooseDecorColour(piece),
         })),
+        // And the coil, which is the one button here that is not a picture
+        // of a thing she owns. There is no count on it because there is
+        // nothing to count: wire costs nothing and a garden may have as much
+        // of it as it has machines to join. See `CRATE_WIRE`.
+        {
+          texture: uiTextureKey(itemIcon(CRATE_WIRE as unknown as FixtureType)),
+          name: CRATE_WIRE,
+          shown: () => this.crateGroup === groupOf(CRATE_WIRE),
+          count: () => 0,
+          act: () => this.armWire(),
+        },
       ],
       count: () =>
         PLACEABLE_FIXTURES.reduce((sum, f) => sum + this.inventory.count(f), 0) +
@@ -5124,13 +5212,17 @@ export class GameScene extends Phaser.Scene {
     // below has to know this happened.
     this.session.aimAt(at);
     this.paintAim();
+    if (held.kind === "wire") {
+      this.stringWireAt(held, at);
+      return;
+    }
     if (held.kind === "seed") this.plantSeed(held.plant);
     // The turn is handed over rather than read back off `this.armed`: the
     // rune is put out a few lines above this, so by the time anything is
     // placed there is nothing in her hands to ask.
     else if (held.kind === "fixture") this.placeFixture(held.fixture, turnFrom(held.turn));
     else if (held.kind === "decor") this.putDecorDown(held.piece, held.look, held.turn);
-    else this.putFlowerDown(held.flower, held.look);
+    else if (held.kind === "flower") this.putFlowerDown(held.flower, held.look);
   }
 
   /** Put the marker away, whatever state it was in. */
@@ -7688,6 +7780,9 @@ export class GameScene extends Phaser.Scene {
     // square with no entry is a machine nobody has woken, which is what a
     // machine built and never tapped actually is.
     this.machines = machinesFromSave(saved?.world?.machines);
+    this.wires = wiresFromSave(saved?.world?.wires);
+    this.wireCarried.clear();
+    this.wireWork.clear();
     // The child's own things come from their progress in this game, never
     // from the ground — which is why a world the generator can no longer
     // rebuild cannot cost them a coin. `loadGame` drops such a world and
@@ -7727,6 +7822,7 @@ export class GameScene extends Phaser.Scene {
       this.savedDecor(),
       this.paintedTiles(),
       machinesToSave(this.machines),
+      wiresToSave(this.wires),
     );
     // And this child's own things, which nobody else's game may touch. Kept
     // separate all the way down: a shared purse would let one child spend
@@ -8209,6 +8305,11 @@ export class GameScene extends Phaser.Scene {
     // heap because a device's own clock was corrected would be a bug nobody
     // could reproduce.
     if (minutes <= 0) return;
+    // The wires first, so what a machine is handed this tick is worked on
+    // this tick rather than sitting in its mouth until the next one. The
+    // other order made a line of three machines take three ticks to move
+    // anything from end to end, which is a garden that looks asleep.
+    this.runWires(minutes);
     let dealt = false;
     for (const [key, state] of this.machines) {
       const machine = this.machineAt(key);
@@ -8219,6 +8320,172 @@ export class GameScene extends Phaser.Scene {
       if (worked.crates.some((count, at) => count !== (state.crates[at] ?? 0))) dealt = true;
     }
     if (dealt) this.autosave();
+  }
+
+  // --- Wire ---------------------------------------------------------------
+  //
+  // It only carries. Every decision belongs to a machine standing where a
+  // child can see it, and none of them belong to the line between two of
+  // them — see `wires.ts`.
+
+  /** Take up a coil. Nothing is spent: what a wire costs is the machines. */
+  private armWire(): void {
+    this.arm({ kind: "wire", from: null }, uiTextureKey(itemIcon(CRATE_WIRE as never)));
+  }
+
+  /**
+   * One tap of the two a wire takes.
+   *
+   * The first names the machine it comes off; the second names the one it
+   * feeds. In between, the coil stays lit and she can walk — which is the
+   * whole reason this is two taps rather than a drag: a wire reaches six
+   * squares and a six-year-old dragging across six squares of world while
+   * the camera follows is a gesture nobody lands.
+   *
+   * `castArmedAt` puts the rune out before it dispatches, so the first tap
+   * has to light it again with the end it now has hold of. Same trick as a
+   * refused piece of furniture staying in her hands.
+   */
+  private stringWireAt(held: { from: GridPoint | null }, at: GridPoint): void {
+    const machine = this.machineAt(tileKey(at.col, at.row));
+    if (!machine) {
+      // A tap on bare ground is a miss rather than a cancel: she keeps the
+      // coil and whichever end she had, exactly as a spell aimed wide stays
+      // lit. Giving it up would punish a fat finger with two taps.
+      this.showRefusalOnPlayer(itemIcon(CRATE_WIRE as never));
+      this.arm({ kind: "wire", from: held.from }, uiTextureKey(itemIcon(CRATE_WIRE as never)));
+      return;
+    }
+    if (!held.from) {
+      this.showResult(UiAsset.MarkYes, at.col, at.row);
+      this.arm({ kind: "wire", from: at }, uiTextureKey(itemIcon(CRATE_WIRE as never)));
+      return;
+    }
+    if (!canString(held.from, at)) {
+      this.markTooFar(at.col, at.row);
+      this.arm({ kind: "wire", from: held.from }, uiTextureKey(itemIcon(CRATE_WIRE as never)));
+      return;
+    }
+    const wire = { from: tileKey(held.from.col, held.from.row), to: tileKey(at.col, at.row) };
+    // Strung twice is strung once. Two wires the same way between the same
+    // two machines would carry twice as fast for no reason a child could
+    // see, which is the sort of thing somebody finds and nobody understands.
+    if (!this.wires.some((one) => one.from === wire.from && one.to === wire.to)) {
+      this.wires.push(wire);
+    }
+    this.showResult(UiAsset.MarkYes, at.col, at.row);
+    this.drawWires();
+    this.autosave();
+  }
+
+  /**
+   * Give every wire the minutes that have passed.
+   *
+   * The same clock the machines run on and for the same reason — see
+   * `workMachines`. A wire that carried by elapsed time would fill a garden
+   * overnight while nobody was there.
+   *
+   * A wire whose ends are no longer machines is dropped here rather than
+   * refused on the way in: one of them may have been taken back since, and a
+   * save that would not load because something had been moved would be worse
+   * than a length of wire quietly coming down.
+   */
+  private runWires(minutes: number): void {
+    if (this.wires.length === 0) return;
+    let carried = false;
+    const standing: Wire[] = [];
+    for (const wire of this.wires) {
+      const key = wireKey(wire.from, wire.to);
+      const sinkMachine = this.machineAt(wire.to);
+      if (!this.machineAt(wire.from) || !sinkMachine) continue;
+      standing.push(wire);
+
+      // Banked by the round, exactly as a machine's work is. Carrying a
+      // little on every frame instead made a wire sixty times faster than
+      // the machine feeding it — a line that emptied a sorter's crates in
+      // under two seconds, which is not a wire, it is a drain.
+      const worked = (this.wireWork.get(key) ?? 0) + minutes;
+      const rounds = Math.floor(worked / MINUTES_PER_ROUND);
+      if (rounds <= 0) {
+        this.wireWork.set(key, worked);
+        continue;
+      }
+      const source = this.machines.get(wire.from);
+      const sink = this.machines.get(wire.to);
+      if (!source || !sink) {
+        this.wireWork.set(key, 0);
+        continue;
+      }
+      const done = carry(source, sink, sinkMachine, rounds * CARRIES_PER_ROUND);
+      if (done.moved <= 0) {
+        // Backed up, or nothing to carry. One round's work is kept and no
+        // more: a line that banked a month of it while the far end was full
+        // would empty a garden into one machine the moment it cleared.
+        this.wireWork.set(key, MINUTES_PER_ROUND);
+        continue;
+      }
+      this.wireWork.set(key, worked - rounds * MINUTES_PER_ROUND);
+      // How much it has carried *altogether*, not on the last tick. A wire
+      // that has finished its work and one that never started both carry
+      // nothing this second, and from outside they are the same picture —
+      // so what a scenario needs to know is whether this line has ever
+      // worked, which is a running total and not a rate.
+      this.wireCarried.set(key, (this.wireCarried.get(key) ?? 0) + done.moved);
+      this.machines.set(wire.from, done.source);
+      this.machines.set(wire.to, done.sink);
+      carried = true;
+    }
+    if (standing.length !== this.wires.length) {
+      this.wires = standing;
+      this.drawWires();
+    }
+    if (carried) this.autosave();
+  }
+
+  /**
+   * Draw every length of it, and the pail on each.
+   *
+   * Ink rather than sprites, the way the spells' marks are: a wire is a line
+   * and a line is what `Graphics` is for. The sag is the whole of what makes
+   * it read as hanging rather than as a ruler laid across the garden.
+   */
+  private drawWires(): void {
+    const ink = this.wireInk;
+    if (!ink) return;
+    ink.clear();
+    for (const wire of this.wires) {
+      const at = tileOf(wire.from);
+      const to = tileOf(wire.to);
+      if (!at || !to) continue;
+      const start = this.toFeet(at.col, at.row);
+      const end = this.toFeet(to.col, to.row);
+      const hang = Math.max(6, Math.hypot(end.x - start.x, end.y - start.y) / 6);
+      ink.lineStyle(2, WIRE_DARK, 1);
+      this.sagFrom(ink, start, end, hang);
+      ink.lineStyle(1, WIRE_LIT, 1);
+      this.sagFrom(ink, { x: start.x, y: start.y - 1 }, { x: end.x, y: end.y - 1 }, hang);
+    }
+  }
+
+  /** One hanging line, as a handful of straight ones. */
+  private sagFrom(
+    ink: Phaser.GameObjects.Graphics,
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+    hang: number,
+  ): void {
+    const steps = 10;
+    ink.beginPath();
+    for (let step = 0; step <= steps; step++) {
+      const along = step / steps;
+      const x = start.x + (end.x - start.x) * along;
+      // A parabola through both ends, deepest in the middle: four times the
+      // sag at the halfway point and nothing at either end.
+      const y = start.y + (end.y - start.y) * along + hang * 4 * along * (1 - along);
+      if (step === 0) ink.moveTo(x, y);
+      else ink.lineTo(x, y);
+    }
+    ink.strokePath();
   }
 
   private takeFixture(fixture: FixtureType, col: number, row: number): void {

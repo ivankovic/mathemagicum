@@ -95,6 +95,14 @@ export interface WorldSnapshot {
    */
   readonly machines?: Readonly<Record<string, string>>;
   /**
+   * Every length of wire, as the two squares it joins.
+   *
+   * A fact about the world rather than about the child, for the reason the
+   * machines are: two siblings on one tablet share a garden, and a line one
+   * of them strung is carrying for the other.
+   */
+  readonly wires?: readonly string[];
+  /**
    * The floor plan of every house somebody has added a room to, by building.
    *
    * Here rather than with the child, and the placement is the whole of it: a
@@ -227,6 +235,7 @@ export function snapshotWorld(
   decor: Readonly<Record<string, readonly string[]>> = {},
   painted: PaintedTiles = [],
   machines: Readonly<Record<string, string>> = {},
+  wires: readonly string[] = [],
 ): WorldSnapshot {
   const placed: PlacedObject[] = [];
   const standing = new Map<string, string>();
@@ -250,6 +259,7 @@ export function snapshotWorld(
     ...(Object.keys(decor).length > 0 ? { decor } : {}),
     ...(painted.length > 0 ? { painted } : {}),
     ...(Object.keys(machines).length > 0 ? { machines } : {}),
+    ...(wires.length > 0 ? { wires } : {}),
   };
 }
 
@@ -283,12 +293,13 @@ export function snapshotGame(
   decor: Readonly<Record<string, readonly string[]>> = {},
   painted: PaintedTiles = [],
   machines: Readonly<Record<string, string>> = {},
+  wires: readonly string[] = [],
 ): GameSnapshot {
   return {
     snapshotVersion: SNAPSHOT_VERSION,
     generatorVersion: GENERATOR_VERSION,
     seed,
-    world: snapshotWorld(grid, baseline, plans, decor, painted, machines),
+    world: snapshotWorld(grid, baseline, plans, decor, painted, machines, wires),
     savedAt,
   };
 }

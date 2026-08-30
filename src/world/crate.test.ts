@@ -2,12 +2,23 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { CRATE_GROUPS, CrateGroup, type CrateThing, faceOf, groupOf, thingsIn } from "./crate";
+import {
+  CRATE_GROUPS,
+  CRATE_WIRE,
+  CrateGroup,
+  type CrateThing,
+  faceOf,
+  groupOf,
+  thingsIn,
+} from "./crate";
 import { DECOR_TYPES } from "./decor";
 import { PLACEABLE_FIXTURES } from "./fixtures";
 import { MACHINE_TYPES } from "./machines";
 
-const EVERYTHING: readonly CrateThing[] = [...PLACEABLE_FIXTURES, ...DECOR_TYPES];
+// The coil is in here too, and it is the one entry that is not a thing a
+// child owns: a wire is a line between two machines rather than an object,
+// so what the crate holds is the gesture. See `CRATE_WIRE`.
+const EVERYTHING: readonly CrateThing[] = [...PLACEABLE_FIXTURES, ...DECOR_TYPES, CRATE_WIRE];
 
 describe("how the crate is divided", () => {
   /**
@@ -31,8 +42,17 @@ describe("how the crate is divided", () => {
     }
   });
 
-  test("the machines are the makers, and nothing else is", () => {
-    expect([...thingsIn(CrateGroup.Makers)].sort()).toEqual([...MACHINE_TYPES].sort());
+  /**
+   * The makers are the machines and the way of joining them.
+   *
+   * The coil belongs here rather than in the garden group for the reason the
+   * sorter does: it is not furniture, and shelving it with the benches would
+   * say it was. It comes last, after the machines, because there is nothing
+   * to wire together until two of them are standing there.
+   */
+  test("the machines are the makers, and the coil that joins them", () => {
+    expect([...thingsIn(CrateGroup.Makers)].sort()).toEqual([...MACHINE_TYPES, CRATE_WIRE].sort());
+    expect(thingsIn(CrateGroup.Makers).at(-1)).toBe(CRATE_WIRE);
   });
 
   test("furniture is the room, and fixtures never are", () => {

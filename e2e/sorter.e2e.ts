@@ -3,6 +3,7 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
+import { CRATE_WIRE } from "../src/world/crate";
 import { FixtureType } from "../src/world/fixtures";
 import { MINUTES_PER_ROUND, SHARES } from "../src/world/machines";
 import { type Game, play, runeButton, shutDown, takeFromCrate } from "./harness";
@@ -28,6 +29,12 @@ afterAll(shutDown);
  * exactly like one that works.
  */
 const WITH_TIMBER = "&materials=60&hour=12&freezeNpcs&learned=all";
+
+interface Strung {
+  from: string;
+  to: string;
+  moved: number;
+}
 
 interface Machine {
   where: string;
@@ -303,6 +310,108 @@ describe("the first machine that does something", () => {
         await game.settle(500);
         expect(await game.held("wood")).toBe(wood + 9);
         expect(await game.held("carrot")).toBe(0);
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * And a wire between the two, which is what makes it a system.
+   *
+   * A sorter deals a heap into three and a hothouse eats one crop a round.
+   * On their own they are two machines a child walks between with a basket;
+   * joined, the second is fed by the first and the garden does something
+   * while she is standing in it.
+   *
+   * The failure worth guarding is the quiet one, and it is *two* failures
+   * that look identical from outside: a wire that never carried and a wire
+   * that is correctly backed up both sit there doing nothing. That is why
+   * the seam reports how much moved rather than only what is joined to what.
+   */
+  test(
+    "and a wire feeds one machine from another",
+    async () => {
+      await play({ seams: WITH_TIMBER }, async (game) => {
+        // A sorter with carrots in it, dealt and waiting in the crates.
+        const from = await aMachineBeside(game, FixtureType.Sorter);
+        await game.tapCell(from.col, from.row);
+        await game.settle(400);
+        await game.solveShare();
+        await game.settle(400);
+        // More carrots than she has of anything else, and that matters: a
+        // sorter takes *whatever* it is given — dealing cannot mint, so it
+        // has no reason to be fussy — and it tips in the biggest heap she is
+        // carrying. Given fewer carrots than stone it eats the stone, and
+        // then there is none left to build the second machine out of.
+        await game.tab.evaluate((crop) => {
+          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
+            .__mathemagicum;
+          if (!handle) throw new Error("the game has not put its handle out");
+          (handle.session as { inventory: { add: (of: string, n: number) => void } }).inventory.add(
+            crop as string,
+            99,
+          );
+        }, "carrot");
+        await game.settle(200);
+        await game.tapCell(from.col, from.row);
+        await game.settle(400);
+
+        // And a hothouse beside it, woken and empty.
+        const to = await aMachineBeside(game, FixtureType.Hothouse);
+        await game.tapCell(to.col, to.row);
+        await game.settle(400);
+        await game.solveArray();
+        await game.settle(400);
+
+        // Both standing and both awake before any wire is strung, so a
+        // failure below is about the wire rather than about the machines.
+        const both = await machines(game);
+        expect(both.map((one) => one.where).sort()).toEqual(
+          [`${from.col},${from.row}`, `${to.col},${to.row}`].sort(),
+        );
+        expect(both.every((one) => one.awake)).toBe(true);
+
+        // The coil takes two taps: one machine, then the other. In between
+        // it stays lit and she still has hold of the first end.
+        expect(await takeFromCrate(game, CRATE_WIRE)).toBe(true);
+        await game.settle(300);
+        await game.tapCell(from.col, from.row);
+        await game.settle(300);
+        expect(await game.seam<{ col: number; row: number } | null>("wiring")).toEqual({
+          col: from.col,
+          row: from.row,
+        });
+        expect(await game.seam<string | null>("armed")).toBe(CRATE_WIRE);
+
+        await game.tapCell(to.col, to.row);
+        await game.settle(400);
+        expect(await game.seam<Strung[]>("wires")).toHaveLength(1);
+
+        // Now wind the clock: the sorter deals its heap and the wire walks
+        // it along to the hothouse, which turns it into timber.
+        const wood = await game.held("wood");
+        await game.windClock(12);
+        await game.settle(1500);
+
+        const strung = (await game.seam<Strung[]>("wires"))[0];
+        expect(strung?.moved).toBeGreaterThan(0);
+
+        const house = (await game.seam<Machine[]>("machines")).find(
+          (one) => one.where === `${to.col},${to.row}`,
+        );
+        // Carrots arrived and became timber, which nothing but the wire
+        // could have done — she never carried any of it across herself.
+        expect(house?.made).toBe("wood");
+        expect(house?.crates.some((count) => count > 0)).toBe(true);
+
+        await game.tapCell(to.col, to.row);
+        await game.settle(500);
+        expect(await game.held("wood")).toBeGreaterThan(wood);
+
+        // And the line is still there tomorrow.
+        await game.reload(WITH_TIMBER);
+        await game.settle(800);
+        expect(await game.seam<Strung[]>("wires")).toHaveLength(1);
       });
     },
     5 * MINUTES,

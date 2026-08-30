@@ -197,6 +197,11 @@
       "width": 32,
       "height": 32
     },
+    "item-wire": {
+      "file": "item_wire.png",
+      "width": 32,
+      "height": 32
+    },
     "coin-50": {
       "file": "coin_50.png",
       "width": 32,
