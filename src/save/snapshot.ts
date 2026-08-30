@@ -38,7 +38,19 @@ import type { GridPoint } from "../world/topdown";
  */
 export const GENERATOR_VERSION = 1;
 
-/** Bumped when the shape below changes, which is a different thing. */
+/**
+ * Bumped when the shape below changes, which is a different thing.
+ *
+ * It has two jobs and both are load-bearing. Going forwards it names the last
+ * step of the migration chain, so a save written by an older build is walked
+ * up to today before anything reads it — see `migrate`. Going *backwards* it
+ * is the guard: a save stamped higher than this was written by a build that
+ * knew more than this one does, and `writeGame` refuses to write over it.
+ *
+ * That second one is not hypothetical. A tab left open across a deploy is
+ * running yesterday's code against today's save, and without the guard the
+ * first autosave quietly drops every field yesterday did not know about.
+ */
 export const SNAPSHOT_VERSION = 2;
 
 /**
@@ -60,6 +72,37 @@ export const SNAPSHOT_VERSION = 2;
  * is when the shape changes again for some unrelated reason.
  */
 export const HEARTH_IS_FURNITURE = 2;
+
+/**
+ * One step up the chain: what a save of `from` has to have done to it to
+ * become a save of `to`.
+ *
+ * Pure, small, and kept for ever. A migration is not deleted when it stops
+ * being needed for the saves anybody has today, because "anybody" includes a
+ * child who has not opened the game since the spring.
+ */
+export interface Migration {
+  readonly from: number;
+  readonly to: number;
+  readonly run: (world: WorldSnapshot) => WorldSnapshot;
+}
+
+/**
+ * Every step, in order, and there are none yet.
+ *
+ * That is not an oversight — it is what the format has cost so far. Every
+ * change to date has been *additive with a default*: an absent `turn` reads
+ * as facing the camera, an absent `made` as a machine that deals, an absent
+ * `mark` as a tally nobody has shown a heap to. A field that means the right
+ * thing by being missing needs no migration, and it is much the better trick
+ * where it fits.
+ *
+ * What it does not fit is a field changing meaning, a field splitting in two,
+ * or a key being rewritten — and this is where those go, one entry each, so
+ * that the next person to need one adds a line rather than inventing a
+ * scheme under time pressure.
+ */
+export const MIGRATIONS: readonly Migration[] = [];
 
 export interface WorldSnapshot {
   /** Planted tiles: column, row, what, how grown. */
@@ -359,6 +402,56 @@ export function savedAtOf(record: unknown): number | null {
  * make sense is dropped rather than restored: a missing fence is a thing a
  * child can buy again, and a crash on load is a farm they can never reach.
  */
+/**
+ * Walk a save up to today, one step at a time.
+ *
+ * Runs every migration above the version it was written at, in order, and
+ * stamps the result with where it arrived. A save already at today's version
+ * goes through untouched, which is nearly every save there will ever be.
+ *
+ * **A save from the future is left exactly as it is.** Not migrated, not
+ * repaired, not partly understood: a build that meets a save newer than
+ * itself has no way to know what it would be throwing away, so it changes
+ * nothing and `writeGame` refuses to overwrite it. That is a stale tab left
+ * open across a deploy, and it is the one way a child can lose work without
+ * touching anything.
+ */
+export function migrate(snapshot: GameSnapshot): GameSnapshot {
+  return walk(snapshot, MIGRATIONS, SNAPSHOT_VERSION);
+}
+
+/**
+ * The chain itself, with the steps and the destination handed in.
+ *
+ * Split out from `migrate` so it can be tried with migrations that are not
+ * real — the list is empty today, and an untried mechanism is one that is
+ * wrong on the day it first matters.
+ */
+export function walk(
+  snapshot: GameSnapshot,
+  steps: readonly Migration[],
+  upTo: number,
+): GameSnapshot {
+  const at = Number.isInteger(snapshot.snapshotVersion) ? snapshot.snapshotVersion : 0;
+  if (at >= upTo) return snapshot;
+  let world = snapshot.world;
+  for (const step of [...steps].sort((a, b) => a.from - b.from)) {
+    if (step.from < at || step.to > upTo) continue;
+    world = step.run(world);
+  }
+  return { ...snapshot, snapshotVersion: upTo, world };
+}
+
+/** Whether this save was written by a build that knew more than this one. */
+export function fromTheFuture(snapshot: GameSnapshot | null | undefined): boolean {
+  return (
+    snapshot !== null &&
+    snapshot !== undefined &&
+    Number.isInteger(snapshot.snapshotVersion) &&
+    snapshot.snapshotVersion > SNAPSHOT_VERSION
+  );
+}
+
 /** What came back, and what could not. */
 export interface Restored {
   /**

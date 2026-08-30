@@ -34,11 +34,18 @@ import {
 } from "./profiles";
 import {
   GENERATOR_VERSION,
+  type GameSnapshot,
+  type Migration,
+  SNAPSHOT_VERSION,
+  type WorldSnapshot,
+  fromTheFuture,
+  migrate,
   readPlans,
   restorePlayer,
   restoreWorld,
   snapshotGame,
   snapshotPlayer,
+  walk,
   worldBaseline,
 } from "./snapshot";
 import { deleteProfile, readProfiles, saveProfile } from "./store";
@@ -781,5 +788,98 @@ describe("a world the generator no longer builds the same way", () => {
     const put = restoreWorld(fresh, saved);
     expect(put.refused).toEqual([]);
     expect(fresh.getObjectAt(3, 3)?.type).toBe("fence");
+  });
+});
+
+/**
+ * Walking a save up to today, and refusing one that came from tomorrow.
+ *
+ * The chain is empty, and that is what the format has cost so far: every
+ * change to date has been additive with a default, and a field that means
+ * the right thing by being missing needs no migration. What it exists for is
+ * the change that cannot be done that way — a field splitting in two, a key
+ * being rewritten — so that the next person to need one adds a line instead
+ * of inventing a scheme under time pressure.
+ *
+ * So it is exercised here with migrations that are not real, because an
+ * untried mechanism is a mechanism that is wrong on the day it matters.
+ */
+describe("a save from another version", () => {
+  const snapshotAt = (version: number): GameSnapshot => ({
+    ...snapshotGame(world(), new Map(), 99, CLOCK),
+    snapshotVersion: version,
+  });
+
+  test("one written today goes through untouched", () => {
+    const now = snapshotAt(SNAPSHOT_VERSION);
+    expect(migrate(now)).toBe(now);
+  });
+
+  test("and an older one comes out stamped with today", () => {
+    expect(migrate(snapshotAt(1)).snapshotVersion).toBe(SNAPSHOT_VERSION);
+  });
+
+  /**
+   * And every step above the version it was written at runs, in order.
+   *
+   * Order is the whole of a chain: a save that ran the steps backwards, or
+   * ran only the last one, is a save that has been half-understood — which
+   * is worse than one that was refused, because it looks fine.
+   */
+  test("and every step above where it started runs, in order", () => {
+    const ran: string[] = [];
+    const noting = (step: string) => (w: WorldSnapshot) => {
+      ran.push(step);
+      return w;
+    };
+    // Out of order on purpose: the chain sorts them, and a chain that ran
+    // them as written would be a pile.
+    const chain: Migration[] = [
+      { from: 2, to: 3, run: noting("2→3") },
+      { from: 1, to: 2, run: noting("1→2") },
+    ];
+    expect(walk(snapshotAt(1), chain, 3).snapshotVersion).toBe(3);
+    expect(ran).toEqual(["1→2", "2→3"]);
+
+    // And a save that already had the first step done does not have it done
+    // again — which is the difference between a chain and a pile.
+    ran.length = 0;
+    walk(snapshotAt(2), chain, 3);
+    expect(ran).toEqual(["2→3"]);
+  });
+
+  /**
+   * A save from a build that knew more than this one is left exactly alone.
+   *
+   * Not migrated, not repaired, not partly understood: there is no way to
+   * know what would be thrown away.
+   */
+  test("and one from the future is not touched", () => {
+    const ahead = snapshotAt(SNAPSHOT_VERSION + 1);
+    expect(migrate(ahead)).toBe(ahead);
+    expect(fromTheFuture(ahead)).toBe(true);
+    expect(fromTheFuture(snapshotAt(SNAPSHOT_VERSION))).toBe(false);
+    expect(fromTheFuture(null)).toBe(false);
+  });
+
+  /**
+   * And nothing writes over it.
+   *
+   * This is a tab left open across a deploy: yesterday's code holding
+   * today's save. Everything it does not recognise it drops on the way out,
+   * and the autosave four seconds later makes that permanent — from a tab
+   * nobody touched. A game that will not save is bad; a garden with things
+   * missing is worse, and it does not come back.
+   */
+  test("and nothing writes over a save newer than the build", () => {
+    const store = memory();
+    const game = newGame(store, 0.5, CLOCK);
+    const ahead = { ...game, world: snapshotAt(SNAPSHOT_VERSION + 1) };
+    writeGame(store, ahead);
+    expect(loadGame(store, game.id)?.world?.snapshotVersion).toBe(SNAPSHOT_VERSION + 1);
+
+    // Yesterday's build tries to autosave over it, and does not.
+    writeGame(store, { ...game, world: snapshotAt(SNAPSHOT_VERSION) });
+    expect(loadGame(store, game.id)?.world?.snapshotVersion).toBe(SNAPSHOT_VERSION + 1);
   });
 });

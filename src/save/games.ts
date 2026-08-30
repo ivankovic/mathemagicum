@@ -10,7 +10,7 @@ import {
   joinProfile,
   splitProfile,
 } from "./profiles";
-import { GENERATOR_VERSION, type GameSnapshot } from "./snapshot";
+import { GENERATOR_VERSION, type GameSnapshot, fromTheFuture, migrate } from "./snapshot";
 
 /**
  * The games saved on this device, and which one is being played.
@@ -177,6 +177,20 @@ export function newGame(store: SettingsStore | null, random: number, now: number
 }
 
 export function writeGame(store: SettingsStore | null, game: SavedGame): void {
+  // **Never over a save that knows more than we do.**
+  //
+  // A tab left open across a deploy is yesterday's code holding today's
+  // save. Everything it does not recognise it drops on the way out — every
+  // machine, if machines were what shipped that morning — and the first
+  // autosave four seconds later makes that permanent, from a tab nobody
+  // touched. Reading before writing costs a few kilobytes on a timer that
+  // was already writing them.
+  //
+  // What a child sees is a game that will not save, which is bad. What they
+  // would otherwise see is a garden with things missing, which is worse and
+  // is not recoverable. See `fromTheFuture`.
+  const standing = readJson(store, gameKey(game.id)) as { world?: GameSnapshot | null } | null;
+  if (fromTheFuture(standing?.world)) return;
   writeJson(store, gameKey(game.id), game);
   const rest = listGames(store).filter((entry) => entry.id !== game.id);
   writeIndex(store, [{ id: game.id, seed: game.seed, savedAt: game.savedAt }, ...rest]);
@@ -206,7 +220,9 @@ export function loadGame(store: SettingsStore | null, id: string): SavedGame | n
   // What the mismatch means now is *the ground may have moved*, which is a
   // thing to check a square at a time as the world is put back. See
   // `restoreWorld`, and `SavedGame.groundMoved`.
-  const usable = world ?? null;
+  // Walked up to today before anything reads it, and left alone if it came
+  // from a build that knew more than this one — see `migrate`.
+  const usable = world ? migrate(world) : null;
   const progress =
     typeof record.progress === "object" && record.progress !== null
       ? (record.progress as Record<string, Progress>)
