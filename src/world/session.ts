@@ -561,6 +561,9 @@ export class GameSession {
       blocksMovement: true,
       anchorCol: col,
       anchorRow: row,
+      // Hers, and said so here because here is the only place that knows.
+      // See `PlacedObject.mine`.
+      mine: true,
     };
     this.grid.placeObject(object);
     return {

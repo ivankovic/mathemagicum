@@ -8818,9 +8818,18 @@ export class GameScene extends Phaser.Scene {
       // one of these is hers. See `watchMachine`.
       if (isMachine(fixture)) {
         this.watchMachine(sprite, object.col, object.row);
-        // And into the map the take-back reaches for. Without this a machine
-        // could be unmade the day after it was built and its picture would
-        // stay standing in the garden.
+      } else if (object.mine) {
+        // Hers, so it can be picked up again — which it could not be, for as
+        // long as this only happened at the moment of placing. A fence put
+        // down yesterday came back through here and was never made tappable,
+        // so it stood in the garden for good. See `PlacedObject.mine` for why
+        // the answer is a field rather than a guess.
+        this.watchPlacedFixture(sprite, fixture, object.col, object.row);
+      }
+      // Into the map whatever it is, because both routes out of the world —
+      // a tap for a fence, the minus rune for a machine — destroy the sprite
+      // through it.
+      if (isMachine(fixture) || object.mine) {
         this.placedFixtures.set(tileKey(object.col, object.row), sprite);
       }
       // A lamp has a flame in it and a glowcap glows: both light the ground

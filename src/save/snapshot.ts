@@ -194,7 +194,13 @@ function objectSignature(object: PlacedObject): string {
   // is a difference the save has to carry, and this signature is how the
   // save decides there is one.
   const turned = object.turn ? `|turn${object.turn}` : "";
-  return `${object.type}${object.flip ? "|flip" : ""}${turned}`;
+  // And whose it is. A fence a child bought and put down on a square the
+  // village had already fenced is the same picture and not the same thing:
+  // hers can be picked up again and the village's cannot, so a save that
+  // called them equal would give her back the village's on the next load and
+  // quietly take hers away.
+  const owned = object.mine ? "|mine" : "";
+  return `${object.type}${object.flip ? "|flip" : ""}${turned}${owned}`;
 }
 
 export function worldBaseline(grid: WorldGrid): WorldBaseline {

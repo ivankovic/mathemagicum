@@ -63,4 +63,22 @@ export interface PlacedObject {
    * the two side-on ways it had been.
    */
   turn?: number;
+  /**
+   * Whether a child put this here, as against the generator.
+   *
+   * The one thing that decides whether a tap on it picks it up. Everything
+   * the world builds — the well in the square, the fences round somebody
+   * else's garden, the city's lamps — goes through the same spawner as a
+   * fence she bought, and taking a village to pieces one tap at a time is
+   * not a thing this game offers.
+   *
+   * Written at the moment of placing rather than worked out later, and that
+   * is the whole reason it exists. It *is* derivable from a save — a diff
+   * against how the world was generated is exactly what `placed` is — but
+   * only for as long as you are holding the save. By the time the scene puts
+   * a sprite on screen it is reading the grid, where a fence she bought and
+   * a fence the village built are the same object with the same fields, and
+   * her own could not be picked up the day after she put it down.
+   */
+  mine?: boolean;
 }

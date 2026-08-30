@@ -421,6 +421,36 @@ describe("a world written down and put back", () => {
     expect(saved.world.cleared).toEqual([]);
   });
 
+  /**
+   * Whose a thing is, when the two are otherwise the same thing.
+   *
+   * A fence a child bought and set down on a square the village had already
+   * fenced is the same picture and not the same object: hers can be picked
+   * up again and the village's cannot. Left out of the signature the two
+   * compare equal, so the save records nothing, and the next load gives her
+   * back the village's fence and quietly takes hers away.
+   *
+   * It is also the only thing that survives to tell the scene which is
+   * which. By the time a sprite goes on screen it is reading the grid, where
+   * both are the same fields — which is why hers could not be picked up the
+   * day after she put it down. See `PlacedObject.mine`.
+   */
+  test("a fence she put down is not the fence the village built", () => {
+    const grid = world();
+    grid.placeObject(fence(1, 1)); // the village's
+    const baseline = worldBaseline(grid);
+    grid.removeObjectAt(1, 1);
+    grid.placeObject({ ...fence(1, 1), mine: true }); // hers, on the same square
+
+    const saved = snapshotGame(grid, baseline, 99, CLOCK);
+    expect(saved.world.placed.map((o) => o.mine)).toEqual([true]);
+
+    // And back it comes as hers, which is the half the scene reads.
+    const fresh = world();
+    restoreWorld(fresh, saved.world);
+    expect(fresh.getObjectAt(1, 1)?.mine).toBe(true);
+  });
+
   // Occupied before and occupied after, but not by the same thing. A check
   // for whether a tile has something on it records no change here at all,
   // and the world reloads with the generator's fence back and the bought one
