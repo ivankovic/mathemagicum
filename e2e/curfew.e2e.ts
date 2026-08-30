@@ -54,6 +54,9 @@ async function doorOf(game: Game, wanted: string): Promise<{ col: number; row: n
 async function tryTheDoor(game: Game, hour: number, wanted: string): Promise<Inside | null> {
   const door = await doorOf(game, wanted);
   await game.reload(`&learned=all&hour=${hour}&at=${door.col},${door.row + 1}`);
+  // A reload is not one load: the page boots, reads the save and boots
+  // again, and a walk sent into the gap between them goes nowhere at all.
+  await game.settle(600);
   // Held rather than tapped, which is what every other scenario that walks
   // her anywhere does. A single press is one keydown and one keyup, and on a
   // page that has just reloaded it can land before the scene is listening —

@@ -475,6 +475,7 @@ import {
   readPainted,
 } from "../world/terrainCopy";
 import {
+  ALL_HOURS,
   MAX_NIGHT_ALPHA,
   NIGHT_TINT_COLOR,
   type OpeningHours,
@@ -994,6 +995,14 @@ const CITY_CLOCKMAKER_ID = "city-clockmaker";
  * when the door opens. See `hoursFor`.
  */
 const OBSERVATORY_DOME_ID = "observatory-dome";
+/**
+ * The village tower, which is a post office downstairs and a study up.
+ *
+ * Named here because two separate things about it hang off the id: the map
+ * on its wall, and the hours it keeps while a child has no other way of
+ * finding anything. See `WALL_HANGINGS` and `hoursFor`.
+ */
+const TOWER_ID = "post-office";
 const LONE_ATTENDANTS: Record<string, string> = {
   [OBSERVATORY_DOME_ID]: ASTRONOMER_ID,
 };
@@ -10490,7 +10499,27 @@ export class GameScene extends Phaser.Scene {
    * the hours are a fact about the person in it.
    */
   private hoursFor(buildingId: string): OpeningHours {
-    return buildingId === OBSERVATORY_DOME_ID ? STARGAZING_HOURS : VILLAGE_HOURS;
+    if (buildingId === OBSERVATORY_DOME_ID) return STARGAZING_HOURS;
+    // The tower never shuts on a child who cannot yet cross the world.
+    //
+    // Reported from a playtest: start the game after six in the evening and
+    // the map is unreachable. The map hangs in the tower, the tower keeps
+    // the village's hours, and a five-year-old sat down at bedtime is a
+    // five-year-old who cannot see where anything is — which is not a
+    // locked door, it is the game refusing to explain itself.
+    //
+    // The hourglass is the answer the game would like to give, and it is a
+    // circular one: winding the clock is a spell, spells are learned in
+    // buildings, and finding a building is what the map is for. So the door
+    // that holds the map is open until she has the spell that makes doors
+    // stop mattering — the portal crosses the world, and a child who can
+    // cross it can reach the tower at any hour by other means.
+    //
+    // Not open for ever, because a village where one door never shuts is a
+    // village with a rule that has an exception nobody can see the shape of.
+    // This one has a shape: *until you can find your own way*.
+    if (buildingId === TOWER_ID && !this.knowsPortal) return ALL_HOURS;
+    return VILLAGE_HOURS;
   }
 
   private isOpenNow(buildingId: string): boolean {

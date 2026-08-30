@@ -3,6 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  ALL_HOURS,
   MAX_NIGHT_ALPHA,
   OPENS_AT,
   SHUTS_AT,
@@ -205,6 +206,18 @@ describe("the observatory's hours", () => {
     for (let hour = 0; hour < 24; hour += 0.25) {
       expect(isOpenHours(hour)).toBe(isOpenHours(hour, VILLAGE_HOURS));
       expect(opensIn(hour)).toBe(opensIn(hour, VILLAGE_HOURS));
+    }
+  });
+
+  // The door the tower keeps until a child has the portal. Written as a pair
+  // of hours like every other door rather than as a special case in the
+  // caller, so it goes through the same rule — and this is what says the
+  // rule reads it the way it was meant: nought to twenty-four is the whole
+  // day, not the empty window a `<` at the wrong end would make of it.
+  test("and a door that never shuts is open at every hour of the day", () => {
+    for (let hour = 0; hour < 24; hour += 0.25) {
+      expect({ hour, open: isOpenHours(hour, ALL_HOURS) }).toEqual({ hour, open: true });
+      expect(opensIn(hour, ALL_HOURS)).toBe(0);
     }
   });
 });

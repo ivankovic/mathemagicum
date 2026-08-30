@@ -76,6 +76,15 @@ export const VILLAGE_HOURS: OpeningHours = { opensAt: OPENS_AT, shutsAt: SHUTS_A
 export const STARGAZING_HOURS: OpeningHours = { opensAt: SUNSET - 1, shutsAt: SUNRISE + 1 };
 
 /**
+ * A door that is never shut.
+ *
+ * Opens at midnight and shuts at midnight, which by the rule below is open
+ * for all twenty-four hours: `opensAt <= shutsAt`, so the window is between
+ * the two, and between nought and twenty-four is the whole day.
+ */
+export const ALL_HOURS: OpeningHours = { opensAt: 0, shutsAt: 24 };
+
+/**
  * Whether a door is open at this hour.
  *
  * Handles a window that wraps midnight, which the observatory's does and the
