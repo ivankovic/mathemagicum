@@ -67,6 +67,20 @@ export interface SavedGame extends GameEntry {
   readonly world: GameSnapshot | null;
   /** What each child has done here, by their id. */
   readonly progress: Readonly<Record<string, Progress>>;
+  /**
+   * Whether the generator has changed since this was written.
+   *
+   * Not a reason to refuse the save — see `loadGame` — but a reason to put it
+   * back carefully: the same seed may grow a different coastline now, so a
+   * fence saved on grass could be standing in the sea. Everything indoors is
+   * keyed by house rather than by tile and is safe either way.
+   */
+  readonly groundMoved: boolean;
+}
+
+/** Whether a snapshot was written against a world the generator no longer builds. */
+function movedSince(world: GameSnapshot | null): boolean {
+  return world !== null && world.generatorVersion !== GENERATOR_VERSION;
 }
 
 function readJson(store: SettingsStore | null, key: string): unknown {
@@ -147,7 +161,15 @@ export function canAddGame(games: readonly GameEntry[]): boolean {
 export function newGame(store: SettingsStore | null, random: number, now: number): SavedGame {
   const games = listGames(store);
   const id = `g${now.toString(36)}${Math.floor(Math.abs(random) * 1e6).toString(36)}`;
-  const game: SavedGame = { id, seed: gameSeed(random), savedAt: now, world: null, progress: {} };
+  const game: SavedGame = {
+    id,
+    seed: gameSeed(random),
+    savedAt: now,
+    world: null,
+    progress: {},
+    // A world nobody has walked in yet has no ground to have moved.
+    groundMoved: false,
+  };
   writeGame(store, game);
   writeIndex(store, [game, ...games].slice(0, MAX_GAMES));
   setPlaying(store, id);
@@ -175,12 +197,21 @@ export function loadGame(store: SettingsStore | null, id: string): SavedGame | n
   const entry = readEntry(record);
   if (!entry) return null;
   const world = record.world as GameSnapshot | null | undefined;
-  const usable = world && world.generatorVersion === GENERATOR_VERSION ? world : null;
+  // **Kept, whatever version built it.** This used to hand back nothing when
+  // the generator had moved on, which threw away every room, every machine
+  // and every line along with the outdoor squares that were actually at
+  // risk — and rooms are keyed by house rather than by tile, so they were
+  // never in danger at all.
+  //
+  // What the mismatch means now is *the ground may have moved*, which is a
+  // thing to check a square at a time as the world is put back. See
+  // `restoreWorld`, and `SavedGame.groundMoved`.
+  const usable = world ?? null;
   const progress =
     typeof record.progress === "object" && record.progress !== null
       ? (record.progress as Record<string, Progress>)
       : {};
-  return { ...entry, world: usable, progress };
+  return { ...entry, world: usable, progress, groundMoved: movedSince(usable) };
 }
 
 export function deleteGame(store: SettingsStore | null, id: string): readonly GameEntry[] {
@@ -261,8 +292,11 @@ function carryOverTheOldWorld(store: SettingsStore | null, now: number): void {
     id,
     seed: Number.isFinite(seed) && seed > 0 ? Math.floor(seed) : (world?.seed ?? 1),
     savedAt: world?.savedAt ?? now,
-    world: world && world.generatorVersion === GENERATOR_VERSION ? world : null,
+    // Kept whatever built it, the same as `loadGame` now does: a save from
+    // an older generator is a save to put back carefully, not one to throw.
+    world: world ?? null,
     progress: {},
+    groundMoved: movedSince(world ?? null),
   };
   writeGame(store, game);
   setPlaying(store, id);

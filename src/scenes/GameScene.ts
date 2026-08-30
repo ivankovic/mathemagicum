@@ -33,6 +33,7 @@ import { type Profile, createProfile, freshStart } from "../save/profiles";
 import {
   HEARTH_IS_FURNITURE,
   type WorldBaseline,
+  type WorldSnapshot,
   readDecor,
   readPlans,
   restorePlayer,
@@ -7746,6 +7747,54 @@ export class GameScene extends Phaser.Scene {
    * by the same pass that spawns the village's own and nothing has to be
    * added to a scene already running.
    */
+  /**
+   * Lay a saved world back over a freshly grown one, and give back whatever
+   * no longer has anywhere to stand.
+   *
+   * **Nothing is thrown away for being old.** A save whose generator has
+   * moved on used to be discarded whole — every room, every machine, every
+   * line — for a hazard that only ever applied to the outdoor half of it.
+   * Rooms and their furniture are keyed by *house* rather than by tile and
+   * were never at risk at all.
+   *
+   * So the ground is checked a square at a time, and a thing that cannot go
+   * back goes into her basket instead. She loses a layout, which is a morning
+   * of rearranging; she does not lose the things, which were paid for with
+   * spells. That is the same bargain the minus rune already strikes when it
+   * takes a machine back with its heap still in it.
+   */
+  private putTheWorldBack(world: WorldSnapshot | undefined): void {
+    const moved = this.savedGame.groundMoved;
+    const { refused } = restoreWorld(this.grid, world, moved);
+    if (refused.length === 0) return;
+
+    for (const object of refused) {
+      const fixture = fixtureFor(object.type);
+      // Only hers. A tree the generator used to put there and no longer does
+      // is not a thing anybody owns, and handing a child a conifer because a
+      // coastline moved would be inventing timber out of a version number.
+      if (!fixture || !object.mine) continue;
+      this.inventory.add(fixture, 1);
+      if (!isMachine(fixture)) continue;
+      // And everything that was inside it. A machine's contents are held
+      // beside the grid rather than on it, so nothing else would have
+      // noticed them going.
+      const key = tileKey(object.col, object.row);
+      const state = this.machines.get(key);
+      this.machines.delete(key);
+      const item = state?.made ?? state?.holding;
+      if (!state || !item) continue;
+      const inside = state.heap + state.crates.reduce((all, count) => all + count, 0);
+      if (inside > 0) this.inventory.add(item as ItemType, inside);
+      if (state.binned && state.bin > 0) this.inventory.add(state.binned as ItemType, state.bin);
+    }
+    // Any line whose machine is now in her basket is a line to nowhere.
+    this.wires = this.wires.filter(
+      (wire) => this.machineAt(wire.from) !== null && this.machineAt(wire.to) !== null,
+    );
+    this.refreshCarried();
+  }
+
   private restoreSavedWorld(): void {
     const saved = this.savedGame.world;
     // When the ground was last written down, read *before* the autosave
@@ -7753,7 +7802,7 @@ export class GameScene extends Phaser.Scene {
     // game down"; asked later it would find the answer creeping up to now
     // and pay nothing. `?away=` fakes it, because the alternative way to see
     // this spell is to close the game and come back in an hour.
-    if (saved) restoreWorld(this.grid, saved.world);
+    if (saved) this.putTheWorldBack(saved.world);
     // And what the mirror spell moved, *kept* as well as put back.
     //
     // Restoring it onto the grid is not enough, and the way that fails is

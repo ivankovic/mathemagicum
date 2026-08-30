@@ -698,3 +698,88 @@ describe("what a house somebody built out remembers", () => {
     expect(readPlans({ crops: [], placed: [], cleared: [] })).toEqual({});
   });
 });
+
+/**
+ * A save whose generator has moved on under it.
+ *
+ * This used to be the end of a child's world: `loadGame` handed back nothing
+ * at all when the versions disagreed, so every room, every machine and every
+ * line went with the outdoor squares that were actually at risk. Rooms are
+ * keyed by *house* rather than by tile and were never in danger.
+ *
+ * Now the save comes back and the ground is checked a square at a time.
+ */
+describe("a world the generator no longer builds the same way", () => {
+  test("still comes back, rather than being thrown away", () => {
+    const store = memory();
+    const game = newGame(store, 0.5, CLOCK);
+    const grid = world();
+    const baseline = worldBaseline(grid);
+    grid.placeObject({ ...fence(3, 3), mine: true });
+
+    writeGame(store, {
+      ...game,
+      world: {
+        ...snapshotGame(grid, baseline, game.seed, CLOCK),
+        // As if written by a build whose generator has since changed.
+        generatorVersion: GENERATOR_VERSION + 1,
+      },
+    });
+
+    const loaded = loadGame(store, game.id);
+    expect(loaded?.world).not.toBeNull();
+    expect(loaded?.groundMoved).toBe(true);
+    // And a save from *this* generator is not treated as having moved.
+    writeGame(store, { ...game, world: snapshotGame(grid, baseline, game.seed, CLOCK) });
+    expect(loadGame(store, game.id)?.groundMoved).toBe(false);
+  });
+
+  /**
+   * And what will not stand is handed back rather than forced onto water.
+   *
+   * The refusal is the whole mechanism: `restoreWorld` says which of her
+   * things have nowhere to go, and the scene puts those in her basket. A
+   * fence dropped onto a square that has become sea is a fence a child walks
+   * up to and cannot pick up.
+   */
+  test("and what no longer fits is refused rather than forced", () => {
+    const grid = world();
+    const baseline = worldBaseline(grid);
+    grid.placeObject({ ...fence(3, 3), mine: true });
+    grid.placeObject({ ...fence(5, 5), mine: true });
+    const saved = snapshotGame(grid, baseline, 99, CLOCK).world;
+
+    // The world regrows with water where one of them stood.
+    const fresh = world();
+    fresh.setTerrain(3, 3, TerrainType.Water);
+
+    const put = restoreWorld(fresh, saved, true);
+    expect(put.refused.map((object) => `${object.col},${object.row}`)).toEqual(["3,3"]);
+    // The one on dry land is exactly where she left it.
+    expect(fresh.getObjectAt(5, 5)?.type).toBe("fence");
+    expect(fresh.getObjectAt(3, 3)).toBeNull();
+  });
+
+  /**
+   * And an ordinary reload is untouched by any of it.
+   *
+   * A save put back against a world grown from the same seed by the same code
+   * meets squares that are exactly the ones it was saved against — so there
+   * is nothing to check, and checking anyway would make the common path carry
+   * the risk of the rare one.
+   */
+  test("and a save against the same generator is put back verbatim", () => {
+    const grid = world();
+    const baseline = worldBaseline(grid);
+    grid.placeObject({ ...fence(3, 3), mine: true });
+    const saved = snapshotGame(grid, baseline, 99, CLOCK).world;
+
+    const fresh = world();
+    fresh.setTerrain(3, 3, TerrainType.Water);
+    // Ground unmoved as far as the save is concerned, so it goes back where
+    // it was told to, water or no water.
+    const put = restoreWorld(fresh, saved);
+    expect(put.refused).toEqual([]);
+    expect(fresh.getObjectAt(3, 3)?.type).toBe("fence");
+  });
+});

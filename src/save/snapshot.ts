@@ -359,15 +359,52 @@ export function savedAtOf(record: unknown): number | null {
  * make sense is dropped rather than restored: a missing fence is a thing a
  * child can buy again, and a crash on load is a farm they can never reach.
  */
-export function restoreWorld(grid: WorldGrid, world: WorldSnapshot | undefined): void {
-  if (!world) return;
+/** What came back, and what could not. */
+export interface Restored {
+  /**
+   * Things she put down that no longer have anywhere to stand.
+   *
+   * Handed to the caller rather than dropped, because the caller is the only
+   * one that knows what to do with them — a fence goes back in the basket, a
+   * machine goes back with everything that was inside it. Losing a layout is
+   * survivable; losing the things is not.
+   */
+  readonly refused: readonly PlacedObject[];
+}
+
+export function restoreWorld(
+  grid: WorldGrid,
+  world: WorldSnapshot | undefined,
+  groundMoved = false,
+): Restored {
+  const refused: PlacedObject[] = [];
+  if (!world) return { refused };
   for (const [col, row] of world.cleared ?? []) {
     if (grid.inBounds(col, row)) grid.removeObjectAt(col, row);
   }
   for (const object of world.placed ?? []) {
-    if (isPlacedObject(object) && grid.inBounds(object.col, object.row)) {
-      grid.placeObject(object);
+    if (!isPlacedObject(object) || !grid.inBounds(object.col, object.row)) continue;
+    // **Refused rather than forced.** A save is a handful of differences
+    // against a world the generator builds, and the generator is still being
+    // worked on: change a habitat rule and the same seed grows a different
+    // coastline, at which point a fence saved on grass is a fence in the sea.
+    //
+    // What used to happen was worse than either. The whole snapshot was
+    // thrown away on a version mismatch — every room, every machine, every
+    // line — for a hazard that only ever applied to the outdoor half. So the
+    // ground is checked a square at a time instead, and what will not stand
+    // is handed back rather than dropped on water or lost with the rest.
+    //
+    // **Only when the ground has actually moved.** An ordinary reload puts a
+    // save back against a world grown from the same seed by the same code,
+    // where every square is exactly the one it was saved against — so there
+    // is nothing to check and checking anyway would mean a common path
+    // carrying the risk of a rare one.
+    if (groundMoved && !fits(grid, object)) {
+      refused.push(object);
+      continue;
     }
+    grid.placeObject(object);
   }
   // Before the crops and after the objects, which is the order they were
   // laid down in: ground first, then what stands on it.
@@ -378,8 +415,25 @@ export function restoreWorld(grid: WorldGrid, world: WorldSnapshot | undefined):
     const [col, row, plant, stage] = entry;
     if (!grid.inBounds(col, row)) continue;
     if (!PLANT_TYPES.includes(plant) || !PLANT_STAGES.includes(stage)) continue;
+    // A crop on ground that has become sea or rock is simply not there any
+    // more. Nothing is handed back for it, and that is not meanness: nothing
+    // was spent on it either — planting costs no seed, and what a child paid
+    // for a crop was the cast that grew it, which is already behind them.
+    if (groundMoved && !grid.isPassable(col, row)) continue;
     grid.restoreCrop(col, row, { plant, stage });
   }
+  return { refused };
+}
+
+/**
+ * Whether a saved thing can still stand where it was left.
+ *
+ * The same question `session.place` asks when a child puts one down, and
+ * deliberately the same one: a square the game would refuse today is a square
+ * a save has no more right to than a tap does.
+ */
+function fits(grid: WorldGrid, object: PlacedObject): boolean {
+  return grid.isPassable(object.col, object.row) && grid.getCrop(object.col, object.row) === null;
 }
 
 /**
