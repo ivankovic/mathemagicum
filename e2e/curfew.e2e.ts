@@ -54,7 +54,12 @@ async function doorOf(game: Game, wanted: string): Promise<{ col: number; row: n
 async function tryTheDoor(game: Game, hour: number, wanted: string): Promise<Inside | null> {
   const door = await doorOf(game, wanted);
   await game.reload(`&learned=all&hour=${hour}&at=${door.col},${door.row + 1}`);
-  await game.press("ArrowUp");
+  // Held rather than tapped, which is what every other scenario that walks
+  // her anywhere does. A single press is one keydown and one keyup, and on a
+  // page that has just reloaded it can land before the scene is listening —
+  // so she never takes the step, the door is never tried, and the failure
+  // reads as a door that would not open. This one flaked exactly that way.
+  await game.walk("ArrowUp", 900);
   await game.stopped();
   return game.seam<Inside | null>("inside");
 }
