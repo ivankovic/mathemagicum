@@ -41,8 +41,19 @@ async function goHome(game: Game): Promise<void> {
   const door = doors["player-house"];
   if (!door) throw new Error("this village has no house for the player");
   await game.standAt(door.col, door.row + 2, "up");
-  await game.walk("ArrowUp", 900);
-  await game.stopped();
+  // Walked until she is *in*, rather than walked once and hoped.
+  //
+  // `stopped()` waits for her to stop moving, which she also does when she
+  // has stopped short of the door — and this one failed exactly that way on
+  // a loaded machine, reporting a room with no fire in it when the truth was
+  // a child standing on the doorstep. Two more goes cost nothing on the runs
+  // where the first was enough.
+  for (let go = 0; go < 3; go++) {
+    await game.walk("ArrowUp", 900);
+    await game.stopped();
+    if ((await game.seam<unknown>("house")) !== null) return;
+  }
+  throw new Error("walking through the front door did not go indoors");
 }
 
 describe("the fires in a room", () => {
