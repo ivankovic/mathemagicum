@@ -358,6 +358,17 @@ export interface DevHandle {
   /** Screen positions of the named buttons, so scripts stop guessing them. */
   readonly ui: () => Record<string, { x: number; y: number }>;
   /**
+   * Whether the world map is up.
+   *
+   * The map is opened by tapping the picture on the post office wall and by
+   * nothing else, and a panel that failed to open leaves the screen looking
+   * exactly as it did — so the door being open is not the same fact as the
+   * map being reachable, and a scenario about the second needs to be able to
+   * ask. See `hoursFor`: the tower keeps no hours until a child has the
+   * portal, precisely so that this can be true at two in the morning.
+   */
+  readonly mapOpen: () => boolean;
+  /**
    * The wall of bricks on the parchment, or null when none is open.
    *
    * Hands over the answer as well as the question, which the other spells'

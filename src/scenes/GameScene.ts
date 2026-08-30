@@ -2345,6 +2345,11 @@ export class GameScene extends Phaser.Scene {
     exposeForTests({
       session: this.session,
       ui: () => this.uiPositions(),
+      // Whether the world map is up. There is exactly one way to open it —
+      // tapping the picture on the post office wall — and no other sign on
+      // screen that it worked: the panel is a picture of a world that is
+      // also on screen behind it.
+      mapOpen: () => this.mapPanel?.isOpen === true,
       armed: () => armedTag(this.armed),
       // Which way round the thing in her hands is. Its own seam rather than
       // part of `armed`, which is a name several scenarios compare against
@@ -7666,6 +7671,13 @@ export class GameScene extends Phaser.Scene {
     // cannot simply be read off like a tray button.
     const rune = this.armedRune;
     if (rune) positions.armed = this.screenOfPoint(rune.x, rune.y);
+    // The map hanging on the post office wall, on the same terms as the rune
+    // and for the same reason: it is a picture in a room rather than a button
+    // on a tray, so a script had no way to reach the one control that opens
+    // the world map. `getCenter` rather than the sprite's own point, which is
+    // the bottom of it — the picture hangs from its foot.
+    const hanging = this.wallMap?.getCenter();
+    if (hanging) positions.wallMap = this.screenOfPoint(hanging.x, hanging.y);
     for (const [name, tray] of Object.entries(this.trays())) {
       if (!tray) continue;
       positions[name] = tray.containerPosition();

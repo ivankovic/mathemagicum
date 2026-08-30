@@ -89,6 +89,18 @@ describe("the tower keeps its own hours", () => {
         // on it here would pass whether she got in or not.
         const tower = await tryTheDoor(game, NIGHT, "post-office", "growth");
         expect(tower?.room ?? null).toBe("tower");
+
+        // And the thing she came for opens. The report was not "a door is
+        // shut", it was "the map cannot be reached at all" — and an open
+        // door is only half of that. The map is a picture hanging on this
+        // wall, tapped like any other, and nothing else in the game opens
+        // it.
+        const wall = (await game.ui()).wallMap;
+        if (!wall) throw new Error("no map on the tower wall");
+        expect(await game.seam<boolean>("mapOpen")).toBe(false);
+        await game.tab.mouse.click(wall.x, wall.y);
+        await game.settle(500);
+        expect(await game.seam<boolean>("mapOpen")).toBe(true);
       });
     },
     5 * MINUTES,
