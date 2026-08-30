@@ -452,7 +452,7 @@ import {
   footprintBottomY,
   spriteOrigin,
 } from "../world/spriteSidecar";
-import type { TerrainType } from "../world/terrain";
+import { TerrainType } from "../world/terrain";
 import {
   DUAL_OFFSET,
   DUAL_ORIGIN,
@@ -692,6 +692,14 @@ const WATER_DEPTH = CHUNK_DEPTH - 1;
  * is the arithmetic on top of it.
  */
 const WAVE_STEP_MS = 250;
+/**
+ * How long after the world is drawn before it says what came back.
+ *
+ * Long enough that the garden is on screen first: a cloud that arrives while
+ * the world is still being built is a cloud about nothing, and she has not
+ * yet had a chance to notice the gap it is explaining.
+ */
+const RETURNED_SAYS_MS = 900;
 /**
  * The two colours a length of wire is drawn in.
  *
@@ -1681,6 +1689,8 @@ export class GameScene extends Phaser.Scene {
   private readonly wireWork = new Map<string, number>();
   /** The lines themselves, drawn as ink the way the spells' marks are. */
   private wireInk?: Phaser.GameObjects.Graphics;
+  /** Things a rebuilt world had nowhere to put, until her basket is back. */
+  private refused: readonly PlacedObject[] = [];
   // Problems vary from cast to cast, so this is seeded from the clock rather
   // than from the world's seed: a world is meant to be reproducible, a lesson is
   // meant not to be. A driving script can pin it with `?seed=`, which is the
@@ -1988,6 +1998,13 @@ export class GameScene extends Phaser.Scene {
     // worse than a village of question marks.
     this.household = readProfiles(browserStore());
     const world = generateWorld(WORLD_SIZE, WORLD_SIZE, this.seed);
+    // The ground moving under a save, on purpose. See `DevSeams.drown`: this
+    // is the consequence of a habitat rule changing, made reachable without a
+    // scenario having to pin a habitat rule.
+    const drown = this.dev.drown;
+    if (drown && world.grid.inBounds(drown.col, drown.row)) {
+      world.grid.setTerrain(drown.col, drown.row, TerrainType.Water);
+    }
     this.grid = world.grid;
     this.worldGrid = world.grid;
     this.anchors = world.anchors;
@@ -7765,7 +7782,16 @@ export class GameScene extends Phaser.Scene {
    */
   private putTheWorldBack(world: WorldSnapshot | undefined): void {
     const moved = this.savedGame.groundMoved;
-    const { refused } = restoreWorld(this.grid, world, moved);
+    // Only remembered here. What is owed for them is worked out at the end of
+    // the restore, once her basket and her machines are both back — see
+    // `giveBackWhatDidNotFit`.
+    this.refused = restoreWorld(this.grid, world, moved).refused;
+  }
+
+  /** Put what could not stand into her basket, and say that it is there. */
+  private giveBackWhatDidNotFit(): void {
+    const refused = this.refused;
+    this.refused = [];
     if (refused.length === 0) return;
 
     for (const object of refused) {
@@ -7793,6 +7819,41 @@ export class GameScene extends Phaser.Scene {
       (wire) => this.machineAt(wire.from) !== null && this.machineAt(wire.to) !== null,
     );
     this.refreshCarried();
+    this.sayWhatCameBack(refused);
+  }
+
+  /**
+   * Say that her things are in the basket, without a word of it.
+   *
+   * **Silent recovery and silent loss look the same from where she is
+   * sitting.** She left a sorter by the gate and it is not there; whether it
+   * is safe in her basket or gone for ever is the whole question, and a
+   * garden that answers neither is a garden she has to guess about.
+   *
+   * A cloud over her head with the things in it, which is the sentence this
+   * game already has for *here is a thing* — the same one the animals use and
+   * the same one a crop that will not grow here uses. No words, because there
+   * is no wording of "the coastline moved" that a five-year-old reads in
+   * three languages, and because the useful half is not why it happened. The
+   * useful half is **where your sorter went**, and a picture of the sorter
+   * over her head with the basket's number going up says exactly that.
+   *
+   * Held back a moment so it lands after the world is drawn rather than
+   * during the frame that builds it: a cloud that appears before the garden
+   * does is a cloud about nothing.
+   */
+  private sayWhatCameBack(refused: readonly PlacedObject[]): void {
+    const kinds: FixtureType[] = [];
+    for (const object of refused) {
+      const fixture = fixtureFor(object.type);
+      if (fixture && object.mine && !kinds.includes(fixture)) kinds.push(fixture);
+    }
+    if (kinds.length === 0) return;
+    // Three at most, which is what the cloud holds without spilling out of
+    // its own sides. A child who has had six kinds of thing handed back does
+    // not need all six named; they need to know to look in the basket.
+    const shown = kinds.slice(0, 3).map((fixture) => ({ ui: itemIcon(fixture) }));
+    this.time.delayedCall(RETURNED_SAYS_MS, () => this.showThoughtOnPlayer(shown, false));
   }
 
   private restoreSavedWorld(): void {
@@ -7847,6 +7908,16 @@ export class GameScene extends Phaser.Scene {
     // keeps everything else, so what is missing here is only the tile they
     // were standing on.
     restorePlayer(this.session, this.profile.carried, saved !== null);
+
+    // **Last of all**, and the ordering is the whole of why it is here.
+    //
+    // Handing things back the moment they were refused put them in a basket
+    // that `restorePlayer` then replaced with the saved one, so every one of
+    // them vanished again — and it read the machine states before
+    // `machinesFromSave` had filled them, so a sorter came back with nothing
+    // in it. Both were silent. What she is owed can only be worked out once
+    // her basket and her machines are both the ones she left.
+    this.giveBackWhatDidNotFit();
   }
 
   /**

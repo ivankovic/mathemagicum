@@ -196,6 +196,17 @@ export interface DevOptions {
    */
   readonly hour: number | null;
   /**
+   * Turn one square to water after the world is grown: `?drown=col,row`.
+   *
+   * The ground moving under a save is the thing the whole compatibility
+   * story is about, and it is otherwise unreachable from a test — it happens
+   * when somebody changes a habitat rule, which is not something a scenario
+   * can do and should not be something it pins. This makes the *consequence*
+   * reachable: a square that was grass when she built on it and is sea when
+   * she comes back.
+   */
+  readonly drown: { col: number; row: number } | null;
+  /**
    * Start the game without waiting at the title card or at who's playing.
    *
    * The card holds until it is tapped and the players screen holds until a
@@ -319,6 +330,7 @@ export function parseDevOptions(search: string): DevOptions {
     learned: names(params.get("learned"), ALL_SPELLS),
     flowers: names(params.get("flowers"), FLOWER_TYPES),
     hour: number("hour", false),
+    drown: tile(params.get("drown")),
     skipTitle: params.has("skipTitle"),
     at: tile(params.get("at")),
     share: number("share"),
