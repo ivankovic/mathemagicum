@@ -8155,7 +8155,16 @@ export class GameScene extends Phaser.Scene {
   private machineAt(key: string): MachineType | null {
     const [col, row] = key.split(",").map(Number);
     if (col === undefined || row === undefined) return null;
-    const object = this.grid.getObjectAt(col, row);
+    // `worldGrid`, never `grid`. Indoors `grid` is the *room's* grid, where a
+    // machine's outdoor square is either out of bounds or some square of
+    // somebody's floor — so this answered "no machine here" for every machine
+    // in the world the moment she stepped through a door.
+    //
+    // That was quiet and it was expensive: `runWires` drops a wire whose ends
+    // are no longer machines, so walking into her own house deleted every
+    // length of wire she had strung, and then autosaved. Machines are outdoor
+    // things and this is the grid they stand on.
+    const object = this.worldGrid.getObjectAt(col, row);
     const fixture = object ? fixtureFor(object.type) : null;
     return fixture && isMachine(fixture) ? fixture : null;
   }

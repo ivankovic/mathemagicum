@@ -450,4 +450,62 @@ describe("machines joined into a line", () => {
     },
     5 * MINUTES,
   );
+
+  /**
+   * And a line survives her walking indoors, which it did not.
+   *
+   * `machineAt` read `this.grid`, and indoors that is the *room's* grid —
+   * where a machine's outdoor square is out of bounds or some square of
+   * somebody's floor. So it answered "no machine here" for every machine in
+   * the world the moment she stepped through a door, `runWires` dropped
+   * every wire whose ends were no longer machines, and the autosave that
+   * followed made it permanent.
+   *
+   * Quiet, too: she walks into her own house, walks out, and the lines she
+   * strung are gone with nothing to say why. Found by capturing a real save
+   * and noticing the wire was not in it.
+   */
+  test(
+    "and a wire is still there after she goes indoors",
+    async () => {
+      await play({ seams: WITH_TIMBER }, async (game) => {
+        const from = await aMachineBeside(game, FixtureType.Sorter);
+        await game.tapCell(from.col, from.row);
+        await game.settle(400);
+        await game.solveShare();
+        await game.settle(400);
+        const to = await aMachineBeside(game, FixtureType.Hothouse);
+        await game.tapCell(to.col, to.row);
+        await game.settle(400);
+        await game.solveArray();
+        await game.settle(400);
+
+        expect(await takeFromCrate(game, CRATE_WIRE)).toBe(true);
+        await game.settle(300);
+        await game.tapCell(from.col, from.row);
+        await game.settle(300);
+        await game.tapCell(to.col, to.row);
+        await game.settle(400);
+        expect(await game.seam<Strung[]>("wires")).toHaveLength(1);
+
+        // In through her own front door, a moment inside, and out again.
+        const doors = await game.seam<Record<string, { col: number; row: number }>>("doors");
+        const door = doors["player-house"];
+        if (!door) throw new Error("the village has no house for the player");
+        await game.standAt(door.col, door.row + 2, "up");
+        await game.walk("ArrowUp", 900);
+        await game.stopped();
+        expect(await game.seam<unknown>("house")).not.toBeNull();
+        await game.settle(800);
+
+        // Still strung. And still strung tomorrow, which is the half that
+        // says the autosave did not write the loss down.
+        expect(await game.seam<Strung[]>("wires")).toHaveLength(1);
+        await game.reload(WITH_TIMBER);
+        await game.settle(800);
+        expect(await game.seam<Strung[]>("wires")).toHaveLength(1);
+      });
+    },
+    5 * MINUTES,
+  );
 });
