@@ -5,6 +5,7 @@ import { Spell } from "../spells/spellbook";
 import { FixtureType } from "./fixtures";
 import type { Inventory } from "./inventory";
 import { MaterialType } from "./materials";
+import { PLANT_TYPES } from "./plants";
 
 /**
  * The things a player builds rather than buys.
@@ -60,6 +61,21 @@ export const MachineType = {
    * that reason.
    */
   Sorter: FixtureType.Sorter,
+  /**
+   * A glass frame with three shoots coming up in it.
+   *
+   * The second, and the pair to the sorter. A sorter *deals* — it divides a
+   * heap you already had into equal parts, and nothing leaves it that did
+   * not go in. This one *turns*: a crop goes in and timber comes out, which
+   * is the difference between the two verbs and the reason there are two
+   * machines rather than one with a setting.
+   *
+   * It is also the answer to a question the garden did not have one for.
+   * Growing was a thing a child did once per square and then sold the
+   * result of; now a crop is worth as much standing as a tree is worth
+   * felled, so growing the same carrot again is a way to build.
+   */
+  Hothouse: FixtureType.Hothouse,
 } as const;
 
 export type MachineType = (typeof MachineType)[keyof typeof MachineType];
@@ -93,6 +109,12 @@ export type Recipe = Readonly<Partial<Record<MaterialType, number>>>;
  */
 export const RECIPES: Readonly<Record<MachineType, Recipe>> = {
   [MachineType.Sorter]: { [MaterialType.Wood]: 15, [MaterialType.Stone]: 6 },
+  // More stone and less wood than the sorter, and the shape of that is the
+  // point rather than the size: this one is mostly glass and a glasshouse is
+  // sand and fire, so it is the machine that sends a child up the hills.
+  // Two machines with the same shopping list would be two machines that were
+  // the same errand.
+  [MachineType.Hothouse]: { [MaterialType.Wood]: 8, [MaterialType.Stone]: 12 },
 };
 
 /** What a machine is made of, as pairs, in a stable order. */
@@ -164,7 +186,63 @@ export const MINUTES_PER_ROUND = 20;
  */
 export const SPARK: Readonly<Record<MachineType, Spell>> = {
   [MachineType.Sorter]: Spell.Share,
+  // Rows and columns, for the machine that turns one into three.
+  [MachineType.Hothouse]: Spell.Array,
 };
+
+/**
+ * What each machine does with a round's work, and to what.
+ *
+ * Two verbs, and the difference between them is the whole reason there are
+ * two machines. **Dealing** divides a heap that is already there into the
+ * crates, and nothing leaves a sorter that did not go into it. **Turning**
+ * changes what a thing is: one crop out of the mouth, three of something
+ * else into the crates.
+ *
+ * The `gives` is a content decision sitting in one line on purpose. What a
+ * hothouse pays and how much of it is a number to argue about over a
+ * playtest, not a shape to rewrite: three matches what a felled conifer
+ * gives, so a crop grown is worth about a tree cleared, and a growth cast
+ * and a clearing cast come out level.
+ */
+export const Verb = { Deal: "deal", Turn: "turn" } as const;
+export type Verb = (typeof Verb)[keyof typeof Verb];
+
+export interface Work {
+  readonly verb: Verb;
+  /** How many go into the mouth for one round. */
+  readonly takes: number;
+  /** What comes out, for a machine that turns. Null for one that deals. */
+  readonly gives: string | null;
+  /**
+   * What it will take in, and this one is not decoration.
+   *
+   * A machine that turns one thing into three of another must not accept the
+   * thing it makes. A hothouse that took timber would turn one wood into
+   * three wood — an endless supply out of nothing, which would undo the rule
+   * the whole design rests on: material in the world stays a function of
+   * spellwork. It grows things, so it takes things that grow.
+   *
+   * A sorter takes anything, because dealing cannot mint: what comes out of
+   * it is what went in, counted into three piles.
+   */
+  readonly wants: "anything" | "a crop";
+}
+
+export const WORK: Readonly<Record<MachineType, Work>> = {
+  [MachineType.Sorter]: { verb: Verb.Deal, takes: SHARES, gives: null, wants: "anything" },
+  [MachineType.Hothouse]: {
+    verb: Verb.Turn,
+    takes: 1,
+    gives: MaterialType.Wood,
+    wants: "a crop",
+  },
+};
+
+/** Whether this machine will take this in. See `Work.wants`. */
+export function accepts(machine: MachineType, item: string): boolean {
+  return WORK[machine].wants === "anything" || (PLANT_TYPES as readonly string[]).includes(item);
+}
 
 /** What a machine is holding, and how far into the round it has got. */
 export interface MachineState {
@@ -185,13 +263,30 @@ export interface MachineState {
   readonly heap: number;
   /** What has been dealt, one count per crate. Always `SHARES` long. */
   readonly crates: readonly number[];
+  /**
+   * What is in the crates, when that is not what is in the mouth.
+   *
+   * Null for a machine that deals, where the crates hold what was tipped in.
+   * A machine that *turns* fills them with something else — a hothouse
+   * holding carrots has timber in its crates — and the answer has to be
+   * remembered rather than worked out at the moment of taking, because the
+   * mouth can run empty while the crates are still full.
+   */
+  readonly made: string | null;
   /** Minutes of work into the round in progress. */
   readonly worked: number;
 }
 
 /** A machine as it comes: asleep, empty, and waiting to be shown a sum. */
 export function newMachine(): MachineState {
-  return { awake: false, holding: null, heap: 0, crates: Array(SHARES).fill(0), worked: 0 };
+  return {
+    awake: false,
+    holding: null,
+    heap: 0,
+    crates: Array(SHARES).fill(0),
+    made: null,
+    worked: 0,
+  };
 }
 
 /** The same machine, woken. */
@@ -208,8 +303,14 @@ export function wake(state: MachineState): MachineState {
  * in there is a child's, and a machine that quietly dropped it to make room
  * would be a machine that stole.
  */
-export function feed(state: MachineState, item: string, count: number): MachineState | null {
+export function feed(
+  state: MachineState,
+  item: string,
+  count: number,
+  machine: MachineType,
+): MachineState | null {
   if (!state.awake || !Number.isFinite(count) || Math.trunc(count) <= 0) return null;
+  if (!accepts(machine, item)) return null;
   if (state.holding !== null && state.holding !== item) return null;
   return { ...state, holding: item, heap: state.heap + Math.trunc(count) };
 }
@@ -228,20 +329,30 @@ export function feed(state: MachineState, item: string, count: number): MachineS
  * function does not know what a clock is, which is the point of it being
  * here rather than there.
  */
-export function advance(state: MachineState, minutes: number): MachineState {
+export function advance(state: MachineState, minutes: number, machine: MachineType): MachineState {
   if (!state.awake || !Number.isFinite(minutes) || minutes <= 0) return state;
+  const work = WORK[machine];
   const worked = state.worked + minutes;
-  const rounds = Math.min(Math.floor(worked / MINUTES_PER_ROUND), Math.floor(state.heap / SHARES));
+  const rounds = Math.min(
+    Math.floor(worked / MINUTES_PER_ROUND),
+    Math.floor(state.heap / work.takes),
+  );
   if (rounds <= 0) {
     // Only bank the work if there is something to work on. A machine left
     // running on an empty mouth would otherwise store up months of it and
     // deal a whole heap the instant anything was tipped in.
-    return state.heap >= SHARES ? { ...state, worked } : { ...state, worked: 0 };
+    return state.heap >= work.takes ? { ...state, worked } : { ...state, worked: 0 };
   }
   return {
     ...state,
-    heap: state.heap - rounds * SHARES,
+    heap: state.heap - rounds * work.takes,
+    // A round fills every crate, whichever verb it is. Dealing puts one of
+    // what went in into each; turning puts one of something else — and it is
+    // the same three crates either way, so a child reads the two machines
+    // the same way and so does everything downstream of here.
     crates: state.crates.map((count) => count + rounds),
+    // What the crates hold is not always what the mouth holds. See `made`.
+    made: work.gives,
     worked: worked - rounds * MINUTES_PER_ROUND,
   };
 }
@@ -259,7 +370,11 @@ export function takeShare(
 ): { state: MachineState; item: string | null; count: number } {
   const index = Math.trunc(crate);
   const count = state.crates[index] ?? 0;
-  if (count <= 0 || state.holding === null) return { state, item: null, count: 0 };
+  // What comes out is what the machine *made*, and only a machine that deals
+  // makes what it was given. Asking `holding` here was right while there was
+  // one machine, and would have handed back carrots out of a hothouse.
+  const made = state.made ?? state.holding;
+  if (count <= 0 || made === null) return { state, item: null, count: 0 };
   const crates = state.crates.map((held, at) => (at === index ? 0 : held));
   // The mouth forgets what it was holding once the machine is empty, so the
   // next thing tipped in can be anything. A sorter that only ever accepted
@@ -267,8 +382,13 @@ export function takeShare(
   // remember the history of.
   const empty = crates.every((held) => held <= 0) && state.heap <= 0;
   return {
-    state: { ...state, crates, holding: empty ? null : state.holding },
-    item: state.holding,
+    state: {
+      ...state,
+      crates,
+      holding: empty ? null : state.holding,
+      made: empty ? null : state.made,
+    },
+    item: made,
     count,
   };
 }
@@ -300,7 +420,7 @@ export function machinesToSave(
   const saved: Record<string, string> = {};
   for (const [where, state] of machines) {
     saved[where] =
-      `${state.awake ? 1 : 0},${state.holding ?? ""},${state.heap},${state.crates.join("/")},${Math.round(state.worked)}`;
+      `${state.awake ? 1 : 0},${state.holding ?? ""},${state.heap},${state.crates.join("/")},${Math.round(state.worked)},${state.made ?? ""}`;
   }
   return saved;
 }
@@ -317,22 +437,29 @@ export function machinesFromSave(saved: unknown): Map<string, MachineState> {
   if (typeof saved !== "object" || saved === null) return machines;
   for (const [where, entry] of Object.entries(saved as Record<string, unknown>)) {
     if (typeof entry !== "string" || !/^-?\d+,-?\d+$/.test(where)) continue;
-    const [awake, holding, heap, crates, worked] = entry.split(",");
+    const [awake, holding, heap, crates, worked, made] = entry.split(",");
     if (awake === undefined || heap === undefined || crates === undefined) continue;
     if (!/^\d+$/.test(heap) || !/^\d+$/.test(worked ?? "")) continue;
     const dealt = crates.split("/").map(Number);
     if (dealt.length !== SHARES || dealt.some((count) => !Number.isInteger(count) || count < 0)) {
       continue;
     }
-    // A heap with nothing in the mouth is not a heap. Dropped rather than
-    // kept as an anonymous pile, which nothing could ever be taken out of.
+    // A heap with nothing in the mouth is not a heap, and nor are full
+    // crates with nothing named in them. Dropped rather than kept as an
+    // anonymous pile, which nothing could ever be taken out of.
     const item = holding ? holding : null;
-    if (item === null && (Number(heap) > 0 || dealt.some((count) => count > 0))) continue;
+    // A save from before there was a machine that turns has no sixth field,
+    // and everything in one of those deals — so its crates hold what its
+    // mouth holds, which is what `made` being absent means.
+    const gives = made ? made : null;
+    if (item === null && Number(heap) > 0) continue;
+    if (gives === null && item === null && dealt.some((count) => count > 0)) continue;
     machines.set(where, {
       awake: awake === "1",
       holding: item,
       heap: Number(heap),
       crates: dealt,
+      made: gives,
       worked: Number(worked),
     });
   }

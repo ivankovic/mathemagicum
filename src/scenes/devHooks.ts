@@ -473,6 +473,7 @@ export interface DevHandle {
     holding: string | null;
     heap: number;
     crates: number[];
+    made: string | null;
   }[];
   readonly sea: () => {
     /** How many tiles of water are laid under the chunks on screen. */

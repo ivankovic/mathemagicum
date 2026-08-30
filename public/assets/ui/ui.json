@@ -192,6 +192,11 @@
       "width": 32,
       "height": 32
     },
+    "item-hothouse": {
+      "file": "item_hothouse.png",
+      "width": 32,
+      "height": 32
+    },
     "coin-50": {
       "file": "coin_50.png",
       "width": 32,

@@ -366,7 +366,10 @@ import {
 import { hasStep } from "../world/levels";
 import {
   type MachineState,
+  type MachineType,
+  SHARES,
   SPARK,
+  accepts,
   advance as advanceMachine,
   build,
   feed,
@@ -2283,6 +2286,10 @@ export class GameScene extends Phaser.Scene {
           holding: state.holding,
           heap: state.heap,
           crates: [...state.crates],
+          // What the crates hold, which for a machine that turns is not what
+          // the mouth holds — and is the difference a scenario cannot see any
+          // other way. See `MachineState.made`.
+          made: state.made,
         })),
       sea: () => {
         const tiles = [...this.liveWater.values()].flat();
@@ -8032,6 +8039,22 @@ export class GameScene extends Phaser.Scene {
    * there. Which means a machine cannot yet be taken back once it is down —
    * a real gap, and the next thing this wants.
    */
+  /**
+   * Which machine stands on a square, if one does.
+   *
+   * Asked of the grid rather than remembered beside the state, because the
+   * grid is where a machine *is* — a state entry for a square nothing stands
+   * on is a machine that was taken back while its heap was still in it, and
+   * this is the one place that would notice.
+   */
+  private machineAt(key: string): MachineType | null {
+    const [col, row] = key.split(",").map(Number);
+    if (col === undefined || row === undefined) return null;
+    const object = this.grid.getObjectAt(col, row);
+    const fixture = object ? fixtureFor(object.type) : null;
+    return fixture && isMachine(fixture) ? fixture : null;
+  }
+
   private watchMachine(sprite: Phaser.GameObjects.Sprite, col: number, row: number): void {
     const frame = sprite.frame;
     sprite.setInteractive(
@@ -8056,8 +8079,10 @@ export class GameScene extends Phaser.Scene {
     if (this.modalOpen) return;
     const key = tileKey(col, row);
     const state = this.machines.get(key) ?? newMachine();
+    const machine = this.machineAt(key);
+    if (!machine) return;
     if (!state.awake) {
-      this.showTheSum(key, state);
+      this.showTheSum(key, state, machine);
       return;
     }
     const crate = fullestCrate(state);
@@ -8073,7 +8098,7 @@ export class GameScene extends Phaser.Scene {
       }
       return;
     }
-    this.tipIn(key, state);
+    this.tipIn(key, state, machine);
   }
 
   /**
@@ -8085,18 +8110,35 @@ export class GameScene extends Phaser.Scene {
    * the tap: the machine is still there and still asleep, which is where it
    * started.
    */
-  private showTheSum(key: string, state: MachineState): void {
-    if (!this.knowsShare) {
-      this.showWhereToLearn(Spell.Share);
+  private showTheSum(key: string, state: MachineState, machine: MachineType): void {
+    const spell = SPARK[machine];
+    if (!knowsSpell([...this.profile.learned, ...this.dev.learned], spell)) {
+      this.showWhereToLearn(spell);
+      return;
+    }
+    const woken = (result: { solved: boolean }) => {
+      if (!result.solved) return;
+      this.machines.set(key, wake(state));
+      this.showEarned(spell === Spell.Share ? UiAsset.RuneDivide : UiAsset.RuneTimes);
+      this.autosave();
+    };
+    // Each machine is shown *its own* arithmetic, which is the whole of why
+    // this branches: a hothouse woken by a division would be a toll, where
+    // one woken by the rows and columns it is about to do three at a time is
+    // the machine asking to be understood before it starts.
+    if (spell === Spell.Array) {
+      const rung = arrayRungAt(this.dev.arrayRung ?? this.profile.arrayRung);
+      // The machine's own rectangle: three shoots, three times over. Chosen
+      // rather than rolled, and chosen to be the smallest square that is
+      // genuinely a multiplication — because this is a demonstration and not
+      // a test. The three is the three a child can already count through the
+      // glass, so the sum on the parchment is a sum about the thing they are
+      // standing in front of.
+      this.arrayPopup?.open(arrayProblemFor(SHARES, SHARES, rung), woken);
       return;
     }
     const rung = shareRungAt(this.dev.shareRung ?? this.profile.shareRung);
-    this.sharePopup?.open(shareProblemFor(this.spellRng, rung), (result) => {
-      if (!result.solved) return;
-      this.machines.set(key, wake(state));
-      this.showEarned(UiAsset.RuneDivide);
-      this.autosave();
-    });
+    this.sharePopup?.open(shareProblemFor(this.spellRng, rung), woken);
   }
 
   /**
@@ -8108,10 +8150,14 @@ export class GameScene extends Phaser.Scene {
    * what they meant: the reason to walk to a machine is the heap you are
    * carrying, and it is nearly always the big one.
    */
-  private tipIn(key: string, state: MachineState): void {
+  private tipIn(key: string, state: MachineState, machine: MachineType): void {
     let best: { item: ItemType; count: number } | null = null;
     for (const [item, count] of this.inventory.entries()) {
       if (count <= 0) continue;
+      // Only what this machine will take, so the biggest heap she is
+      // carrying is the biggest heap *it wants* — a hothouse beside a child
+      // with fifty wood and six carrots is asking for the carrots.
+      if (!accepts(machine, item)) continue;
       if (state.holding !== null && state.holding !== item) continue;
       if (!best || count > best.count) best = { item, count };
     }
@@ -8119,7 +8165,7 @@ export class GameScene extends Phaser.Scene {
       this.showRefusalOnPlayer(UiAsset.RuneDivide);
       return;
     }
-    const fed = feed(state, best.item, best.count);
+    const fed = feed(state, best.item, best.count, machine);
     if (!fed) {
       this.showRefusalOnPlayer(UiAsset.RuneDivide);
       return;
@@ -8165,7 +8211,9 @@ export class GameScene extends Phaser.Scene {
     if (minutes <= 0) return;
     let dealt = false;
     for (const [key, state] of this.machines) {
-      const worked = advanceMachine(state, minutes);
+      const machine = this.machineAt(key);
+      if (!machine) continue;
+      const worked = advanceMachine(state, minutes, machine);
       if (worked === state) continue;
       this.machines.set(key, worked);
       if (worked.crates.some((count, at) => count !== (state.crates[at] ?? 0))) dealt = true;

@@ -35,6 +35,7 @@ interface Machine {
   holding: string | null;
   heap: number;
   crates: number[];
+  made: string | null;
 }
 
 const machines = (game: Game) => game.seam<Machine[]>("machines");
@@ -67,8 +68,11 @@ async function squareBeside(game: Game): Promise<{ col: number; row: number }> {
 }
 
 /** Build one, put it down beside her, and give back the square it is on. */
-async function aSorterBeside(game: Game): Promise<{ col: number; row: number }> {
-  expect(await takeFromCrate(game, FixtureType.Sorter)).toBe(true);
+async function aMachineBeside(
+  game: Game,
+  machine: FixtureType,
+): Promise<{ col: number; row: number }> {
+  expect(await takeFromCrate(game, machine)).toBe(true);
   await game.settle(400);
   const at = await squareBeside(game);
   await game.tapCell(at.col, at.row);
@@ -81,7 +85,7 @@ describe("the first machine that does something", () => {
     "is shown one sum, then deals in silence for ever",
     async () => {
       await play({ seams: WITH_TIMBER }, async (game) => {
-        const at = await aSorterBeside(game);
+        const at = await aMachineBeside(game, FixtureType.Sorter);
         // Standing there and asleep: a sculpture until it has been shown the
         // arithmetic it is about to spend its life doing.
         expect(await machines(game)).toEqual([]);
@@ -131,7 +135,7 @@ describe("the first machine that does something", () => {
     "and winding the clock is what hurries it",
     async () => {
       await play({ seams: WITH_TIMBER }, async (game) => {
-        const at = await aSorterBeside(game);
+        const at = await aMachineBeside(game, FixtureType.Sorter);
         await game.tapCell(at.col, at.row);
         await game.settle(400);
         await game.solveShare();
@@ -205,7 +209,7 @@ describe("the first machine that does something", () => {
     "and the minus rune takes it back, heap and all",
     async () => {
       await play({ seams: WITH_TIMBER }, async (game) => {
-        const at = await aSorterBeside(game);
+        const at = await aMachineBeside(game, FixtureType.Sorter);
         await game.tapCell(at.col, at.row);
         await game.settle(400);
         await game.solveShare();
@@ -231,6 +235,74 @@ describe("the first machine that does something", () => {
         expect(await game.held(FixtureType.Sorter)).toBe(1);
         expect(await game.held(filled.holding)).toBe(filled.heap);
         expect(await machines(game)).toEqual([]);
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * And the second machine, which turns one thing into another.
+   *
+   * The sorter *deals*: what comes out of it is what went in, counted into
+   * three piles. This one *turns*, and that difference is the reason there
+   * are two machines rather than one with a setting — a crop goes into the
+   * mouth and timber comes out of the crates.
+   *
+   * The failure it is here for is the one that looks like success. Every
+   * line of code that moves work along is shared, so a hothouse wired up
+   * wrong runs perfectly and hands a child their carrots back — a machine
+   * that appears to work and does nothing at all.
+   */
+  test(
+    "and the hothouse turns a crop into timber",
+    async () => {
+      await play({ seams: WITH_TIMBER }, async (game) => {
+        const at = await aMachineBeside(game, FixtureType.Hothouse);
+
+        // Woken by the rows and columns it is about to do three at a time,
+        // not by the sorter's division: each machine is shown its own sum.
+        await game.tapCell(at.col, at.row);
+        await game.settle(400);
+        expect(await game.seam("array")).not.toBeNull();
+        await game.solveArray();
+        await game.settle(500);
+        expect((await machines(game))[0]).toMatchObject({ awake: true });
+
+        // A basket of carrots, and more wood than carrots on purpose: the
+        // machine takes the biggest heap it *wants*, and a hothouse that
+        // took timber would turn one wood into three and never stop.
+        await game.tab.evaluate((crop) => {
+          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
+            .__mathemagicum;
+          if (!handle) throw new Error("the game has not put its handle out");
+          (handle.session as { inventory: { add: (of: string, n: number) => void } }).inventory.add(
+            crop as string,
+            9,
+          );
+        }, "carrot");
+        await game.settle(200);
+        expect(await game.held("wood")).toBeGreaterThan(9);
+
+        await game.tapCell(at.col, at.row);
+        await game.settle(500);
+        const fed = (await machines(game))[0];
+        expect(fed).toMatchObject({ holding: "carrot", heap: 9 });
+        expect(await game.held("carrot")).toBe(0);
+
+        const wood = await game.held("wood");
+        await game.windClock(12);
+        await game.settle(1500);
+
+        // Nine crops in, one to a round, three crates filling each time.
+        const done = (await machines(game))[0];
+        expect(done).toMatchObject({ heap: 0, made: "wood" });
+        expect(done?.crates).toEqual([9, 9, 9]);
+
+        // And what comes out is timber, not the carrots that went in.
+        await game.tapCell(at.col, at.row);
+        await game.settle(500);
+        expect(await game.held("wood")).toBe(wood + 9);
+        expect(await game.held("carrot")).toBe(0);
       });
     },
     5 * MINUTES,

@@ -60,6 +60,9 @@ const FIXTURES: Record<FixtureType, Noun> = {
   // The first machine. Named for what it does rather than for what it is
   // made of, which is how a child will point at it.
   [FixtureType.Sorter]: noun("sorter"),
+  // The second. Named for the glass rather than for the growing, because a
+  // child points at the box and not at what is happening inside it.
+  [FixtureType.Hothouse]: noun("hothouse"),
   [FixtureType.Windpump]: noun("wind pump"),
   [FixtureType.Planter]: noun("planter"),
   [FixtureType.Gate]: noun("gate"),

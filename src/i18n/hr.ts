@@ -134,6 +134,15 @@ const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
     few: "razvrstavača",
     many: "razvrstavača",
   },
+  // *Staklenik*, the everyday word for a glasshouse. Masculine and
+  // inanimate, so the accusative is the nominative — the same shape as the
+  // sorter above it.
+  [FixtureType.Hothouse]: {
+    one: "staklenik",
+    acc: "staklenik",
+    few: "staklenika",
+    many: "staklenika",
+  },
   // One feminine and one masculine, and the masculine is inanimate, so its
   // accusative is its nominative — the same shape as *bunar* and the sorter.
   [FixtureType.Windpump]: {

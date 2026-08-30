@@ -79,6 +79,9 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Scarecrow]: noun({ bare: "Vogelscheuche", gender: "f", plural: "Vogelscheuchen" }),
   [FixtureType.Flowerpot]: noun({ bare: "Blumentopf", gender: "m", plural: "Blumentöpfe" }),
   [FixtureType.Sorter]: noun({ bare: "Sortierer", gender: "m", plural: "Sortierer" }),
+  // *Gewächshaus*, the ordinary word for a glasshouse, which is the one a
+  // child would hear at home rather than a compound built for this game.
+  [FixtureType.Hothouse]: noun({ bare: "Gewächshaus", gender: "n", plural: "Gewächshäuser" }),
   [FixtureType.Windpump]: noun({ bare: "Windpumpe", gender: "f", plural: "Windpumpen" }),
   [FixtureType.Planter]: noun({ bare: "Pflanzkasten", gender: "m", plural: "Pflanzkästen" }),
   [FixtureType.Gate]: noun({ bare: "Tor", gender: "n", plural: "Tore" }),

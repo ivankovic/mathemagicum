@@ -115,6 +115,15 @@ export const FixtureType = {
    */
   Sorter: "sorter",
   /**
+   * The second machine, and the sorter's other half.
+   *
+   * A glass frame with three shoots coming up in it. Where a sorter deals a
+   * heap you already had into equal parts, this turns one thing into three
+   * of another — so between them they are the division and the
+   * multiplication, standing in a garden where they can be watched.
+   */
+  Hothouse: "hothouse",
+  /**
    * Brass and greenery, for the places that are not the village square.
    *
    * A playtest liked the fairytale look and asked for somewhere with a bit
@@ -165,6 +174,7 @@ export const PLACEABLE_FIXTURES: readonly FixtureType[] = [
   // may put it down and pick it up again — the crate, the world, the save.
   // How it got into the crate is the shop's business and the workshop's.
   FixtureType.Sorter,
+  FixtureType.Hothouse,
 ];
 
 export function isPlaceable(fixture: FixtureType): boolean {
@@ -212,6 +222,7 @@ export const FIXTURE_TURNS: Partial<Record<FixtureType, number>> = {
   [FixtureType.Gate]: TURNS_DRAWN,
   [FixtureType.Fence]: TURNS_DRAWN,
   [FixtureType.Sorter]: TURNS_DRAWN,
+  [FixtureType.Hothouse]: TURNS_DRAWN,
 };
 
 /** How many drawings this fixture has: three if it turns, one if it does not. */
