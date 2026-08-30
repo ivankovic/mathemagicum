@@ -151,6 +151,14 @@ const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
     few: "sita",
     many: "sita",
   },
+  // *Brojilo*, neuter like the sieve above it, so the accusative is the
+  // nominative and all four forms come off the one stem.
+  [FixtureType.Tally]: {
+    one: "brojilo",
+    acc: "brojilo",
+    few: "brojila",
+    many: "brojila",
+  },
   // One feminine and one masculine, and the masculine is inanimate, so its
   // accusative is its nominative — the same shape as *bunar* and the sorter.
   [FixtureType.Windpump]: {

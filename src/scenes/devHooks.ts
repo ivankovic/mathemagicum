@@ -477,6 +477,7 @@ export interface DevHandle {
     passes: string | null;
     binned: string | null;
     bin: number;
+    mark: number;
   }[];
   /** Every length of wire, and whether it is carrying. See `wires.ts`. */
   readonly wires: () => { from: string; to: string; moved: number }[];

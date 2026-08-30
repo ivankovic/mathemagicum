@@ -2348,6 +2348,8 @@ export class GameScene extends Phaser.Scene {
           passes: state.passes,
           binned: state.binned,
           bin: state.bin,
+          /** What a tally waits for. Nought until it has been shown. */
+          mark: state.mark,
           // What the crates hold, which for a machine that turns is not what
           // the mouth holds — and is the difference a scenario cannot see any
           // other way. See `MachineState.made`.
@@ -8246,6 +8248,14 @@ export class GameScene extends Phaser.Scene {
     // this branches: a hothouse woken by a division would be a toll, where
     // one woken by the rows and columns it is about to do three at a time is
     // the machine asking to be understood before it starts.
+    if (spell === Spell.Growth) {
+      // Counting up to a number on a line, which is what the growth spell
+      // walks and what a tally does to a heap.
+      const rung = rungAt(this.dev.rung ?? this.profile.rung);
+      const cast = additionCastFor(this.spellRng, rung);
+      this.spellPopup.open(cast.problem, cast.given, woken, cast.bare);
+      return;
+    }
     if (spell === Spell.Clearing) {
       // The number line walked backwards, which is what a sieve does to a
       // heap: take out what does not belong. The same parchment the rune

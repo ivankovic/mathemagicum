@@ -132,6 +132,14 @@ export const FixtureType = {
    */
   Sieve: "sieve",
   /**
+   * The fourth machine: a bucket on a pivot with a scale up its side.
+   *
+   * It counts up. Holds what it is given until it reaches the mark and then
+   * tips the lot — which is the first machine in the garden that asks
+   * whether there is *enough* rather than how much there is.
+   */
+  Tally: "tally",
+  /**
    * Brass and greenery, for the places that are not the village square.
    *
    * A playtest liked the fairytale look and asked for somewhere with a bit
@@ -184,6 +192,7 @@ export const PLACEABLE_FIXTURES: readonly FixtureType[] = [
   FixtureType.Sorter,
   FixtureType.Hothouse,
   FixtureType.Sieve,
+  FixtureType.Tally,
 ];
 
 export function isPlaceable(fixture: FixtureType): boolean {
@@ -233,6 +242,7 @@ export const FIXTURE_TURNS: Partial<Record<FixtureType, number>> = {
   [FixtureType.Sorter]: TURNS_DRAWN,
   [FixtureType.Hothouse]: TURNS_DRAWN,
   [FixtureType.Sieve]: TURNS_DRAWN,
+  [FixtureType.Tally]: TURNS_DRAWN,
 };
 
 /** How many drawings this fixture has: three if it turns, one if it does not. */

@@ -88,6 +88,19 @@ export const MachineType = {
    * wakes it: what a sieve does to a heap is take out what does not belong.
    */
   Sieve: FixtureType.Sieve,
+  /**
+   * A bucket on a pivot with a scale up the side of it.
+   *
+   * The fourth, and the last of the four operations: the sorter divides, the
+   * hothouse multiplies, the sieve takes away, and this one counts up. It
+   * holds what it is given until it reaches the mark and then tips the lot.
+   *
+   * What it makes possible is **"at least"**. Everything before it says how
+   * much of a thing there is; this is the first machine that asks whether
+   * there is *enough* — and a heap sitting below the mark, going nowhere, is
+   * what `≥` looks like when you can walk up to it.
+   */
+  Tally: FixtureType.Tally,
 } as const;
 
 export type MachineType = (typeof MachineType)[keyof typeof MachineType];
@@ -131,6 +144,10 @@ export const RECIPES: Readonly<Record<MachineType, Recipe>> = {
   // mesh in it, and it is the machine a child needs *two* of before either
   // of the others is much use on a line.
   [MachineType.Sieve]: { [MaterialType.Wood]: 6, [MaterialType.Stone]: 4 },
+  // Mostly timber and a little brass, which the recipe says as mostly wood
+  // and a little stone. It is also the second cheapest, because a line wants
+  // one wherever it wants a number.
+  [MachineType.Tally]: { [MaterialType.Wood]: 9, [MaterialType.Stone]: 3 },
 };
 
 /** What a machine is made of, as pairs, in a stable order. */
@@ -207,6 +224,9 @@ export const SPARK: Readonly<Record<MachineType, Spell>> = {
   // Taking away what does not belong, which is what a sieve does to a heap
   // and what the minus rune does to everything else.
   [MachineType.Sieve]: Spell.Clearing,
+  // Counting up to a number on a line, which is what the growth spell walks
+  // and what a tally does to a heap.
+  [MachineType.Tally]: Spell.Growth,
 };
 
 /**
@@ -224,7 +244,7 @@ export const SPARK: Readonly<Record<MachineType, Spell>> = {
  * gives, so a crop grown is worth about a tree cleared, and a growth cast
  * and a clearing cast come out level.
  */
-export const Verb = { Deal: "deal", Turn: "turn", Sift: "sift" } as const;
+export const Verb = { Deal: "deal", Turn: "turn", Sift: "sift", Count: "count" } as const;
 export type Verb = (typeof Verb)[keyof typeof Verb];
 
 export interface Work {
@@ -278,6 +298,10 @@ export const WORK: Readonly<Record<MachineType, Work>> = {
     wants: "a crop",
   },
   [MachineType.Sieve]: { verb: Verb.Sift, takes: 1, puts: 1, gives: null, wants: "anything" },
+  // `takes` and `puts` are the *mark* for a tally, and the mark is learned
+  // rather than written down — see `MachineState.mark`. One apiece here is
+  // the floor they cannot go below, not the batch it will settle on.
+  [MachineType.Tally]: { verb: Verb.Count, takes: 1, puts: 1, gives: null, wants: "anything" },
 };
 
 /**
@@ -340,6 +364,17 @@ export interface MachineState {
   /** What a sieve has rejected, and how much of it. */
   readonly binned: string | null;
   readonly bin: number;
+  /**
+   * How many a tally waits for before it tips, and nought until it is shown.
+   *
+   * Learned from the first heap that goes in, which is the same bargain the
+   * sieve makes and for the same reason: a dial would be a menu, and a
+   * number typed into a machine is a number a five-year-old cannot type.
+   * Show it five and it deals in fives from then on.
+   *
+   * Nought for ever on anything that is not a tally.
+   */
+  readonly mark: number;
   /** Minutes of work into the round in progress. */
   readonly worked: number;
 }
@@ -355,6 +390,7 @@ export function newMachine(): MachineState {
     passes: null,
     binned: null,
     bin: 0,
+    mark: 0,
     worked: 0,
   };
 }
@@ -408,15 +444,19 @@ export function advance(state: MachineState, minutes: number, machine: MachineTy
   if (!state.awake || !Number.isFinite(minutes) || minutes <= 0) return state;
   const work = WORK[machine];
   const worked = state.worked + minutes;
-  const rounds = Math.min(
-    Math.floor(worked / MINUTES_PER_ROUND),
-    Math.floor(state.heap / work.takes),
-  );
+  // A tally waits for its mark rather than for a round's worth, so how many
+  // batches it can tip is a different sum — see `counted`.
+  const batch = work.verb === Verb.Count ? Math.max(1, state.mark || state.heap) : work.takes;
+  const rounds = Math.min(Math.floor(worked / MINUTES_PER_ROUND), Math.floor(state.heap / batch));
   if (rounds <= 0) {
     // Only bank the work if there is something to work on. A machine left
     // running on an empty mouth would otherwise store up months of it and
     // deal a whole heap the instant anything was tipped in.
-    return state.heap >= work.takes ? { ...state, worked } : { ...state, worked: 0 };
+    // A tally under its mark banks nothing either, and that is the shape of
+    // `≥` rather than an optimisation: a heap of nine against a mark of
+    // twelve is not *almost* ready, it is not ready, and it will still not be
+    // ready tomorrow. What changes that is more arriving, not more time.
+    return state.heap >= batch ? { ...state, worked } : { ...state, worked: 0 };
   }
   const held = state.holding;
   // A sieve puts a round's work in one of two places, and which one is the
@@ -442,6 +482,7 @@ export function advance(state: MachineState, minutes: number, machine: MachineTy
   }
   const sifting = work.verb === Verb.Sift;
   const left = state.heap - rounds * work.takes;
+  if (work.verb === Verb.Count) return counted(state, worked, held);
   return {
     ...state,
     heap: left,
@@ -458,6 +499,38 @@ export function advance(state: MachineState, minutes: number, machine: MachineTy
     // which is a sieve that does nothing.
     passes: sifting ? (state.passes ?? held) : state.passes,
     worked: worked - rounds * MINUTES_PER_ROUND,
+  };
+}
+
+/**
+ * A tally reaching its mark, and tipping.
+ *
+ * Its own arithmetic because everything else here works on a *rate* — so
+ * much a round — and this one works on a *threshold*. It takes nothing at
+ * all until the heap reaches the mark, and then the whole batch goes over at
+ * once. That is the difference between "how much" and "enough", and it is
+ * the whole reason this machine exists.
+ *
+ * The mark is learned from the first heap it is shown, the same bargain the
+ * sieve makes: show it five and it deals in fives from then on.
+ */
+function counted(state: MachineState, worked: number, held: string | null): MachineState {
+  const mark = state.mark || state.heap;
+  if (mark <= 0 || state.heap < mark) return { ...state, worked: 0 };
+  const batches = Math.min(Math.floor(worked / MINUTES_PER_ROUND), Math.floor(state.heap / mark));
+  if (batches <= 0) return { ...state, worked, mark };
+  const left = state.heap - batches * mark;
+  return {
+    ...state,
+    heap: left,
+    holding: left > 0 ? state.holding : null,
+    crates: spread(state.crates, batches * mark),
+    // Named, because a tally's mouth empties between batches exactly as a
+    // sieve's does — by the time anybody takes a share there may be nothing
+    // in there to ask.
+    made: state.made ?? held,
+    mark,
+    worked: worked - batches * MINUTES_PER_ROUND,
   };
 }
 
@@ -598,7 +671,7 @@ export function machinesToSave(
   const saved: Record<string, string> = {};
   for (const [where, state] of machines) {
     saved[where] =
-      `${state.awake ? 1 : 0},${state.holding ?? ""},${state.heap},${state.crates.join("/")},${Math.round(state.worked)},${state.made ?? ""},${state.passes ?? ""},${state.binned ?? ""},${state.bin}`;
+      `${state.awake ? 1 : 0},${state.holding ?? ""},${state.heap},${state.crates.join("/")},${Math.round(state.worked)},${state.made ?? ""},${state.passes ?? ""},${state.binned ?? ""},${state.bin},${state.mark}`;
   }
   return saved;
 }
@@ -615,7 +688,8 @@ export function machinesFromSave(saved: unknown): Map<string, MachineState> {
   if (typeof saved !== "object" || saved === null) return machines;
   for (const [where, entry] of Object.entries(saved as Record<string, unknown>)) {
     if (typeof entry !== "string" || !/^-?\d+,-?\d+$/.test(where)) continue;
-    const [awake, holding, heap, crates, worked, made, passes, binned, bin] = entry.split(",");
+    const [awake, holding, heap, crates, worked, made, passes, binned, bin, mark] =
+      entry.split(",");
     if (awake === undefined || heap === undefined || crates === undefined) continue;
     if (!/^\d+$/.test(heap) || !/^\d+$/.test(worked ?? "")) continue;
     const dealt = crates.split("/").map(Number);
@@ -644,6 +718,7 @@ export function machinesFromSave(saved: unknown): Map<string, MachineState> {
       passes: passes ? passes : null,
       binned: binned ? binned : null,
       bin: /^\d+$/.test(bin ?? "") ? Number(bin) : 0,
+      mark: /^\d+$/.test(mark ?? "") ? Number(mark) : 0,
       worked: Number(worked),
     });
   }

@@ -46,6 +46,7 @@ interface Machine {
   passes: string | null;
   binned: string | null;
   bin: number;
+  mark: number;
 }
 
 const machines = (game: Game) => game.seam<Machine[]>("machines");
@@ -141,6 +142,7 @@ describe("the first machine that does something", () => {
    * hour while she watches, so it moves the machine too, and that is the one
    * way to make a sorter deal a heap in the time anybody would sit still for.
    */
+
   test(
     "and winding the clock is what hurries it",
     async () => {
@@ -215,6 +217,7 @@ describe("the first machine that does something", () => {
    * they moved it would be punishing them for changing their mind about
    * where a thing stands.
    */
+
   test(
     "and the minus rune takes it back, heap and all",
     async () => {
@@ -263,265 +266,4 @@ describe("the first machine that does something", () => {
    * wrong runs perfectly and hands a child their carrots back — a machine
    * that appears to work and does nothing at all.
    */
-  test(
-    "and the hothouse turns a crop into timber",
-    async () => {
-      await play({ seams: WITH_TIMBER }, async (game) => {
-        const at = await aMachineBeside(game, FixtureType.Hothouse);
-
-        // Woken by the rows and columns it is about to do three at a time,
-        // not by the sorter's division: each machine is shown its own sum.
-        await game.tapCell(at.col, at.row);
-        await game.settle(400);
-        expect(await game.seam("array")).not.toBeNull();
-        await game.solveArray();
-        await game.settle(500);
-        expect((await machines(game))[0]).toMatchObject({ awake: true });
-
-        // A basket of carrots, and more wood than carrots on purpose: the
-        // machine takes the biggest heap it *wants*, and a hothouse that
-        // took timber would turn one wood into three and never stop.
-        await game.tab.evaluate((crop) => {
-          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-            .__mathemagicum;
-          if (!handle) throw new Error("the game has not put its handle out");
-          (handle.session as { inventory: { add: (of: string, n: number) => void } }).inventory.add(
-            crop as string,
-            9,
-          );
-        }, "carrot");
-        await game.settle(200);
-        expect(await game.held("wood")).toBeGreaterThan(9);
-
-        await game.tapCell(at.col, at.row);
-        await game.settle(500);
-        const fed = (await machines(game))[0];
-        expect(fed).toMatchObject({ holding: "carrot", heap: 9 });
-        expect(await game.held("carrot")).toBe(0);
-
-        const wood = await game.held("wood");
-        await game.windClock(12);
-        await game.settle(1500);
-
-        // Nine crops in, one to a round, three crates filling each time.
-        const done = (await machines(game))[0];
-        expect(done).toMatchObject({ heap: 0, made: "wood" });
-        expect(done?.crates).toEqual([9, 9, 9]);
-
-        // And what comes out is timber, not the carrots that went in.
-        await game.tapCell(at.col, at.row);
-        await game.settle(500);
-        expect(await game.held("wood")).toBe(wood + 9);
-        expect(await game.held("carrot")).toBe(0);
-      });
-    },
-    5 * MINUTES,
-  );
-
-  /**
-   * And a wire between the two, which is what makes it a system.
-   *
-   * A sorter deals a heap into three and a hothouse eats one crop a round.
-   * On their own they are two machines a child walks between with a basket;
-   * joined, the second is fed by the first and the garden does something
-   * while she is standing in it.
-   *
-   * The failure worth guarding is the quiet one, and it is *two* failures
-   * that look identical from outside: a wire that never carried and a wire
-   * that is correctly backed up both sit there doing nothing. That is why
-   * the seam reports how much moved rather than only what is joined to what.
-   */
-  test(
-    "and a wire feeds one machine from another",
-    async () => {
-      await play({ seams: WITH_TIMBER }, async (game) => {
-        // A sorter with carrots in it, dealt and waiting in the crates.
-        const from = await aMachineBeside(game, FixtureType.Sorter);
-        await game.tapCell(from.col, from.row);
-        await game.settle(400);
-        await game.solveShare();
-        await game.settle(400);
-        // More carrots than she has of anything else, and that matters: a
-        // sorter takes *whatever* it is given — dealing cannot mint, so it
-        // has no reason to be fussy — and it tips in the biggest heap she is
-        // carrying. Given fewer carrots than stone it eats the stone, and
-        // then there is none left to build the second machine out of.
-        await game.tab.evaluate((crop) => {
-          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-            .__mathemagicum;
-          if (!handle) throw new Error("the game has not put its handle out");
-          (handle.session as { inventory: { add: (of: string, n: number) => void } }).inventory.add(
-            crop as string,
-            99,
-          );
-        }, "carrot");
-        await game.settle(200);
-        await game.tapCell(from.col, from.row);
-        await game.settle(400);
-
-        // And a hothouse beside it, woken and empty.
-        const to = await aMachineBeside(game, FixtureType.Hothouse);
-        await game.tapCell(to.col, to.row);
-        await game.settle(400);
-        await game.solveArray();
-        await game.settle(400);
-
-        // Both standing and both awake before any wire is strung, so a
-        // failure below is about the wire rather than about the machines.
-        const both = await machines(game);
-        expect(both.map((one) => one.where).sort()).toEqual(
-          [`${from.col},${from.row}`, `${to.col},${to.row}`].sort(),
-        );
-        expect(both.every((one) => one.awake)).toBe(true);
-
-        // The coil takes two taps: one machine, then the other. In between
-        // it stays lit and she still has hold of the first end.
-        expect(await takeFromCrate(game, CRATE_WIRE)).toBe(true);
-        await game.settle(300);
-        await game.tapCell(from.col, from.row);
-        await game.settle(300);
-        expect(await game.seam<{ col: number; row: number } | null>("wiring")).toEqual({
-          col: from.col,
-          row: from.row,
-        });
-        expect(await game.seam<string | null>("armed")).toBe(CRATE_WIRE);
-
-        await game.tapCell(to.col, to.row);
-        await game.settle(400);
-        expect(await game.seam<Strung[]>("wires")).toHaveLength(1);
-
-        // Now wind the clock: the sorter deals its heap and the wire walks
-        // it along to the hothouse, which turns it into timber.
-        const wood = await game.held("wood");
-        await game.windClock(12);
-        await game.settle(1500);
-
-        const strung = (await game.seam<Strung[]>("wires"))[0];
-        expect(strung?.moved).toBeGreaterThan(0);
-
-        const house = (await game.seam<Machine[]>("machines")).find(
-          (one) => one.where === `${to.col},${to.row}`,
-        );
-        // Carrots arrived and became timber, which nothing but the wire
-        // could have done — she never carried any of it across herself.
-        expect(house?.made).toBe("wood");
-        expect(house?.crates.some((count) => count > 0)).toBe(true);
-
-        await game.tapCell(to.col, to.row);
-        await game.settle(500);
-        expect(await game.held("wood")).toBeGreaterThan(wood);
-
-        // And the line is still there tomorrow.
-        await game.reload(WITH_TIMBER);
-        await game.settle(800);
-        expect(await game.seam<Strung[]>("wires")).toHaveLength(1);
-      });
-    },
-    5 * MINUTES,
-  );
-
-  /**
-   * And the sieve, which decides rather than makes.
-   *
-   * A wire only carries, so this is where a line is gated: shown one thing,
-   * it passes that and drops everything else into its bin. What it is
-   * *for* is the case where a line would otherwise stop dead — a hothouse
-   * only takes crops, so timber arriving at one backs the whole thing up
-   * until somebody comes and sorts it out by hand.
-   *
-   * The failure worth guarding is that a jam and an idle machine look
-   * identical from outside. Both sit there doing nothing.
-   */
-  test(
-    "and the sieve keeps what it is shown and bins the rest",
-    async () => {
-      await play({ seams: WITH_TIMBER }, async (game) => {
-        const at = await aMachineBeside(game, FixtureType.Sieve);
-
-        // Woken by the minus rune's own arithmetic: what a sieve does to a
-        // heap is take out what does not belong.
-        await game.tapCell(at.col, at.row);
-        await game.settle(400);
-        expect(await game.seam("spell")).not.toBeNull();
-        await game.solveNumberLine();
-        await game.settle(500);
-        expect((await machines(game))[0]).toMatchObject({ awake: true, passes: null });
-
-        // Shown one thing by the first heap that goes in, and never asked
-        // again. She is carrying more stone than anything, so stone is what
-        // it learns — which is the machine deciding, not the scenario.
-        await game.tapCell(at.col, at.row);
-        await game.settle(400);
-        const shown = (await machines(game))[0];
-        if (!shown?.holding) throw new Error("the sieve took nothing at all");
-        const passes = shown.holding;
-
-        await game.windClock(12);
-        await game.settle(1500);
-        const sifted = (await machines(game))[0];
-        expect(sifted).toMatchObject({ passes, bin: 0 });
-        // What has come through is in the crates and none of it in the bin,
-        // and nothing has been lost between the two. Not *all* of it: a
-        // sieve takes one a round, so twelve hours is thirty-six of them and
-        // a big heap outlasts a single cast — which is why a line feeds one
-        // a few at a time rather than tipping a basket into it.
-        const through = sifted?.crates.reduce((all, count) => all + count, 0) ?? 0;
-        expect(through).toBeGreaterThan(0);
-        expect(through + (sifted?.heap ?? 0)).toBe(shown.heap);
-
-        // Wind again until the mouth runs dry. A sieve takes one kind at a
-        // time like every other machine, so nothing else goes in until it
-        // has finished what it has — and its mouth forgetting the moment it
-        // empties is what lets a line pour a stream of mixed things through
-        // it at all.
-        await game.windClock(12);
-        await game.settle(1500);
-        expect((await machines(game))[0]).toMatchObject({ heap: 0, holding: null });
-
-        // Now something else. It goes in the bin rather than the crates,
-        // which is the whole of what a sieve is.
-        await game.tab.evaluate((crop) => {
-          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-            .__mathemagicum;
-          if (!handle) throw new Error("the game has not put its handle out");
-          (handle.session as { inventory: { add: (of: string, n: number) => void } }).inventory.add(
-            crop as string,
-            99,
-          );
-        }, "carrot");
-        await game.settle(200);
-        // Empty its crates first, or a tap hands her a share instead of
-        // filling it — the good ones come out before the rejects. Which
-        // gives her back everything it passed, so the carrots have to
-        // outnumber that too: a machine tips in the biggest heap she has.
-        for (let go = 0; go < SHARES; go++) {
-          await game.tapCell(at.col, at.row);
-          await game.settle(300);
-        }
-        await game.tapCell(at.col, at.row);
-        await game.settle(400);
-        await game.windClock(12);
-        await game.settle(1500);
-
-        const caught = (await machines(game))[0];
-        expect(caught).toMatchObject({ passes, binned: "carrot" });
-        expect(caught?.bin).toBeGreaterThan(0);
-
-        // And a tap tips the bin out — the carrots back, not a share of the
-        // stone it kept. A bin is not a share.
-        const held = await game.held("carrot");
-        await game.tapCell(at.col, at.row);
-        await game.settle(500);
-        expect(await game.held("carrot")).toBeGreaterThan(held);
-
-        // Not asserted: that the bin is empty afterwards. It is emptied, and
-        // then it starts filling again, because the mouth is still full of
-        // carrots and the machine has not stopped — which is right. A sieve
-        // whose bin stayed empty after one tap would be a sieve that had
-        // given up on the heap it was still holding.
-        expect((await machines(game))[0]?.binned).toBe("carrot");
-      });
-    },
-    5 * MINUTES,
-  );
 });

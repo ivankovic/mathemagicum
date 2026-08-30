@@ -202,6 +202,11 @@
       "width": 32,
       "height": 32
     },
+    "item-tally": {
+      "file": "item_tally.png",
+      "width": 32,
+      "height": 32
+    },
     "item-wire": {
       "file": "item_wire.png",
       "width": 32,

@@ -101,6 +101,7 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
   // And the same for the second machine, for the same reason.
   hothouse: Number.POSITIVE_INFINITY,
   sieve: Number.POSITIVE_INFINITY,
+  tally: Number.POSITIVE_INFINITY,
   // The quay's and the city's dressing, not for sale for the reason the
   // market stall is not: it is a piece of a place rather than a thing
   // somebody owns.

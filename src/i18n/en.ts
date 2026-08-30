@@ -66,6 +66,8 @@ const FIXTURES: Record<FixtureType, Noun> = {
   // Named for the mesh, which is the part that does the work and the part
   // a child will point at.
   [FixtureType.Sieve]: noun("sieve"),
+  // Named for what it keeps rather than for the bucket it keeps it in.
+  [FixtureType.Tally]: noun("tally"),
   [FixtureType.Windpump]: noun("wind pump"),
   [FixtureType.Planter]: noun("planter"),
   [FixtureType.Gate]: noun("gate"),

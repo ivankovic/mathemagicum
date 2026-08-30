@@ -325,6 +325,7 @@ describe("a hothouse turning one thing into another", () => {
       passes: null,
       binned: null,
       bin: 0,
+      mark: 0,
       worked: 5,
     });
     expect(takeShare(old.get("1,1") as never, 0).item).toBe("wood");
@@ -478,5 +479,99 @@ describe("a sieve deciding which way things go", () => {
     if (!fed) throw new Error("a woken sorter refused a heap");
     expect(advance(fed, MINUTES_PER_ROUND, MachineType.Sorter).crates).toEqual([1, 1, 1]);
     expect(advance(fed, MINUTES_PER_ROUND * 3, MachineType.Sorter).crates).toEqual([3, 3, 3]);
+  });
+});
+
+/**
+ * The fourth machine, and the first that asks whether there is *enough*.
+ *
+ * Everything before it says how much of a thing there is. A tally holds what
+ * it is given until the heap reaches a mark and then tips the lot — so a
+ * heap sitting below that mark, going nowhere, is what `≥` looks like when
+ * you can walk up to it.
+ */
+describe("a tally counting up to its mark", () => {
+  const TALLY = MachineType.Tally;
+  const WHEAT = "wheat";
+
+  function counting(count: number, from = wake(newMachine())) {
+    const fed = feed(from, WHEAT, count, TALLY);
+    if (!fed) throw new Error("a woken tally refused a heap");
+    return fed;
+  }
+
+  /** Shown once, by the first heap in — the same bargain the sieve makes. */
+  test("learns its mark from the first heap it is shown", () => {
+    const done = advance(counting(5), MINUTES_PER_ROUND, TALLY);
+    expect(done.mark).toBe(5);
+    expect(done.heap).toBe(0);
+    expect(done.crates.reduce((all, count) => all + count, 0)).toBe(5);
+  });
+
+  /**
+   * And under the mark, nothing happens — not slowly, not at all.
+   *
+   * That is the shape of `≥` rather than an optimisation. Nine against a
+   * mark of twelve is not *almost* ready; it is not ready, and it will still
+   * not be ready tomorrow. What changes that is more arriving, not more
+   * time — which is the whole idea a child is meeting here.
+   */
+  test("and holds a heap below the mark for ever", () => {
+    let done = advance(counting(4), MINUTES_PER_ROUND, TALLY);
+    for (let crate = 0; crate < SHARES; crate++) done = takeShare(done, crate).state;
+    done = counting(3, done);
+    expect(advance(done, MINUTES_PER_ROUND * 1000, TALLY)).toMatchObject({
+      heap: 3,
+      crates: [0, 0, 0],
+    });
+    // And it tips the moment enough arrives, without needing to be told.
+    const enough = advance(counting(1, done), MINUTES_PER_ROUND, TALLY);
+    expect(enough.heap).toBe(0);
+    expect(enough.crates.reduce((all, count) => all + count, 0)).toBe(4);
+  });
+
+  test("and tips in whole batches, leaving the remainder under the mark", () => {
+    let done = advance(counting(3), MINUTES_PER_ROUND, TALLY);
+    for (let crate = 0; crate < SHARES; crate++) done = takeShare(done, crate).state;
+    done = advance(counting(11, done), MINUTES_PER_ROUND * 100, TALLY);
+    // Eleven against a mark of three is three batches of three and two over.
+    expect(done.crates.reduce((all, count) => all + count, 0)).toBe(9);
+    expect(done.heap).toBe(2);
+    expect(done.mark).toBe(3);
+  });
+
+  test("and a tally banks no work while it is waiting", () => {
+    let done = advance(counting(6), MINUTES_PER_ROUND, TALLY);
+    for (let crate = 0; crate < SHARES; crate++) done = takeShare(done, crate).state;
+    // Left running under its mark for a month, then filled: it must tip
+    // once, not pour out a month of batches it never had the goods for.
+    const waited = advance(counting(2, done), MINUTES_PER_ROUND * 500, TALLY);
+    const filled = advance(counting(10, waited), MINUTES_PER_ROUND, TALLY);
+    expect(filled.crates.reduce((all, count) => all + count, 0)).toBe(6);
+    expect(filled.heap).toBe(6);
+  });
+
+  test("and what comes out is what went in", () => {
+    const done = advance(counting(4), MINUTES_PER_ROUND, TALLY);
+    const taken = takeShare(done, fullestCrate(done));
+    expect(taken.item).toBe(WHEAT);
+  });
+
+  test("and its mark survives being written down", () => {
+    const done = advance(counting(7), MINUTES_PER_ROUND, TALLY);
+    const machines = new Map([["2,3", done]]);
+    expect(machinesFromSave(machinesToSave(machines))).toEqual(machines);
+    expect(machinesFromSave(machinesToSave(machines)).get("2,3")?.mark).toBe(7);
+  });
+
+  /** And one machine for each of the four operations, which is the set. */
+  test("and there is one machine for each of the four operations", () => {
+    expect(new Set(MACHINE_TYPES.map((machine) => WORK[machine].verb)).size).toBe(
+      MACHINE_TYPES.length,
+    );
+    expect(new Set(MACHINE_TYPES.map((machine) => SPARK[machine])).size).toBe(MACHINE_TYPES.length);
+    expect([...MACHINE_TYPES].map((machine) => SPARK[machine]).sort()).toEqual(
+      [Spell.Growth, Spell.Clearing, Spell.Array, Spell.Share].sort(),
+    );
   });
 });
