@@ -43,6 +43,9 @@ interface Machine {
   heap: number;
   crates: number[];
   made: string | null;
+  passes: string | null;
+  binned: string | null;
+  bin: number;
 }
 
 const machines = (game: Game) => game.seam<Machine[]>("machines");
@@ -412,6 +415,111 @@ describe("the first machine that does something", () => {
         await game.reload(WITH_TIMBER);
         await game.settle(800);
         expect(await game.seam<Strung[]>("wires")).toHaveLength(1);
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * And the sieve, which decides rather than makes.
+   *
+   * A wire only carries, so this is where a line is gated: shown one thing,
+   * it passes that and drops everything else into its bin. What it is
+   * *for* is the case where a line would otherwise stop dead — a hothouse
+   * only takes crops, so timber arriving at one backs the whole thing up
+   * until somebody comes and sorts it out by hand.
+   *
+   * The failure worth guarding is that a jam and an idle machine look
+   * identical from outside. Both sit there doing nothing.
+   */
+  test(
+    "and the sieve keeps what it is shown and bins the rest",
+    async () => {
+      await play({ seams: WITH_TIMBER }, async (game) => {
+        const at = await aMachineBeside(game, FixtureType.Sieve);
+
+        // Woken by the minus rune's own arithmetic: what a sieve does to a
+        // heap is take out what does not belong.
+        await game.tapCell(at.col, at.row);
+        await game.settle(400);
+        expect(await game.seam("spell")).not.toBeNull();
+        await game.solveNumberLine();
+        await game.settle(500);
+        expect((await machines(game))[0]).toMatchObject({ awake: true, passes: null });
+
+        // Shown one thing by the first heap that goes in, and never asked
+        // again. She is carrying more stone than anything, so stone is what
+        // it learns — which is the machine deciding, not the scenario.
+        await game.tapCell(at.col, at.row);
+        await game.settle(400);
+        const shown = (await machines(game))[0];
+        if (!shown?.holding) throw new Error("the sieve took nothing at all");
+        const passes = shown.holding;
+
+        await game.windClock(12);
+        await game.settle(1500);
+        const sifted = (await machines(game))[0];
+        expect(sifted).toMatchObject({ passes, bin: 0 });
+        // What has come through is in the crates and none of it in the bin,
+        // and nothing has been lost between the two. Not *all* of it: a
+        // sieve takes one a round, so twelve hours is thirty-six of them and
+        // a big heap outlasts a single cast — which is why a line feeds one
+        // a few at a time rather than tipping a basket into it.
+        const through = sifted?.crates.reduce((all, count) => all + count, 0) ?? 0;
+        expect(through).toBeGreaterThan(0);
+        expect(through + (sifted?.heap ?? 0)).toBe(shown.heap);
+
+        // Wind again until the mouth runs dry. A sieve takes one kind at a
+        // time like every other machine, so nothing else goes in until it
+        // has finished what it has — and its mouth forgetting the moment it
+        // empties is what lets a line pour a stream of mixed things through
+        // it at all.
+        await game.windClock(12);
+        await game.settle(1500);
+        expect((await machines(game))[0]).toMatchObject({ heap: 0, holding: null });
+
+        // Now something else. It goes in the bin rather than the crates,
+        // which is the whole of what a sieve is.
+        await game.tab.evaluate((crop) => {
+          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
+            .__mathemagicum;
+          if (!handle) throw new Error("the game has not put its handle out");
+          (handle.session as { inventory: { add: (of: string, n: number) => void } }).inventory.add(
+            crop as string,
+            99,
+          );
+        }, "carrot");
+        await game.settle(200);
+        // Empty its crates first, or a tap hands her a share instead of
+        // filling it — the good ones come out before the rejects. Which
+        // gives her back everything it passed, so the carrots have to
+        // outnumber that too: a machine tips in the biggest heap she has.
+        for (let go = 0; go < SHARES; go++) {
+          await game.tapCell(at.col, at.row);
+          await game.settle(300);
+        }
+        await game.tapCell(at.col, at.row);
+        await game.settle(400);
+        await game.windClock(12);
+        await game.settle(1500);
+
+        const caught = (await machines(game))[0];
+        expect(caught).toMatchObject({ passes, binned: "carrot" });
+        expect(caught?.bin).toBeGreaterThan(0);
+
+        // And a tap tips the bin out — the carrots back, not a share of the
+        // stone it kept. A bin is not a share.
+        const held = await game.held("carrot");
+        await game.tapCell(at.col, at.row);
+        await game.settle(500);
+        expect(await game.held("carrot")).toBeGreaterThan(held);
+
+        // Not asserted: that the bin is empty afterwards. It is emptied, and
+        // then it starts filling again, because the mouth is still full of
+        // carrots and the machine has not stopped — which is right. A sieve
+        // whose bin stayed empty after one tap would be a sieve that had
+        // given up on the heap it was still holding.
+        expect((await machines(game))[0]?.binned).toBe("carrot");
       });
     },
     5 * MINUTES,

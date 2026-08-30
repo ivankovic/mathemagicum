@@ -124,6 +124,14 @@ export const FixtureType = {
    */
   Hothouse: "hothouse",
   /**
+   * The third machine: a slanted mesh with a chute and a bin under it.
+   *
+   * The one that decides rather than makes. A wire only carries, so this is
+   * where a line is gated — shown one thing, it passes that and drops
+   * everything else into its bin.
+   */
+  Sieve: "sieve",
+  /**
    * Brass and greenery, for the places that are not the village square.
    *
    * A playtest liked the fairytale look and asked for somewhere with a bit
@@ -175,6 +183,7 @@ export const PLACEABLE_FIXTURES: readonly FixtureType[] = [
   // How it got into the crate is the shop's business and the workshop's.
   FixtureType.Sorter,
   FixtureType.Hothouse,
+  FixtureType.Sieve,
 ];
 
 export function isPlaceable(fixture: FixtureType): boolean {
@@ -223,6 +232,7 @@ export const FIXTURE_TURNS: Partial<Record<FixtureType, number>> = {
   [FixtureType.Fence]: TURNS_DRAWN,
   [FixtureType.Sorter]: TURNS_DRAWN,
   [FixtureType.Hothouse]: TURNS_DRAWN,
+  [FixtureType.Sieve]: TURNS_DRAWN,
 };
 
 /** How many drawings this fixture has: three if it turns, one if it does not. */

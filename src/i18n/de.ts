@@ -82,6 +82,7 @@ const FIXTURES: Record<FixtureType, Noun> = {
   // *Gewächshaus*, the ordinary word for a glasshouse, which is the one a
   // child would hear at home rather than a compound built for this game.
   [FixtureType.Hothouse]: noun({ bare: "Gewächshaus", gender: "n", plural: "Gewächshäuser" }),
+  [FixtureType.Sieve]: noun({ bare: "Sieb", gender: "n", plural: "Siebe" }),
   [FixtureType.Windpump]: noun({ bare: "Windpumpe", gender: "f", plural: "Windpumpen" }),
   [FixtureType.Planter]: noun({ bare: "Pflanzkasten", gender: "m", plural: "Pflanzkästen" }),
   [FixtureType.Gate]: noun({ bare: "Tor", gender: "n", plural: "Tore" }),

@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { Spell } from "../spells/spellbook";
 import {
+  BIN_HOLDS,
   MACHINE_TYPES,
   MINUTES_PER_ROUND,
   MachineType,
@@ -19,6 +20,7 @@ import {
   machinesToSave,
   newMachine,
   takeShare,
+  tipBin,
   wake,
 } from "./machines";
 import { CLEARED_YIELD } from "./materials";
@@ -263,7 +265,13 @@ describe("a hothouse turning one thing into another", () => {
    * carrot twice a way to build rather than a worse way to earn.
    */
   test("and three is what it makes, which is what a felled conifer gives", () => {
-    expect(WORK[HOUSE]).toEqual({ verb: Verb.Turn, takes: 1, gives: "wood", wants: "a crop" });
+    expect(WORK[HOUSE]).toEqual({
+      verb: Verb.Turn,
+      takes: 1,
+      puts: SHARES,
+      gives: "wood",
+      wants: "a crop",
+    });
     expect(CLEARED_YIELD.woodland?.count).toBe(SHARES);
   });
 
@@ -271,6 +279,7 @@ describe("a hothouse turning one thing into another", () => {
     expect(WORK[MachineType.Sorter]).toEqual({
       verb: Verb.Deal,
       takes: SHARES,
+      puts: SHARES,
       gives: null,
       wants: "anything",
     });
@@ -313,6 +322,9 @@ describe("a hothouse turning one thing into another", () => {
       heap: 4,
       crates: [2, 2, 2],
       made: null,
+      passes: null,
+      binned: null,
+      bin: 0,
       worked: 5,
     });
     expect(takeShare(old.get("1,1") as never, 0).item).toBe("wood");
@@ -341,5 +353,130 @@ describe("a hothouse turning one thing into another", () => {
     for (const item of ["wood", "stone", CARROT]) {
       expect({ item, ok: accepts(MachineType.Sorter, item) }).toEqual({ item, ok: true });
     }
+  });
+});
+
+/**
+ * The third machine, which decides rather than makes.
+ *
+ * A wire only carries — every choice belongs to a machine standing where a
+ * child can see it — so this is where a line is gated. Shown one thing, it
+ * passes that and drops everything else into its bin.
+ */
+describe("a sieve deciding which way things go", () => {
+  const SIEVE = MachineType.Sieve;
+  const CARROT = "carrot";
+
+  /** A woken sieve with a heap in its mouth. */
+  function sifting(item: string, count: number, from = wake(newMachine())) {
+    const fed = feed(from, item, count, SIEVE);
+    if (!fed) throw new Error("a woken sieve refused a heap");
+    return fed;
+  }
+
+  /**
+   * Shown once, and by the first thing that goes in.
+   *
+   * The same bargain as waking, and for the same reason: a dial would be the
+   * first menu in the garden, and a sieve that had to be told in words what
+   * to pass would be a sieve a six-year-old could not use.
+   */
+  test("learns what to pass from the first thing it is given", () => {
+    const done = advance(sifting(CARROT, 4), MINUTES_PER_ROUND * 4, SIEVE);
+    expect(done.passes).toBe(CARROT);
+    expect(done.heap).toBe(0);
+    expect(done.bin).toBe(0);
+    // Four in, four out — a sieve neither makes nor loses, it only sorts.
+    expect(done.crates.reduce((all, count) => all + count, 0)).toBe(4);
+  });
+
+  test("and does not learn again from the next thing", () => {
+    let done = advance(sifting(CARROT, 3), MINUTES_PER_ROUND * 3, SIEVE);
+    for (let crate = 0; crate < SHARES; crate++) done = takeShare(done, crate).state;
+    done = advance(sifting("wood", 3, done), MINUTES_PER_ROUND * 3, SIEVE);
+    // Still carrots, and the timber went in the bin. A sieve that relearned
+    // every batch would pass whatever it was last handed, which is a sieve
+    // that does nothing at all.
+    expect(done.passes).toBe(CARROT);
+    expect({ binned: done.binned, bin: done.bin }).toEqual({ binned: "wood", bin: 3 });
+    expect(done.crates.reduce((all, count) => all + count, 0)).toBe(0);
+  });
+
+  /**
+   * And the bin fills and jams, which is the point rather than a limit
+   * somebody forgot to remove.
+   *
+   * A sieve quietly swallowing everything it is sent for ever would be a
+   * hole in a child's garden. One that stops, backs the line up and sits
+   * there with a full bin is a thing they can find and empty.
+   */
+  test("and its bin fills up and then jams", () => {
+    let done = advance(sifting(CARROT, 1), MINUTES_PER_ROUND, SIEVE);
+    done = advance(sifting("wood", BIN_HOLDS + 6, done), MINUTES_PER_ROUND * 100, SIEVE);
+    expect(done.bin).toBe(BIN_HOLDS);
+    // What would not fit is still in the mouth rather than gone.
+    expect({ holding: done.holding, heap: done.heap }).toEqual({ holding: "wood", heap: 6 });
+
+    // And now *nothing* goes in — not even what it passes. The mouth is
+    // blocked by rejects it has nowhere to put, so the whole machine stops
+    // and every wire into it backs up. That is the jam, and it is a stronger
+    // thing than a full box: a sieve that went on accepting the good ones
+    // while it choked on the bad would hide the problem it is having.
+    expect(feed(done, "stone", 3, SIEVE)).toBeNull();
+    expect(feed(done, CARROT, 3, SIEVE)).toBeNull();
+
+    // Tipping the bin out is what frees it, and that is the whole design of
+    // this: the fix is a thing a child does, in one tap, to a machine whose
+    // bin they can see is full.
+    // With room in the bin it works the rest of the timber off, and only
+    // then is the mouth clear for anything else — which is the machine
+    // finishing what it was doing rather than dropping it.
+    const running = advance(tipBin(done).state, MINUTES_PER_ROUND * 10, SIEVE);
+    expect({ heap: running.heap, holding: running.holding }).toEqual({ heap: 0, holding: null });
+    expect(feed(running, CARROT, 3, SIEVE)?.heap).toBe(3);
+  });
+
+  /**
+   * The bin is emptied by its own call, never by taking a share.
+   *
+   * A bin is not a share. One call for both would mean a child tipping the
+   * rejects out found they had taken a third of the good ones with them.
+   */
+  test("and the bin is tipped out on its own", () => {
+    let done = advance(sifting(CARROT, 1), MINUTES_PER_ROUND, SIEVE);
+    done = advance(sifting("wood", 5, done), MINUTES_PER_ROUND * 5, SIEVE);
+    expect({ bin: done.bin, crates: done.crates.reduce((a, c) => a + c, 0) }).toEqual({
+      bin: 5,
+      crates: 1,
+    });
+
+    const tipped = tipBin(done);
+    expect({ item: tipped.item, count: tipped.count }).toEqual({ item: "wood", count: 5 });
+    expect({ bin: tipped.state.bin, binned: tipped.state.binned }).toEqual({
+      bin: 0,
+      binned: null,
+    });
+    // And the carrot it passed is still in its crates, untouched.
+    expect(tipped.state.crates.reduce((a, c) => a + c, 0)).toBe(1);
+  });
+
+  test("and an empty bin gives nothing rather than an empty heap of something", () => {
+    const tipped = tipBin(wake(newMachine()));
+    expect({ item: tipped.item, count: tipped.count }).toEqual({ item: null, count: 0 });
+  });
+
+  test("and all of it survives being written down", () => {
+    let done = advance(sifting(CARROT, 2), MINUTES_PER_ROUND * 2, SIEVE);
+    done = advance(sifting("wood", 4, done), MINUTES_PER_ROUND * 4, SIEVE);
+    const machines = new Map([["8,9", done]]);
+    expect(machinesFromSave(machinesToSave(machines))).toEqual(machines);
+  });
+
+  /** And the other two are unchanged by any of it. */
+  test("and dealing still puts exactly one in each crate a round", () => {
+    const fed = feed(wake(newMachine()), "wood", 9, MachineType.Sorter);
+    if (!fed) throw new Error("a woken sorter refused a heap");
+    expect(advance(fed, MINUTES_PER_ROUND, MachineType.Sorter).crates).toEqual([1, 1, 1]);
+    expect(advance(fed, MINUTES_PER_ROUND * 3, MachineType.Sorter).crates).toEqual([3, 3, 3]);
   });
 });

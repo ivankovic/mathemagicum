@@ -76,6 +76,18 @@ export const MachineType = {
    * felled, so growing the same carrot again is a way to build.
    */
   Hothouse: FixtureType.Hothouse,
+  /**
+   * A slanted mesh with a chute and a bin under it.
+   *
+   * The third, and the one that decides rather than makes. A wire only
+   * carries — every choice belongs to a machine standing where a child can
+   * see it — so *this* is where a line is gated: shown one thing, it passes
+   * that and drops everything else into its bin.
+   *
+   * It does the arithmetic the clearing spell does, which is why that spell
+   * wakes it: what a sieve does to a heap is take out what does not belong.
+   */
+  Sieve: FixtureType.Sieve,
 } as const;
 
 export type MachineType = (typeof MachineType)[keyof typeof MachineType];
@@ -115,6 +127,10 @@ export const RECIPES: Readonly<Record<MachineType, Recipe>> = {
   // Two machines with the same shopping list would be two machines that were
   // the same errand.
   [MachineType.Hothouse]: { [MaterialType.Wood]: 8, [MaterialType.Stone]: 12 },
+  // The cheapest of the three, and it should be: a sieve is a frame with a
+  // mesh in it, and it is the machine a child needs *two* of before either
+  // of the others is much use on a line.
+  [MachineType.Sieve]: { [MaterialType.Wood]: 6, [MaterialType.Stone]: 4 },
 };
 
 /** What a machine is made of, as pairs, in a stable order. */
@@ -188,6 +204,9 @@ export const SPARK: Readonly<Record<MachineType, Spell>> = {
   [MachineType.Sorter]: Spell.Share,
   // Rows and columns, for the machine that turns one into three.
   [MachineType.Hothouse]: Spell.Array,
+  // Taking away what does not belong, which is what a sieve does to a heap
+  // and what the minus rune does to everything else.
+  [MachineType.Sieve]: Spell.Clearing,
 };
 
 /**
@@ -205,13 +224,27 @@ export const SPARK: Readonly<Record<MachineType, Spell>> = {
  * gives, so a crop grown is worth about a tree cleared, and a growth cast
  * and a clearing cast come out level.
  */
-export const Verb = { Deal: "deal", Turn: "turn" } as const;
+export const Verb = { Deal: "deal", Turn: "turn", Sift: "sift" } as const;
 export type Verb = (typeof Verb)[keyof typeof Verb];
 
 export interface Work {
   readonly verb: Verb;
   /** How many go into the mouth for one round. */
   readonly takes: number;
+  /**
+   * How many come out of it, into the crates, for one round.
+   *
+   * The whole difference between the three verbs, in one number against
+   * `takes`. Dealing takes three and puts three — nothing is made and
+   * nothing is lost, it is the same heap in three piles. Turning takes one
+   * and puts three, which is the multiplication. Sifting takes one and puts
+   * one, because what it does to a heap is decide *where it goes* rather
+   * than how much of it there is.
+   *
+   * Spread across the crates as evenly as it will go, so dealing still puts
+   * exactly one in each per round and a child can still count the piles.
+   */
+  readonly puts: number;
   /** What comes out, for a machine that turns. Null for one that deals. */
   readonly gives: string | null;
   /**
@@ -230,14 +263,34 @@ export interface Work {
 }
 
 export const WORK: Readonly<Record<MachineType, Work>> = {
-  [MachineType.Sorter]: { verb: Verb.Deal, takes: SHARES, gives: null, wants: "anything" },
+  [MachineType.Sorter]: {
+    verb: Verb.Deal,
+    takes: SHARES,
+    puts: SHARES,
+    gives: null,
+    wants: "anything",
+  },
   [MachineType.Hothouse]: {
     verb: Verb.Turn,
     takes: 1,
+    puts: SHARES,
     gives: MaterialType.Wood,
     wants: "a crop",
   },
+  [MachineType.Sieve]: { verb: Verb.Sift, takes: 1, puts: 1, gives: null, wants: "anything" },
 };
+
+/**
+ * How full a sieve's bin gets before it will take no more.
+ *
+ * It fills and it jams, and the jamming is the point rather than a limit
+ * somebody forgot to remove. A sieve standing on a line quietly swallowing
+ * everything it is sent for ever would be a hole in a child's garden; one
+ * that stops, backs the line up and sits there with a full bin is a thing
+ * they can find and empty. Capacity is a fact about a box, and this is the
+ * first place in the game where one is worth meeting.
+ */
+export const BIN_HOLDS = 12;
 
 /** Whether this machine will take this in. See `Work.wants`. */
 export function accepts(machine: MachineType, item: string): boolean {
@@ -273,6 +326,20 @@ export interface MachineState {
    * mouth can run empty while the crates are still full.
    */
   readonly made: string | null;
+  /**
+   * What a sieve was shown, and so what it lets through.
+   *
+   * Null until the first thing goes in, which is what sets it — shown once
+   * and never asked again, the same bargain as waking. A dial would be the
+   * first menu in the garden, and a sieve that had to be told in words what
+   * to pass would be a sieve a child could not use.
+   *
+   * Null for ever on anything that is not a sieve.
+   */
+  readonly passes: string | null;
+  /** What a sieve has rejected, and how much of it. */
+  readonly binned: string | null;
+  readonly bin: number;
   /** Minutes of work into the round in progress. */
   readonly worked: number;
 }
@@ -285,6 +352,9 @@ export function newMachine(): MachineState {
     heap: 0,
     crates: Array(SHARES).fill(0),
     made: null,
+    passes: null,
+    binned: null,
+    bin: 0,
     worked: 0,
   };
 }
@@ -312,6 +382,11 @@ export function feed(
   if (!state.awake || !Number.isFinite(count) || Math.trunc(count) <= 0) return null;
   if (!accepts(machine, item)) return null;
   if (state.holding !== null && state.holding !== item) return null;
+  // A sieve with a full bin takes nothing more, and that is what backs a
+  // line up rather than swallowing everything it is sent for ever. The bin
+  // only ever fills with what the sieve does *not* pass, so a line carrying
+  // what it should carry never meets this at all.
+  if (state.bin >= BIN_HOLDS && state.passes !== null && state.passes !== item) return null;
   return { ...state, holding: item, heap: state.heap + Math.trunc(count) };
 }
 
@@ -343,18 +418,66 @@ export function advance(state: MachineState, minutes: number, machine: MachineTy
     // deal a whole heap the instant anything was tipped in.
     return state.heap >= work.takes ? { ...state, worked } : { ...state, worked: 0 };
   }
+  const held = state.holding;
+  // A sieve puts a round's work in one of two places, and which one is the
+  // whole of what it is for. Everything else always fills the crates.
+  if (work.verb === Verb.Sift && held !== null && held !== (state.passes ?? held)) {
+    const room = Math.max(0, BIN_HOLDS - state.bin);
+    const dropped = Math.min(rounds * work.puts, room);
+    if (dropped <= 0) return { ...state, worked };
+    const left = state.heap - dropped * work.takes;
+    return {
+      ...state,
+      heap: left,
+      // Run dry, and the mouth forgets. **A sieve is a thing you pour a
+      // stream through**, so it has to take whatever arrives next — and
+      // holding on to the last kind meant a line sending it something else
+      // backed up at the one machine whose whole job is to decide what to do
+      // with something else.
+      holding: left > 0 ? state.holding : null,
+      binned: held,
+      bin: state.bin + dropped,
+      worked: worked - dropped * MINUTES_PER_ROUND,
+    };
+  }
+  const sifting = work.verb === Verb.Sift;
+  const left = state.heap - rounds * work.takes;
   return {
     ...state,
-    heap: state.heap - rounds * work.takes,
-    // A round fills every crate, whichever verb it is. Dealing puts one of
-    // what went in into each; turning puts one of something else — and it is
-    // the same three crates either way, so a child reads the two machines
-    // the same way and so does everything downstream of here.
-    crates: state.crates.map((count) => count + rounds),
+    heap: left,
+    holding: sifting && left <= 0 ? null : state.holding,
+    crates: spread(state.crates, rounds * work.puts),
     // What the crates hold is not always what the mouth holds. See `made`.
-    made: work.gives,
+    //
+    // A sieve names it too, and has to: its mouth empties between batches,
+    // so by the time anybody takes a share there may be nothing in there to
+    // ask. What is in its crates is what it passes, which it knows.
+    made: sifting ? (state.passes ?? held) : work.gives,
+    // Shown once, and only ever by the first thing that goes in. A sieve
+    // that relearned every batch would pass whatever it was last handed,
+    // which is a sieve that does nothing.
+    passes: sifting ? (state.passes ?? held) : state.passes,
     worked: worked - rounds * MINUTES_PER_ROUND,
   };
+}
+
+/**
+ * Put this many into the crates, as evenly as they will go.
+ *
+ * Emptiest first, so dealing still puts exactly one in each crate per round
+ * and a child can still count three equal piles. It is the same rule for all
+ * three verbs — what differs is only how many a round hands it.
+ */
+function spread(crates: readonly number[], many: number): number[] {
+  const filled = [...crates];
+  for (let put = 0; put < many; put++) {
+    let at = 0;
+    for (let i = 1; i < filled.length; i++) {
+      if ((filled[i] ?? 0) < (filled[at] ?? 0)) at = i;
+    }
+    filled[at] = (filled[at] ?? 0) + 1;
+  }
+  return filled;
 }
 
 /**
@@ -431,6 +554,23 @@ export function drawOff(
   };
 }
 
+/**
+ * Tip the bin out, and say what was in it.
+ *
+ * Its own way out because a bin is not a share. `takeShare` empties one
+ * crate of what a machine *made*; this empties the box of what it would not
+ * have — and the two must not be one call, or a child emptying the rejects
+ * would find they had taken a third of the good ones with them.
+ */
+export function tipBin(state: MachineState): {
+  state: MachineState;
+  item: string | null;
+  count: number;
+} {
+  if (state.bin <= 0 || state.binned === null) return { state, item: null, count: 0 };
+  return { state: { ...state, bin: 0, binned: null }, item: state.binned, count: state.bin };
+}
+
 /** Which crate to take from: the fullest, and the leftmost of a tie. */
 export function fullestCrate(state: MachineState): number {
   let best = 0;
@@ -458,7 +598,7 @@ export function machinesToSave(
   const saved: Record<string, string> = {};
   for (const [where, state] of machines) {
     saved[where] =
-      `${state.awake ? 1 : 0},${state.holding ?? ""},${state.heap},${state.crates.join("/")},${Math.round(state.worked)},${state.made ?? ""}`;
+      `${state.awake ? 1 : 0},${state.holding ?? ""},${state.heap},${state.crates.join("/")},${Math.round(state.worked)},${state.made ?? ""},${state.passes ?? ""},${state.binned ?? ""},${state.bin}`;
   }
   return saved;
 }
@@ -475,7 +615,7 @@ export function machinesFromSave(saved: unknown): Map<string, MachineState> {
   if (typeof saved !== "object" || saved === null) return machines;
   for (const [where, entry] of Object.entries(saved as Record<string, unknown>)) {
     if (typeof entry !== "string" || !/^-?\d+,-?\d+$/.test(where)) continue;
-    const [awake, holding, heap, crates, worked, made] = entry.split(",");
+    const [awake, holding, heap, crates, worked, made, passes, binned, bin] = entry.split(",");
     if (awake === undefined || heap === undefined || crates === undefined) continue;
     if (!/^\d+$/.test(heap) || !/^\d+$/.test(worked ?? "")) continue;
     const dealt = crates.split("/").map(Number);
@@ -498,6 +638,12 @@ export function machinesFromSave(saved: unknown): Map<string, MachineState> {
       heap: Number(heap),
       crates: dealt,
       made: gives,
+      // A save from before there were sieves has none of these three, and
+      // an absent one reads as a machine that never sifted — which every
+      // machine in an older save was.
+      passes: passes ? passes : null,
+      binned: binned ? binned : null,
+      bin: /^\d+$/.test(bin ?? "") ? Number(bin) : 0,
       worked: Number(worked),
     });
   }

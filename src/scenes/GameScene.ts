@@ -382,6 +382,7 @@ import {
   newMachine,
   recipeFor,
   takeShare,
+  tipBin,
   wake,
 } from "../world/machines";
 import { MATERIAL_TYPES, MaterialType, yieldOf } from "../world/materials";
@@ -2341,6 +2342,12 @@ export class GameScene extends Phaser.Scene {
           holding: state.holding,
           heap: state.heap,
           crates: [...state.crates],
+          // What a sieve lets through and what it has caught. Nothing else
+          // can see either: a jammed sieve and an idle one look the same
+          // from outside, which is exactly the failure worth catching.
+          passes: state.passes,
+          binned: state.binned,
+          bin: state.bin,
           // What the crates hold, which for a machine that turns is not what
           // the mouth holds — and is the difference a scenario cannot see any
           // other way. See `MachineState.made`.
@@ -8181,6 +8188,10 @@ export class GameScene extends Phaser.Scene {
       this.showTheSum(key, state, machine);
       return;
     }
+    // Three answers in the order a child meets them: wake it, empty it,
+    // fill it — and for a sieve there are two things to empty, so the good
+    // ones come out before the rejects. A tap that handed back the bin while
+    // there were shares waiting would be a machine offering the wrong half.
     const crate = fullestCrate(state);
     if ((state.crates[crate] ?? 0) > 0) {
       const taken = takeShare(state, crate);
@@ -8192,6 +8203,19 @@ export class GameScene extends Phaser.Scene {
         this.refreshCarried();
         this.autosave();
       }
+      return;
+    }
+    // Then the bin, which is its own thing rather than a fourth crate: what
+    // is in there is what the machine would *not* have, and taking it must
+    // not cost her a share of what it kept.
+    const tipped = tipBin(state);
+    const rejects = tipped.item as ItemType | null;
+    if (rejects) {
+      this.machines.set(key, tipped.state);
+      this.inventory.add(rejects, tipped.count);
+      this.showResult(iconForItem(rejects), col, row);
+      this.refreshCarried();
+      this.autosave();
       return;
     }
     this.tipIn(key, state, machine);
@@ -8207,7 +8231,7 @@ export class GameScene extends Phaser.Scene {
    * started.
    */
   private showTheSum(key: string, state: MachineState, machine: MachineType): void {
-    const spell = SPARK[machine];
+    const spell: Spell = SPARK[machine];
     if (!knowsSpell([...this.profile.learned, ...this.dev.learned], spell)) {
       this.showWhereToLearn(spell);
       return;
@@ -8215,13 +8239,21 @@ export class GameScene extends Phaser.Scene {
     const woken = (result: { solved: boolean }) => {
       if (!result.solved) return;
       this.machines.set(key, wake(state));
-      this.showEarned(spell === Spell.Share ? UiAsset.RuneDivide : UiAsset.RuneTimes);
+      this.showEarned(RUNE_OF[spell]);
       this.autosave();
     };
     // Each machine is shown *its own* arithmetic, which is the whole of why
     // this branches: a hothouse woken by a division would be a toll, where
     // one woken by the rows and columns it is about to do three at a time is
     // the machine asking to be understood before it starts.
+    if (spell === Spell.Clearing) {
+      // The number line walked backwards, which is what a sieve does to a
+      // heap: take out what does not belong. The same parchment the rune
+      // opens on a tree, because it is the same sum.
+      const rung = rungAt(this.dev.rung ?? this.profile.rung);
+      this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, woken);
+      return;
+    }
     if (spell === Spell.Array) {
       const rung = arrayRungAt(this.dev.arrayRung ?? this.profile.arrayRung);
       // The machine's own rectangle: three shoots, three times over. Chosen

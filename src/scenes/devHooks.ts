@@ -474,6 +474,9 @@ export interface DevHandle {
     heap: number;
     crates: number[];
     made: string | null;
+    passes: string | null;
+    binned: string | null;
+    bin: number;
   }[];
   /** Every length of wire, and whether it is carrying. See `wires.ts`. */
   readonly wires: () => { from: string; to: string; moved: number }[];
