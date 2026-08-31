@@ -28,21 +28,21 @@ describe("timeOfDay", () => {
 /**
  * When the village is open, which is not the same as when it is light.
  *
- * The hours people keep rather than the hours the sun keeps: villagers start
- * for home at six with the sun still up, and the shops are shut well before
- * dark. The tint has its own pair of hours and they are deliberately not
- * these — see the test below that holds them apart.
+ * The hours people keep rather than the hours the sun keeps: six in the
+ * morning until nine at night, so the village wakes with the light and sits
+ * up an hour past it. The tint has its own pair and they are deliberately
+ * not these — see the tests below that hold them apart.
  */
 describe("the opening hours", () => {
   const cases: [number, boolean][] = [
     [0, false],
-    [5, false],
-    [7.99, false],
+    [4, false],
+    [5.99, false],
     [OPENS_AT, true],
     [12, true],
-    [17.99, true],
+    [20.99, true],
     [SHUTS_AT, false],
-    [19.9, false],
+    [22, false],
     [23, false],
   ];
   for (const [hour, expected] of cases) {
@@ -63,10 +63,10 @@ describe("how long a shut door stays shut", () => {
   // is a wait until this morning; after closing it is a wait until the next
   // one, which is the longer of the two and the one a child meets.
   test("counts to this morning before dawn and to the next after dusk", () => {
-    expect(opensIn(6)).toBe(2);
+    expect(opensIn(4)).toBe(2);
     expect(opensIn(0)).toBe(OPENS_AT);
     expect(opensIn(SHUTS_AT)).toBe(24 - SHUTS_AT + OPENS_AT);
-    expect(opensIn(23)).toBe(9);
+    expect(opensIn(23)).toBe(24 - 23 + OPENS_AT);
   });
 
   // Never negative and never more than a whole day, whatever it is handed.
@@ -81,19 +81,39 @@ describe("how long a shut door stays shut", () => {
 /**
  * The village keeps its own hours, and the sky keeps the sun's.
  *
- * Stated as a test because the two were the same pair of numbers, and the
- * cheap way to move the curfew would have been to move `SUNRISE` and
- * `SUNSET` — which would have quietly dragged the light with it and made
- * the world dark at six in the evening in high summer.
+ * Stated as a test because the two were once the same pair of numbers, and
+ * the cheap way to move a curfew is to move `SUNRISE` and `SUNSET` — which
+ * would drag the light along with it and make the world dark at six in the
+ * evening in high summer.
+ *
+ * They agree far more than they did, now that the village is up from six
+ * until nine: a shut door is a dark street, which is what makes the moon
+ * drawn on it true. What they still are is two separate facts, and the last
+ * hour of the evening is where you can see it.
  */
 describe("the light and the opening hours are not the same thing", () => {
-  test("it is broad daylight when the shops shut", () => {
-    expect(nightTintAlpha(SHUTS_AT)).toBe(0);
+  test("the village wakes with the light", () => {
+    expect(nightTintAlpha(OPENS_AT)).toBe(0);
+    expect(nightTintAlpha(OPENS_AT - 1)).toBeGreaterThan(0);
   });
 
-  test("and still dark when they open", () => {
-    expect(nightTintAlpha(OPENS_AT)).toBe(0);
-    expect(nightTintAlpha(5)).toBeGreaterThan(0);
+  // And sits up past it. The shops are still open through the last of the
+  // dusk, which is the hour that keeps these two pairs of numbers apart.
+  test("and stays up an hour after it has gone", () => {
+    expect(isOpenHours(SHUTS_AT - 0.5)).toBe(true);
+    expect(nightTintAlpha(SHUTS_AT - 0.5)).toBeGreaterThan(0);
+  });
+
+  // And a shut door is a dark one, which is the whole of what moving them
+  // was for: a moon over a bright garden was what the old pair drew.
+  test("and a shut village is a dark one", () => {
+    for (const hour of [SHUTS_AT, 22, 23, 0, 3, 5]) {
+      expect({ hour, open: isOpenHours(hour), lit: nightTintAlpha(hour) === 0 }).toEqual({
+        hour,
+        open: false,
+        lit: false,
+      });
+    }
   });
 });
 
@@ -107,10 +127,15 @@ describe("what the corner of the screen says", () => {
    * because the shops have shut is exactly the mistake this must not make.
    */
   test("the sun is up while the sky is light, not while the shops are open", () => {
-    expect(isDaylight(SHUTS_AT)).toBe(true);
     expect(isDaylight(12)).toBe(true);
     expect(isDaylight(3)).toBe(false);
     expect(isDaylight(23)).toBe(false);
+    // The hour that tells the two apart: the village is still open and the
+    // sun has gone. A picture keyed to the doors would draw a sun on it.
+    expect({ open: isOpenHours(20.5), sun: isDaylight(20.5) }).toEqual({
+      open: true,
+      sun: false,
+    });
   });
 
   test("and it is dark before the village opens", () => {
@@ -219,31 +244,46 @@ describe("the observatory's hours", () => {
     });
   }
 
-  // The point of the change, stated as the thing it has to be: the two doors
-  // are never both shut and never both open, so a child turning the glass to
-  // get into one is turning it out of the other. That is the trade, and it
-  // is what makes the hourglass worth having twice.
-  test("is the village's, inverted", () => {
+  /**
+   * It is open for the whole of the night the village sleeps through.
+   *
+   * This used to be the village's hours exactly inverted, and the trade was
+   * the point: winding the glass to get into one door turned you out of the
+   * other. The village is up from six until nine now, which overlaps the
+   * dome's own evening — so the two are no longer opposites, and what is
+   * left of the claim is the half that matters. Every hour the village is
+   * shut, the dome is open.
+   */
+  test("covers every hour the village is shut", () => {
     for (let hour = 0; hour < 24; hour += 0.25) {
-      const village = isOpenHours(hour, VILLAGE_HOURS);
-      const dome = isOpenHours(hour, STARGAZING_HOURS);
-      if (village) {
-        expect({ hour, dome }).toEqual({ hour, dome: false });
-      }
+      if (isOpenHours(hour, VILLAGE_HOURS)) continue;
+      expect({ hour, dome: isOpenHours(hour, STARGAZING_HOURS) }).toEqual({ hour, dome: true });
     }
   });
 
-  // It is not *exactly* the inverse, and deliberately: both are shut in the
-  // hour after the village locks up and before the sky is dark, which is the
-  // gap between the hours people keep and the hours the sun keeps.
-  test("but not its exact complement — there is a dusk between them", () => {
-    const between = [];
+  /**
+   * So there is no hour of the day with nothing open in it.
+   *
+   * There used to be: both doors were shut through the dusk, between the
+   * hours people kept and the hours the sun keeps. A child who sat down at
+   * half past six found a world that had gone to bed and no way into
+   * anything until she had a spell she could only learn indoors.
+   */
+  test("and between them they leave no hour with nothing open", () => {
     for (let hour = 0; hour < 24; hour += 0.25) {
-      if (!isOpenHours(hour, VILLAGE_HOURS) && !isOpenHours(hour, STARGAZING_HOURS)) {
-        between.push(hour);
-      }
+      const open = isOpenHours(hour, VILLAGE_HOURS) || isOpenHours(hour, STARGAZING_HOURS);
+      expect({ hour, open }).toEqual({ hour, open: true });
     }
-    expect(between.length).toBeGreaterThan(0);
+  });
+
+  // And they really do overlap now, which is a change worth pinning rather
+  // than leaving somebody to discover: the astronomer is at the eyepiece
+  // before the shops have shut.
+  test("and there are evening hours when both are open", () => {
+    expect({
+      village: isOpenHours(20, VILLAGE_HOURS),
+      dome: isOpenHours(20, STARGAZING_HOURS),
+    }).toEqual({ village: true, dome: true });
   });
 
   test("says how long until it is dark", () => {

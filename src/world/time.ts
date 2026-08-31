@@ -27,19 +27,26 @@ export const NIGHT_TINT_COLOR = 0x0a1a3a;
 /**
  * When the village is open: doors unlocked, and people out in the street.
  *
- * Its own pair of hours, deliberately not `SUNRISE` and `SUNSET`. Those two
- * are the *light*, and the light is a fact about the sky; this is a fact
- * about what people do, and the two disagree on purpose. Villagers start for
- * home at six with the sun still up, the way people do, and the shops are
- * shut a good while before it is dark.
+ * **Six in the morning until nine at night**, which is a long day and meant
+ * to be. It was eight until six, on the argument that those are the hours
+ * people keep and the light is a different fact from what people do — and
+ * both halves of that argument were sound and the numbers were still wrong.
  *
- * It used to be the same pair, on the argument that an NPC either is or is
- * not at home and there is no half-retreated. That argument was about the
- * *edges* of the tint's ramp and it still holds — what changed is which hour
- * they keep, not that they keep one.
+ * Two things were wrong with them. The village shut two hours before sunset,
+ * so a door tried at seven said *they have gone to bed* under a bright sky,
+ * with a moon drawn over her head to say so — reported from a playtest as a
+ * picture that made no sense. And the hours a five-year-old actually plays
+ * in are the ones on either side of the school day, most of which fell
+ * outside them: the world was asleep whenever she was free.
+ *
+ * So the village now wakes with the sun and stays up an hour past it. It is
+ * still not the same pair as `SUNRISE` and `SUNSET` and must not become it —
+ * moving the light is how the world ends up dark at six in the evening in
+ * high summer — but the two now agree about the thing a child reads off
+ * them: a shut door is a dark street, and the moon on it is the truth.
  */
-export const OPENS_AT = 8;
-export const SHUTS_AT = 18;
+export const OPENS_AT = 6;
+export const SHUTS_AT = 21;
 
 /**
  * The hours a door keeps: open at `opensAt`, shut again at `shutsAt`.
@@ -119,9 +126,11 @@ export function opensIn(hour: number, hours: OpeningHours = VILLAGE_HOURS): numb
  * a child who has been indoors for ten minutes has no baseline for — so the
  * corner of the screen says it in a picture as well.
  *
- * The light rather than the village's hours, which are a different pair on
- * purpose (see `OPENS_AT`): the shops shut at six with the sun still well
- * up, and a moon over a bright garden is what that mistake looks like.
+ * The light rather than the village's hours, which are still a different
+ * pair on purpose (see `OPENS_AT`). They agree more than they used to and
+ * they do not agree exactly: the shops are open for the last hour of the
+ * dusk, so at half past eight the sky says night and the door says come in.
+ * A sun drawn over a dark street is the mistake this must not make.
  */
 export function isDaylight(hour: number): boolean {
   return hour >= SUNRISE && hour < SUNSET;

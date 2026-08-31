@@ -10804,11 +10804,13 @@ export class GameScene extends Phaser.Scene {
     if (buildingId === OBSERVATORY_DOME_ID) return STARGAZING_HOURS;
     // The tower never shuts on a child who cannot yet cross the world.
     //
-    // Reported from a playtest: start the game after six in the evening and
-    // the map is unreachable. The map hangs in the tower, the tower keeps
-    // the village's hours, and a five-year-old sat down at bedtime is a
-    // five-year-old who cannot see where anything is — which is not a
-    // locked door, it is the game refusing to explain itself.
+    // Reported from a playtest: start the game after the village has shut
+    // and the map is unreachable. The map hangs in the tower, the tower
+    // keeps the village's hours, and a five-year-old sat down at bedtime is
+    // a five-year-old who cannot see where anything is — which is not a
+    // locked door, it is the game refusing to explain itself. (The hours
+    // have moved out to nine in the evening since, which shrinks the window
+    // this is about without closing it: bedtime is still bedtime.)
     //
     // The hourglass is the answer the game would like to give, and it is a
     // circular one: winding the clock is a spell, spells are learned in
@@ -11255,8 +11257,8 @@ export class GameScene extends Phaser.Scene {
    *
    * He teaches the hourglass, and the hourglass is what a child uses to get
    * past a shut door: wind the glass to morning and the village opens. A
-   * teacher of that spell who himself went home at six would be a lock whose
-   * key was on the other side of it.
+   * teacher of that spell who himself went home at nine would be a lock
+   * whose key was on the other side of it.
    *
    * It does not undo the whole knot — the geometer is indoors and teaches
    * the portal spell, so an evening-only player still has a long walk to

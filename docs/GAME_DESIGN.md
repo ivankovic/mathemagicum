@@ -768,9 +768,10 @@ stars at midnight, and neither of those is anywhere in it to be looked at.
 ##### And the dome is open at night
 
 Every door in the world used to keep the same hours: unlocked at eight,
-locked at six. On the village that is right — those are the hours *people*
-keep, which is why they are deliberately not the hours the sun keeps. On the
-observatory it was absurd. The one building in the world whose entire purpose
+locked at six. On the village that was nearly right — those are the hours
+*people* keep, which is why they are deliberately not the hours the sun keeps
+— and the village has since moved out to six until nine, for reasons of its
+own (see "The village's hours" below). On the observatory it was absurd. The one building in the world whose entire purpose
 is the night sky was open all afternoon and locked at dusk, and the woman
 inside it was at a spyglass in broad daylight.
 
@@ -788,15 +789,37 @@ spell about the hour.
 
 **And it gives the hourglass a second direction to turn.** Winding the glass
 forward to morning is how a child gets past a shut village; winding it on to
-midnight is how she gets into the dome. The village and the dome are never
-both open, so the glass is not a key to one door — it is the choice of which
-door.
+midnight is how she gets into the dome.
 
-They are not exact opposites, though, and that is on purpose: for an hour
-after the village locks up the sky is not dark yet, and in that hour
-everything is shut. The gap is the difference between the hours people keep
-and the hours the sun keeps, and it is the same gap that has always been
-there — it is simply visible now that something is on the other side of it.
+They were exact opposites when the village shut at six, and the glass was
+then the *choice* of which door rather than the key to one. Moving the
+village out to nine has taken that trade away and left the half of it that
+matters: every hour the village is shut, the dome is open, and there is now
+no hour of the day with nothing open in it at all. Where it used to be that
+both doors were locked through the dusk — a child sitting down at half past
+six found a world that had gone to bed — the two ranges now overlap in the
+evening instead, and the astronomer is at her eyepiece while the shops are
+still trading.
+
+##### The village's hours
+
+**Six in the morning until nine at night.** They were eight until six, and
+the argument for those was sound — the hours *people* keep are not the hours
+the sun keeps, and moving the light instead is how a world ends up dark at
+six in the evening in high summer. The numbers were still wrong, in two ways
+a playtest found.
+
+The village shut two hours before sunset. So a door tried at seven answered
+*they have gone to bed*, with a moon over her head to say why, under a bright
+sky — a picture with nothing behind it. And the hours a five-year-old is
+actually free are the ones on either side of a school day, most of which fell
+outside them: the world was asleep whenever she could play.
+
+Waking with the sun and staying up an hour past it fixes both. The two pairs
+are still two facts and must stay so — the last hour of trading is dusk, and
+that hour is where you can see the difference — but they now agree about the
+one thing a child reads off them, which is that a shut door means a dark
+street.
 
 **A shut door says which way it is shut.** Every refusal in this game is a
 cross on the door and a picture saying why, and the picture was a crescent
