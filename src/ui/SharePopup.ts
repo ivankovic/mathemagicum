@@ -24,6 +24,7 @@ import {
   ACTIVE_HEX,
   DONE_HEX,
   DONE_INK,
+  FACE,
   INK,
   INK_DIM,
   INK_HEX,
@@ -315,7 +316,7 @@ export class SharePopup {
 
   private label(text: string, size: number, color: string): Phaser.GameObjects.Text {
     return this.scene.add.text(0, 0, text, {
-      fontFamily: "monospace",
+      fontFamily: FACE,
       fontSize: `${size}px`,
       color,
     });

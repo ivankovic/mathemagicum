@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type Phaser from "phaser";
+import { ACTIVE_HEX, FACE, INK, INK_HEX, PAPER_PALE_HEX } from "./parchment";
 
 /**
  * A container button in the corner of the screen, and the row of things that
@@ -22,21 +23,44 @@ import type Phaser from "phaser";
  * top, not the real interface.
  */
 
-const BUTTON_FILL = 0x000000;
-const BUTTON_ALPHA = 0.45;
-const BUTTON_STROKE = 0xffffff;
-const BUTTON_STROKE_ALPHA = 0.6;
+/**
+ * Dark boards with a pale rim: the same two colours as the parchment, the
+ * other way round.
+ *
+ * These were black at 45% behind a *white* hairline, which is the palette a
+ * debug overlay has and was never chosen — it is what a rectangle looks like
+ * when nobody has said otherwise, and four trays of it sat along the bottom
+ * of every picture of a game about spellbooks and paper.
+ *
+ * **Not parchment, and that was tried first.** Everything in this game that
+ * is written down is ink on paper, so paper buttons were the obvious move —
+ * and the runes vanished. They are drawn in pale gold because they have
+ * always sat on a dark ground: measured, a rune averages 176 of luminance
+ * and the paper is 199, which is a picture you cannot see. Wheat is worse.
+ *
+ * So the rule the interface actually follows is: **parchment for what is
+ * written, boards for what is pressed.** The clock and the options button
+ * hold words, and words can be set in ink. A tray holds pictures, and the
+ * pictures were drawn for the dark.
+ */
+const BUTTON_FILL = INK_HEX;
+const BUTTON_ALPHA = 0.82;
+const BUTTON_STROKE = PAPER_PALE_HEX;
+const BUTTON_STROKE_ALPHA = 0.7;
 // The open container reads as pressed, so it is obvious which tray the items
-// on screen belong to once there is more than one of these.
-const OPEN_STROKE = 0xffe08a;
+// on screen belong to once there is more than one of these. The same gold a
+// parchment outlines the box it is waiting on, which is the only other place
+// this game says *this one, now*.
+const OPEN_STROKE = ACTIVE_HEX;
 const GAP = 8;
 
 // A count sitting on the corner of a button. Ink on parchment rather than
 // the white-on-red of a notification: this is how many carrots are in the
-// basket, not an alert.
-const BADGE_FILL = 0xf6e8c4;
-const BADGE_STROKE = 0x4a3422;
-const BADGE_INK = "#4a3422";
+// basket, not an alert. It is the one scrap of paper on a dark board, which
+// is exactly what a tally slip is.
+const BADGE_FILL = PAPER_PALE_HEX;
+const BADGE_STROKE = INK_HEX;
+const BADGE_INK = INK;
 // How much of the button the badge takes, and the floor below which the
 // digits stop being legible on a phone.
 const BADGE_SCALE = 0.4;
@@ -352,7 +376,7 @@ export class IconTray {
         .setDepth(options.depth + 2);
       const text = scene.add
         .text(0, 0, "", {
-          fontFamily: "monospace",
+          fontFamily: FACE,
           fontSize: `${Math.round(badgeSize * 0.62)}px`,
           color: BADGE_INK,
         })

@@ -4,7 +4,7 @@
 import type Phaser from "phaser";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
-import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX, RULE_HEX } from "./parchment";
+import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX, RULE_HEX } from "./parchment";
 
 /**
  * Somebody's errand: a row of things to do, what you get for it, and both
@@ -145,7 +145,7 @@ export class TaskPanel {
     );
     this.closeLabel = this.own(
       scene.add
-        .text(0, 0, "x", { fontFamily: "monospace", fontSize: `${CLOSE_SIZE}px`, color: INK })
+        .text(0, 0, "x", { fontFamily: FACE, fontSize: `${CLOSE_SIZE}px`, color: INK })
         .setOrigin(0.5),
     );
     this.closeBox.on("pointerdown", () => this.close());
@@ -293,7 +293,7 @@ export class TaskPanel {
 
   private text(size: number, color: string): Phaser.GameObjects.Text {
     return this.scene.add.text(0, 0, "", {
-      fontFamily: "monospace",
+      fontFamily: FACE,
       fontSize: `${size}px`,
       color,
       lineSpacing: 3,

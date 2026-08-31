@@ -11,7 +11,7 @@ import { BANDS, DEFAULT_BAND, sampleProblem } from "../spells/difficulty";
 import { createRng } from "../world/rng";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, flagIcon, uiTextureKey } from "./assets";
-import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
+import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
 
 /**
  * The options: which language the game is read in.
@@ -755,7 +755,7 @@ export class OptionsPanel {
 
   private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
     return this.scene.add.text(0, 0, value, {
-      fontFamily: "monospace",
+      fontFamily: FACE,
       fontSize: `${size}px`,
       color,
     });

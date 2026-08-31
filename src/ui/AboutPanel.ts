@@ -5,7 +5,7 @@ import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
-import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
+import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
 
 /**
  * Who made this, what it costs, and what is asked of anybody minded to pay —
@@ -473,7 +473,7 @@ export class AboutPanel {
 
   private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
     return this.scene.add.text(0, 0, value, {
-      fontFamily: "monospace",
+      fontFamily: FACE,
       fontSize: `${size}px`,
       color,
     });

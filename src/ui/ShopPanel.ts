@@ -64,7 +64,7 @@ import {
 } from "../world/shop";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { type UiIndex, coinIcon, cropIcon, itemIcon, materialIcon, uiTextureKey } from "./assets";
-import { INK, INK_DIM, INK_HEX, PAPER_HEX, PAPER_PALE_HEX } from "./parchment";
+import { FACE, INK, INK_DIM, INK_HEX, PAPER_HEX, PAPER_PALE_HEX } from "./parchment";
 
 /**
  * The village store, and the two things it teaches.
@@ -1454,7 +1454,7 @@ export class ShopPanel {
 
   private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
     return this.scene.add.text(0, 0, value, {
-      fontFamily: "monospace",
+      fontFamily: FACE,
       fontSize: `${size}px`,
       color,
       lineSpacing: 2,

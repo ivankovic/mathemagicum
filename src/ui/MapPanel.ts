@@ -8,7 +8,7 @@ import type { WorldGrid } from "../world/grid";
 import { areaCentre, markedPlaces, minimapPoint, minimapSize } from "../world/minimap";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
-import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
+import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
 import { paintWorldMap } from "./worldMapTexture";
 
 /**
@@ -258,7 +258,7 @@ export class MapPanel {
 
   private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
     return this.scene.add.text(0, 0, value, {
-      fontFamily: "monospace",
+      fontFamily: FACE,
       fontSize: `${size}px`,
       color,
     });

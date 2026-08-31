@@ -3,6 +3,7 @@
 
 import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
+import { FACE } from "./parchment";
 
 /**
  * The first thing on screen: the game's name, and how far the loading has
@@ -148,7 +149,7 @@ export class TitleCard {
   private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
     return this.scene.add
       .text(0, 0, value, {
-        fontFamily: "monospace",
+        fontFamily: FACE,
         fontSize: `${size}px`,
         color,
         align: "center",

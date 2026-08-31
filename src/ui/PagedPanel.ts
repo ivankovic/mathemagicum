@@ -6,7 +6,7 @@ import type { Phrases } from "../i18n/phrases";
 import { isLastPage, stepPage } from "../pages";
 import { PANEL_PAD as PAD, type PanelRect, ParchmentPanel } from "./ParchmentPanel";
 import { type UiIndex, uiTextureKey } from "./assets";
-import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
+import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
 
 /**
  * A short deck of parchment pages: a title, a line or two, a picture, and a
@@ -366,7 +366,7 @@ export abstract class PagedPanel<TPage> {
 
   protected text(value: string, size: number, color: string): Phaser.GameObjects.Text {
     return this.scene.add.text(0, 0, value, {
-      fontFamily: "monospace",
+      fontFamily: FACE,
       fontSize: `${size}px`,
       color,
       lineSpacing: 3,

@@ -19,7 +19,37 @@
     <link rel="icon" type="image/png" href="/icon-64.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <meta name="theme-color" content="#000000" />
+    <!-- The one face the game is written in, fetched before anything asks
+         for it. Root-absolute like the icons above, and `crossorigin`
+         because a font preload is a CORS request whether or not it crosses
+         an origin — without it the browser fetches the file twice, once for
+         the preload it cannot use and once for the @font-face. -->
+    <link rel="preload" href="/fonts/andika.woff2" as="font" type="font/woff2" crossorigin />
     <style>
+      /*
+         Andika, by SIL International, under the Open Font License. Drawn for
+         people who are still learning to read, which is exactly who this is
+         for: the letterforms are chosen to be unmistakable to somebody who
+         does not yet know them well, and the zero is a plain round one
+         rather than a slashed one — this game teaches a child what a nought
+         looks like and must not then show them a second kind.
+
+         Subset to Latin Extended-A, so Croatian and German are covered along
+         with English, and served from this device. Nothing here is fetched
+         from a font service: the game is played offline, and a face that
+         arrived over the network would be a face that did not arrive.
+
+         `swap` rather than `block`: if it somehow has not loaded, letters in
+         the fallback are better than no letters. The scene waits for it
+         before it draws anything anyway — see `BootScene`.
+      */
+      @font-face {
+        font-family: "Andika";
+        src: url("/fonts/andika.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
       html,
       body {
         margin: 0;

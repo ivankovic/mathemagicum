@@ -27,6 +27,7 @@ import {
   ACTIVE_HEX,
   DONE_HEX,
   DONE_INK,
+  FACE,
   INK,
   INK_DIM,
   INK_HEX,
@@ -88,8 +89,20 @@ const BOX_W = 52;
 const BOX_H = 26;
 /** The narrowest a box may get before a six-digit number stops being legible. */
 const BOX_MIN_W = 40;
-/** How wide one character of the monospace face is, as a share of its size. */
-const CHAR_W = 0.62;
+/**
+ * How wide one digit is, as a share of the size it is set at.
+ *
+ * Measured off the face rather than guessed: Andika's digits are tabular —
+ * every one of them 0.586 of an em, which is what makes a column of numbers
+ * line up — and this is that, rounded up a hair so a number can never come
+ * out a pixel wider than the box it was fitted to.
+ *
+ * It read 0.62 for the browser's monospace before, which was the same
+ * measurement of a different face. Only digits are ever fitted this way; a
+ * word set in Andika is not this wide and does not need to be, because
+ * nothing here shrinks a word to fit.
+ */
+const CHAR_W = 0.6;
 /** Air between two boxes, so six of them do not read as one long strip. */
 const BOX_GAP = 3;
 const KEY_GAP = 6;
@@ -378,7 +391,7 @@ export class SpellPopup {
 
   private label(text: string, size: number, color: string): Phaser.GameObjects.Text {
     return this.scene.add.text(0, 0, text, {
-      fontFamily: "monospace",
+      fontFamily: FACE,
       fontSize: `${size}px`,
       color,
     });

@@ -34,6 +34,7 @@ import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
 import {
   DONE_HEX,
   DONE_INK,
+  FACE,
   INK,
   INK_DIM,
   INK_HEX,
@@ -959,7 +960,7 @@ export class PortalPanel {
 
   private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
     return this.scene.add.text(0, 0, value, {
-      fontFamily: "monospace",
+      fontFamily: FACE,
       fontSize: `${size}px`,
       color,
     });

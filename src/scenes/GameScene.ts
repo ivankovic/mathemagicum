@@ -129,6 +129,7 @@ import { MapPanel } from "../ui/MapPanel";
 import { OptionsPanel } from "../ui/OptionsPanel";
 import { PatchMenu } from "../ui/PatchMenu";
 import { PicturePanel } from "../ui/PicturePanel";
+import { Plaque } from "../ui/Plaque";
 import { PortalPanel } from "../ui/PortalPanel";
 import { SandGlass } from "../ui/SandGlass";
 import { ShareLessonPanel } from "../ui/ShareLessonPanel";
@@ -149,6 +150,7 @@ import {
   materialIcon,
   uiTextureKey,
 } from "../ui/assets";
+import { FACE, INK, INK_DIM } from "../ui/parchment";
 import { RUNE_OF } from "../ui/runes";
 import type { AreaPlacement } from "../world/anchors";
 import type { AnchorPlacements } from "../world/anchors";
@@ -767,9 +769,19 @@ const HUD_MARGIN = 8;
  * eighty-four. The longest date the three languages write is `31 pros`,
  * which is shorter than the time above it, so the time sets the width.
  */
-const CLOCK_HUD_W = 96;
-const CLOCK_HUD_H = 38;
+const CLOCK_HUD_W = 104;
+const CLOCK_HUD_H = 42;
 const CLOCK_HUD_ICON = 18;
+/**
+ * How far inside a plaque's own edge anything written on it starts.
+ *
+ * The frame is drawn several pixels thick, and writing that begins at the
+ * corner begins on the border rather than on the paper.
+ */
+const PLAQUE_PAD = 9;
+/** The options button, which is a plaque with one word on it. */
+const OPTIONS_W = 78;
+const OPTIONS_H = 28;
 
 /**
  * The most ducats the purse badge prints before it says "and more".
@@ -1694,7 +1706,7 @@ export class GameScene extends Phaser.Scene {
    */
   private introPath: GridPoint[] = [];
   private introPathFor: GridPoint | null = null;
-  private optionsButton?: { box: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text };
+  private optionsButton?: { plaque: Plaque; label: Phaser.GameObjects.Text };
   /**
    * The picture rising over her head, while there is one.
    *
@@ -1708,7 +1720,7 @@ export class GameScene extends Phaser.Scene {
    * laid out against each other and are shown and hidden together.
    */
   private clockHud?: {
-    box: Phaser.GameObjects.Rectangle;
+    plaque: Plaque;
     sky: Phaser.GameObjects.Image;
     time: Phaser.GameObjects.Text;
     date: Phaser.GameObjects.Text;
@@ -2388,8 +2400,8 @@ export class GameScene extends Phaser.Scene {
     this.optionsPanel.setGames(listGames(browserStore()), playingId(browserStore()));
     this.applyCropPrice();
     this.applyRung();
-    this.createOptionsButton();
-    this.createClockHud();
+    this.createOptionsButton(uiIndex);
+    this.createClockHud(uiIndex);
     // The coin line is written whenever money moves, and money starting in
     // the purse is not money moving: ?coins= showed nothing until the first
     // trade, and a saved purse would have done the same.
@@ -2755,7 +2767,7 @@ export class GameScene extends Phaser.Scene {
         time: this.clockHud?.time.text ?? "",
         date: this.clockHud?.date.text ?? "",
         sky: this.clockHud?.sky.texture.key ?? "",
-        shown: this.clockHud?.box.visible ?? false,
+        shown: this.clockHud?.time.visible ?? false,
       }),
       // Where the world's clock stands, and how far it has been wound from
       // the real one. The spell's whole effect, and nothing on screen states
@@ -7802,8 +7814,11 @@ export class GameScene extends Phaser.Scene {
   private uiPositions(): Record<string, { x: number; y: number }> {
     const positions: Record<string, { x: number; y: number }> = {};
     if (this.optionsButton) {
-      const { x, y } = this.optionsButton.box;
-      positions.options = { x: x - 37, y: y + 12 };
+      // The word itself, which is centred on the plaque it is written on —
+      // so this is the middle of the button without measuring it. It used to
+      // be the box's own corner plus half its size, written out by hand.
+      const { x, y } = this.optionsButton.label;
+      positions.options = { x, y };
     }
     // The picture of what she is holding, which is also the control that
     // turns it. In world pixels turned into screen ones: it hangs over her
@@ -7862,25 +7877,20 @@ export class GameScene extends Phaser.Scene {
    * every hand-copied coordinate in the test scripts pointed at its
    * neighbour — a settings button among them would be one more to shift.
    */
-  private createOptionsButton(): void {
-    const box = this.ui(
-      this.add
-        .rectangle(0, 0, 74, 24, 0x1b1710, 0.65)
-        .setOrigin(1, 0)
-        .setStrokeStyle(1, 0xd8c08a, 0.8)
-        .setScrollFactor(0)
-        .setDepth(HUD_DEPTH)
-        .setInteractive({ useHandCursor: true }),
-    );
+  private createOptionsButton(index: UiIndex): void {
+    const plaque = new Plaque(this, index, {
+      depth: HUD_DEPTH,
+      register: (object) => this.ui(object),
+    });
+    plaque.takeTaps(OPTIONS_W, OPTIONS_H, () => this.openOptions());
     const label = this.ui(
       this.add
-        .text(0, 0, "", { fontFamily: "monospace", fontSize: "12px", color: "#f0e0b8" })
-        .setOrigin(1, 0)
+        .text(0, 0, "", { fontFamily: FACE, fontSize: "12px", color: INK })
+        .setOrigin(0.5, 0.5)
         .setScrollFactor(0)
-        .setDepth(HUD_DEPTH),
+        .setDepth(HUD_DEPTH + 1),
     );
-    box.on("pointerdown", () => this.openOptions());
-    this.optionsButton = { box, label };
+    this.optionsButton = { plaque, label };
     this.placeOptionsButton();
   }
 
@@ -7906,38 +7916,37 @@ export class GameScene extends Phaser.Scene {
    * the sky went dark would be the one thing on screen contradicting the
    * spell.
    */
-  private createClockHud(): void {
-    const box = this.ui(
-      this.add
-        .rectangle(0, 0, CLOCK_HUD_W, CLOCK_HUD_H, 0x1b1710, 0.65)
-        .setOrigin(0, 0)
-        .setStrokeStyle(1, 0xd8c08a, 0.8)
-        .setScrollFactor(0)
-        .setDepth(HUD_DEPTH),
-    );
+  private createClockHud(index: UiIndex): void {
+    const plaque = new Plaque(this, index, {
+      depth: HUD_DEPTH,
+      register: (object) => this.ui(object),
+    });
     const sky = this.ui(
       this.add
         .image(0, 0, uiTextureKey(UiAsset.MarkDay))
         .setOrigin(0, 0.5)
         .setDisplaySize(CLOCK_HUD_ICON, CLOCK_HUD_ICON)
         .setScrollFactor(0)
-        .setDepth(HUD_DEPTH),
+        .setDepth(HUD_DEPTH + 1),
     );
+    // Written in ink on the paper, like everything else in this game that is
+    // written down. It was pale letters on a dark box, which is the palette
+    // of a heads-up display in a flight simulator.
     const time = this.ui(
       this.add
-        .text(0, 0, "", { fontFamily: "monospace", fontSize: "15px", color: "#f0e0b8" })
+        .text(0, 0, "", { fontFamily: FACE, fontSize: "15px", color: INK })
         .setOrigin(0, 0)
         .setScrollFactor(0)
-        .setDepth(HUD_DEPTH),
+        .setDepth(HUD_DEPTH + 1),
     );
     const date = this.ui(
       this.add
-        .text(0, 0, "", { fontFamily: "monospace", fontSize: "10px", color: "#c8b48c" })
+        .text(0, 0, "", { fontFamily: FACE, fontSize: "10px", color: INK_DIM })
         .setOrigin(0, 0)
         .setScrollFactor(0)
-        .setDepth(HUD_DEPTH),
+        .setDepth(HUD_DEPTH + 1),
     );
-    this.clockHud = { box, sky, time, date };
+    this.clockHud = { plaque, sky, time, date };
     this.placeClockHud();
     this.refreshClockHud();
   }
@@ -7951,10 +7960,14 @@ export class GameScene extends Phaser.Scene {
   private placeClockHud(): void {
     const hud = this.clockHud;
     if (!hud) return;
-    hud.box.setPosition(HUD_MARGIN, HUD_MARGIN);
-    hud.sky.setPosition(HUD_MARGIN + 7, HUD_MARGIN + CLOCK_HUD_H / 2);
-    hud.time.setPosition(HUD_MARGIN + 11 + CLOCK_HUD_ICON, HUD_MARGIN + 4);
-    hud.date.setPosition(HUD_MARGIN + 11 + CLOCK_HUD_ICON, HUD_MARGIN + 22);
+    hud.plaque.layout(HUD_MARGIN, HUD_MARGIN, CLOCK_HUD_W, CLOCK_HUD_H);
+    // Inset from the paper's own edge rather than from the screen's: the
+    // frame is drawn a few pixels thick and writing that starts at the
+    // corner starts on the border.
+    const left = HUD_MARGIN + PLAQUE_PAD;
+    hud.sky.setPosition(left, HUD_MARGIN + CLOCK_HUD_H / 2);
+    hud.time.setPosition(left + CLOCK_HUD_ICON + 5, HUD_MARGIN + 5);
+    hud.date.setPosition(left + CLOCK_HUD_ICON + 5, HUD_MARGIN + 23);
   }
 
   /**
@@ -7970,7 +7983,8 @@ export class GameScene extends Phaser.Scene {
     const hud = this.clockHud;
     if (!hud) return;
     const shown = !this.modalOpen;
-    for (const piece of [hud.box, hud.sky, hud.time, hud.date]) piece.setVisible(shown);
+    hud.plaque.setVisible(shown);
+    for (const piece of [hud.sky, hud.time, hud.date]) piece.setVisible(shown);
     if (!shown) return;
     const hour = this.hourNow();
     const face = `${clockFace(hour)}|${this.words.gameWhen(this.worldNow())}|${isDaylight(hour)}`;
@@ -7982,10 +7996,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private placeOptionsButton(): void {
-    if (!this.optionsButton) return;
-    const right = this.scale.width - HUD_MARGIN;
-    this.optionsButton.box.setPosition(right, HUD_MARGIN);
-    this.optionsButton.label.setPosition(right - 8, HUD_MARGIN + 5);
+    const button = this.optionsButton;
+    if (!button) return;
+    // Measured back from the right edge rather than anchored to it: a plaque
+    // is laid out from its top-left corner, because a nine-slice is.
+    const left = this.scale.width - HUD_MARGIN - OPTIONS_W;
+    button.plaque.layout(left, HUD_MARGIN, OPTIONS_W, OPTIONS_H);
+    button.label.setPosition(left + OPTIONS_W / 2, HUD_MARGIN + OPTIONS_H / 2);
   }
 
   /**
@@ -7998,7 +8015,7 @@ export class GameScene extends Phaser.Scene {
   private refreshOptionsButton(): void {
     this.optionsButton?.label.setText(this.words.optionsButton);
     const shown = !this.modalOpen;
-    this.optionsButton?.box.setVisible(shown);
+    this.optionsButton?.plaque.setVisible(shown);
     this.optionsButton?.label.setVisible(shown);
   }
 

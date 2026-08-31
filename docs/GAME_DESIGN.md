@@ -1784,6 +1784,43 @@ old keys go with it so a device cannot be carried over twice. This is also
 where the standing permission to lose data while playtesting runs out — it is
 the change that says a save is worth keeping.
 
+### What the interface is made of
+
+Two surfaces, and a rule for which is which: **parchment for what is written,
+dark boards for what is pressed.**
+
+Everything written down in this game is ink on paper. The spell parchments,
+the shop's counter, the notices a parent reads — all of them are the same
+mottled fill under the same nine-sliced border, and the clock and the options
+button in the corners of the screen are now small squares of the same thing.
+They used to be flat dark rectangles with a hairline round them, which is
+what a rectangle looks like when nobody has said otherwise: the palette of a
+debug overlay, in a village of runes and spellbooks.
+
+The trays along the bottom are the exception and the exception is measured
+rather than felt. They were tried on paper too, and the runes disappeared: a
+rune averages 176 of luminance and the paper is 199, and wheat is worse.
+Every icon in this game was drawn to sit on a dark ground, because that is
+where they have always sat. So the buttons stay dark — but dark in this
+game's own two colours, the ink of the writing with the pale paper as a rim,
+rather than black behind a white hairline. The count in the corner of one is
+then the single scrap of paper on a dark board, which is exactly what a tally
+slip is.
+
+**And it is all written in one face.** Andika, by SIL International, under
+the Open Font License — a face drawn for people who are still learning to
+read, which is who this is for. Its letters are chosen to be unmistakable to
+somebody who does not yet know them well, and its nought is a plain round one
+rather than a slashed one: a game that teaches a child what a nought looks
+like must not then show them a second kind in the corner of the screen. It
+replaced `monospace` in seventeen places, which was the browser's own choice
+of typewriter and was never a choice at all.
+
+It is subset to the three languages the game speaks and served from the
+device — nothing here is fetched from a font service, because the game is
+played offline and a face that arrived over the network would be a face that
+did not arrive.
+
 ### Nothing is said in words
 
 **The status line is gone.** There was one line of small type along the top of

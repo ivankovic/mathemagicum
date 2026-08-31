@@ -41,6 +41,7 @@ import { makeAdditionProblem } from "../spells/addition";
 import { BANDS, DEFAULT_BAND, SUGGESTED_BAND, sampleProblem } from "../spells/difficulty";
 import { GAME_NAME } from "../ui/TitleCard";
 import { UiAsset, flagIcon, uiTextureKey } from "../ui/assets";
+import { FACE } from "../ui/parchment";
 import {
   HEADER,
   MAKING_STEPS,
@@ -1324,7 +1325,7 @@ export class PlayersScene extends Phaser.Scene {
 
   private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
     return this.add.text(0, 0, value, {
-      fontFamily: "monospace",
+      fontFamily: FACE,
       fontSize: `${size}px`,
       color,
       align: "center",

@@ -4,7 +4,7 @@
 import type Phaser from "phaser";
 import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
 import { type UiIndex, uiTextureKey } from "./assets";
-import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
+import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
 
 /**
  * One picture, held up close, named and captioned.
@@ -95,7 +95,7 @@ export class PicturePanel {
     );
     this.closeLabel = this.own(
       scene.add
-        .text(0, 0, "x", { fontFamily: "monospace", fontSize: `${CLOSE_SIZE}px`, color: INK })
+        .text(0, 0, "x", { fontFamily: FACE, fontSize: `${CLOSE_SIZE}px`, color: INK })
         .setOrigin(0.5),
     );
     this.closeBox.on("pointerdown", () => this.close());
@@ -181,7 +181,7 @@ export class PicturePanel {
 
   private text(size: number, color: string): Phaser.GameObjects.Text {
     return this.scene.add.text(0, 0, "", {
-      fontFamily: "monospace",
+      fontFamily: FACE,
       fontSize: `${size}px`,
       color,
       lineSpacing: 3,

@@ -41,3 +41,18 @@ SPDX-License-Identifier = "CC-BY-NC-ND-4.0"
 path = "public/icon-*.png"
 SPDX-FileCopyrightText = "Marko Ivankovic"
 SPDX-License-Identifier = "CC-BY-NC-ND-4.0"
+
+# The one thing in this repository somebody else made.
+#
+# Andika, by SIL International, under the Open Font License — a face drawn
+# for people who are still learning to read, which is who this game is for.
+# Subset to the languages it speaks (Latin Extended-A, so Croatian's č ć š ž
+# đ and German's ä ö ü ß are covered) and shipped as woff2 at a fifth of a
+# megabyte's worth of TTF. Under public/fonts rather than public/assets on
+# purpose: everything under assets is the generator's and is licensed the
+# other way, and a font swept into that rule would be claimed by a copyright
+# line that is not true of it.
+[[annotations]]
+path = "public/fonts/andika.woff2"
+SPDX-FileCopyrightText = "2004-2022 SIL International"
+SPDX-License-Identifier = "OFL-1.1"

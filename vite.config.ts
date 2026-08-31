@@ -54,7 +54,12 @@ export default defineConfig({
         // fetched at runtime exactly like the images and are just as fatal
         // to miss. Extend this list again for whatever else actually lands
         // under public/assets (audio, ...) rather than guessing ahead of it.
-        globPatterns: ["**/*.{js,wasm,css,html,png,json}"],
+        //
+        // `woff2` is the lettering, which is fetched by the stylesheet
+        // rather than by Phaser and would otherwise be the one thing in the
+        // game that needed the network. It is twenty kilobytes and the whole
+        // interface is written in it.
+        globPatterns: ["**/*.{js,wasm,css,html,png,json,woff2}"],
         // The largest asset is the terrain atlas page (~850KB), comfortably
         // under maximumFileSizeToCacheInBytes' 2MB default. Raise it if a
         // future atlas needs a second page.
