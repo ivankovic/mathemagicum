@@ -262,6 +262,32 @@ describe("putting things down", () => {
     expect(s.grid.isPassable(2, 3)).toBe(false);
   });
 
+  /**
+   * And a machine at her corner is one of them, which it was not.
+   *
+   * Reported from a playtest as *minus doesn't pick up machines*. It was
+   * every machine she was not directly beside: the spell's tap is accepted
+   * anywhere she can point, and this measured the two sides added together
+   * and refused anything past one — so a corner square that is one away to
+   * her and to `withinReach` is two here. She answered the subtraction and
+   * the sorter stayed standing.
+   *
+   * Both measures, in one test, because the bug was the gap between them.
+   */
+  test("a spell takes back what it can be aimed at, a hand only what is beside her", () => {
+    const s = session();
+    s.inventory.add(FixtureType.Sorter, 1);
+    expect(s.place(FixtureType.Sorter).tile).toEqual({ col: 2, row: 3 });
+    // At its corner: one step diagonally, which she can point at.
+    s.setPosition(1, 2);
+    expect(withinReach(s.tile, { col: 2, row: 3 })).toBe(true);
+
+    expect(s.takeBack(FixtureType.Sorter, 2, 3).outcome).toBe(Outcome.TooFar);
+    expect(s.takeBack(FixtureType.Sorter, 2, 3, withinReach).ok).toBe(true);
+    expect(s.inventory.count(FixtureType.Sorter)).toBe(1);
+    expect(s.grid.isPassable(2, 3)).toBe(true);
+  });
+
   // The reason there is no connectivity check before placing: whatever she
   // walls herself in with is adjacent, so it is always within reach.
   test("she can always undo walling herself in", () => {

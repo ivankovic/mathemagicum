@@ -136,6 +136,16 @@ export function stepsBetween(a: GridPoint, b: GridPoint): number {
 }
 
 /**
+ * Whether a thing is close enough to reach for: one orthogonal step.
+ *
+ * The measure a *hand* uses, named so that the other one can be handed to
+ * `takeBack` in its place. See there for why that is a caller's business.
+ */
+export function beside(from: GridPoint, at: GridPoint): boolean {
+  return stepsBetween(from, at) <= 1;
+}
+
+/**
  * How far a *person* can be and still be spoken to: one step in any
  * direction, diagonals included.
  *
@@ -575,10 +585,31 @@ export class GameSession {
     };
   }
 
-  /** Take a placed fixture back, if it is within one step. */
-  takeBack(fixture: FixtureType, col: number, row: number): PlaceResult {
+  /**
+   * Take a placed fixture back.
+   *
+   * How far she may be standing is the caller's to say, because it is a fact
+   * about *how she asked* rather than about the thing standing there. A tap
+   * on it is a hand and a hand reaches one square, which is the default. The
+   * minus rune is a spell, and a spell reaches as far as it can be aimed.
+   *
+   * Both measures already existed and this used only the shorter one, which
+   * broke the bargain `place` states above: anything she puts down she can
+   * pick back up. Putting down has no distance rule of its own — it takes
+   * whatever `targetTile` says, and she can point three squares — so a
+   * machine could be stood at her corner and then refused when she asked for
+   * it back. Refused *after* the sum, which is the part that made it a
+   * playtest report rather than a range a child could feel: **minus doesn't
+   * pick up machines**.
+   */
+  takeBack(
+    fixture: FixtureType,
+    col: number,
+    row: number,
+    near: (from: GridPoint, at: GridPoint) => boolean = beside,
+  ): PlaceResult {
     if (this.indoors) return { ok: false, outcome: Outcome.Indoors };
-    if (stepsBetween(this.tile, { col, row }) > 1) {
+    if (!near(this.tile, { col, row })) {
       return { ok: false, outcome: Outcome.TooFar, tile: { col, row } };
     }
     if (!this.grid.removeObjectAt(col, row)) return { ok: false, outcome: Outcome.NothingThere };

@@ -440,6 +440,17 @@ export interface DevHandle {
    */
   readonly armed: () => string | null;
   /**
+   * The square she is pointing at, or null when she is not pointing at one.
+   *
+   * A ring drawn on the grass, which a script cannot see — and everything
+   * she does lands on it rather than on the square she is facing, so an aim
+   * that outlives what set it is a spell going somewhere she is not looking.
+   * That is not visible from anything else here: `where` says where she is
+   * standing, and a cast that landed on the wrong square looks exactly like
+   * a cast that did nothing.
+   */
+  readonly aimed: () => { col: number; row: number } | null;
+  /**
    * Which way round the thing she is holding will go down: nought facing the
    * camera, then away, then the two side-on ways.
    *

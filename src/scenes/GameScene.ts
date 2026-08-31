@@ -2351,6 +2351,9 @@ export class GameScene extends Phaser.Scene {
       // also on screen behind it.
       mapOpen: () => this.mapPanel?.isOpen === true,
       armed: () => armedTag(this.armed),
+      // And the square it will land on, which is not the same question: the
+      // rune says a spell is waiting, this says where it is pointed.
+      aimed: () => this.session.aimed,
       // Which way round the thing in her hands is. Its own seam rather than
       // part of `armed`, which is a name several scenarios compare against
       // and which should go on meaning what it has always meant.
@@ -2848,10 +2851,6 @@ export class GameScene extends Phaser.Scene {
       this.traffic?.sail(this.frozen ? FROZEN_TIDE : this.worldNow() / 60_000);
       this.teacherMarks?.show(this.teachersOnScreen(), (spell) => !this.knows(spell));
       this.cullScenery();
-      // The reach is drawn round wherever she is standing now, so it follows
-      // her while she walks about choosing — the same reason the rune does.
-      if (this.armed) this.paintAim();
-      this.checkAim();
     }
     // Indoors as well as out: she is present either way, and a sorter in the
     // garden goes on dealing while she is upstairs.
@@ -2865,6 +2864,17 @@ export class GameScene extends Phaser.Scene {
     // for is in her hands either way — and stopped being survivable when it
     // became the control that turns furniture round.
     this.placeArmedRune();
+    // Indoors as well as out, and for the same reason the rune above it is.
+    //
+    // The reach is drawn round wherever she is standing now, so it follows
+    // her while she walks about choosing; and a square she has walked away
+    // from is let go of, wherever she walked away from it. Both of those
+    // used to sit in the outdoor branch above, which left a room the one
+    // place in the game where the ring stayed on the square it was put on
+    // however far she went — and where everything she did went on landing
+    // there.
+    if (this.armed) this.paintAim();
+    this.checkAim();
     // The tint still applies indoors: it is the time of day, not the weather
     // outside a window.
     this.paintNight(nightTintAlpha(hour), this.settleDusk(time));
@@ -5251,19 +5261,32 @@ export class GameScene extends Phaser.Scene {
     // or the one she is facing if she has not. So putting a thing down on a
     // tapped square is *pointing at it first*, and none of the four routes
     // below has to know this happened.
+    //
+    // And pointed at it for the placement only: whatever she was pointing at
+    // before is put back afterwards. Left on the square she has just built
+    // on, it is the aim the *next* thing she does lands on — which is the
+    // thing `checkGrowth` refuses to do to a spell, in the same words: a
+    // spell asks where once, and leaving the answer in `aim` would send the
+    // next seed she plants to the tile she last cast on.
+    //
+    // On a phone what is put back is nothing at all, and that is the half of
+    // this that a playtest found. `handleTileClick` is the only thing that
+    // ever sets an aim on purpose and touch never reaches it — a press there
+    // is the joystick — so the ring left behind by a fence was a ring a
+    // child had no way to put out except by walking four squares away from
+    // it. *The targeting tile got stuck.*
+    const pointing = this.session.aimed;
     this.session.aimAt(at);
-    this.paintAim();
-    if (held.kind === "wire") {
-      this.stringWireAt(held, at);
-      return;
-    }
-    if (held.kind === "seed") this.plantSeed(held.plant);
+    if (held.kind === "wire") this.stringWireAt(held, at);
+    else if (held.kind === "seed") this.plantSeed(held.plant);
     // The turn is handed over rather than read back off `this.armed`: the
     // rune is put out a few lines above this, so by the time anything is
     // placed there is nothing in her hands to ask.
     else if (held.kind === "fixture") this.placeFixture(held.fixture, turnFrom(held.turn));
     else if (held.kind === "decor") this.putDecorDown(held.piece, held.look, held.turn);
     else if (held.kind === "flower") this.putFlowerDown(held.flower, held.look);
+    this.session.aimAt(pointing);
+    this.paintAim();
   }
 
   /** Put the marker away, whatever state it was in. */
@@ -6667,7 +6690,11 @@ export class GameScene extends Phaser.Scene {
     // Emptied before it is lifted, so that a `takeBack` which refuses — she
     // stepped away while the parchment was open — leaves the machine
     // standing there with its contents still in it.
-    const result = this.session.takeBack(fixture, col, row);
+    // Taken back at a spell's reach rather than a hand's, because that is
+    // what she used: the rune was lit and the square was tapped, and the tap
+    // was accepted anywhere inside the ring drawn on the grass. Anything
+    // narrower here is a sum answered for nothing.
+    const result = this.session.takeBack(fixture, col, row, withinReach);
     this.report(result, itemIcon(fixture));
     if (!result.ok) return;
     if (state?.holding) {
@@ -9594,6 +9621,21 @@ export class GameScene extends Phaser.Scene {
   private setInterior<T extends InteriorRuntime | null>(interior: T): T {
     this.interior = interior;
     this.session.indoors = interior !== null;
+    // Nothing pointed at survives a doorway either — `enterInterior` says
+    // the same of the marked-out patch, and this is the other half of it.
+    //
+    // The square she picked is a fact about the grid she was standing on,
+    // and this line is what changes the grid. Left alone it went on
+    // answering `targetTile` with a coordinate out in the village, so the
+    // first chair she put down in a room was placed several hundred tiles
+    // away in the garden; and the ring round it came in through the door on
+    // the layer that follows her, drawn at pixels that mean nothing in here.
+    // A stuck target and a stuck ring, from one square nobody dropped.
+    //
+    // Wiped rather than repainted: `leaveInterior` calls this before it puts
+    // the origin back, and `paintAim` measures from the origin.
+    this.session.aimAt(null);
+    this.aimInk?.clear();
     // The sockets belong to the climb, not to whatever room this is.
     this.paintSockets();
     return interior;
