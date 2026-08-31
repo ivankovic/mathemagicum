@@ -177,6 +177,25 @@ export function stepsToSpeak(a: GridPoint, b: GridPoint): number {
 }
 
 /**
+ * However far: the third measure `takeBack` can be handed, and the odd one.
+ *
+ * What the times spell uses. A patch may be ten squares on a side and is
+ * drawn from wherever she is standing, so the far corner of one is well
+ * outside anything she could point at — and the patch clears *trees* out
+ * there without asking, because marking the ground out is what the reach of
+ * that spell is. A machine standing among them cannot be the one thing in
+ * the rectangle that answers a different question: she drew the box round
+ * it, which is the asking.
+ *
+ * Named rather than written as `() => true` at the call site, because what
+ * it means is not "no rule" — it is *the patch is the rule*, and the two
+ * read the same only until somebody tries to change one of them.
+ */
+export function anywhereInThePatch(): boolean {
+  return true;
+}
+
+/**
  * What the clearing spell took off a tile.
  *
  * A union rather than a `PlacedObject | Crop`, because the two are not

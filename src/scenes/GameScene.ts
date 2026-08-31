@@ -429,6 +429,7 @@ import {
   type ActionResult,
   GameSession,
   Outcome,
+  anywhereInThePatch,
   stepsToSpeak,
   withinReach,
 } from "../world/session";
@@ -5603,7 +5604,17 @@ export class GameScene extends Phaser.Scene {
     }
     return [
       { action: PatchAction.Grow, cells: this.session.growableIn(patch) },
-      { action: PatchAction.Clear, cells: this.session.clearableIn(patch) },
+      {
+        action: PatchAction.Clear,
+        // The ground's things and the machines standing on it, which are two
+        // lists because they are taken back two different ways — see
+        // `machinesIn`. A rectangle holding nothing but machines used to
+        // count as an empty one, so the rune was refused before it was cast.
+        cells: [
+          ...this.session.clearableIn(patch),
+          ...this.machinesIn(patch).map((standing) => standing.at),
+        ],
+      },
       { action: PatchAction.Pick, cells: this.session.pickableIn(patch) },
     ];
   }
@@ -5657,6 +5668,39 @@ export class GameScene extends Phaser.Scene {
   private toGridCell(at: GridPoint): GridPoint {
     const origin = this.interior?.origin ?? { col: 0, row: 0 };
     return { col: at.col - origin.col, row: at.row - origin.row };
+  }
+
+  /**
+   * The machines standing in a marked patch.
+   *
+   * Reported from a playtest: *why wasn't I able to use multiplication with
+   * minus to pick up three machines?* Because the patch's minus knew about
+   * trees and crops and nothing else — `clearableIn` asks the grid for
+   * scenery or a crop and a sorter is neither — while a *tap* with the same
+   * rune has taken a machine back since the day machines were placeable.
+   * One rune, one garden, two answers, and which one you got depended on
+   * whether the times spell had drawn a box first.
+   *
+   * Kept in the scene rather than beside `clearableIn` in the session,
+   * because taking a machine back is not a thing the grid can do on its own:
+   * what is inside it goes to the basket, its sprite has to go, and the
+   * sockets have to be repainted. The session owns the ground; this owns
+   * everything standing on it that is more than a picture.
+   */
+  private machinesIn(patch: Patch): { at: GridPoint; fixture: FixtureType }[] {
+    if (this.interior) return [];
+    const standing: { at: GridPoint; fixture: FixtureType }[] = [];
+    for (const at of patchCells(patch)) {
+      const object = this.grid.getObjectAt(at.col, at.row);
+      const fixture = object ? fixtureFor(object.type) : null;
+      // Its own square only. A machine is one tile, but a *footprint* that
+      // straddled the edge of the patch would otherwise be lifted by a
+      // rectangle that only covers half of it.
+      if (!fixture || !isMachine(fixture)) continue;
+      if (object && (object.col !== at.col || object.row !== at.row)) continue;
+      standing.push({ at, fixture });
+    }
+    return standing;
   }
 
   /** How many squares of floor the basket will pay for. See `roomsAfforded`. */
@@ -5872,6 +5916,17 @@ export class GameScene extends Phaser.Scene {
         this.clearAt(at.col, at.row);
         done++;
       }
+      // And the machines, at the patch's own reach rather than a pointing
+      // one: she drew the rectangle round them, and the rectangle is how far
+      // this spell asks. The trees beside them are cleared on the same
+      // terms.
+      const machines = this.machinesIn(patch);
+      for (const { at, fixture } of machines) {
+        this.takeMachineBack(fixture, at.col, at.row, anywhereInThePatch, false);
+        done++;
+      }
+      // Once for the lot of them. See `takeMachineBack`'s last argument.
+      if (machines.length > 0) this.autosave();
     } else if (action === PatchAction.Pick) {
       for (const at of this.session.pickableIn(patch)) {
         this.pickCropAt(at.col, at.row);
@@ -6790,17 +6845,33 @@ export class GameScene extends Phaser.Scene {
     return true;
   }
 
-  private takeMachineBack(fixture: FixtureType, col: number, row: number): void {
+  private takeMachineBack(
+    fixture: FixtureType,
+    col: number,
+    row: number,
+    near: (from: GridPoint, at: GridPoint) => boolean = withinReach,
+    /**
+     * Whether to write the world down afterwards.
+     *
+     * A tap takes one machine and should be saved the moment it is taken. A
+     * patch can hold a hundred squares, and a hundred autosaves in one frame
+     * is a hundred walks of the whole world diff to record one cast — so the
+     * loop saves once, at the end, when it knows what it took.
+     */
+    save = true,
+  ): void {
     const key = tileKey(col, row);
     const state = this.machines.get(key);
     // Emptied before it is lifted, so that a `takeBack` which refuses — she
     // stepped away while the parchment was open — leaves the machine
     // standing there with its contents still in it.
-    // Taken back at a spell's reach rather than a hand's, because that is
-    // what she used: the rune was lit and the square was tapped, and the tap
-    // was accepted anywhere inside the ring drawn on the grass. Anything
-    // narrower here is a sum answered for nothing.
-    const result = this.session.takeBack(fixture, col, row, withinReach);
+    // Taken back at the reach of whatever asked for it, and there are two
+    // askers. A tap on it is a spell's reach — the rune was lit and the
+    // square was tapped, and the tap was accepted anywhere inside the ring
+    // drawn on the grass, so anything narrower here is a sum answered for
+    // nothing. A patch is the patch's own, which is further; see
+    // `anywhereInThePatch`.
+    const result = this.session.takeBack(fixture, col, row, near);
     this.report(result, itemIcon(fixture));
     if (!result.ok) return;
     if (state?.holding) {
@@ -6812,7 +6883,7 @@ export class GameScene extends Phaser.Scene {
     this.placedFixtures.delete(key);
     this.refreshCarried();
     this.paintSockets();
-    this.autosave();
+    if (save) this.autosave();
   }
 
   /** Lift what stood there out of the world, sprite and all. */

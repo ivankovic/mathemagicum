@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { Spell } from "../src/spells/spellbook";
 import { FixtureType } from "../src/world/fixtures";
 import { MachineType, recipeFor } from "../src/world/machines";
-import { type Game, play, shutDown, takeFromCrate } from "./harness";
+import { PatchAction } from "../src/world/selection";
+import { type Game, patchButton, play, runeButton, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -61,6 +63,28 @@ function objectOn(game: Game, col: number, row: number): Promise<string | null> 
     },
     [col, row] as const,
   );
+}
+
+/**
+ * Three empty squares in a row, near enough to put machines on.
+ *
+ * A row rather than any three, because the point is a rectangle: the times
+ * spell is cast on a block of ground, and three in a line is the smallest
+ * block that is obviously more than one square.
+ */
+async function threeInARow(game: Game): Promise<{ col: number; row: number }[]> {
+  const here = await game.where();
+  for (const row of [here.row + 1, here.row - 1, here.row]) {
+    const cells = [
+      { col: here.col - 1, row },
+      { col: here.col, row },
+      { col: here.col + 1, row },
+    ].filter((at) => at.col !== here.col || at.row !== here.row);
+    if (cells.length < 3) continue;
+    const free = await Promise.all(cells.map((at) => objectOn(game, at.col, at.row)));
+    if (free.every((standing) => standing === null)) return cells;
+  }
+  throw new Error("there is no clear row of three squares beside her");
 }
 
 /** An empty square next to her, to put things down on. */
@@ -148,6 +172,66 @@ describe("building a machine", () => {
         // And nothing is lit, so the next tap on the ground is a tap on the
         // ground rather than a machine appearing out of an empty basket.
         expect(await game.seam<string | null>("armed")).toBeNull();
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * Three machines, one rectangle, one cast.
+   *
+   * Reported from a playtest: *why wasn't I able to use multiplication with
+   * minus to pick up three machines?* Because the patch's minus knew about
+   * trees and crops and nothing else, while a tap with the same rune has
+   * taken a machine back for as long as machines have been placeable. One
+   * rune, one garden, two answers — and which one a child got depended on
+   * whether the times spell had drawn a box first.
+   *
+   * Worse than a missing feature, because of the order the game asks in: the
+   * rectangle holding nothing but machines counted as an empty one, so minus
+   * was refused with a cross *before* any sum. From the child's side the
+   * spell simply did not work on the things she could see inside it.
+   *
+   * Three of them and not one, because one machine in a rectangle is a
+   * rectangle a single tap could have handled. What the times spell is for
+   * is doing the same thing three times without doing it three times.
+   */
+  test(
+    "and the times spell takes three of them back in one cast",
+    async () => {
+      await play({ seams: "&materials=60&hour=12&freezeNpcs&learned=all" }, async (game) => {
+        const row = await threeInARow(game);
+        for (const at of row) {
+          expect(await takeFromCrate(game, FixtureType.Sorter)).toBe(true);
+          await game.settle(350);
+          await game.tapCell(at.col, at.row);
+          await game.settle(400);
+        }
+        const standing = await Promise.all(row.map((at) => objectOn(game, at.col, at.row)));
+        expect(standing).toEqual([FixtureType.Sorter, FixtureType.Sorter, FixtureType.Sorter]);
+        expect(await game.held(FixtureType.Sorter)).toBe(0);
+
+        // The times spell, then the minus it is multiplying, then the two
+        // corners of the block: exactly the order the game asks in.
+        await game.tap("spellbook");
+        await game.tap(runeButton(Spell.Array));
+        expect(await game.tap(patchButton(PatchAction.Clear))).toBe(true);
+        await game.settle(300);
+        await game.tapCell(row[0]?.col ?? 0, row[0]?.row ?? 0);
+        await game.settle(300);
+        await game.tapCell(row[2]?.col ?? 0, row[2]?.row ?? 0);
+        await game.settle(700);
+
+        // The spell once by hand, and then how many times over.
+        await game.solveNumberLine();
+        await game.solveArray();
+        await game.settle(900);
+
+        // Every square bare, and all three machines back in the basket.
+        expect({
+          standing: await Promise.all(row.map((at) => objectOn(game, at.col, at.row))),
+          held: await game.held(FixtureType.Sorter),
+        }).toEqual({ standing: [null, null, null], held: 3 });
       });
     },
     5 * MINUTES,

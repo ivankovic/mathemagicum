@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { Spell } from "../src/spells/spellbook";
 import { ANIMAL_GLAD_MS } from "../src/world/animals";
-import { type Game, play, shutDown } from "./harness";
+import { FixtureType } from "../src/world/fixtures";
+import { PatchAction } from "../src/world/selection";
+import { type Game, patchButton, play, runeButton, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -26,6 +29,30 @@ afterAll(shutDown);
  * afternoon.
  */
 const FROZEN = "&hour=12&crops=5&freezeNpcs&hungry";
+/** The same village, with timber for a machine and every rune lit. */
+const WITH_TIMBER = `${FROZEN}&materials=40&learned=all`;
+
+/** Whether a square is clear enough to stand a machine on. */
+function isFree(game: Game, col: number, row: number): Promise<boolean> {
+  return game.tab.evaluate(
+    ([c, r]) => {
+      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
+        .__mathemagicum;
+      if (!handle) throw new Error("the game has not put its handle out");
+      const session = handle.session as {
+        grid: {
+          isPassable: (col: number, row: number) => boolean;
+          getObjectAt: (col: number, row: number) => unknown;
+        };
+      };
+      return (
+        session.grid.isPassable(c as number, r as number) &&
+        !session.grid.getObjectAt(c as number, r as number)
+      );
+    },
+    [col, row] as const,
+  );
+}
 
 interface Beast {
   id: string;
@@ -166,6 +193,76 @@ describe("the animals of the village", () => {
           mood: tapped?.mood,
           held: await game.held(beast.craves),
         }).toEqual({ thinking: ["food"], mood: "quiet", held: full });
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * And a spell cast over one does not pick it up.
+   *
+   * Raised alongside a playtest report about the times spell: *there was
+   * also an animal in the target rectangle, but I didn't expect to pick it
+   * up.* Nor should she — and the reason it is safe is worth pinning rather
+   * than trusting, because it is an accident of where an animal lives. A
+   * chicken is a sprite in a list; it was never put on the grid, so nothing
+   * that asks the ground what is standing on a square can see one.
+   *
+   * That accident is exactly the kind that stops being true. The patch's
+   * minus has just learned to take *machines* back — things that do stand on
+   * squares — and the next step from "machines" to "anything standing here"
+   * is a short one. This is the test that would fail on it.
+   */
+  test(
+    "and a rectangle drawn round one takes the machine and leaves the animal",
+    async () => {
+      await play({ seams: WITH_TIMBER }, async (game) => {
+        // A beast with a free square to its right to stand a sorter on, and
+        // one below it for her to stand on and reach both.
+        const village = await game.seam<Beast[]>("animals");
+        let chosen: Beast | undefined;
+        for (const beast of village) {
+          if (!(await isFree(game, beast.col + 1, beast.row))) continue;
+          if (!(await isFree(game, beast.col, beast.row + 1))) continue;
+          chosen = beast;
+          break;
+        }
+        if (!chosen) throw new Error("no animal in this village has room beside it");
+
+        const beast = chosen;
+        const machine = { col: beast.col + 1, row: beast.row };
+        await game.reload(`${WITH_TIMBER}&at=${beast.col},${beast.row + 1}`);
+        await game.settle(900);
+
+        expect(await takeFromCrate(game, FixtureType.Sorter)).toBe(true);
+        await game.settle(350);
+        await game.tapCell(machine.col, machine.row);
+        await game.settle(400);
+
+        // A rectangle two squares wide: the animal on one, the machine on
+        // the other. A tap on a square an animal is standing on reaches the
+        // ground while a spell is being aimed — which is what
+        // `pointerIsSpokenFor` is for, and is why the corner can be marked
+        // at all.
+        await game.tap("spellbook");
+        await game.tap(runeButton(Spell.Array));
+        expect(await game.tap(patchButton(PatchAction.Clear))).toBe(true);
+        await game.settle(300);
+        await game.tapCell(beast.col, beast.row);
+        await game.settle(300);
+        await game.tapCell(machine.col, machine.row);
+        await game.settle(700);
+        await game.solveNumberLine();
+        await game.solveArray();
+        await game.settle(900);
+
+        // The machine is hers again and the animal is exactly where it was,
+        // still itself, still on its own square.
+        const after = (await game.seam<Beast[]>("animals")).find((one) => one.id === beast.id);
+        expect({
+          held: await game.held(FixtureType.Sorter),
+          standing: after ? { col: after.col, row: after.row } : null,
+        }).toEqual({ held: 1, standing: { col: beast.col, row: beast.row } });
       });
     },
     5 * MINUTES,
