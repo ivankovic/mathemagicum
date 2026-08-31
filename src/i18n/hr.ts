@@ -330,9 +330,9 @@ const PLACE_NAMES: Record<string, string> = {
 };
 
 const INTRO_HR: Record<string, string> = {
-  seeds: `Ja sam ${NAMED_PEOPLE["postal-worker"]}, poštar. Ovo je tvoj vrt. Uzmi sjeme iz vrećice i past će u zemlju na polje ispred tebe.`,
+  seeds: `Ja sam ${NAMED_PEOPLE["postal-worker"]}, poštar. Ovo je tvoj vrt. Uzmi sjeme iz vrećice pa dodirni polje na koje ga želiš posijati.`,
   spell: `Sjeme ovdje ne raste samo od sebe. Otvori čarobnjačku knjigu, baci runu + na njega i riješi zadatak. Dva bacanja i plod je zreo. ${NAMED_PEOPLE.teacher} u školi pokazat će ti kako, ako je pitaš.`,
-  pick: "Dodirni zreo plod da ga ubereš. Ide ti u košaru, a na polju naraste novi.",
+  pick: "Dodirni zreo plod da ga ubereš. Ide ti u košaru, a polje ostaje prazno — spremno za novo sjeme.",
   store: `${NAMED_PEOPLE.shopkeeper} u štaglju otkupljuje što ubereš, a prodaje ograde, stolove i svjetiljke za vrt. Novac brojiš sam — a ona se zna i prevariti.`,
   map: `U kuli, na zidu, visi karta cijeloga svijeta. Dodirni je kad god želiš vidjeti gdje si — a ${NAMED_PEOPLE.geometer} ispod nje naučit će te čaroliju za putovanje.`,
 };

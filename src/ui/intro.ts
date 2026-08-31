@@ -18,6 +18,18 @@ import { UiAsset, coinIcon, cropIcon, itemIcon } from "./assets";
  * nothing about the tower otherwise says it has anything in it, and the only
  * other way to find the map is to wander in and tap the wall.
  *
+ * **What he says has to keep up with what the game does.** Reported from a
+ * playtest: he was still telling a child that a seed goes into the ground on
+ * the square she is facing, and that a picked crop grows back. Neither had
+ * been true for some time — a seed is taken from the pouch and the square is
+ * tapped, the same two steps as casting a spell, and `harvestCrop` takes the
+ * crop off the tile and leaves it bare. A tutorial that describes an older
+ * game is worse than none: a child who follows it and sees something else
+ * happen learns that the game is not to be trusted, which is the one thing
+ * the first minute of it must not teach. Both lines are corrected in all
+ * three languages; the icons are pinned by a test and the words are not, so
+ * this note is the reminder.
+ *
  * **Every page is two icons the player will meet again.** They are the same
  * images that sit in the corner of the screen and on the shop's counter, not
  * illustrations drawn for the telling: "tap this pouch" is a sentence a child

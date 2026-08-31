@@ -159,9 +159,9 @@ const PLACE_NAMES: Record<string, string> = {
 // Der Rundgang, Seite für Seite. Nach IntroBeat geschlüsselt, damit eine neue
 // Seite in jeder Sprache auffällt und nicht leer bleibt.
 const INTRO_DE: Record<string, string> = {
-  seeds: `Ich bin ${NAMED_PEOPLE["postal-worker"]}, der Postbote. Das da ist dein Garten. Nimm ein Saatkorn aus dem Beutel — es kommt auf das Feld, vor dem du stehst.`,
+  seeds: `Ich bin ${NAMED_PEOPLE["postal-worker"]}, der Postbote. Das da ist dein Garten. Nimm ein Saatkorn aus dem Beutel und tipp auf das Feld, auf das es soll.`,
   spell: `Von allein wächst hier nichts. Öffne das Zauberbuch, sprich die +-Rune darauf und löse die Aufgabe. Zweimal, dann ist die Pflanze reif. ${NAMED_PEOPLE.teacher} in der Schule zeigt dir, wie es geht.`,
-  pick: "Tipp auf eine reife Pflanze, um sie zu pflücken. Sie wandert in deinen Korb und wächst nach.",
+  pick: "Tipp auf eine reife Pflanze, um sie zu pflücken. Sie wandert in deinen Korb, und das Feld ist wieder leer — bereit für ein neues Saatkorn.",
   store: `${NAMED_PEOPLE.shopkeeper} in der Scheune kauft deine Ernte und verkauft Zäune, Tische und Laternen für den Garten. Das Geld zählst du selbst ab — und sie verzählt sich auch mal.`,
   map: `Im Turm hängt an der Wand eine Karte der ganzen Welt. Tipp jederzeit darauf, um zu sehen, wo du bist — und ${NAMED_PEOPLE.geometer} darunter bringt dir einen Zauber fürs Reisen bei.`,
 };

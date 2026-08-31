@@ -135,9 +135,9 @@ const PLACE_NAMES: Record<string, string> = {
 // four fields, so a beat added to the tour fails the coverage test in every
 // language instead of silently showing an empty page in one of them.
 const INTRO_EN: Record<string, string> = {
-  seeds: `I am ${NAMED_PEOPLE["postal-worker"]}, the postman. That is your garden. Take a seed from the pouch and it goes into the ground on the tile you are facing.`,
+  seeds: `I am ${NAMED_PEOPLE["postal-worker"]}, the postman. That is your garden. Take a seed from the pouch, then tap the square you want it in.`,
   spell: `Seeds do not grow on their own here. Open the spellbook, cast the + rune on one, and answer the sum. Two casts and it is ripe. ${NAMED_PEOPLE.teacher} in the school will show you how, if you ask her.`,
-  pick: "Tap a ripe crop to pick it. It goes in your basket, and it grows back.",
+  pick: "Tap a ripe crop to pick it. It goes in your basket and the ground is bare again, ready for another seed.",
   store: `${NAMED_PEOPLE.shopkeeper} in the barn buys what you pick, and sells fences, tables and lamps for the garden. You count the coins out yourself — she is not always right, mind.`,
   map: `There is a map of the whole world on the wall in the tower. Tap it any time you want to see where you are — and ${NAMED_PEOPLE.geometer} under it will teach you a spell for getting about.`,
 };
