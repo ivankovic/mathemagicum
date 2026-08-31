@@ -163,12 +163,14 @@ import {
   ANIMAL_RANGE,
   type AnimalKind,
   AnimalMood,
+  AnimalThought,
   type Mood,
   animalSheetKey,
   animalSidecarKey,
   animalSpots,
   firstMood,
   moodAfter,
+  thoughtFor,
 } from "../world/animals";
 import {
   BUILDING_FOOTPRINTS,
@@ -560,6 +562,16 @@ const PATCH_BEAT_MS = REFUSAL_MS;
 const RESULT_ICON = 22;
 const RESULT_RISE = 22;
 const RESULT_MS = 700;
+/**
+ * And how long the cloud a tap puts over an animal stays up.
+ *
+ * Twice as long, because there is now something in it worth looking at. It
+ * was `RESULT_MS` while the cloud was empty, and seven tenths of a second is
+ * plenty of time to show somebody nothing — a child who has to find the
+ * animal, read a small carrot and understand that the two go together needs
+ * longer than a result flashing off a square she was already watching.
+ */
+const TAPPED_THOUGHT_MS = 1400;
 /** The trail that says *too far*: this many dots between her and the square. */
 const TOO_FAR_STEPS = 4;
 const TOO_FAR_DOT = 2.5;
@@ -1099,6 +1111,15 @@ interface AnimalRuntime extends NpcRuntime {
   /** When it was last fed, or 0. Only used to tell two silences apart. */
   fedAt: number;
   bubble?: Phaser.GameObjects.Container;
+  /**
+   * What is in the cloud over its head at this moment, by name.
+   *
+   * Its own field rather than read back off the container, because a cloud
+   * is a handful of images and "which pictures are in it" is the question a
+   * script asks — and because the momentary one a tap puts up is not the
+   * animal's own bubble and has nowhere else to be recorded.
+   */
+  thinking: readonly AnimalThought[];
 }
 
 interface NpcRuntime {
@@ -2719,6 +2740,10 @@ export class GameScene extends Phaser.Scene {
           craves: animal.craves,
           mood: animal.mood,
           bubble: animal.bubble !== undefined,
+          // What is in the cloud over it, which is not the same question as
+          // whether it has one: a tap on a quiet animal puts up a cloud that
+          // is nobody's bubble and lasts a beat.
+          thinking: [...animal.thinking],
         })),
       portalMarks: () => this.portalPanel?.marks() ?? {},
       portal: () => {
@@ -8991,6 +9016,9 @@ export class GameScene extends Phaser.Scene {
         craves: spot.wants,
         ...this.firstMood(),
         fedAt: 0,
+        // Filled in by `showThought` below, which every mood change goes
+        // through as well.
+        thinking: [],
       };
       sprite.setInteractive({ useHandCursor: true });
       sprite.on("pointerdown", () => {
@@ -9017,32 +9045,41 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * A cloud with nothing in it, for a beat, over an animal that was tapped
-   * while it had nothing to ask for.
+   * What it likes, for a beat, over an animal tapped while it is not asking.
    *
-   * Built by hand rather than through `showThought`, because that one owns
-   * the animal's own bubble and this is a moment rather than a mood: it must
-   * not survive the tap, and it must not overwrite what the animal is
-   * actually thinking if it starts thinking something.
+   * Reported from a playtest: *tapping the rabbit didn't bring up any food,
+   * just an empty rabbit*. This used to be a cloud with nothing in it, and
+   * five of a village's seven animals are quiet at any moment — so a child
+   * who taps two or three of them meets empty cloud after empty cloud and
+   * puts the creatures down as scenery. The crop it craves says what a
+   * rabbit is *for* without asking for anything; see `thoughtFor`.
+   *
+   * Kept apart from `showThought`, which owns the animal's own bubble,
+   * because this is a moment rather than a mood: it must not survive the
+   * tap, and it must not overwrite what the animal is thinking if it starts
+   * thinking something. `thinking` is put back to what the mood says the
+   * instant the cloud goes, for the same reason.
    */
-  private puffEmptyThought(animal: AnimalRuntime): void {
+  private puffThought(animal: AnimalRuntime): void {
     if (animal.bubble) return;
-    const cloud = this.world(
-      this.add
-        .image(
-          animal.sprite.x - BUBBLE_W / 2,
-          animal.sprite.y - animal.sprite.displayHeight - BUBBLE_LIFT,
-          uiTextureKey(UiAsset.ThoughtBubble),
-        )
-        .setOrigin(0, 1)
-        .setDepth(animal.sprite.depth + 0.5),
+    const thinking = thoughtFor(animal.mood, true);
+    if (thinking.length === 0) return;
+    animal.thinking = thinking;
+    const cloud = this.world(this.cloudOf(animal, thinking));
+    cloud.setPosition(
+      animal.sprite.x - BUBBLE_W / 2,
+      animal.sprite.y - animal.sprite.displayHeight - BUBBLE_LIFT,
     );
+    cloud.setDepth(animal.sprite.depth + 0.5);
     this.tweens.add({
       targets: cloud,
       alpha: 0,
-      duration: RESULT_MS,
+      duration: TAPPED_THOUGHT_MS,
       ease: "Quad.easeIn",
-      onComplete: () => cloud.destroy(),
+      onComplete: () => {
+        cloud.destroy();
+        animal.thinking = thoughtFor(animal.mood, false);
+      },
     });
   }
 
@@ -9080,9 +9117,36 @@ export class GameScene extends Phaser.Scene {
   private showThought(animal: AnimalRuntime): void {
     animal.bubble?.destroy();
     animal.bubble = undefined;
-    if (animal.mood === AnimalMood.Quiet) return;
-    const asking = animal.mood === AnimalMood.Asking;
-    const marks = asking ? [cropIcon(animal.craves), UiAsset.MarkQuestion] : [UiAsset.MarkGlad];
+    const thinking = thoughtFor(animal.mood, false);
+    animal.thinking = thinking;
+    if (thinking.length === 0) return;
+    animal.bubble = this.world(this.cloudOf(animal, thinking));
+    this.placeBubble(animal);
+  }
+
+  /**
+   * A cloud with those pictures laid out along its inner slot.
+   *
+   * Shared by the bubble an animal wears and the one a tap puts up for a
+   * moment, which is the whole reason it is its own method: the two used to
+   * be built by different code, and the momentary one was built with no
+   * slots at all — an empty cloud, because that was all it ever had to say.
+   *
+   * The food is whichever crop *this* animal craves. `AnimalThought` names the
+   * three pictures and knows nothing about textures; this is where they
+   * become art.
+   */
+  private cloudOf(
+    animal: AnimalRuntime,
+    thinking: readonly AnimalThought[],
+  ): Phaser.GameObjects.Container {
+    const marks = thinking.map((mark) =>
+      mark === AnimalThought.Food
+        ? cropIcon(animal.craves)
+        : mark === AnimalThought.Question
+          ? UiAsset.MarkQuestion
+          : UiAsset.MarkGlad,
+    );
     const span = marks.length * BUBBLE_SLOT + (marks.length - 1) * BUBBLE_SLOT_GAP;
     const left = BUBBLE_INNER_X + (BUBBLE_INNER_W - span) / 2;
     const middle = -BUBBLE_H + BUBBLE_INNER_Y + BUBBLE_INNER_H / 2;
@@ -9096,8 +9160,7 @@ export class GameScene extends Phaser.Scene {
         )
         .setDisplaySize(BUBBLE_SLOT, BUBBLE_SLOT),
     );
-    animal.bubble = this.world(this.add.container(0, 0, [cloud, ...drawn]));
-    this.placeBubble(animal);
+    return this.add.container(0, 0, [cloud, ...drawn]);
   }
 
   /**
@@ -9153,12 +9216,12 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (animal.mood !== AnimalMood.Asking) {
-      // An empty cloud: it is thinking about nothing, which is exactly why
-      // there was no bubble over it to begin with. Silence on a tap reads as
-      // the game having missed the tap; an empty thought reads as an animal
-      // with nothing on its mind, which is the true answer either way — a
-      // full one and a not-hungry one both come to *not now*.
-      this.puffEmptyThought(animal);
+      // What it likes, for a beat. Silence on a tap reads as the game having
+      // missed the tap, and an empty cloud — which is what stood here — read
+      // as an animal that has nothing to do with anything. The crop says
+      // *this one is about carrots, only not now*, which is both true and
+      // worth knowing later.
+      this.puffThought(animal);
       return;
     }
     const wants = animal.craves;

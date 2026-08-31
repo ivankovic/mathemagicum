@@ -18,11 +18,13 @@ import {
   ANIMAL_RANGE,
   AnimalKind,
   AnimalMood,
+  AnimalThought,
   animalSheetKey,
   animalSidecarKey,
   animalSpots,
   firstMood,
   moodAfter,
+  thoughtFor,
 } from "./animals";
 import type { PlacedObject } from "./objects";
 import { PLANT_DEFINITIONS, PlantType } from "./plants";
@@ -254,6 +256,65 @@ describe("when they ask", () => {
   test("the smile is brief", () => {
     expect(ANIMAL_GLAD_MS).toBeGreaterThan(800);
     expect(ANIMAL_GLAD_MS).toBeLessThan(ANIMAL_ASK_MIN_MS);
+  });
+});
+
+describe("what is in the cloud over its head", () => {
+  /**
+   * The report this was written for: *tapping the rabbit didn't bring up any
+   * food, just an empty rabbit*.
+   *
+   * A tap on an animal that is not asking used to put up a cloud with
+   * nothing in it. Five of a village's seven animals are quiet at any
+   * moment, so a child who taps two or three meets empty cloud after empty
+   * cloud and files the creatures under scenery. The crop it craves says
+   * what the animal is about without asking for anything.
+   */
+  test("a tap on a quiet one says what it likes", () => {
+    expect(thoughtFor(AnimalMood.Quiet, true)).toEqual([AnimalThought.Food]);
+  });
+
+  // And untapped it says nothing at all, which is what keeps a village from
+  // being a checklist a child clears in one lap.
+  test("but it wears nothing while nobody is asking it", () => {
+    expect(thoughtFor(AnimalMood.Quiet, false)).toEqual([]);
+  });
+
+  /**
+   * The question mark is the ask, and only the ask can be fed.
+   *
+   * Which is why saying what it likes gives nothing away: knowing that a
+   * rabbit is about carrots does not let a child hand it one, and the ten
+   * quiet minutes after a meal are still ten quiet minutes.
+   */
+  test("the one that is asking wears the crop and the question", () => {
+    expect(thoughtFor(AnimalMood.Asking, false)).toEqual([
+      AnimalThought.Food,
+      AnimalThought.Question,
+    ]);
+    // A tap on it feeds it rather than puffing a cloud, so the tapped
+    // reading is the same picture either way.
+    expect(thoughtFor(AnimalMood.Asking, true)).toEqual(thoughtFor(AnimalMood.Asking, false));
+  });
+
+  // The smile is the whole of what a fed animal says, tapped or not.
+  test("and a fed one smiles and says nothing else", () => {
+    expect(thoughtFor(AnimalMood.Glad, false)).toEqual([AnimalThought.Smile]);
+    expect(thoughtFor(AnimalMood.Glad, true)).toEqual([AnimalThought.Smile]);
+  });
+
+  // Two slots, because the cloud has room for two. A third picture would be
+  // drawn off the edge of the art.
+  test("no cloud holds more than the two the art has room for", () => {
+    for (const mood of [AnimalMood.Quiet, AnimalMood.Asking, AnimalMood.Glad]) {
+      for (const tapped of [false, true]) {
+        expect({ mood, tapped, fits: thoughtFor(mood, tapped).length <= 2 }).toEqual({
+          mood,
+          tapped,
+          fits: true,
+        });
+      }
+    }
   });
 });
 

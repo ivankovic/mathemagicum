@@ -822,6 +822,14 @@ export interface DevHandle {
     craves: string;
     mood: string;
     bubble: boolean;
+    /**
+     * What is in the cloud over it: `food`, `question`, `smile`, or nothing.
+     *
+     * Not the same question as `bubble`. A tap on an animal that is not
+     * asking puts up a cloud for a beat which is nobody's bubble, and what
+     * is *in* it is the whole of what that tap says.
+     */
+    thinking: string[];
   }[];
   /** Where each place's mark sits on screen, so a script can tap one. */
   readonly portalMarks: () => Record<string, { x: number; y: number }>;

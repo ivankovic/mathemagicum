@@ -265,6 +265,56 @@ export function moodAfter(mood: AnimalMood, now: number, roll: Roll, alwaysHungr
 }
 
 /**
+ * What goes in the cloud over an animal's head.
+ *
+ * Named rather than drawn: the pictures live in `src/ui/assets`, and the
+ * rule about which of them belongs over a chicken is a fact about the
+ * chicken. The scene turns these three into textures — the food is whatever
+ * that animal craves — and this is the one place that decides how many there
+ * are and in what order.
+ */
+export const AnimalThought = {
+  /** The crop this one is hungry for. */
+  Food: "food",
+  /** And the mark that turns it into a question. */
+  Question: "question",
+  /** A smile, for the moment after it has been fed. */
+  Smile: "smile",
+} as const;
+
+export type AnimalThought = (typeof AnimalThought)[keyof typeof AnimalThought];
+
+/**
+ * What an animal is showing, from its mood and whether it was just tapped.
+ *
+ * The interesting line is the last one. **A tap on an animal that is not
+ * asking says what it likes.** It used to put up an empty cloud, on the
+ * argument that a creature thinking about nothing should say so — and that
+ * is exactly how it was reported from a playtest: *tapping the rabbit didn't
+ * bring up any food, just an empty rabbit*. Which is fair. Five of the seven
+ * animals in a village are quiet at any moment, so a child who taps two or
+ * three of them meets nothing but empty clouds and concludes the creatures
+ * are scenery.
+ *
+ * The crop without the question mark is the answer, because the question
+ * mark is the *ask* and the crop is the animal. It is a stable fact — what
+ * one craves comes out of the world seed and never changes — so a child who
+ * taps the rabbit today learns something that will still be true when it
+ * does ask, which is the whole of what the empty cloud was failing to give
+ * them.
+ *
+ * It gives nothing away that matters, either: **only an animal that is
+ * asking can be fed**, and that rule is untouched. A child cannot pre-empt a
+ * bubble by learning what is behind it, and the quiet ten minutes after a
+ * meal are still ten quiet minutes.
+ */
+export function thoughtFor(mood: AnimalMood, tapped: boolean): readonly AnimalThought[] {
+  if (mood === AnimalMood.Asking) return [AnimalThought.Food, AnimalThought.Question];
+  if (mood === AnimalMood.Glad) return [AnimalThought.Smile];
+  return tapped ? [AnimalThought.Food] : [];
+}
+
+/**
  * Where in its own round an animal starts.
  *
  * Dropped into the middle of one rather than started at the beginning.
