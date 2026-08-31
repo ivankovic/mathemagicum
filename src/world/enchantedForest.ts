@@ -8,6 +8,7 @@ import { LandmarkType } from "./landmarks";
 import type { PlacedObject } from "./objects";
 import { PlantStage, PlantType } from "./plants";
 import { type Rng, randInt } from "./rng";
+import { SCATTER_DENSITY } from "./scatter";
 import { sceneryOn, sceneryType } from "./scenery";
 import { type Patch, patchCells } from "./selection";
 import { TerrainType } from "./terrain";
@@ -28,20 +29,72 @@ import type { GridPoint } from "./topdown";
  * and nothing has to be undone first.
  */
 
-/** How far from the tree the grove is kept clear, in tiles. */
 /**
  * How far the grass reaches from the tree.
  *
  * The clearing is *made* grass rather than left as whatever the box landed
- * on, and everything outside it in the box is made woodland — so the grove
- * is always the same picture: a ring of wood round a patch of grass, with
- * the tree in the middle of it. It used to inherit the terrain under it,
- * which on a hilly band put the great tree in a field of scrub.
+ * on, and the wood around it is made woodland — so the grove is always the
+ * same picture: a ring of wood round a patch of grass, with the tree in the
+ * middle of it. It used to inherit the terrain under it, which on a hilly
+ * band put the great tree in a field of scrub.
+ *
+ * **Round, not square.** Reported from a playtest: *the enchanted forest is
+ * too square, it looks unnatural.* It was, exactly: the reach was measured
+ * as the longer of the two sides, which draws a square, and a nineteen-tile
+ * square of lawn in the middle of a wood is a thing no forest has ever done.
+ * It is a distance now, and the edge wanders — see `wanderAt`.
+ *
+ * Eleven rather than nine because the reach is measured differently: the
+ * four beds stand seven tiles out along both axes, so their far corners are
+ * very nearly ten tiles from the tree as the crow flies. A clearing that did
+ * not hold them would leave the tree's own plots standing in the wood.
  */
-const CLEARING_RADIUS = 9;
-/** The ring of mushrooms about the tree, and how many stand in it. */
-/** Mushrooms scattered through the wood beyond the ring. */
-const SCATTERED_LIGHTS = 14;
+const CLEARING_RADIUS = 11;
+/**
+ * How far each edge wanders, as a share of where it would otherwise be.
+ *
+ * The clearing wanders *outward* and the wood *inward*, both from their own
+ * radius, so neither can eat the other however the two waves happen to line
+ * up: whatever else it does, there is always a clearing and always a ring of
+ * wood round it.
+ *
+ * A sixth is enough. Much less and it is a circle with a wobble drawn on it,
+ * which reads worse than an honest circle; much more and the clearing grows
+ * lobes, and a lobe is a shape somebody made rather than a shape that grew.
+ */
+const CLEARING_WANDER = 0.16;
+const WOOD_WANDER = 0.16;
+/**
+ * What the world's own scatter actually leaves on the ground.
+ *
+ * Not the number in `SCATTER_DENSITY`, which is one of the two noise fields
+ * it multiplies together: the share of cells that end up with something
+ * standing on them comes out well above it. Measured rather than derived —
+ * 0.50 of six thousand woodland cells outside the box, against a table
+ * saying 0.30 — because the whole point of the number is to *match*, and a
+ * formula that was nearly right would draw a ring where the grove ends.
+ */
+const WORLD_SHARE = 5 / 3;
+
+function naturalDensity(terrain: TerrainType): number {
+  return (SCATTER_DENSITY[terrain] ?? 0) * WORLD_SHARE;
+}
+
+/**
+ * How thick the wood is, at its edges and through its middle.
+ *
+ * It thins back to the country's own rate at *both* edges, which is the
+ * point of the thin number: the ground outside the box is scattered by the
+ * world at that rate, so a wood that arrives at the same figure has no
+ * boundary anybody can see. The thick part is through the middle of the
+ * band, where a wood being pushed through ought to be — and it peaks at the
+ * three quarters this used to reach at the edge of the box, which is as
+ * thick as trees here have ever been.
+ */
+const WOOD_THIN = naturalDensity(TerrainType.Woodland);
+const WOOD_THICK = 0.25;
+/** One mushroom per this many cells of the box, scattered through the wood. */
+const CELLS_PER_LIGHT = 40;
 
 /** The bed the tree asks to have filled: four squares by three. */
 /**
@@ -75,29 +128,91 @@ const BED_REACH = 4;
 const THICKET = 6;
 
 /**
+ * The middle of the grove: the cell the great tree stands over.
+ *
+ * Everything about the shape of this place is measured from here, which is
+ * why it is a function rather than a line inside `growGrove` — the dusk has
+ * to agree with the trees about where the wood is, and it is worked out in
+ * the scene, one tile at a time, a frame at a time.
+ */
+export function groveMiddle(box: AreaPlacement): GridPoint {
+  return {
+    col: box.col + Math.floor(box.width / 2),
+    row: box.row + Math.floor(box.height / 2),
+  };
+}
+
+/**
+ * A number from nought to one that turns smoothly with the angle.
+ *
+ * This is the *bit of randomness* the report asked for, and it is not drawn
+ * from the world's rng: a wobble has to be answerable for any point at any
+ * time — the dusk asks about the tile she is standing on, every frame — and
+ * a sequence of draws cannot answer that. Two waves of different frequency
+ * with a phase taken from where the box landed give a boundary that is
+ * different in every world, never repeats itself round the circle, and can
+ * be asked about a single point without generating anything.
+ *
+ * Whole numbers of cycles, three and five, so the two ends of the circle
+ * meet: a wave that did not close would leave a seam pointing due east.
+ */
+function wanderAt(box: AreaPlacement, angle: number, turn: number): number {
+  const phase = (((box.col * 7 + box.row * 13 + turn * 101) % 360) * Math.PI) / 180;
+  const wave = 0.6 * Math.sin(3 * angle + phase) + 0.4 * Math.sin(5 * angle - 2 * phase);
+  return (wave + 1) / 2;
+}
+
+/** Which way a point lies from the middle of the grove. */
+function angleFrom(middle: GridPoint, at: GridPoint): number {
+  return Math.atan2(at.row - middle.row, at.col - middle.col);
+}
+
+/**
+ * How far the grass reaches in one direction, and how far the wood does.
+ *
+ * The wood is the circle that fits inside the box, pulled inward by its own
+ * wander; the clearing is `CLEARING_RADIUS`, pushed outward by another. Both
+ * are held apart by a tile at the least, because the one thing this place
+ * has to be is a clearing with a wood round it.
+ *
+ * In a box too small to hold both — which the generator only builds in the
+ * small worlds the tests sweep — the clearing gives way rather than the
+ * wood: a grove with no trees round it is no longer the enchanted forest,
+ * and a slightly tight clearing is only tight.
+ */
+function reachAt(box: AreaPlacement, angle: number): { clearing: number; wood: number } {
+  const half = Math.min(box.width, box.height) / 2;
+  const wood = half * (1 - WOOD_WANDER * wanderAt(box, angle, 1));
+  const wanted = CLEARING_RADIUS * (1 + CLEARING_WANDER * wanderAt(box, angle, 0));
+  return { clearing: Math.min(wanted, wood - 1), wood };
+}
+
+/**
  * How deep the dusk is at a point, from one inside the wood to nothing well
  * outside it.
  *
- * Not a rectangle switched on and off. The anchor box has a hard edge and
- * the wood around it does not — the scatter blurs outward for tiles past the
- * boundary — so a tint keyed to the box would put a visible straight line
- * across the ground exactly where the trees say there is none.
+ * Not a shape switched on and off. The wood has no hard edge — the trees
+ * thin out through the last of it and the world's own scatter carries on
+ * past — so a tint with one would put a visible line across ground the trees
+ * say has no line on it.
  *
- * So it ramps: full inside the box, falling to nothing `DUSK_FADE_TILES`
- * outside it, measured as the distance to the box rather than to its centre
- * (a centre distance would make the corners darker than the edges of a
- * square wood). The scene eases this over time as well, which is what
- * covers the one case a spatial ramp cannot: arriving by portal.
+ * So it ramps, from full at the wood's own edge to nothing `DUSK_FADE_TILES`
+ * outside it. It used to measure to the anchor *box*, corners and all, which
+ * was right while the wood was a rectangle and is wrong now that it is not:
+ * a square of dusk round a round wood would be the same report over again,
+ * drawn in shade instead of trees. The scene eases this over time as well,
+ * which is what covers the one case a spatial ramp cannot: arriving by
+ * portal.
  */
 export const DUSK_FADE_TILES = 10;
 
 export function duskOver(box: AreaPlacement, at: GridPoint): number {
-  const outX = Math.max(box.col - at.col, at.col - (box.col + box.width - 1), 0);
-  const outY = Math.max(box.row - at.row, at.row - (box.row + box.height - 1), 0);
-  const out = Math.hypot(outX, outY);
-  if (out <= 0) return 1;
-  if (out >= DUSK_FADE_TILES) return 0;
-  return 1 - out / DUSK_FADE_TILES;
+  const middle = groveMiddle(box);
+  const out = Math.hypot(at.col - middle.col, at.row - middle.row);
+  const { wood } = reachAt(box, angleFrom(middle, at));
+  if (out <= wood) return 1;
+  if (out >= wood + DUSK_FADE_TILES) return 0;
+  return 1 - (out - wood) / DUSK_FADE_TILES;
 }
 
 export interface Grove {
@@ -177,32 +292,42 @@ function put(
  */
 export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove {
   const placed: PlacedObject[] = [];
-  const middle = {
-    col: box.col + Math.floor(box.width / 2),
-    row: box.row + Math.floor(box.height / 2),
-  };
+  const middle = groveMiddle(box);
   // The footprint is three by three and the anchor is its top-left, so the
   // tree stands one cell up and left of the middle of the box.
   const tree = { col: middle.col - 1, row: middle.row - 1 };
   const great = put(grid, LandmarkType.GreatTree, tree.col, tree.row, 3, true);
   if (great) placed.push(great);
 
-  const distance = (col: number, row: number) =>
-    Math.max(Math.abs(col - middle.col), Math.abs(row - middle.row));
+  /**
+   * Where a cell stands: how far out it is, and how far the two edges are in
+   * that direction.
+   *
+   * As the crow flies, and that is the whole of the fix. It used to be the
+   * longer of the two sides, which is a square — and a nineteen-tile square
+   * of lawn in the middle of a wood is what the playtest saw.
+   */
+  const standing = (col: number, row: number) => {
+    const out = Math.hypot(col - middle.col, row - middle.row);
+    return { out, ...reachAt(box, angleFrom(middle, { col, row })) };
+  };
 
-  // The ground, before anything is grown on it: grass inside the clearing
-  // and wood outside it, whatever the box landed on. The grove is one
-  // picture — a ring of wood round a patch of grass — and inheriting the
-  // band it was placed in put the great tree in a field of scrub as often as
-  // not.
+  // The ground, before anything is grown on it: grass inside the clearing,
+  // wood as far as the wood reaches, and past that whatever the world put
+  // there. The grove is one picture — a ring of wood round a patch of grass
+  // — and inheriting the band it was placed in put the great tree in a field
+  // of scrub as often as not.
+  //
+  // The corners of the box are deliberately left alone. Painting the whole
+  // rectangle woodland drew a square of trees in the hillside wherever the
+  // box straddled a band, which is the same complaint as the lawn: the wood
+  // has a shape, and its shape is not its bounding box.
   for (let row = box.row; row < box.row + box.height; row++) {
     for (let col = box.col; col < box.col + box.width; col++) {
       if (!grid.inBounds(col, row)) continue;
-      grid.setTerrain(
-        col,
-        row,
-        distance(col, row) <= CLEARING_RADIUS ? TerrainType.Grass : TerrainType.Woodland,
-      );
+      const { out, clearing, wood } = standing(col, row);
+      if (out <= clearing) grid.setTerrain(col, row, TerrainType.Grass);
+      else if (out <= wood) grid.setTerrain(col, row, TerrainType.Woodland);
     }
   }
 
@@ -213,29 +338,46 @@ export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove 
   // Two rings of lights round one tree said neither: the beds' corners were
   // lost among lights that meant nothing.
 
-  // The wood. Thick, and thickest at the edges of the box — walking in
-  // should feel like the trees opening out rather than like arriving at a
-  // lawn with a tree on it.
+  // The wood. Thickest through the middle of the band and thinning at both
+  // its edges — walking in should feel like the trees opening out rather
+  // than like arriving at a lawn with a tree on it.
+  //
+  // What it thins *to* is the number the world scatters woodland at, so the
+  // wood arrives at the density of the country around it and there is no
+  // boundary to see. It used to thicken all the way to the edge of the box
+  // and stop dead there, which drew the rectangle in trees.
+  //
+  // And the ground beyond the wood, out in the corners of the box, is
+  // scattered at the world's own rate — because the world will not do it.
+  // The scatter skips reserved areas altogether, so anything the grove does
+  // not put down leaves bare ground in a square hole in the countryside.
   for (let row = box.row; row < box.row + box.height; row++) {
     for (let col = box.col; col < box.col + box.width; col++) {
-      const out = distance(col, row);
-      if (out <= CLEARING_RADIUS) continue;
+      const { out, clearing, wood } = standing(col, row);
+      if (out <= clearing) continue;
       const kind = sceneryOn(grid.getTerrain(col, row));
       if (!kind) continue;
-      // Denser the further out, from about a third at the clearing's edge to
-      // most of the ground at the box's own.
-      const chance = Math.min(0.75, 0.28 + (out - CLEARING_RADIUS) * 0.07);
+      const along = (out - clearing) / Math.max(1, wood - clearing);
+      const chance =
+        out >= wood
+          ? naturalDensity(grid.getTerrain(col, row))
+          : WOOD_THIN + WOOD_THICK * Math.sin(Math.PI * along ** 0.7);
       if (randInt(rng, 1, 100) > chance * 100) continue;
       const tree = put(grid, sceneryType(kind), col, row, 1, true);
       if (tree) placed.push(tree);
     }
   }
 
-  // And lights among the trees, so the way in is lit.
-  for (let n = 0; n < SCATTERED_LIGHTS; n++) {
+  // And lights among the trees, so the way in is lit. By the size of the
+  // box rather than a flat count: the fourteen this used to place were
+  // fourteen in a twenty-four-tile box, and the same fourteen spread through
+  // a wood twice the size is a wood you cross in the dark.
+  const lights = Math.round((box.width * box.height) / CELLS_PER_LIGHT);
+  for (let n = 0; n < lights; n++) {
     const col = randInt(rng, box.col, box.col + box.width - 1);
     const row = randInt(rng, box.row, box.row + box.height - 1);
-    if (distance(col, row) <= CLEARING_RADIUS) continue;
+    const { out, clearing, wood } = standing(col, row);
+    if (out <= clearing || out > wood) continue;
     const light = put(grid, FixtureType.Glowcap, col, row, 1, false);
     if (light) placed.push(light);
   }

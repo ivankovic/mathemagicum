@@ -32,6 +32,15 @@ const ANCHOR_SIZE = 24;
 const ANCHOR_SIZES: Readonly<Record<string, number>> = {
   "big-city": 36,
   harbour: 30,
+  // The enchanted forest, for the same kind of reason and a different one.
+  //
+  // Its clearing has to hold the four beds the great tree asks to have
+  // filled, whose far corners stand ten tiles out; and the clearing is a
+  // circle now rather than a square (see `enchantedForest.ts`), so ten tiles
+  // out in *every* direction rather than only along the diagonals. At
+  // twenty-four that left a ring of wood a tile or two thick, which is a
+  // hedge round a lawn. At thirty-six there is a wood to walk through.
+  "enchanted-forest": 36,
 };
 const PADDING = 3;
 const MAX_ATTEMPTS = 500;

@@ -34,9 +34,20 @@ import type { GridPoint } from "../world/topdown";
  *
  * Deliberately manual. Deriving it — hashing the generator's source, say —
  * would invalidate every save on a comment, and a scheme that cries wolf is
- * one somebody eventually routes around.
+ * one somebody eventually routes around. What keeps it honest instead is
+ * `generatorPin.test.ts`, which fails the moment a seed grows something
+ * different and can only be quieted by writing the new fingerprints down —
+ * next to which this line is impossible to miss.
+ *
+ * **2** — the enchanted forest became round. Its clearing was a square of
+ * lawn measured in Chebyshev steps and is a wandering circle now, its box
+ * grew from twenty-four tiles to thirty-six to hold one, and its wood thins
+ * into the country instead of stopping at the box's edge. The grove is drawn
+ * before the harbour, the city and the observatory and draws from the same
+ * rng, so all four moved: every seed grows a different world, which is
+ * exactly what this number is for.
  */
-export const GENERATOR_VERSION = 1;
+export const GENERATOR_VERSION = 2;
 
 /**
  * Bumped when the shape below changes, which is a different thing.

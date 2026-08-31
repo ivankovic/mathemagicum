@@ -525,6 +525,24 @@ patch of grass, made rather than inherited. It used to take the terrain of
 whatever band the box landed in, which put the great tree in a field of scrub
 as often as not.
 
+**Round, and not quite round.** The picture is the same one; the shape it is
+drawn in is not. The clearing used to be measured in Chebyshev steps, which
+draws a square — a nineteen-tile lawn in the middle of a wood, reported from
+a playtest as *the enchanted forest is too square, it looks unnatural*. It is
+a distance now, with a boundary that wanders: two waves of different
+frequency, phased off where the box landed, so the edge is different in every
+world and never repeats itself round the circle. The wood outside it thins
+back to the density the world scatters woodland at, rather than thickening to
+the edge of the anchor box and stopping dead, and the corners of the box the
+wood does not reach are scattered at the country's own rate — because the
+world's scatter skips reserved areas, and anything the grove does not put
+there is a square hole cut out of the countryside.
+
+The box grew from twenty-four tiles to thirty-six to pay for it. A round
+clearing has to hold the four beds in every direction rather than only along
+the diagonals, and their far corners stand ten tiles out; at twenty-four that
+left a ring of wood a tile or two thick, which is a hedge round a lawn.
+
 It also does not break "learning over gating", and the line is worth being
 exact about. Nothing here is locked behind **being good at arithmetic** — a
 child who answers every one of those thirty problems wrongly still finishes

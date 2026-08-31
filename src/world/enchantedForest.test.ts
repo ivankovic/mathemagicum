@@ -19,7 +19,15 @@ import { createRng } from "./rng";
 import { patchCells } from "./selection";
 import { TerrainType } from "./terrain";
 
-const BOX: AreaPlacement = { id: "enchanted-forest", col: 40, row: 40, width: 24, height: 24 };
+/**
+ * The size the generator actually builds, which is not what this used to be.
+ *
+ * Twenty-four while the clearing was a square measured in Chebyshev steps.
+ * A round clearing has to hold the four beds in *every* direction rather
+ * than only along the diagonals, which takes eleven tiles — and eleven of a
+ * twelve-tile half leaves a hedge where the wood goes. See `ANCHOR_SIZES`.
+ */
+const BOX: AreaPlacement = { id: "enchanted-forest", col: 40, row: 40, width: 36, height: 36 };
 
 function grown() {
   const grid = WorldGrid.empty(120, 120, TerrainType.Grass);
@@ -52,21 +60,104 @@ describe("the grove", () => {
     expect(lights.length).toBeGreaterThan(8);
   });
 
-  // A wood you can see straight through is a field with trees in it. The
-  // scatter thickens outward, so the ring nearest the box edge has to be
-  // denser than the ring nearest the tree.
+  /**
+   * A wood you can see straight through is a field with trees in it.
+   *
+   * Measured as the crow flies now, in rings rather than in squares, which
+   * is the whole of the change: the ring just outside the clearing has to be
+   * thicker than the ground the clearing itself covers, and the middle of
+   * the band thicker again. Rings by area, so a wider ring is not counted as
+   * a denser one.
+   */
   test("thickens outward from the clearing", () => {
-    const { grove } = grown();
+    const { grid } = grown();
     const middle = { col: BOX.col + BOX.width / 2, row: BOX.row + BOX.height / 2 };
-    const ring = (from: number, to: number) =>
-      grove.placed.filter((object) => {
-        const out = Math.max(Math.abs(object.col - middle.col), Math.abs(object.row - middle.row));
-        return out >= from && out < to;
-      }).length;
-    const cells = (from: number, to: number) => (2 * to - 1) ** 2 - (2 * from - 1) ** 2;
-    const near = ring(6, 8) / cells(6, 8);
-    const far = ring(10, 12) / cells(10, 12);
-    expect({ denser: far > near }).toEqual({ denser: true });
+    const ring = (from: number, to: number) => {
+      let cells = 0;
+      let standing = 0;
+      for (let row = BOX.row; row < BOX.row + BOX.height; row++) {
+        for (let col = BOX.col; col < BOX.col + BOX.width; col++) {
+          const out = Math.hypot(col - middle.col, row - middle.row);
+          if (out < from || out >= to) continue;
+          cells++;
+          if (grid.getObjectAt(col, row)) standing++;
+        }
+      }
+      return cells === 0 ? 0 : standing / cells;
+    };
+    const inside = ring(4, 9);
+    const band = ring(13, 16);
+    expect({ thicker: band > inside + 0.25 }).toEqual({ thicker: true });
+  });
+
+  /**
+   * And the corners of the box are country, not a bald patch.
+   *
+   * The world's scatter skips reserved areas altogether, so every tile
+   * inside this box is the grove's to fill or to leave empty. The wood is
+   * round and the box is square, which leaves four corners the wood does not
+   * reach — and if the grove left them alone they would be a square hole cut
+   * out of the countryside, which is the same complaint the round clearing
+   * was for.
+   */
+  test("scatters the corners the wood does not reach", () => {
+    const { grid } = grown();
+    const corner = { col: BOX.col + 2, row: BOX.row + 2 };
+    let cells = 0;
+    let standing = 0;
+    for (let row = corner.row; row < corner.row + 4; row++) {
+      for (let col = corner.col; col < corner.col + 4; col++) {
+        cells++;
+        if (grid.getObjectAt(col, row)) standing++;
+      }
+    }
+    expect({ cells, bald: standing === 0 }).toEqual({ cells: 16, bald: false });
+  });
+
+  /**
+   * The shape itself: round, and not the same circle twice.
+   *
+   * Sampled by walking out from the middle along a spread of angles and
+   * noting where the grass gives way. A square measured in Chebyshev steps —
+   * which is what this was — reads √2 times further out at its corners than
+   * at the middle of its sides; a plain circle reads exactly the same in
+   * every direction, which is a shape nothing grew either.
+   */
+  test("the clearing is a circle with a wander in it", () => {
+    const { grid } = grown();
+    const middle = { col: BOX.col + BOX.width / 2, row: BOX.row + BOX.height / 2 };
+    const edges: number[] = [];
+    for (let step = 0; step < 24; step++) {
+      const angle = (step / 24) * 2 * Math.PI;
+      let out = 0;
+      while (out < BOX.width) {
+        const col = Math.round(middle.col + Math.cos(angle) * (out + 1));
+        const row = Math.round(middle.row + Math.sin(angle) * (out + 1));
+        if (!grid.inBounds(col, row) || grid.getTerrain(col, row) !== TerrainType.Grass) break;
+        out++;
+      }
+      edges.push(out);
+    }
+    const near = Math.min(...edges);
+    const far = Math.max(...edges);
+    // Every sixth sample is an axis and the ones between them the diagonals.
+    // This is what tells a wandering circle from a square: a square measured
+    // in Chebyshev steps reaches √2 further along its diagonals than along
+    // its sides, every time, and that is a ratio no wander produces.
+    const mean = (steps: readonly number[]) =>
+      steps.reduce((sum, step) => sum + (edges[step] ?? 0), 0) / steps.length;
+    const axes = mean([0, 6, 12, 18]);
+    const diagonals = mean([3, 9, 15, 21]);
+    expect({
+      // It wanders: a plain circle comes back the same number every time.
+      wanders: far > near,
+      // And its corners are not further out than its sides, which is the
+      // whole of what "too square" meant.
+      notASquare: diagonals / axes < 1.15,
+      // And it is big enough to hold the beds, whose far corners stand ten
+      // tiles out — which is why the radius is eleven and not nine.
+      holdsTheBeds: near >= 10,
+    }).toEqual({ wanders: true, notASquare: true, holdsTheBeds: true });
   });
 
   test("never stacks two things on one cell", () => {
@@ -228,18 +319,45 @@ describe("what the great tree asks for", () => {
     }
   });
 
-  // The whole point of the change: a ring of wood round a patch of grass,
-  // whatever band the box was placed in.
-  test("the clearing is grass and the ring round it is wood", () => {
+  /**
+   * A ring of wood round a patch of grass, whatever band the box landed in.
+   *
+   * The grove makes its own ground rather than inheriting what it was
+   * dropped on — a hilly band used to put the great tree in a field of
+   * scrub. What it does *not* make any more is the corners of its box: the
+   * wood is round, and painting the rectangle woodland drew a square of
+   * trees across the hillside wherever the box straddled a band. This grid
+   * starts as grass everywhere, so a corner that is still grass is a corner
+   * the grove left alone.
+   */
+  test("the clearing is grass, the ring round it is wood, and the corners are the world's", () => {
     const { grid, grove } = grown();
+    const middle = { col: BOX.col + BOX.width / 2, row: BOX.row + BOX.height / 2 };
     expect(grid.getTerrain(grove.tree.col, grove.tree.row)).toBe(TerrainType.Grass);
+    // Fourteen tiles out along each axis is inside the wood in every
+    // direction: the wood reaches at least fifteen after its wander.
+    for (const [dCol, dRow] of [
+      [14, 0],
+      [-14, 0],
+      [0, 14],
+      [0, -14],
+    ] as const) {
+      const at = { col: middle.col + dCol, row: middle.row + dRow };
+      expect({ at, terrain: grid.getTerrain(at.col, at.row) }).toEqual({
+        at,
+        terrain: TerrainType.Woodland,
+      });
+    }
     for (const at of [
       { col: BOX.col, row: BOX.row },
       { col: BOX.col + BOX.width - 1, row: BOX.row },
       { col: BOX.col, row: BOX.row + BOX.height - 1 },
       { col: BOX.col + BOX.width - 1, row: BOX.row + BOX.height - 1 },
     ]) {
-      expect(grid.getTerrain(at.col, at.row)).toBe(TerrainType.Woodland);
+      expect({ at, terrain: grid.getTerrain(at.col, at.row) }).toEqual({
+        at,
+        terrain: TerrainType.Grass,
+      });
     }
   });
 
@@ -254,14 +372,34 @@ describe("what the great tree asks for", () => {
 });
 
 describe("the wood's own dusk", () => {
-  test("is full anywhere inside the box", () => {
-    for (const at of [
-      { col: BOX.col, row: BOX.row },
-      { col: BOX.col + BOX.width - 1, row: BOX.row + BOX.height - 1 },
-      { col: BOX.col + 12, row: BOX.row + 12 },
-    ]) {
-      expect(duskOver(BOX, at)).toBe(1);
+  /**
+   * Full anywhere inside the wood — which is no longer the same thing as
+   * anywhere inside the box.
+   *
+   * The tint follows the trees. It used to be measured to the box, corners
+   * and all, which was right while the wood was a rectangle: a square of
+   * dusk round a round wood would be the same report over again, drawn in
+   * shade rather than in trees.
+   */
+  test("is full anywhere inside the wood", () => {
+    const middle = { col: BOX.col + BOX.width / 2, row: BOX.row + BOX.height / 2 };
+    for (const [dCol, dRow] of [
+      [0, 0],
+      [14, 0],
+      [0, -14],
+      [-9, 9],
+    ] as const) {
+      const at = { col: middle.col + dCol, row: middle.row + dRow };
+      expect({ at, dusk: duskOver(BOX, at) }).toEqual({ at, dusk: 1 });
     }
+  });
+
+  // And thinner out in the corners of the box, which the wood does not
+  // reach. Half a dozen tiles past the trees is half a dozen tiles of
+  // daylight, whether it is inside the anchor's rectangle or not.
+  test("has already begun to lift in the corners of the box", () => {
+    const corner = duskOver(BOX, { col: BOX.col, row: BOX.row });
+    expect({ lifting: corner < 1, dark: corner > 0 }).toEqual({ lifting: true, dark: true });
   });
 
   test("is nothing well outside it", () => {
@@ -283,12 +421,20 @@ describe("the wood's own dusk", () => {
     }
   });
 
-  // Measured to the box, not to its centre: a centre distance would make a
-  // square wood's corners darker than the middle of its edges.
-  test("treats a corner and an edge the same distance out alike", () => {
-    const edge = duskOver(BOX, { col: BOX.col - 4, row: BOX.row + 12 });
-    const corner = duskOver(BOX, { col: BOX.col - 4, row: BOX.row + BOX.height + 3 });
-    expect(corner).toBeLessThan(edge);
-    expect(duskOver(BOX, { col: BOX.col - 4, row: BOX.row - 4 })).toBeLessThan(edge);
+  /**
+   * And it is measured from the middle, which it was not.
+   *
+   * While the wood was a rectangle this had to measure to the *box* — a
+   * centre distance would have made a square wood's corners darker than the
+   * middles of its sides, for no reason anybody standing there could see.
+   * The wood is round now and a centre distance is exactly right: out past
+   * the corner of the box is further from the trees than out past the middle
+   * of its side, and it should be lighter for it.
+   */
+  test("lifts sooner out past a corner than out past a side", () => {
+    const middle = { col: BOX.col + BOX.width / 2, row: BOX.row + BOX.height / 2 };
+    const side = duskOver(BOX, { col: middle.col - 22, row: middle.row });
+    const corner = duskOver(BOX, { col: middle.col - 22, row: middle.row - 22 });
+    expect({ dimmer: side > corner, lit: corner }).toEqual({ dimmer: true, lit: 0 });
   });
 });
