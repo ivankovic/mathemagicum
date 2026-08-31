@@ -9,6 +9,8 @@ import {
   SHUTS_AT,
   STARGAZING_HOURS,
   VILLAGE_HOURS,
+  clockFace,
+  isDaylight,
   isOpenHours,
   nightTintAlpha,
   opensIn,
@@ -92,6 +94,59 @@ describe("the light and the opening hours are not the same thing", () => {
   test("and still dark when they open", () => {
     expect(nightTintAlpha(OPENS_AT)).toBe(0);
     expect(nightTintAlpha(5)).toBeGreaterThan(0);
+  });
+});
+
+describe("what the corner of the screen says", () => {
+  /**
+   * The picture beside the digits, and the whole reason there are any.
+   *
+   * Reported from a playtest: *it's hard for the player to know if it is day
+   * or night*. It follows the light rather than the village's hours, which
+   * are deliberately a different pair — a moon drawn over a bright garden
+   * because the shops have shut is exactly the mistake this must not make.
+   */
+  test("the sun is up while the sky is light, not while the shops are open", () => {
+    expect(isDaylight(SHUTS_AT)).toBe(true);
+    expect(isDaylight(12)).toBe(true);
+    expect(isDaylight(3)).toBe(false);
+    expect(isDaylight(23)).toBe(false);
+  });
+
+  test("and it is dark before the village opens", () => {
+    expect(isDaylight(OPENS_AT - 3)).toBe(false);
+  });
+
+  /**
+   * Twelve hours, because twelve is the clock this game teaches.
+   *
+   * The hourglass spell asks a child to read hands off a face; a corner of
+   * the screen saying 14:35 would be handing them a second notation for the
+   * same time before they had the first.
+   */
+  test("the clock reads as a face does, with midnight and noon as twelve", () => {
+    expect(clockFace(0)).toBe("12:00");
+    expect(clockFace(12)).toBe("12:00");
+    expect(clockFace(13.5)).toBe("1:30");
+    expect(clockFace(9.25)).toBe("9:15");
+  });
+
+  // Truncated rather than rounded, like `readClock` and for its reason: a
+  // clock a minute ahead of itself is a clock that is wrong.
+  test("it never reads a minute that has not happened", () => {
+    expect(clockFace(7.9999)).toBe("7:59");
+    expect(clockFace(23.9999)).toBe("11:59");
+  });
+
+  // Whatever the hourglass has done to the world's clock, this has to have
+  // something to say about it — the spell winds forward without limit.
+  test("it says something sensible however far the glass has wound", () => {
+    for (const hour of [-0.5, 24, 25.5, 48.75]) {
+      expect({ hour, reads: /^\d{1,2}:[0-5]\d$/.test(clockFace(hour)) }).toEqual({
+        hour,
+        reads: true,
+      });
+    }
   });
 });
 

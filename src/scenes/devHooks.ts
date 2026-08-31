@@ -753,6 +753,14 @@ export interface DevHandle {
    */
   readonly floatingMarks: () => number;
   /**
+   * What the clock in the corner of the screen is showing.
+   *
+   * The hour on a twelve-hour face, the date in the words this language
+   * writes one in, and which picture is beside them — `ui-mark-day` for the
+   * sun, `ui-mark-night` for the moon.
+   */
+  readonly hudClock: () => { time: string; date: string; sky: string; shown: boolean };
+  /**
    * Which building she is standing inside, or null for out of doors.
    *
    * `house` answers this for her *own* house and only for that, because it

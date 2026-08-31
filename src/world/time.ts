@@ -110,6 +110,43 @@ export function opensIn(hour: number, hours: OpeningHours = VILLAGE_HOURS): numb
   return wait >= 0 ? wait : wait + 24;
 }
 
+/**
+ * Whether the sun is up.
+ *
+ * The one question the interface's clock exists to answer. Reported from a
+ * playtest: *the UI is missing a clock and date. It's hard for the player to
+ * know if it is day or night.* The tint says it, and the tint is a slow ramp
+ * a child who has been indoors for ten minutes has no baseline for — so the
+ * corner of the screen says it in a picture as well.
+ *
+ * The light rather than the village's hours, which are a different pair on
+ * purpose (see `OPENS_AT`): the shops shut at six with the sun still well
+ * up, and a moon over a bright garden is what that mistake looks like.
+ */
+export function isDaylight(hour: number): boolean {
+  return hour >= SUNRISE && hour < SUNSET;
+}
+
+/**
+ * The hour as a clock face shows it: twelve hours, and the minutes past.
+ *
+ * Twelve rather than twenty-four, because twelve is the clock this game
+ * teaches — the hourglass spell asks a child to read hands off a face, and a
+ * corner of the screen saying `14:35` would be teaching them a second
+ * notation for the same time before they have the first. Which half of the
+ * day it is comes from the sun or moon beside it, which is a better answer
+ * for a five-year-old than `pm` anyway.
+ *
+ * Truncated rather than rounded, like `readClock` and for its reason: a
+ * clock that reads a minute ahead of itself is a clock that is wrong.
+ */
+export function clockFace(hour: number): string {
+  const wrapped = ((hour % 24) + 24) % 24;
+  const minutes = Math.floor(wrapped * 60);
+  const face = Math.floor(minutes / 60) % 12;
+  return `${face === 0 ? 12 : face}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
 // 0 (no tint, full day) to MAX_NIGHT_ALPHA (full night), ramping linearly
 // across TRANSITION_HOURS on each side of sunrise/sunset.
 export function nightTintAlpha(hour: number): number {

@@ -483,6 +483,8 @@ import {
   type OpeningHours,
   STARGAZING_HOURS,
   VILLAGE_HOURS,
+  clockFace,
+  isDaylight,
   isOpenHours,
   nightTintAlpha,
   opensIn,
@@ -757,6 +759,17 @@ const WINDOW_LIGHT_RADIUS = WINDOW_PANE_PX * CAMERA_ZOOM;
 const WINDOW_GLOW_COLOR = 0xffb257;
 const WINDOW_GLOW_ALPHA = 0.78;
 const HUD_MARGIN = 8;
+/**
+ * The clock's box, and the sun or moon in it.
+ *
+ * Wide enough for `12:00` at fifteen pixels beside the picture, with a
+ * little air after it — `10:00` sat hard against the right-hand stroke at
+ * eighty-four. The longest date the three languages write is `31 pros`,
+ * which is shorter than the time above it, so the time sets the width.
+ */
+const CLOCK_HUD_W = 96;
+const CLOCK_HUD_H = 38;
+const CLOCK_HUD_ICON = 18;
 
 /**
  * The most ducats the purse badge prints before it says "and more".
@@ -1688,6 +1701,20 @@ export class GameScene extends Phaser.Scene {
    * One at a time, and this is what enforces it. See `floatMark`.
    */
   private floatingMark?: Phaser.GameObjects.Image;
+  /**
+   * The clock in the corner: the hour, the day, and which half of the day.
+   *
+   * See `createClockHud`. Kept as one object because the four pieces are
+   * laid out against each other and are shown and hidden together.
+   */
+  private clockHud?: {
+    box: Phaser.GameObjects.Rectangle;
+    sky: Phaser.GameObjects.Image;
+    time: Phaser.GameObjects.Text;
+    date: Phaser.GameObjects.Text;
+  };
+  /** What the clock last wrote, so it is only rewritten when it changes. */
+  private clockShowing = "";
   // Sprites for fixtures the *player* put down, so one can be picked back
   // up. Deliberately not the village well: it was placed by generation and
   // is not hers to take.
@@ -2362,6 +2389,7 @@ export class GameScene extends Phaser.Scene {
     this.applyCropPrice();
     this.applyRung();
     this.createOptionsButton();
+    this.createClockHud();
     // The coin line is written whenever money moves, and money starting in
     // the purse is not money moving: ?coins= showed nothing until the first
     // trade, and a saved purse would have done the same.
@@ -2716,6 +2744,19 @@ export class GameScene extends Phaser.Scene {
               (object.texture.key === uiTextureKey(UiAsset.MarkNight) ||
                 object.texture.key === uiTextureKey(UiAsset.MarkDay)),
           ).length,
+      /**
+       * What the clock in the corner is showing, as a child sees it.
+       *
+       * Read off the text objects rather than worked out again, which is the
+       * point: `worldClock` already says what hour the world is at, and this
+       * says what the screen is telling somebody about it.
+       */
+      hudClock: () => ({
+        time: this.clockHud?.time.text ?? "",
+        date: this.clockHud?.date.text ?? "",
+        sky: this.clockHud?.sky.texture.key ?? "",
+        shown: this.clockHud?.box.visible ?? false,
+      }),
       // Where the world's clock stands, and how far it has been wound from
       // the real one. The spell's whole effect, and nothing on screen states
       // it as a number — the light does, which a script cannot read.
@@ -2931,6 +2972,9 @@ export class GameScene extends Phaser.Scene {
     // carry it: two setVisible calls, and it cannot fall out of step with
     // whether a panel is open.
     this.refreshOptionsButton();
+    // And the clock beside it, for the same reason: it is two hands of the
+    // world's own state and nothing else repaints it.
+    this.refreshClockHud();
 
     // Depth follows the sprite's own y, which is its feet — so it stays
     // correct part-way through a step rather than only at whole tiles.
@@ -3594,6 +3638,7 @@ export class GameScene extends Phaser.Scene {
    */
   private layoutHud(): void {
     this.placeOptionsButton();
+    this.placeClockHud();
   }
 
   // --- Asset metadata ----------------------------------------------------
@@ -7837,6 +7882,103 @@ export class GameScene extends Phaser.Scene {
     box.on("pointerdown", () => this.openOptions());
     this.optionsButton = { box, label };
     this.placeOptionsButton();
+  }
+
+  /**
+   * The clock in the opposite corner from the options button.
+   *
+   * Reported from a playtest: *the UI is missing a clock and date. It's hard
+   * for the player to know if it is day or night.* Everything in this game
+   * that turns on the hour — the doors, the villagers going home, the
+   * astronomer, the light itself — had no face anywhere on the screen, so a
+   * child met a locked door with nothing to check it against.
+   *
+   * Three things, in the order they matter. **A sun or a moon**, which is
+   * the part a five-year-old reads without being taught and the part the
+   * report was actually about; the digits beside it are for whoever can
+   * already read a clock. **The hour on a twelve-hour face**, because twelve
+   * is the clock the hourglass spell teaches — see `clockFace`. And **the
+   * date**, in the words the game already writes a date in: `gameWhen` puts
+   * the day and the short month on the save list, in all three languages.
+   *
+   * It reads `worldNow`, not the wall clock, so winding the glass moves this
+   * with everything else. A clock that went on showing the real time while
+   * the sky went dark would be the one thing on screen contradicting the
+   * spell.
+   */
+  private createClockHud(): void {
+    const box = this.ui(
+      this.add
+        .rectangle(0, 0, CLOCK_HUD_W, CLOCK_HUD_H, 0x1b1710, 0.65)
+        .setOrigin(0, 0)
+        .setStrokeStyle(1, 0xd8c08a, 0.8)
+        .setScrollFactor(0)
+        .setDepth(HUD_DEPTH),
+    );
+    const sky = this.ui(
+      this.add
+        .image(0, 0, uiTextureKey(UiAsset.MarkDay))
+        .setOrigin(0, 0.5)
+        .setDisplaySize(CLOCK_HUD_ICON, CLOCK_HUD_ICON)
+        .setScrollFactor(0)
+        .setDepth(HUD_DEPTH),
+    );
+    const time = this.ui(
+      this.add
+        .text(0, 0, "", { fontFamily: "monospace", fontSize: "15px", color: "#f0e0b8" })
+        .setOrigin(0, 0)
+        .setScrollFactor(0)
+        .setDepth(HUD_DEPTH),
+    );
+    const date = this.ui(
+      this.add
+        .text(0, 0, "", { fontFamily: "monospace", fontSize: "10px", color: "#c8b48c" })
+        .setOrigin(0, 0)
+        .setScrollFactor(0)
+        .setDepth(HUD_DEPTH),
+    );
+    this.clockHud = { box, sky, time, date };
+    this.placeClockHud();
+    this.refreshClockHud();
+  }
+
+  /**
+   * Top left, which is the one corner of this screen with nothing in it.
+   *
+   * The options button has the top right, the trays the bottom right, and
+   * the joystick comes up wherever a thumb lands on the bottom left.
+   */
+  private placeClockHud(): void {
+    const hud = this.clockHud;
+    if (!hud) return;
+    hud.box.setPosition(HUD_MARGIN, HUD_MARGIN);
+    hud.sky.setPosition(HUD_MARGIN + 7, HUD_MARGIN + CLOCK_HUD_H / 2);
+    hud.time.setPosition(HUD_MARGIN + 11 + CLOCK_HUD_ICON, HUD_MARGIN + 4);
+    hud.date.setPosition(HUD_MARGIN + 11 + CLOCK_HUD_ICON, HUD_MARGIN + 22);
+  }
+
+  /**
+   * Wind it on, once a minute's worth of world has passed.
+   *
+   * Called every frame and writes almost never: the digits are compared
+   * against what is already up, because setting the same string on a Phaser
+   * text object rebuilds its texture, and doing that sixty times a second
+   * for a number that changes once a minute is a whole frame's budget spent
+   * on nothing.
+   */
+  private refreshClockHud(): void {
+    const hud = this.clockHud;
+    if (!hud) return;
+    const shown = !this.modalOpen;
+    for (const piece of [hud.box, hud.sky, hud.time, hud.date]) piece.setVisible(shown);
+    if (!shown) return;
+    const hour = this.hourNow();
+    const face = `${clockFace(hour)}|${this.words.gameWhen(this.worldNow())}|${isDaylight(hour)}`;
+    if (face === this.clockShowing) return;
+    this.clockShowing = face;
+    hud.time.setText(clockFace(hour));
+    hud.date.setText(this.words.gameWhen(this.worldNow()));
+    hud.sky.setTexture(uiTextureKey(isDaylight(hour) ? UiAsset.MarkDay : UiAsset.MarkNight));
   }
 
   private placeOptionsButton(): void {
