@@ -1661,6 +1661,12 @@ export class GameScene extends Phaser.Scene {
   private introPath: GridPoint[] = [];
   private introPathFor: GridPoint | null = null;
   private optionsButton?: { box: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text };
+  /**
+   * The picture rising over her head, while there is one.
+   *
+   * One at a time, and this is what enforces it. See `floatMark`.
+   */
+  private floatingMark?: Phaser.GameObjects.Image;
   // Sprites for fixtures the *player* put down, so one can be picked back
   // up. Deliberately not the village well: it was placed by generation and
   // is not hers to take.
@@ -2671,6 +2677,24 @@ export class GameScene extends Phaser.Scene {
         hour: this.hourNow(),
         opensIn: opensIn(this.hourNow()),
       }),
+      /**
+       * How many pictures are rising over her head at this moment.
+       *
+       * Counted off the layer rather than reported from the field that holds
+       * the one, so it is a count of what is on screen and not of what the
+       * scene believes it put there. A moon and a sun are the only two
+       * drawn this way — the runes a spell is earned with are their own
+       * picture, and an animal's cloud is a container rather than an image.
+       */
+      floatingMarks: () =>
+        this.sceneryLayer()
+          .getChildren()
+          .filter(
+            (object) =>
+              object instanceof Phaser.GameObjects.Image &&
+              (object.texture.key === uiTextureKey(UiAsset.MarkNight) ||
+                object.texture.key === uiTextureKey(UiAsset.MarkDay)),
+          ).length,
       // Where the world's clock stands, and how far it has been wound from
       // the real one. The spell's whole effect, and nothing on screen states
       // it as a number — the light does, which a script cannot read.
@@ -7173,21 +7197,40 @@ export class GameScene extends Phaser.Scene {
    * the cross on the door itself is the refusal. Calling `showEarned` for it
    * worked and read, in the code, as the village awarding a child the night.
    */
-  private floatMark(icon: string): void {
+  private floatMark(icon: string): boolean {
+    // One at a time, and the second one is refused rather than replaced.
+    //
+    // Reported from a playtest as *the moon comes up many times*. Leaning on
+    // a key at a shut door is not one refusal: `tryMove` runs once per step
+    // for as long as the key is held, and each one used to put another moon
+    // over her head — half a dozen of them rising in a column, which reads
+    // as something having gone wrong rather than as the reason the door will
+    // not open.
+    //
+    // Refused rather than restarted, because a mark whose tween is reset
+    // every step never rises and never fades: it hangs over her head for as
+    // long as she leans on the door, which is a worse picture than the stack
+    // it would be fixing.
+    if (this.floatingMark) return false;
     const mark = this.world(
       this.add
         .image(this.player.x, this.player.y - TILE_SIZE, uiTextureKey(icon))
         .setDisplaySize(RESULT_ICON, RESULT_ICON)
         .setDepth(this.player.depth + 1),
     );
+    this.floatingMark = mark;
     this.tweens.add({
       targets: mark,
       y: mark.y - RESULT_RISE,
       alpha: 0,
       duration: EARNED_MS,
       ease: "Quad.easeOut",
-      onComplete: () => mark.destroy(),
+      onComplete: () => {
+        mark.destroy();
+        if (this.floatingMark === mark) this.floatingMark = undefined;
+      },
     });
+    return true;
   }
 
   private showEarned(rune: string): void {
@@ -10588,14 +10631,18 @@ export class GameScene extends Phaser.Scene {
    * *why*. A door that only said no would be a door a child taps again.
    */
   private refuseForTheNight(building: BuildingRuntime): void {
-    this.markRefusal(building.doorCol, building.doorRow);
     // Which way round it is shut. A moon on nearly everything, and a sun on
     // the dome — the two refusals mean opposite things and a child has to be
     // able to tell "they have gone to bed" from "come back when it is dark".
     // Read off the hours the door keeps rather than off a second list, so a
     // building that changed its hours cannot keep the wrong picture.
     const opensAtNight = this.hoursFor(building.id).opensAt > this.hoursFor(building.id).shutsAt;
-    this.floatMark(opensAtNight ? UiAsset.MarkDay : UiAsset.MarkNight);
+    // The reason first and the cross second, because the reason is the one
+    // that can be refused — one is already up — and a cross drawn beside a
+    // moon that is not there says no without saying why. Held against a
+    // door, this is now one refusal for as long as the key is down.
+    if (!this.floatMark(opensAtNight ? UiAsset.MarkDay : UiAsset.MarkNight)) return;
+    this.markRefusal(building.doorCol, building.doorRow);
   }
 
   private enterInterior(building: BuildingRuntime): void {

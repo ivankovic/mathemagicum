@@ -746,6 +746,13 @@ export interface DevHandle {
   readonly zoom: () => number;
   readonly openHours: () => { open: boolean; hour: number; opensIn: number };
   /**
+   * How many refusal pictures — a moon, a sun — are on screen at once.
+   *
+   * There should never be more than one. Walking into a shut door is a held
+   * key rather than a single press, and every step used to put up another.
+   */
+  readonly floatingMarks: () => number;
+  /**
    * Which building she is standing inside, or null for out of doors.
    *
    * `house` answers this for her *own* house and only for that, because it
