@@ -993,6 +993,7 @@ export class PlayersScene extends Phaser.Scene {
   private showNameBox(centreX: number, y: number): void {
     const canvas = this.game.canvas;
     const bounds = canvas.getBoundingClientRect();
+    const fresh = !this.nameBox;
     if (!this.nameBox) {
       const box = document.createElement("input");
       box.type = "text";
@@ -1034,7 +1035,6 @@ export class PlayersScene extends Phaser.Scene {
       window.visualViewport?.addEventListener("scroll", this.followBand);
       document.body.appendChild(box);
       this.nameBox = box;
-      box.focus();
     }
     this.nameBox.placeholder = this.words.namePrompt;
     const boxWidth = 220;
@@ -1044,6 +1044,24 @@ export class PlayersScene extends Phaser.Scene {
     // and every one of those needs this number again.
     this.nameBoxTop = bounds.top + y;
     this.placeNameBox();
+    // Focused last, and that is the whole of the second iPad report.
+    //
+    // A `position: fixed` box with no `top` yet sits at its *static*
+    // position, and this one is appended to a body whose only child is a
+    // canvas exactly one screen tall — so until the two lines above have run
+    // it is standing on the bottom edge of the screen, out of sight.
+    // Focusing it there is what set the phone off: a browser raises the
+    // keyboard for whatever has focus and scrolls to reveal it, there is
+    // nothing below the fold to scroll to, and so the page went up as far as
+    // it could and took the heading with it — and then the box was moved to
+    // where it belongs, which by that point was above what was still
+    // visible. The heading gone and the box gone, from the order of two
+    // lines.
+    //
+    // Only on the way in. A child stepping back to the colours and forward
+    // again keeps the box they already have, and re-focusing it there would
+    // call the keyboard up over a screen they did not ask it for.
+    if (fresh) this.nameBox.focus();
   }
 
   /**
