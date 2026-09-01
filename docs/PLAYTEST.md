@@ -438,6 +438,11 @@ quest is finished the tree opens a panel explaining a spell the child cannot
 have, with no visible statement of how to get it. That is the whole
 complaint.
 
+*(Since superseded on the other half as well: the spell is paid for the
+clearing now — `GroveTask.Overgrown` is the only stage that does not hand it
+over — and the beds are what she is asked to do **with** it. See "The
+multiplication spell" in GAME_DESIGN.)*
+
 **Fixed: the task is a page, and it is the page the deck opens on.** A fifth
 beat, `GroveBeat.Task`, ahead of the four that teach — headed *The tree's
 bed*, with what is still to do, the bargain under it (*"Do that and the six

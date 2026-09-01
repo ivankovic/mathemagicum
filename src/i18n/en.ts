@@ -245,7 +245,7 @@ export const EN: Phrases = {
       ? `The wood has closed over my beds. Take away the ${standing} that still stand.`
       : task === "done"
         ? "My grove is full. Go well."
-        : `Fill my beds with sunflowers: ${ripe} of ${squares} squares are ripe.`,
+        : `Now use what you have earned: take a sunflower from your pouch and cast the six dots over a whole bed at once. ${ripe} of ${squares} squares are ripe.`,
   groveTaskTitle: "The tree's beds",
   groveBargain: "Do that and the six dots are yours.",
   groveLessonTitle: "Rows and columns",

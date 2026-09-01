@@ -271,7 +271,7 @@ export const DE: Phrases = {
       ? `Das Gehölz hat meine Beete überwuchert. Nimm die ${standing} weg, die noch stehen.`
       : task === "done"
         ? "Mein Hain ist voll. Geh in Frieden."
-        : `Füll meine Beete mit Sonnenblumen: ${ripe} von ${squares} Kästchen sind reif.`,
+        : `Nimm jetzt, was du verdient hast: hol eine Sonnenblume aus deinem Beutel und sprich die sechs Punkte über ein ganzes Beet auf einmal. ${ripe} von ${squares} Kästchen sind reif.`,
   groveTaskTitle: "Die Beete des Baums",
   groveBargain: "Tu das, und die sechs Punkte gehören dir.",
   groveLessonTitle: "Reihen und Spalten",

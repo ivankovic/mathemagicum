@@ -467,7 +467,21 @@ export interface DevHandle {
    * village anchor, and a script that wanted to see it was reduced to
    * guessing at the map.
    */
-  readonly grove: () => { col: number; row: number };
+  /**
+   * The tree's doorstep, the tree itself, and the wood closed over its beds.
+   *
+   * Where a scenario has to stand to speak to it, and which squares its
+   * errand is about — neither of which a script can work out, because both
+   * come out of the world's seed.
+   */
+  readonly grove: () => {
+    col: number;
+    row: number;
+    tree: { col: number; row: number };
+    thicket: { col: number; row: number }[];
+  };
+  /** Which spells this child has been taught, as the profile has them. */
+  readonly spells: () => string[];
   /**
    * Every fire alight in the room she is standing in: where each is and how
    * brightly it is throwing light. Empty if there is no room, no fireplace,

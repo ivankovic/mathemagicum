@@ -167,6 +167,22 @@ export function patchIsCastable(patch: Patch): boolean {
  * facts about the world; only the drawing of the menu is the scene's.
  */
 export const PatchAction = {
+  /**
+   * Sow every square of it, in one cast.
+   *
+   * The newest of them and the one the tree's errand turns on. A seed costs
+   * nothing and planting one asks no arithmetic — it is a tap — so this is
+   * the one action whose whole price is the multiplication. Sixteen squares
+   * for one answer, against sixteen taps: that *is* the argument for
+   * multiplication, made with the child's own hands rather than in a
+   * sentence they cannot read.
+   *
+   * It plants whatever seed the pouch has last been asked for, which is the
+   * same seed the number keys plant and the same one the button shows — a
+   * patch action that picked its own crop would be a second way of choosing
+   * a seed, and the pouch is already the first.
+   */
+  Plant: "plant",
   Grow: "grow",
   Clear: "clear",
   /**

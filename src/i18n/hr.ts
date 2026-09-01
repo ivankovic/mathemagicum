@@ -406,7 +406,7 @@ export const HR: Phrases = {
       ? `Šuma mi je prekrila gredice. Ukloni ${standing} što još stoje.`
       : task === "done"
         ? "Moj je gaj pun. Sretno ti bilo."
-        : `Napuni mi gredice suncokretima: zrelo je ${ripe} od ${squares} polja.`,
+        : `Sad upotrijebi ono što si zaslužila: uzmi suncokret iz vrećice i baci šest točkica na cijelu gredicu odjednom. Zrelo je ${ripe} od ${squares} polja.`,
   groveTaskTitle: "Gredice starog drveta",
   groveBargain: "Učini to i šest točkica su tvoje.",
   groveLessonTitle: "Redovi i stupci",

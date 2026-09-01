@@ -743,6 +743,60 @@ describe("pulling a crop back out of the ground", () => {
   });
 });
 
+describe("planting a whole patch", () => {
+  /**
+   * The newest thing the times spell does, and the one with no sum in it.
+   *
+   * Planting by hand is a tap and costs no arithmetic, so a planted
+   * rectangle's whole price is the multiplication — sixteen squares for one
+   * answer. That is the argument for multiplication made with a child's own
+   * hands, which is why the great tree now hands the spell over *before* it
+   * asks for its beds rather than after.
+   */
+  test("every square of it that will take the seed", () => {
+    const grid = WorldGrid.empty(12, 12, TerrainType.Grass);
+    const patch: Patch = { col: 3, row: 3, width: 2, height: 2 };
+    expect(session(grid).plantableIn(PlantType.Sunflower, patch)).toHaveLength(4);
+  });
+
+  // And no square that is already spoken for. A patch that counted ground it
+  // would then refuse is a cast a child pays for and does not get.
+  test("but not the squares already planted", () => {
+    const grid = WorldGrid.empty(12, 12, TerrainType.Grass);
+    const patch: Patch = { col: 3, row: 3, width: 2, height: 2 };
+    expect(grid.plant(3, 3, PlantType.Carrot)).toBe(true);
+    const offered = session(grid).plantableIn(PlantType.Sunflower, patch);
+    expect(offered.map((at) => `${at.col},${at.row}`).sort()).toEqual(["3,4", "4,3", "4,4"]);
+  });
+
+  /**
+   * And the crop is asked about, not assumed.
+   *
+   * A cactus wants sand and a sunflower will not have it, so the same
+   * rectangle answers differently depending on what is in the pouch — which
+   * is why the button on the menu carries the seed's own picture.
+   */
+  test("and it depends which seed is in her hand", () => {
+    const sand = WorldGrid.empty(12, 12, TerrainType.Sand);
+    const patch: Patch = { col: 3, row: 3, width: 2, height: 2 };
+    const game = session(sand);
+    expect({
+      cactus: game.plantableIn(PlantType.Cactus, patch).length,
+      sunflower: game.plantableIn(PlantType.Sunflower, patch).length,
+    }).toEqual({ cactus: 4, sunflower: 0 });
+  });
+
+  // Indoors there is no ground at all, only floor.
+  test("and indoors there is nothing to plant in", () => {
+    const grid = WorldGrid.empty(12, 12, TerrainType.Grass);
+    const game = session(grid);
+    game.indoors = true;
+    expect(game.plantableIn(PlantType.Sunflower, { col: 3, row: 3, width: 2, height: 2 })).toEqual(
+      [],
+    );
+  });
+});
+
 describe("picking a whole patch", () => {
   /** Plant every square of a rectangle and bring some of them on to ripe. */
   function bed(grid: WorldGrid, patch: Patch, ripe: number): void {

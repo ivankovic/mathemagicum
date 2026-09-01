@@ -127,9 +127,14 @@ export class GroveLessonPanel extends PagedPanel<GroveBeat> {
         const progress = this.progress;
         if (!progress) return this.words.groveLessonTitle;
         const asked = this.words.groveAsks(progress);
-        // The bargain only while there is still something to do. Offered to
-        // a child who has already finished, it would read as a second task.
-        return progress.task === GroveTask.Done ? asked : `${asked}\n\n${this.words.groveBargain}`;
+        // The bargain only while the wood is still standing, because that is
+        // now the whole of what it buys. The tree pays for the clearing and
+        // asks for the beds afterwards — so offered to a child holding the
+        // spell already, this would be promising her a thing in her own
+        // pouch.
+        return progress.task === GroveTask.Overgrown
+          ? `${asked}\n\n${this.words.groveBargain}`
+          : asked;
       }
       case GroveBeat.Rune:
         return this.words.groveRune;

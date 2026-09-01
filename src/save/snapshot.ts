@@ -46,8 +46,15 @@ import type { GridPoint } from "../world/topdown";
  * before the harbour, the city and the observatory and draws from the same
  * rng, so all four moved: every seed grows a different world, which is
  * exactly what this number is for.
+ *
+ * **3** — the great tree asks for more. The wood closed over its beds went
+ * from six cells to twelve, so the grove draws twelve times where it drew
+ * six and everything laid out after it moves again. A child part way through
+ * that errand comes back to a thicket in different places: the squares they
+ * cleared are still cleared, because a save records what was taken away, and
+ * the wood the generator now puts somewhere else is wood they have not.
  */
-export const GENERATOR_VERSION = 2;
+export const GENERATOR_VERSION = 3;
 
 /**
  * Bumped when the shape below changes, which is a different thing.

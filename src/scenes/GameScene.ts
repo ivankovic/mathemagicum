@@ -880,6 +880,10 @@ const GROVE_DUSK_ALPHA = 0.3;
  * the same spell doing the same arithmetic in a different room.
  */
 const SPELL_RUNES: Record<PatchAction, string> = {
+  // Planting is the exception and shows the *seed* instead — see
+  // `patchMenuIcon`. This entry is what the map needs to be complete and is
+  // never the picture on the button.
+  [PatchAction.Plant]: UiAsset.SeedPouch,
   [PatchAction.Grow]: UiAsset.RuneAdd,
   [PatchAction.Clear]: UiAsset.RuneMinus,
   [PatchAction.Build]: UiAsset.RuneAdd,
@@ -1935,6 +1939,13 @@ export class GameScene extends Phaser.Scene {
   private debugHour: number | null = null;
   /** What the patch menu is currently offering, in the order it drew them. */
   private patchChoices: readonly PatchAction[] = [];
+  /**
+   * Which seed the patch being cast on will be sown with.
+   *
+   * Fixed when the action is chosen rather than read when it lands. See
+   * `beginMarking`.
+   */
+  private patchSeed: PlantType = PLANT_TYPES[0] as PlantType;
   /** What part each npc plays, for the marks — `spec.role ?? spec.id`. */
   private readonly npcRoles = new Map<string, string>();
   /** Where the three wild flowers grew, for a script that has to walk to one. */
@@ -2428,7 +2439,20 @@ export class GameScene extends Phaser.Scene {
       armedTurn: () => this.armedTurn,
       marking: () => this.marking?.action ?? null,
       teaching: () => this.teacherMarks?.showing() ?? [],
-      grove: () => ({ col: this.grove.doorstep.col, row: this.grove.doorstep.row }),
+      grove: () => ({
+        col: this.grove.doorstep.col,
+        row: this.grove.doorstep.row,
+        tree: { col: this.grove.tree.col, row: this.grove.tree.row },
+        thicket: this.grove.thicket.map((at) => ({ col: at.col, row: at.row })),
+      }),
+      /**
+       * Which spells this child has been taught.
+       *
+       * The profile's own list rather than the seam that seeds it, so a
+       * scenario can watch one being *earned* — which is the only way to
+       * check that a teacher pays at the moment it is supposed to.
+       */
+      spells: () => [...this.profile.learned],
       /**
        * Every machine in the world and what it is holding.
        *
@@ -5233,14 +5257,14 @@ export class GameScene extends Phaser.Scene {
     const outdoors = this.interior?.plan
       ? [PatchAction.Build, PatchAction.Clear]
       : this.knowsMirror
-        ? [PatchAction.Grow, PatchAction.Clear, PatchAction.Copy]
-        : [PatchAction.Grow, PatchAction.Clear];
+        ? [PatchAction.Plant, PatchAction.Grow, PatchAction.Clear, PatchAction.Copy]
+        : [PatchAction.Plant, PatchAction.Grow, PatchAction.Clear];
     // Kept so the menu's buttons can be named for what they do. See
     // `uiPositions`.
     this.patchChoices = outdoors;
     const choices = outdoors.map((action) => ({
       action,
-      rune: uiTextureKey(SPELL_RUNES[action]),
+      rune: uiTextureKey(this.patchMenuIcon(action)),
     }));
     // A menu of one is not a choice. Indoors there is only the plus rune to
     // pick, so picking it is a tap that asks a child to confirm a decision
@@ -5254,8 +5278,35 @@ export class GameScene extends Phaser.Scene {
     this.patchMenu?.openAt(above, choices, (action) => this.beginMarking(action));
   }
 
+  /**
+   * What a choice looks like on the little menu.
+   *
+   * Runes, everywhere but one. The rune is the picture a child already taps
+   * to cast that spell, and the same picture asking *which spell to
+   * multiply* is a question they can answer without reading a word.
+   *
+   * Planting has no rune, because planting is not a spell — it is a tap, and
+   * it costs no arithmetic at all. So its button carries the seed it will
+   * sow, which is the other picture a child already knows: the one in the
+   * pouch they took it from. It also answers the question the button would
+   * otherwise leave open, which is *which* seed sixteen squares are about to
+   * be filled with.
+   */
+  private patchMenuIcon(action: PatchAction): string {
+    return action === PatchAction.Plant ? cropIcon(this.selectedPlant()) : SPELL_RUNES[action];
+  }
+
   private beginMarking(action: PatchAction): void {
     this.patchMenu?.close();
+    // The seed, taken now and held for the whole cast.
+    //
+    // Not read again when the spell lands, and this is not tidiness: the
+    // number keys are seed shortcuts, and answering a multiplication means
+    // *typing digits*. A four-square bed asks four, so a child who typed the
+    // right answer chose the fourth seed with the same keystroke and planted
+    // tomatoes in the tree's beds. Found by the scenario that was written to
+    // check the sunflowers went in.
+    this.patchSeed = this.selectedPlant();
     // The square she is pointing at is the patch's first corner, if she is
     // pointing at one. That is what the pointing is *for* — she has already
     // said where, and asking again would be asking twice.
@@ -5603,6 +5654,7 @@ export class GameScene extends Phaser.Scene {
       ];
     }
     return [
+      { action: PatchAction.Plant, cells: this.session.plantableIn(this.patchSeed, patch) },
       { action: PatchAction.Grow, cells: this.session.growableIn(patch) },
       {
         action: PatchAction.Clear,
@@ -5809,6 +5861,15 @@ export class GameScene extends Phaser.Scene {
    * nothing else, and closing a panel was never one either.
    */
   private castOnce(action: PatchAction, done: (worked: boolean) => void): void {
+    // Planting is not a spell and has no sum in it — by hand it is a tap on
+    // a square. So there is nothing to do once by hand before doing it many
+    // times, and the whole price of a planted rectangle is the
+    // multiplication that follows. That is the argument for multiplication
+    // as plainly as this game can make it: sixteen squares for one answer.
+    if (action === PatchAction.Plant) {
+      done(true);
+      return;
+    }
     if (action === PatchAction.Copy) {
       this.openMirrorPuzzle(done);
       return;
@@ -5906,6 +5967,21 @@ export class GameScene extends Phaser.Scene {
       }));
       this.takeFloorUp(cells);
       done += cells.length;
+    } else if (action === PatchAction.Plant) {
+      // The seed she chose when she chose the spell, not the one selected
+      // now — answering the multiplication types digits, and digits are seed
+      // shortcuts. See `beginMarking`.
+      const seed = this.patchSeed;
+      for (const at of this.session.plantableIn(seed, patch)) {
+        this.plantCropAt(seed, at.col, at.row);
+        done++;
+      }
+      if (done > 0) {
+        // One bend of the back for the lot of them, where a single seed gets
+        // one for itself. Sixteen gestures in a frame is a seizure.
+        this.playGesture(PLANT);
+        this.autosave();
+      }
     } else if (action === PatchAction.Grow) {
       for (const at of this.session.growableIn(patch)) {
         this.growCropAt(at.col, at.row);
@@ -7809,10 +7885,20 @@ export class GameScene extends Phaser.Scene {
     this.joystick?.release();
     this.closeTrays();
     const progress = groveProgress(this.worldGrid, this.grove);
+    // **Paid when the wood is gone, not when the beds are full.**
+    //
+    // It used to be the other way round, and the other way round taught
+    // nothing: a child cleared the wood, filled sixteen squares by hand, and
+    // was then given the spell that would have filled them in one cast — a
+    // reward handed over after the work it saves, for a lesson nobody had
+    // been shown. Now the tree pays for the clearing, which is twelve
+    // subtractions one square at a time, and then asks for the beds. She
+    // does those sixteen with a single answer. The whole argument for
+    // multiplication is those two things happening ten seconds apart.
     const learned =
-      progress.task === GroveTask.Done
-        ? learnSpell(this.profile.learned, Spell.Array)
-        : this.profile.learned;
+      progress.task === GroveTask.Overgrown
+        ? this.profile.learned
+        : learnSpell(this.profile.learned, Spell.Array);
     const first = learned !== this.profile.learned;
     if (first) {
       this.saveProfileChange({ learned });
@@ -9087,9 +9173,20 @@ export class GameScene extends Phaser.Scene {
     this.tryHarvest();
   }
 
+  /**
+   * The seed the pouch was last asked for.
+   *
+   * One answer for three routes: the number keys, the pouch's own buttons,
+   * and now the patch that plants a whole rectangle of it. A patch action
+   * that chose its own crop would be a second way of picking a seed, and a
+   * child would have no way to tell which of the two the game was using.
+   */
+  private selectedPlant(): PlantType {
+    return PLANT_TYPES[this.selectedPlantIndex] ?? (PLANT_TYPES[0] as PlantType);
+  }
+
   private tryPlant(): void {
-    const plant = PLANT_TYPES[this.selectedPlantIndex] ?? PLANT_TYPES[0];
-    if (plant) this.plantSeed(plant);
+    this.plantSeed(this.selectedPlant());
   }
 
   /** One seed, into whichever square `targetTile` says. */
@@ -9103,6 +9200,24 @@ export class GameScene extends Phaser.Scene {
     const { col, row } = result.tile;
     this.spawnCropSprite(col, row, { plant, stage: PLANTED_STAGE });
     this.playGesture(PLANT);
+  }
+
+  /**
+   * One seed into one named square.
+   *
+   * For the patch, which plants a rectangle of them and has already asked
+   * the session which squares will take one. It must not go back through
+   * `plant`, which asks about the square she is *facing* — sixteen times
+   * over, and every one of them the same square.
+   *
+   * No effect drawn on it, and none needed: sixteen seedlings coming up
+   * together is the picture. The plus belongs to the spell that grows them,
+   * and drawing it here would say a thing had grown that has only been
+   * sown.
+   */
+  private plantCropAt(plant: PlantType, col: number, row: number): void {
+    if (!this.grid.plant(col, row, plant)) return;
+    this.spawnCropSprite(col, row, { plant, stage: PLANTED_STAGE });
   }
 
   /**

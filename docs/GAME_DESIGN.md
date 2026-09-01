@@ -472,24 +472,41 @@ twelve crops from seed to ripe in two casts where the one-at-a-time route is
 twenty-four number lines, so a spell handed over on a tap quietly removes
 most of the arithmetic in the game.
 
-So the great tree sets a task, and the task is **doing the long way once**:
+So the great tree sets a task, and the task is **doing the long way once,
+and then being handed the short one while the long one is still in your
+hands**:
 
-1. **Clear the wood that has closed over its beds** — six thickets, six
-   subtraction problems, and the one spell the game otherwise under-uses.
-2. **Fill four beds of two by two with sunflowers and ripen them** — sixteen
-   squares, planted one at a time and grown to ripeness. Thirty-two number
-   lines: precisely what one array cast will later replace.
+1. **Clear the wood that has closed over its beds** — twelve thickets, twelve
+   subtraction problems, one square at a time, and the one spell the game
+   otherwise under-uses.
+2. **The tree pays for that, and the spell is yours**, before a single
+   sunflower has gone in.
+3. **Now fill its four beds of two by two with them** — sixteen squares, and
+   she has just been given the thing that does sixteen squares for one
+   answer.
+
+**The order used to be the other way round**, and the other way round taught
+nothing. The child cleared the wood, filled all sixteen squares by hand, and
+was *then* given the spell that would have filled them in one cast — a reward
+handed over after the work it saves, for a lesson nobody had been shown. It
+was a fair price and a bad demonstration.
+
+Now the two halves sit next to each other. Twelve casts, one square each,
+then sixteen squares for one answer, ten seconds apart and both in her own
+hands. That is the argument for multiplication as plainly as this game can
+make it, and no sentence in it is read to a five-year-old.
+
+Which is also why the times spell learned to **plant**. It could grow a
+patch, clear one, pick one, copy one and build one, and the one thing it
+could not do was sow — so the tree's beds would have been sixteen taps before
+the spell was worth casting at all. Planting is free and asks no arithmetic,
+so a planted rectangle's whole price is the multiplication.
 
 Two by two because that is the array spell's own smallest shape, and four of
-them because four is the shape of the spell itself — the child lays out by
-hand exactly the thing they are about to be given. And **sunflowers**, not
+them because four is the shape of the spell itself. And **sunflowers**, not
 anything ripe: a tree that would take whatever was to hand is a tree whose
 beds get filled by accident on the way past, and the errand is the whole
 reason the spell is worth having.
-
-That is not a gate bolted onto a spell, it *is* the lesson. A child who has
-filled four two-by-two beds by hand knows in their hands why `2 × 2` four
-times over is worth one cast.
 
 **The beds are grass with their corners marked**, not bare earth and not
 bordered. Earth in a clearing read as a hole in the grass rather than as

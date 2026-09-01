@@ -124,8 +124,26 @@ const TRELLIS = BED_SIDE + 2;
  * corners of a square rather than as a cluster.
  */
 const BED_REACH = 4;
-/** How much wood has closed over it, in cells. */
-const THICKET = 6;
+/**
+ * How much wood has closed over the beds, in cells.
+ *
+ * Twelve of the sixteen, which is three quarters of the plot buried — and
+ * twelve *casts*, because the clearing spell takes one square at a time and
+ * every one of them is a subtraction answered by hand.
+ *
+ * That number is the whole of the errand's argument and was six. The tree
+ * used to be paid for at the end: clear the wood, fill the beds by hand,
+ * and then be given the times spell. So the spell arrived after the work it
+ * would have saved, which is a reward for a lesson nobody had been taught.
+ *
+ * Now the spell is handed over the moment the wood is gone, and what a
+ * child has just finished doing is twelve of something one square at a
+ * time. The next thing they are asked to do is sixteen squares — and they
+ * do it with one answer. Twelve, then one: the difference is in their hands
+ * ten seconds apart, which is a thing no sentence about multiplication can
+ * do for a five-year-old.
+ */
+const THICKET = 12;
 
 /**
  * The middle of the grove: the cell the great tree stands over.
