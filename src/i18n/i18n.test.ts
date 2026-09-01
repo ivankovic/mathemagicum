@@ -37,7 +37,14 @@ function sample(p: Phrases): Record<string, string> {
     count: p.count(carrot, 3),
 
     cleared: p.cleared,
-    groveAsks: p.groveAsks({ task: "growing", standing: 0, ripe: 4, squares: 12 }),
+    // All three stages under the one key, the way `lessonSplit` carries its
+    // three lengths: the tree says a different thing at each, and two of the
+    // three were going unchecked.
+    groveAsks: [
+      p.groveAsks({ task: "overgrown", standing: 12, ripe: 0, squares: 16 }),
+      p.groveAsks({ task: "growing", standing: 0, ripe: 4, squares: 16 }),
+      p.groveAsks({ task: "done", standing: 0, ripe: 16, squares: 16 }),
+    ].join(" "),
     groveTaskTitle: p.groveTaskTitle,
     groveBargain: p.groveBargain,
     groveLessonTitle: p.groveLessonTitle,
@@ -236,6 +243,62 @@ function sample(p: Phrases): Record<string, string> {
     takeQuestion: p.takeQuestion(612538, 265382),
   };
 }
+
+/**
+ * Nothing the game says to a Croatian child is in a gender.
+ *
+ * Croatian's past tense agrees with whoever is speaking or spoken to, so
+ * *dobro došao*, *dobro si uočio* and *gdje si sletio* all greet a girl as a
+ * boy. Half the children this is written for are girls, and the game does
+ * not know which it has: a child picks one of six bodies, two of them read
+ * as a boy, and none of it is recorded as a gender anywhere — correctly,
+ * because it is not the game's business.
+ *
+ * The book had nine of these in it. That is the kind of mistake that comes
+ * back, because the natural way to write the sentence is the wrong one, so
+ * here is a tripwire.
+ *
+ * **It is a tripwire and not a grammar checker.** It knows two things: a
+ * second-person *si* or *nisi* followed by a masculine participle, which is
+ * the shape every one of the nine had; and the handful of forms this file
+ * has actually got wrong, in both genders. A new sentence can still slip a
+ * form past it. What holds the line is the rule written down in `hr.ts`;
+ * this is what catches the third time somebody forgets.
+ */
+// `si` or `nisi`, then a masculine participle within the same sentence —
+// *si bio*, *si već bio*, *nisi vidio*. Bounded by sentence-ending
+// punctuation so it cannot reach across from one sentence into the next,
+// and keyed on `-ao`/`-io` because those two endings belong to verbs.
+// Feminine `-la` is not here on purpose: adjectives end in it too, and
+// *svijetla točka* is not a child being called a girl.
+const GENDERED = /\b(ni)?si\b[^.?!]{0,24}\b\w+(ao|io)\b/;
+const GENDERED_WORDS = [
+  "došao",
+  "došla",
+  "sletio",
+  "sletjela",
+  "uočio",
+  "uočila",
+  "zaslužio",
+  "zaslužila",
+  "uzgojio",
+  "uzgojila",
+];
+
+describe("Croatian speaks to a child of either kind", () => {
+  const said = sample(HR);
+  for (const [key, line] of Object.entries(said)) {
+    test(`${key} is not in a gender`, () => {
+      const gendered = GENDERED.exec(line)?.[0];
+      const named = GENDERED_WORDS.find((word) => line.toLowerCase().includes(word));
+      expect({ key, gendered: gendered ?? null, named: named ?? null }).toEqual({
+        key,
+        gendered: null,
+        named: null,
+      });
+    });
+  }
+});
 
 const BOOKS: [string, Phrases][] = [
   ["English", EN],

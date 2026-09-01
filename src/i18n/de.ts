@@ -29,8 +29,8 @@ import type { Noun, Phrases } from "./phrases";
  * so it does not need one — "zum Aufheben antippen" rather than "tipp darauf,
  * um ihn aufzuheben" — which is also how a sign in a shop would put it.
  *
- * The interface is a rich German would use for a child: du, imperatives, and
- * no compound nouns longer than a line.
+ * The register is the one a German adult uses to a child: du, imperatives,
+ * and no compound noun longer than a line.
  */
 
 interface DeNoun {
@@ -111,7 +111,7 @@ const TERRAIN: Record<TerrainType, string> = {
   [TerrainType.Dirt]: "Erde",
   [TerrainType.Grass]: "Gras",
   [TerrainType.Woodland]: "Waldboden",
-  [TerrainType.Hilly]: "Hügeln",
+  [TerrainType.Hilly]: "Hügel",
   [TerrainType.Mountain]: "Fels",
   [TerrainType.Cobble]: "Pflaster",
 };
@@ -160,7 +160,7 @@ const PLACE_NAMES: Record<string, string> = {
 // Seite in jeder Sprache auffällt und nicht leer bleibt.
 const INTRO_DE: Record<string, string> = {
   seeds: `Ich bin ${NAMED_PEOPLE["postal-worker"]}, der Postbote. Das da ist dein Garten. Nimm ein Saatkorn aus dem Beutel und tipp auf das Feld, auf das es soll.`,
-  spell: `Von allein wächst hier nichts. Öffne das Zauberbuch, sprich die +-Rune darauf und löse die Aufgabe. Zweimal, dann ist die Pflanze reif. ${NAMED_PEOPLE.teacher} in der Schule zeigt dir, wie es geht.`,
+  spell: `Von allein wächst hier nichts. Öffne das Zauberbuch, sprich die +-Rune darauf und löse die Aufgabe. Zweimal, dann ist die Pflanze reif. ${NAMED_PEOPLE.teacher} in der Schule zeigt es dir, wenn du sie fragst.`,
   pick: "Tipp auf eine reife Pflanze, um sie zu pflücken. Sie wandert in deinen Korb, und das Feld ist wieder leer — bereit für ein neues Saatkorn.",
   store: `${NAMED_PEOPLE.shopkeeper} in der Scheune kauft deine Ernte und verkauft Zäune, Tische und Laternen für den Garten. Das Geld zählst du selbst ab — und sie verzählt sich auch mal.`,
   map: `Im Turm hängt an der Wand eine Karte der ganzen Welt. Tipp jederzeit darauf, um zu sehen, wo du bist — und ${NAMED_PEOPLE.geometer} darunter bringt dir einen Zauber fürs Reisen bei.`,
@@ -241,7 +241,7 @@ export const DE: Phrases = {
 
   geometryLessonTitle: "Die Welt vermessen",
   geometryRune:
-    "Der Zirkel in deinem Zauberbuch öffnet eine Karte. Wähle einen Ort, an dem du schon warst, sage wie weit er weg ist, und das Portal bringt dich hin.",
+    "Der Zirkel in deinem Zauberbuch öffnet eine Karte. Wähle einen Ort, an dem du schon warst, sag, wie weit er weg ist, und das Portal bringt dich hin.",
   geometryRuler: (paces) =>
     `An jeder Seite der Karte läuft ein Lineal. Ein Strich sind ${paces} Schritte, und wo du stehst, ist null — der Strich, auf dem ein Ort liegt, ist also seine Entfernung.`,
   geometryLegs: (across, acrossMarks, down, downMarks, total) =>
@@ -276,7 +276,7 @@ export const DE: Phrases = {
   groveBargain: "Tu das, und die sechs Punkte gehören dir.",
   groveLessonTitle: "Reihen und Spalten",
   groveRune:
-    "Die sechs Punkte in deinem Zauberbuch nehmen sich ein ganzes Beet auf einmal vor. Sag, wie viele Kästchen darin sind, dann wächst jedes einzelne mit.",
+    "Die sechs Punkte in deinem Zauberbuch wirken auf ein ganzes Beet auf einmal. Sag, wie viele Kästchen darin sind, dann wächst jedes einzelne mit.",
   groveRows: (rows, columns) =>
     `Sieh das Beet als Reihen an: ${rows} Reihen, und in jeder ${columns} — jede Reihe genau gleich, das ist der ganze Trick.`,
   groveCount: (rows, columns, total) =>
@@ -412,7 +412,7 @@ export const DE: Phrases = {
   keeperBuys: (keeper) => `${keeper} kauft`,
   keeperSells: (keeper) => `${keeper} verkauft`,
   stockRow: (thing, price) => `${DE.item(thing).bare}\n${price}`,
-  cropRow: (item, held, price) => `${held} x ${DE.item(item).bare}\n${price} je`,
+  cropRow: (item, held, price) => `${held} x ${DE.item(item).bare}\nje ${price}`,
   buyTitle: (thing, count, price) => `${count} x ${DE.item(thing).bare} — zahle ${price}`,
   sellTitle: (item, count, price) => `${count} x ${DE.item(item).bare} — sie zahlt ${price}`,
   onTheCounter: (total) => `auf dem Tresen: ${total}`,
@@ -420,7 +420,7 @@ export const DE: Phrases = {
   tooMuch: (amount) => `${amount} zu viel.`,
   exactlyRight: "Genau richtig — tipp auf „zahlen“.",
   tooExpensive: "Das ist mehr Geld, als du hast.",
-  paidFor: (fixture, count) => `Bezahlt. ${DE.count(fixture, count)} im Kasten.`,
+  paidFor: (fixture, count) => `Bezahlt. ${DE.count(fixture, count)} in deiner Kiste.`,
   sheCountsOut: "sie zählt ab:",
   countHerCoins: "Zähl ihre Münzen. Stimmt das Geld?",
   countHerPiles: "Rechne ihre Stapel aus. Stimmt das Geld?",

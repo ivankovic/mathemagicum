@@ -34,6 +34,25 @@ import type { Noun, Phrases } from "./phrases";
  *
  * The register is the one an adult uses to a child: *ti*, imperatives, and
  * short sentences.
+ *
+ * **And nothing the game says to the child is in a gender.** This is the
+ * rule that had been broken everywhere and is the reason this file was gone
+ * through: Croatian's past tense agrees with the speaker, so *dobro došao*,
+ * *dobro si uočio*, *gdje si sletio* and *mjesto na kojem si već bio* all
+ * greet a girl as a boy — and half the children this is written for are
+ * girls. The game does not know, either: a child picks one of six bodies and
+ * two of them read as a boy, and none of it is written down as a gender
+ * anywhere, correctly, because it is not the game's business.
+ *
+ * So every sentence addressed to the player is built without a participle
+ * that would have to agree: the present tense (*poznaješ*, *brojiš*), a
+ * question about a thing rather than about her (*na kojem si broju*), or a
+ * noun (*dobro oko*). `i18n.test.ts` holds the file to it — the pattern is
+ * mechanical enough to catch, and it came back three times by hand.
+ *
+ * The generic *igrač* on a parent's list of players is left alone. That is
+ * the ordinary Croatian generic for a person who plays and it names nobody
+ * in particular; what is wrong is telling a specific girl she *is* a boy.
  */
 
 /**
@@ -227,7 +246,7 @@ const MATERIAL_FORMS: Record<MaterialType, HrNoun> = {
   // counting forms are the ones a Croatian speaker uses for a quantity of
   // it — tri drva, pet drva.
   [MaterialType.Wood]: { one: "drvo", acc: "drvo", few: "drva", many: "drva" },
-  [MaterialType.Stone]: { one: "kamen", acc: "kamen", few: "kamena", many: "kamenja" },
+  [MaterialType.Stone]: { one: "kamen", acc: "kamen", few: "kamena", many: "kamena" },
 };
 
 const PLANTS: Record<PlantType, Noun> = Object.fromEntries(
@@ -331,10 +350,10 @@ const PLACE_NAMES: Record<string, string> = {
 
 const INTRO_HR: Record<string, string> = {
   seeds: `Ja sam ${NAMED_PEOPLE["postal-worker"]}, poštar. Ovo je tvoj vrt. Uzmi sjeme iz vrećice pa dodirni polje na koje ga želiš posijati.`,
-  spell: `Sjeme ovdje ne raste samo od sebe. Otvori čarobnjačku knjigu, baci runu + na njega i riješi zadatak. Dva bacanja i plod je zreo. ${NAMED_PEOPLE.teacher} u školi pokazat će ti kako, ako je pitaš.`,
+  spell: `Sjeme ovdje ne raste samo od sebe. Otvori čarobnjačku knjigu, baci runu + na njega i riješi zadatak. Dva bacanja i plod je zreo. ${NAMED_PEOPLE.teacher} će ti u školi pokazati kako, ako je pitaš.`,
   pick: "Dodirni zreo plod da ga ubereš. Ide ti u košaru, a polje ostaje prazno — spremno za novo sjeme.",
-  store: `${NAMED_PEOPLE.shopkeeper} u štaglju otkupljuje što ubereš, a prodaje ograde, stolove i svjetiljke za vrt. Novac brojiš sam — a ona se zna i prevariti.`,
-  map: `U kuli, na zidu, visi karta cijeloga svijeta. Dodirni je kad god želiš vidjeti gdje si — a ${NAMED_PEOPLE.geometer} ispod nje naučit će te čaroliju za putovanje.`,
+  store: `${NAMED_PEOPLE.shopkeeper} u štaglju otkupljuje što ubereš, a prodaje ograde, stolove i svjetiljke za vrt. Novac brojiš ti — a ona se zna i prevariti.`,
+  map: `U kuli, na zidu, visi karta cijeloga svijeta. Dodirni je kad god želiš vidjeti gdje si — a ${NAMED_PEOPLE.geometer} će te ispod nje naučiti čaroliju za putovanje.`,
 };
 
 /** `1 sat`, `2 sata`, `5 sati`. */
@@ -345,6 +364,16 @@ function hours(count: number): string {
 /** `1 korak`, `2 koraka`, `5 koraka`. */
 function paces(count: number): string {
   return `${count} ${{ one: "korak", few: "koraka", many: "koraka" }[countForm(count)]}`;
+}
+
+/** `1 red`, `2 reda`, `5 redova`. */
+function rowsOf(count: number): string {
+  return `${count} ${{ one: "red", few: "reda", many: "redova" }[countForm(count)]}`;
+}
+
+/** `1 grm`, `2 grma`, `5 grmova` — the wood over the tree's beds. */
+function bushes(count: number): string {
+  return `${count} ${{ one: "grm", few: "grma", many: "grmova" }[countForm(count)]}`;
 }
 
 /** `1 oznaka`, `2 oznake`, `5 oznaka`. */
@@ -363,7 +392,7 @@ export const HR: Phrases = {
 
   cleared: "Put je slobodan.",
 
-  titleTagline: "Vrt, i računanje koje ga uzgaja",
+  titleTagline: "Vrt i računanje koje ga uzgaja",
   titleLoading: "učitavanje…",
   titleLoadingWhat: (done, total, what) => `učitavanje ${done}/${total} — ${what}`,
   titleLoadFailed: (what) => `nije se moglo učitati: ${what}`,
@@ -375,17 +404,17 @@ export const HR: Phrases = {
 
   geometryLessonTitle: "Mjerenje svijeta",
   geometryRune:
-    "Šestar u tvojoj knjizi otvara kartu. Odaberi mjesto na kojem si već bio, reci koliko je daleko, i portal će te odnijeti tamo.",
+    "Šestar u tvojoj knjizi otvara kartu. Odaberi mjesto koje već poznaješ, reci koliko je daleko, i portal će te odnijeti tamo.",
   geometryRuler: (count) =>
     `Uz svaki rub karte ide ravnalo. Jedna oznaka je ${paces(count)}, a mjesto na kojem stojiš je nula — pa oznaka na kojoj mjesto leži i jest koliko je daleko.`,
   geometryLegs: (across, acrossMarks, down, downMarks, total) =>
     `Portal ide ${acrossMarks} na ${across}, pa ${downMarks} na ${down}. To je ${acrossMarks} + ${downMarks} = ${marks(total)} puta.`,
   geometryCrow: (acrossMarks, downMarks, squares, crow) =>
-    `Vrana leti ravno, a to je kraće. Pomnoži svaku stranu sa sobom pa zbroji: ${acrossMarks}×${acrossMarks} + ${downMarks}×${downMarks} = ${squares}. Let je broj koji pomnožen sam sa sobom daje ${squares} — ${crow}. Na pravom putu zaokruži na najbližu cijelu oznaku.`,
+    `Vrana leti ravno, a to je kraće. Pomnoži svaku stranu sa sobom pa zbroji: ${acrossMarks}×${acrossMarks} + ${downMarks}×${downMarks} = ${squares}. Let je broj koji pomnožen sam sa sobom daje ${squares} — ${crow}. Kad stvarno putuješ, zaokruži na najbližu cijelu oznaku.`,
 
   portalTitle: "Portal",
   portalChoose: "Kamo da te portal odnese?",
-  portalLocked: "Tamo još nisi bio.",
+  portalLocked: "To mjesto još ne poznaješ.",
   portalHereAlready: "Već si tamo.",
   portalScale: (count) => `jedna oznaka = ${paces(count)}`,
   portalAskCount: "Koliko je to kamenčića?",
@@ -403,21 +432,21 @@ export const HR: Phrases = {
 
   groveAsks: ({ task, standing, ripe, squares }) =>
     task === "overgrown"
-      ? `Šuma mi je prekrila gredice. Ukloni ${standing} što još stoje.`
+      ? `Šuma mi je prekrila gredice. Ukloni ${bushes(standing)} koji još stoje.`
       : task === "done"
         ? "Moj je gaj pun. Sretno ti bilo."
-        : `Sad upotrijebi ono što si zaslužila: uzmi suncokret iz vrećice i baci šest točkica na cijelu gredicu odjednom. Zrelo je ${ripe} od ${squares} polja.`,
+        : `Šest je točkica sada tvoje. Uzmi suncokret iz vrećice i baci ih na cijelu gredicu odjednom. Zrelo je ${ripe} od ${squares} polja.`,
   groveTaskTitle: "Gredice starog drveta",
   groveBargain: "Učini to i šest točkica su tvoje.",
   groveLessonTitle: "Redovi i stupci",
   groveRune:
-    "Šest točkica u tvojoj knjizi radi na cijeloj gredici odjednom. Reci koliko polja ima u njoj, i svako od njih raste zajedno.",
+    "Šest točkica u tvojoj knjizi radi na cijeloj gredici odjednom. Reci koliko polja ima u njoj i sva zajedno narastu.",
   groveRows: (rows, columns) =>
-    `Gledaj gredicu po redovima. ${rows} reda, a u svakom ${columns} — svaki red potpuno isti, i u tome je cijeli trik.`,
+    `Gledaj gredicu po redovima. ${rowsOf(rows)}, a u svakom ${columns} — svaki red potpuno isti, i u tome je cijeli trik.`,
   groveCount: (rows, columns, total) =>
     `Zato broji po redovima: ${Array.from({ length: rows }, (_, at) => (at + 1) * columns).join(", ")}. To je ${rows} × ${columns} = ${total}.`,
   groveTurn: (rows, columns, total) =>
-    `Sad okreni gredicu na bok: ${columns} reda po ${rows}. Opet ${total}. ${rows} × ${columns} i ${columns} × ${rows} su ista gredica gledana s dvije strane, pa moraš naučiti samo pola tablice.`,
+    `Sad okreni gredicu na bok: ${rowsOf(columns)} po ${rows}. Opet ${total}. ${rows} × ${columns} i ${columns} × ${rows} su ista gredica gledana s dvije strane, pa moraš naučiti samo pola tablice.`,
 
   arrayTitle: (rows, columns) => `${rows} × ${columns}`,
   arrayAsk: "Koliko ih je u cijeloj gredici?",
@@ -468,7 +497,11 @@ export const HR: Phrases = {
   // Verain — and building one by sticking a suffix on a name out of the
   // table is how the wrong word gets printed the day somebody renames her.
   // The same reason her own lines never say her name: see the keeper's.
-  lampsTaskTitle: "Uspon do zvjezdarnice",
+  // *Verin*, not *Verain*: a Croatian possessive off a woman's name drops
+  // the -a before the -in. Written as the rule rather than as the word so
+  // the name stays the one thing in `names.ts` — and the -in ending is the
+  // masculine one, because the noun it agrees with is *uspon*.
+  lampsTaskTitle: `${NAMED_PEOPLE.astronomer.replace(/a$/, "")}in uspon`,
   lampsAsk: (left) =>
     left > 0
       ? `Put do mojih vrata je mračan. Na svaki stup ide svjetiljka, a nedostaje ih još ${left}.`
@@ -481,7 +514,7 @@ export const HR: Phrases = {
 
   mirrorTitle: "Zrcalo",
   mirrorAsk: "Oboji polja tako da obje strane crte budu jednake.",
-  mirrorWrong: "Ne to. Pogledaj preko crte.",
+  mirrorWrong: "Ta ne. Pogledaj preko crte.",
   mirrorDone: "Obje su strane jednake. To je zrcalo.",
   mirrorHint: "Ovo je polje jedno od njih.",
 
@@ -512,7 +545,7 @@ export const HR: Phrases = {
   sponsorLink: "GitHub Sponsors",
 
   playersTitle: "Tko igra?",
-  newPlayer: "Novi igrač",
+  newPlayer: "Netko novi",
   tongueTitle: "Jezik",
   makePlayerTitle: "Tko si ti?",
   namePrompt: "Tvoje ime",
@@ -525,7 +558,7 @@ export const HR: Phrases = {
   deviceFull: (most) =>
     `Na ovaj tablet stane ${most} ${{ one: "igrač", few: "igrača", many: "igrača" }[countForm(most)]}`,
   deletePlayer: "Ukloni igrača",
-  deleteAreYouSure: (name) => `Ukloniti ${name} i sve što je ${name} uzgojio?`,
+  deleteAreYouSure: (name) => `Ukloniti ${name} — i sve što je u toj igri naraslo?`,
   deleteYes: "Da, ukloni",
   deleteNo: "Ne, ostavi",
   sumsHeading: "Tvoji zadaci",
@@ -559,7 +592,7 @@ export const HR: Phrases = {
   onTheCounter: (total) => `na pultu: ${total}`,
   moreToGo: (amount) => `Fali još ${amount}.`,
   tooMuch: (amount) => `${amount} previše.`,
-  exactlyRight: "Točno tako — dodirni plati.",
+  exactlyRight: "Točno tako — dodirni „plati”.",
   tooExpensive: "To je više novca nego što imaš.",
   paidFor: (fixture, count) => `Plaćeno. ${counted(formsOf(fixture), count)} u tvom sanduku.`,
   sheCountsOut: "ona odbrojava:",
@@ -572,13 +605,16 @@ export const HR: Phrases = {
   thatsRight: "točno je",
   thatsWrong: "nije točno",
 
-  verdictExact: (owed) => `Točno — ${owed} na dlaku.`,
+  verdictExact: (owed) => `Točno — baš ${owed}.`,
   verdictSpotted: (paid, owed, short) =>
-    `Dobro si uočio. Bilo je ${paid}, ${short ? "manje od" : "više od"} ${owed}. Nadoknadit će ti.`,
+    `Dobro oko. Bilo je ${paid}, ${short ? "manje od" : "više od"} ${owed}. Nadoknadit će ti.`,
   verdictWasRight: (owed) => `Ipak je bilo točno: ${owed}. Prebrojat će ti ponovno.`,
   verdictLookAgain: (paid, owed) => `Pogledaj još jednom — bilo je ${paid}, a ne ${owed}.`,
 
-  introTitle: "Dobro došao u selo",
+  // Plural, and only here. A title is a sign over a door and every sign in
+  // Croatia says *dobro došli*; the singular would have to pick a gender,
+  // which this book does not do — see the note at the top of the file.
+  introTitle: "Dobro došli u selo",
   intro: (beat) => INTRO_HR[beat] ?? "",
 
   lessonTitle: "Čarolija zbrajanja",
@@ -591,18 +627,18 @@ export const HR: Phrases = {
           parts.length === 2 ? "desetica i jedinica" : "stotica, desetica i jedinica"
         }, i to su ta ${parts.length === 2 ? "dva" : "tri"} skoka.`,
   lessonJump: (start, jumps) =>
-    `Kreni od ${start} i prvo preskoči mali dio: ${jumps.map((jump) => `+${jump}`).join(", pa ")}. Upiši broj na koji si sletio u svaki okvir.`,
+    `Kreni od ${start} i prvo preskoči mali dio: ${jumps.map((jump) => `+${jump}`).join(", pa ")}. U svaki okvir upiši broj koji dobiješ.`,
   lessonAnswer: (answer) =>
     `Zadnji okvir je odgovor: ${answer}. Kad prvo skačeš male dijelove, svaki put se mijenja samo jedan dio broja, pa nema ništa za prenositi ni za pamtiti.`,
   lessonUndo: (total, addend, start) =>
     `Ponekad broj nedostaje na početku: ? + ${addend} = ${total}. Onda iste skokove skačeš unatrag od ${total} umjesto naprijed i sletiš ondje gdje je moralo početi: ${start}.`,
   lessonNext: "dalje",
   lessonBack: "natrag",
-  lessonDone: "sad idi",
+  lessonDone: "hajde u vrt",
   lessonExample: (start, addend) => `${start} + ${addend}`,
 
   place: (index) => PLACES[index] ?? "",
-  jumpPrompt: (index) => `Preskoči ${PLACES[index] ?? ""}. Gdje si sletio?`,
+  jumpPrompt: (index) => `Skoči ${PLACES[index] ?? ""}. Na kojem si broju?`,
   addPlace: (index, from) => `Dodaj ${PLACES[index] ?? ""} na ${from}.`,
   sumQuestion: (from, jump) => `${from} + ${jump} = ?`,
   takeQuestion: (total, known) => `${total} − ${known} = ?`,
