@@ -1005,6 +1005,57 @@ line whatever the rock did. Taking the shadows away is what showed it.
 What seats a sprite on the terrain now is the terrain: an object is drawn
 standing at the bottom of its own cell, and that is the line it sorts on.
 
+### What is tall gets out of the way
+
+**Anything whose art rises three tiles or more above its own footprint fades
+while the player is standing behind it**, and closes up again when she walks
+out. Three tiles takes in the townhouse, the post office tower, the
+observatory, the great tree, the town clock and the lighthouse, and leaves
+out every tree and fence — fading half a wood as a child walks through it
+would be a worse picture than the one this fixes.
+
+It exists for the lighthouse, and a playtest reported it as something else
+entirely: *I got stuck behind the lighthouse. I wandered in and stopped
+moving.* Nothing was stuck. The beacon's art is seven and a half tiles tall
+over the two cells it stands on, so six cells of quay behind it are painted
+over completely — she was walking about under a picture of a tower, with
+nothing on screen to say so, and a character who does not move when you press
+a key is a character who cannot move.
+
+The test is the picture's own arithmetic: are her feet inside the art's
+rectangle? Depth is the y a thing stands on, so anything whose footprint
+bottom is below her feet sorts in front of her, and its rectangle ends at
+exactly that bottom edge. No second notion of "behind" is needed, and none
+would agree with what is drawn as reliably.
+
+**And what has nothing to say does not answer a tap.** The same report ended
+*you need to tap way outside of the lighthouse to get unstuck*, which is a
+second bug wearing the first one's clothes. A landmark was made tappable
+whatever it was, with a hit area covering its whole height; a game object
+under the pointer stops a click ever reaching the ground; and the beacon's
+only answer was a refusal. So it swallowed every click in a tall column of
+the quay and drew a red cross for each. Only the great tree is wired up now.
+The other two are there to be seen from across the world, and a thing that
+can only ever say no is better off letting the tap through to the ground it
+is standing in front of.
+
+### Two squares is talking distance
+
+**Anything that can be spoken to answers from two squares away, diagonals
+included.** People, animals, and the great tree. It was one square, and a
+playtest asked for two in as many words.
+
+The reason it is worth the change is what a refusal costs: everything in this
+world worth talking to is *walking about*. A child aims at a villager, the
+villager takes a step while the finger is on its way down, and the answer is
+a red cross on the ground. Two squares absorbs one step of drift, which is
+the whole of the miss.
+
+It is deliberately not the measure a *hand* uses. Gardening still wants one
+orthogonal step, because it acts on the tile the player faces and a facing is
+one of four — a diagonal neighbour is genuinely out of reach of a trowel.
+Talking needs no facing, and neither does holding out a carrot.
+
 ### Three teachers
 
 The schoolteacher explains the growth spell, the geometer explains the portal
@@ -2736,6 +2787,29 @@ per terrain and a test that says no two of them are the same.
 
 **Why the tower.** It is the post office, and the post is the one trade in a
 village that has a reason to know where everywhere else is.
+
+**And the geometer under it teaches the lesson this child is on.** His deck
+is cut to the rung the portal spell is set at, and it took two playtests to
+get right. The first found him working through the crow's flight — two legs
+squared, added and rooted — at a five-year-old whose own spell asks her to
+count stepping stones, which is the mistake the addition lesson was built to
+avoid, in its own words: a method demonstrated on a question you have not
+been asked is a method you cannot check.
+
+Cutting the deck to the tier fixed three rungs of four and left the bottom
+one exactly as wrong, which is what the second playtest reported. The
+counting child was still handed *the ruler* — a page about reading a numeral
+off a graduated edge, at a child whose map draws no numerals and whose
+question is how many stones there are. So the second page is the tier's own
+picture rather than one page for everybody: she gets the stepping stones,
+laid one to a league along an unlabelled path, with nothing numbered on it
+because the counting is the answer and printing it would be doing it for her.
+Everyone above her gets the ruler, because by then the stones are gone from
+the map and a mark has taken their place.
+
+Which means the pages a child is shown are no longer the first *n* of the
+lesson, and should not be: the stones and the ruler are two answers to one
+question, not two steps of one method.
 
 ### The teacher
 

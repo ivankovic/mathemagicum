@@ -429,9 +429,11 @@ import {
   type ActionResult,
   GameSession,
   Outcome,
+  SPEAK_REACH,
   anywhereInThePatch,
   stepsToSpeak,
   withinReach,
+  withinSpeaking,
 } from "../world/session";
 import { VISIT, alongLane, shipsAt } from "../world/shipping";
 import type { Purse } from "../world/shop";
@@ -950,6 +952,36 @@ function mixTint(dusk: number): number {
 // across. Enough that a stand of trees looks unsynchronised, few enough
 // that it stays a cheap integer hash of the tile.
 const PHASE_STEPS = 16;
+
+/**
+ * How far a thing's art must rise above its own footprint before walking
+ * behind it counts as being hidden, in tiles.
+ *
+ * Three, which takes in the townhouse, the tower, the observatory and all
+ * three landmarks, and leaves out every tree and every fence. A conifer is
+ * two tiles of art over one of ground: standing behind one covers a child's
+ * head and nothing else, and fading half a wood as she walks through it
+ * would be a worse picture than the one it fixed.
+ *
+ * The case this exists for is the lighthouse. Its art is seven and a half
+ * tiles tall over a footprint of two, so the six cells behind it are drawn
+ * over completely — a playtest reported walking in there and being unable to
+ * move, and she was moving the whole time. `LANDMARK_OVERHANG` already knew
+ * this number and was only ever consulted to keep *buildings* out of the
+ * shadow; nothing kept the player out of it, and nothing can, because she
+ * walks where she likes.
+ */
+const TALL_ENOUGH_TO_HIDE = 3;
+/** What is left of one while she is behind it: enough to see her through. */
+const HIDDEN_BEHIND_ALPHA = 0.35;
+/**
+ * How fast it gets out of the way, per frame at sixty of them a second.
+ *
+ * A fifth of a second either way. Snapping was tried and reads as the
+ * building flickering rather than as it giving way, which is the whole
+ * difference between an effect and a glitch.
+ */
+const HIDING_FADE_STEP = 0.08;
 
 const NPC_MOVE_DURATION_MS = 500;
 
@@ -1746,6 +1778,19 @@ export class GameScene extends Phaser.Scene {
    * comparison.
    */
   private machines = new Map<string, MachineState>();
+  /**
+   * Everything standing in the world that could hide the player behind it.
+   *
+   * Collected as each one is drawn rather than searched for every frame:
+   * `spawnFootprintSprite` is the one place any of them is made, and it has
+   * the sidecar in its hand at the time. Ids come along so a test can ask
+   * *which* thing is giving way — a sprite has no name a script can read.
+   *
+   * Dead entries are dropped on the pass that finds them: a tree cast away
+   * by the minus spell leaves its sprite destroyed and nothing else knows to
+   * come here and say so.
+   */
+  private tallThings: { id: string; at: GridPoint; sprite: Phaser.GameObjects.Sprite }[] = [];
   /**
    * The world's clock, last time a machine was told about it.
    *
@@ -2794,6 +2839,11 @@ export class GameScene extends Phaser.Scene {
         sky: this.clockHud?.sky.texture.key ?? "",
         shown: this.clockHud?.time.visible ?? false,
       }),
+      geometry: () => (this.geometryPanel?.isOpen ? (this.geometryPanel.readout() ?? null) : null),
+      hiding: () =>
+        this.tallThings
+          .filter(({ sprite }) => sprite.active)
+          .map(({ id, at, sprite }) => ({ id, col: at.col, row: at.row, alpha: sprite.alpha })),
       // Where the world's clock stands, and how far it has been wound from
       // the real one. The spell's whole effect, and nothing on screen states
       // it as a number — the light does, which a script cannot read.
@@ -3019,6 +3069,7 @@ export class GameScene extends Phaser.Scene {
     // of the doorway's mouth for the crossing, and recomputing it from their
     // y would drop them behind it the moment they were lifted into it.
     if (!this.travelling) this.player.setDepth(this.player.y);
+    this.showThroughWhatHidesHer();
     this.playCharacterAnim(
       this.player,
       this.playerCharacter,
@@ -7596,13 +7647,13 @@ export class GameScene extends Phaser.Scene {
     );
     sprite.on("pointerdown", () => {
       if (this.pointerIsSpokenFor) return;
-      // Within one step in *any* direction, diagonals included — unlike
-      // harvesting, which measures orthogonally because it acts on the tile
-      // the player faces and there is no diagonal facing to turn to. Talking
-      // to someone needs no facing, so standing at her corner is standing
-      // next to her, and refusing that would be a rule with no reason behind
-      // it that the player could see.
-      if (stepsToSpeak(this.session.tile, at()) > 1) {
+      // In any direction, diagonals included — unlike harvesting, which
+      // measures orthogonally because it acts on the tile the player faces
+      // and there is no diagonal facing to turn to. Talking to someone needs
+      // no facing, so standing at her corner is standing next to her. How
+      // far is `SPEAK_REACH`, and why it is two rather than one is written
+      // there: everybody worth talking to is walking about while you aim.
+      if (!withinSpeaking(this.session.tile, at())) {
         const there = at();
         this.markRefusal(there.col, there.row);
         this.markTooFar(there.col, there.row);
@@ -7625,6 +7676,8 @@ export class GameScene extends Phaser.Scene {
    * one named cell. A thing three tiles wide has no single position to be
    * next to, and picking one would make two of its three sides refuse a
    * player who is plainly standing against it.
+   *
+   * Only wired up for the thing that answers. See where this is called from.
    */
   private watchLandmark(
     sprite: Phaser.GameObjects.Sprite,
@@ -7638,7 +7691,7 @@ export class GameScene extends Phaser.Scene {
       new Phaser.Geom.Rectangle(inset, 0, width, sprite.frame.realHeight),
       Phaser.Geom.Rectangle.Contains,
     );
-    sprite.on("pointerdown", () => {
+    sprite.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       if (this.pointerIsSpokenFor) return;
       const near = sidecar.blocked_cells_relative_to_anchor.reduce(
         (best, [row, col]) =>
@@ -7648,9 +7701,14 @@ export class GameScene extends Phaser.Scene {
           ),
         Number.POSITIVE_INFINITY,
       );
-      if (near > 1) {
-        this.markRefusal(object.col, object.row);
-        this.markTooFar(object.col, object.row);
+      if (near > SPEAK_REACH) {
+        // Out of reach, so this was not a tap on the tree at all — the crown
+        // covers four tiles of ground above the trunk, and a click up there
+        // is a click on the clearing behind it. Handed on rather than
+        // refused, because the scene's own handler gives up the moment
+        // anything interactive is under the pointer, and a red cross where a
+        // child meant to walk is the beacon's bug in another wood.
+        this.handleTileClick(pointer.worldX, pointer.worldY);
         return;
       }
       talk();
@@ -7750,10 +7808,10 @@ export class GameScene extends Phaser.Scene {
       this.openGroveLesson();
       return;
     }
-    // Nothing to say and nothing to do. A lighthouse and a clock tower are
-    // there to be seen from across the world, and touching one is how a
-    // child finds out that they are the sort of thing you cannot go inside.
-    this.markRefusal(this.session.tile.col, this.session.tile.row);
+    // Nothing else is wired up to be touched at all: a lighthouse and a
+    // clock tower are there to be seen from across the world, and a thing
+    // that only ever refuses is better off letting the tap through to the
+    // ground it is standing in front of.
   }
 
   /**
@@ -9531,10 +9589,11 @@ export class GameScene extends Phaser.Scene {
   /**
    * A tap on an animal: hand over what it is asking for, if you have it.
    *
-   * The reach is `stepsToSpeak`, the same one a person answers on, diagonals
+   * The reach is `SPEAK_REACH`, the same one a person answers on, diagonals
    * included — a chicken standing at your corner is a chicken you can hand a
    * carrot to, and refusing it would be a rule with no reason a child could
-   * see.
+   * see. Two squares rather than one, because a chicken is the fastest
+   * moving thing in the village and aiming at one is aiming at where it was.
    *
    * **Only an animal that is asking can be fed.** One thinking about nothing
    * says so and keeps its crop: a bubble that could be pre-empted would be a
@@ -9555,7 +9614,7 @@ export class GameScene extends Phaser.Scene {
     // hundred tiles away answering a tap on somebody's floor would be a
     // puzzle with no visible cause.
     if (this.session.indoors) return;
-    if (stepsToSpeak(this.session.tile, { col: animal.col, row: animal.row }) > 1) {
+    if (!withinSpeaking(this.session.tile, { col: animal.col, row: animal.row })) {
       this.markRefusal(animal.col, animal.row);
       this.markTooFar(animal.col, animal.row);
       return;
@@ -9842,7 +9901,18 @@ export class GameScene extends Phaser.Scene {
       if (landmark === LandmarkType.Lighthouse) {
         this.lightLamp(object.col, object.row + sidecar.footprint_tiles.height - 1);
       }
-      this.watchLandmark(sprite, object, sidecar, () => this.touchLandmark(landmark));
+      // Only the one that has something to say answers a tap. The other two
+      // used to, with a refusal, and it cost more than it looked: a game
+      // object under the pointer stops the tap ever reaching the ground (see
+      // the `over.length` branch in the input wiring), and this one's hit
+      // area is its whole seven and a half tiles of art. So the beacon
+      // swallowed every click in a tall column of the quay and answered each
+      // with a red cross — which is how a playtest came to report needing to
+      // *tap way outside the lighthouse* to get moving again. Left alone, a
+      // tap there is a tap on the ground behind it and walks her out.
+      if (landmark === LandmarkType.GreatTree) {
+        this.watchLandmark(sprite, object, sidecar, () => this.touchLandmark(landmark));
+      }
       return;
     }
     if (sceneryKind(object.type) !== null) {
@@ -9884,6 +9954,58 @@ export class GameScene extends Phaser.Scene {
    * unison reads as a screensaver, and there are hundreds of them along each
    * walled edge.
    */
+  /**
+   * Fade whatever the player is standing behind, and bring back what she is
+   * not.
+   *
+   * Reported from a playtest as a big bug: *I got stuck behind the
+   * lighthouse. I wandered in and stopped moving.* She was not stuck. The
+   * beacon's art is seven and a half tiles tall over the two it stands on,
+   * so six cells of quay behind it are painted over — she was walking about
+   * under a picture of a tower with nothing on screen to say so, and a
+   * character who does not move when you press a key is a character who
+   * cannot move.
+   *
+   * The test is simply whether her feet are inside the art's own rectangle.
+   * That is exactly the condition under which it is drawn over her: depth is
+   * the y a thing stands on, so anything whose footprint bottom is below her
+   * feet sorts in front, and its rectangle ends at that bottom edge. No
+   * separate notion of "behind" is needed and none would agree with the
+   * picture as reliably as the picture's own arithmetic does.
+   *
+   * Eased rather than switched, and both ways, so a building gives way as
+   * she walks into its shadow and closes again behind her.
+   */
+  private showThroughWhatHidesHer(): void {
+    const x = this.player.x;
+    const y = this.player.y;
+    let live = 0;
+    for (const thing of this.tallThings) {
+      const { sprite } = thing;
+      // Destroyed since the last pass — a tree taken by the minus spell, or
+      // a whole world thrown away and built again.
+      if (!sprite.active) continue;
+      this.tallThings[live++] = thing;
+      // Indoors, nothing out here is on screen and the player's position is
+      // a room's, not the world's: every comparison would be nonsense. They
+      // are left at whatever they were, which is what they will be found at
+      // when she comes back out of the door she went in.
+      if (this.interior) continue;
+      const hides =
+        x >= sprite.x &&
+        x < sprite.x + sprite.displayWidth &&
+        y > sprite.y &&
+        y < sprite.y + sprite.displayHeight;
+      const wanted = hides ? HIDDEN_BEHIND_ALPHA : 1;
+      if (sprite.alpha === wanted) continue;
+      const step = Math.sign(wanted - sprite.alpha) * HIDING_FADE_STEP;
+      sprite.setAlpha(
+        step > 0 ? Math.min(wanted, sprite.alpha + step) : Math.max(wanted, sprite.alpha + step),
+      );
+    }
+    this.tallThings.length = live;
+  }
+
   private spawnFootprintSprite(
     object: PlacedObject,
     sidecar: SpriteSidecar,
@@ -9912,6 +10034,14 @@ export class GameScene extends Phaser.Scene {
     }
     sprite.play(animKey);
     sprite.anims.setProgress(variationFor(object.col, object.row, PHASE_STEPS) / PHASE_STEPS);
+    // Tall enough to hide her behind it? Then it has to be able to get out
+    // of the way. See `showThroughWhatHidesHer`.
+    const rise =
+      (sidecar.sprite_size_px.height - sidecar.footprint_tiles.height * sidecar.tile_size) /
+      sidecar.tile_size;
+    if (rise >= TALL_ENOUGH_TO_HIDE) {
+      this.tallThings.push({ id: object.id, at: { col: object.col, row: object.row }, sprite });
+    }
     return sprite;
   }
 

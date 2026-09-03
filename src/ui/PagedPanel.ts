@@ -157,6 +157,24 @@ export abstract class PagedPanel<TPage> {
     return this.opened;
   }
 
+  /**
+   * What is written on the sheet right now, for a script to read.
+   *
+   * Every one of these decks is cut to the child in front of it — see
+   * `geometryBeatsFor` and `lessonFor` — so *which* pages a panel is
+   * showing is a decision, and a decision nothing on screen states in a form
+   * a test can check. The alternative is comparing screenshots of prose,
+   * which fails on a comma.
+   */
+  readout(): { title: string; body: string; page: string; pages: number } {
+    return {
+      title: this.title.text,
+      body: this.body.text,
+      page: String(this.page),
+      pages: this.deck().length,
+    };
+  }
+
   /** Say everything from here on in another language. */
   setPhrases(words: Phrases): void {
     this.words = words;

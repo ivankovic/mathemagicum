@@ -108,6 +108,14 @@ export interface Phrases {
 
   geometryLessonTitle: string;
   geometryRune: string;
+  /**
+   * Count the stepping stones: the bottom rung's own page.
+   *
+   * Only that rung is shown it. Every rung above lays no stones and reads a
+   * ruler instead, and this page would be a method for a question they are
+   * not asked. See `geometryBeatsFor`.
+   */
+  geometryStones: (stones: number) => string;
   /** One mark is this many paces, and you are nought. */
   geometryRuler: (paces: number) => string;
   geometryLegs: (

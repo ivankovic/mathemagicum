@@ -217,6 +217,7 @@ function sample(p: Phrases): Record<string, string> {
 
     geometryLessonTitle: p.geometryLessonTitle,
     geometryRune: p.geometryRune,
+    geometryStones: p.geometryStones(7),
     geometryRuler: p.geometryRuler(50),
     geometryLegs: p.geometryLegs(p.portalCompass("east"), 4, p.portalCompass("north"), 3, 7),
     geometryCrow: p.geometryCrow(4, 3, 25, 5),

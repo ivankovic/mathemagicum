@@ -371,9 +371,20 @@ function rowsOf(count: number): string {
   return `${count} ${{ one: "red", few: "reda", many: "redova" }[countForm(count)]}`;
 }
 
-/** `1 grm`, `2 grma`, `5 grmova` — the wood over the tree's beds. */
-function bushes(count: number): string {
-  return `${count} ${{ one: "grm", few: "grma", many: "grmova" }[countForm(count)]}`;
+/**
+ * `1 stablo`, `2 stabla`, `5 stabala` — the wood over the tree's beds.
+ *
+ * Trees, not bushes. This said *grm* until a playtest caught it: the grove
+ * is woodland, and woodland's scenery is conifers, so the thing a child
+ * clears there is a tree however small the word for it would have been.
+ */
+function trees(count: number): string {
+  return `${count} ${{ one: "stablo", few: "stabla", many: "stabala" }[countForm(count)]}`;
+}
+
+/** `1 kamenčić`, `2 kamenčića`, `5 kamenčića` — the portal's stepping stones. */
+function pebbles(count: number): string {
+  return `${count} ${{ one: "kamenčić", few: "kamenčića", many: "kamenčića" }[countForm(count)]}`;
 }
 
 /** `1 oznaka`, `2 oznake`, `5 oznaka`. */
@@ -405,6 +416,8 @@ export const HR: Phrases = {
   geometryLessonTitle: "Mjerenje svijeta",
   geometryRune:
     "Šestar u tvojoj knjizi otvara kartu. Odaberi mjesto koje već poznaješ, reci koliko je daleko, i portal će te odnijeti tamo.",
+  geometryStones: (stones) =>
+    `Put je popločan kamenčićima, po jedan za svaki korak portala. Dodirni svaki dok brojiš: 1, 2, 3… sve do zadnjega. Ovo putovanje ima ${pebbles(stones)}.`,
   geometryRuler: (count) =>
     `Uz svaki rub karte ide ravnalo. Jedna oznaka je ${paces(count)}, a mjesto na kojem stojiš je nula — pa oznaka na kojoj mjesto leži i jest koliko je daleko.`,
   geometryLegs: (across, acrossMarks, down, downMarks, total) =>
@@ -432,7 +445,7 @@ export const HR: Phrases = {
 
   groveAsks: ({ task, standing, ripe, squares }) =>
     task === "overgrown"
-      ? `Šuma mi je prekrila gredice. Ukloni ${bushes(standing)} koji još stoje.`
+      ? `Šuma mi je prekrila gredice. Baci runu − iz svoje knjige i ukloni ${trees(standing)}.`
       : task === "done"
         ? "Moj je gaj pun. Sretno ti bilo."
         : `Šest je točkica sada tvoje. Uzmi suncokret iz vrećice i baci ih na cijelu gredicu odjednom. Zrelo je ${ripe} od ${squares} polja.`,

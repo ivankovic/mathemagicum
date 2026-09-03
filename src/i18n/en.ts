@@ -177,6 +177,17 @@ const FURNITURE: Record<DecorType, Noun> = {
   [DecorType.Privy]: noun("privy"),
 };
 
+/**
+ * `1 tree`, `12 trees` — the wood standing over the great tree's beds.
+ *
+ * A counted noun rather than a bare number. The line used to read *take away
+ * the 12 that still stand*, which names nothing; and the two books that
+ * decline their nouns have to be given something to decline.
+ */
+function trees(count: number): string {
+  return `${count} ${count === 1 ? "tree" : "trees"}`;
+}
+
 function item(item: ItemType | Buyable): Noun {
   return (
     PLANTS[item as PlantType] ??
@@ -216,6 +227,8 @@ export const EN: Phrases = {
   geometryLessonTitle: "Measuring the world",
   geometryRune:
     "The dividers in your spellbook open a map. Pick a place you have been, say how far away it is, and the portal takes you there.",
+  geometryStones: (stones) =>
+    `The way is laid in stepping stones, one for every step the portal takes. Touch each one as you count: 1, 2, 3… on to the last. This journey has ${stones} of them.`,
   geometryRuler: (paces) =>
     `Down each side of the map runs a ruler. One mark is ${paces} paces, and where you stand is nought — so the mark a place sits on is how far away it is.`,
   geometryLegs: (across, acrossMarks, down, downMarks, total) =>
@@ -242,7 +255,7 @@ export const EN: Phrases = {
 
   groveAsks: ({ task, standing, ripe, squares }) =>
     task === "overgrown"
-      ? `The wood has closed over my beds. Take away the ${standing} that still stand.`
+      ? `The wood has closed over my beds. Cast the − rune from your spellbook on the ${trees(standing)} that still stand.`
       : task === "done"
         ? "My grove is full. Go well."
         : `Now use what you have earned: take a sunflower from your pouch and cast the six dots over a whole bed at once. ${ripe} of ${squares} squares are ripe.`,

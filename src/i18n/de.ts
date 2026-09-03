@@ -203,6 +203,11 @@ const FURNITURE: Record<DecorType, Noun> = {
   [DecorType.Privy]: noun({ bare: "Plumpsklo", gender: "n", plural: "Plumpsklos" }),
 };
 
+/** `1 Baum`, `12 Bäume` — das Gehölz über den Beeten des Baums. */
+function trees(count: number): string {
+  return `${count} ${count === 1 ? "Baum" : "Bäume"}`;
+}
+
 function item(item: ItemType | Buyable): Noun {
   return (
     PLANTS[item as PlantType] ??
@@ -242,6 +247,8 @@ export const DE: Phrases = {
   geometryLessonTitle: "Die Welt vermessen",
   geometryRune:
     "Der Zirkel in deinem Zauberbuch öffnet eine Karte. Wähle einen Ort, an dem du schon warst, sag, wie weit er weg ist, und das Portal bringt dich hin.",
+  geometryStones: (stones) =>
+    `Der Weg ist mit Trittsteinen ausgelegt, einer für jeden Schritt, den das Portal macht. Tipp jeden an, während du zählst: 1, 2, 3 … bis zum letzten. Diese Reise hat ${stones} davon.`,
   geometryRuler: (paces) =>
     `An jeder Seite der Karte läuft ein Lineal. Ein Strich sind ${paces} Schritte, und wo du stehst, ist null — der Strich, auf dem ein Ort liegt, ist also seine Entfernung.`,
   geometryLegs: (across, acrossMarks, down, downMarks, total) =>
@@ -268,7 +275,7 @@ export const DE: Phrases = {
 
   groveAsks: ({ task, standing, ripe, squares }) =>
     task === "overgrown"
-      ? `Das Gehölz hat meine Beete überwuchert. Nimm die ${standing} weg, die noch stehen.`
+      ? `Das Gehölz hat meine Beete überwuchert. Sprich die −-Rune aus deinem Zauberbuch auf die ${trees(standing)}, die noch stehen.`
       : task === "done"
         ? "Mein Hain ist voll. Geh in Frieden."
         : `Nimm jetzt, was du verdient hast: hol eine Sonnenblume aus deinem Beutel und sprich die sechs Punkte über ein ganzes Beet auf einmal. ${ripe} von ${squares} Kästchen sind reif.`,

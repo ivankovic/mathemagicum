@@ -158,6 +158,29 @@ export function beside(from: GridPoint, at: GridPoint): boolean {
  * player could see.
  */
 /**
+ * How far a person, an animal or the great tree can be and still be
+ * answered: two squares in any direction, diagonals included.
+ *
+ * One was the rule, and a playtest asked for two in as many words. The
+ * reason it is worth having is what a refusal costs the player: everything
+ * in this world that can be talked to is *walking about*, so a child aims at
+ * a villager, the villager takes a step while the finger is on the way down,
+ * and the answer is a red cross. Two squares absorbs one step of drift,
+ * which is the whole of the miss.
+ *
+ * Deliberately not the measure a hand uses. `beside` stays at one orthogonal
+ * step because gardening acts on the tile the player *faces* and a facing is
+ * one of four, so a diagonal neighbour is genuinely out of reach of a
+ * trowel. Talking needs no facing, and neither does holding out a carrot.
+ */
+export const SPEAK_REACH = 2;
+
+/** Whether somebody is close enough to be spoken to from where she is. */
+export function withinSpeaking(from: GridPoint, at: GridPoint): boolean {
+  return stepsToSpeak(from, at) <= SPEAK_REACH;
+}
+
+/**
  * How far she can point.
  *
  * Three squares in any direction, diagonals included, which is a seven-by-

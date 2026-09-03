@@ -37,6 +37,8 @@ const HERE_HEX = 0xffffff;
 const SMALL_SIZE = 12;
 const TICK = 4;
 const MARK_SIZE = 7;
+/** How big a stepping stone is drawn, in radius. See `drawStones`. */
+const STONE_SIZE = 5;
 
 export class GeometryLessonPanel extends PagedPanel<GeometryBeat> {
   /**
@@ -112,6 +114,8 @@ export class GeometryLessonPanel extends PagedPanel<GeometryBeat> {
     switch (beat) {
       case GeometryBeat.Rune:
         return this.words.geometryRune;
+      case GeometryBeat.Stones:
+        return this.words.geometryStones(journey.across.marks + journey.down.marks);
       case GeometryBeat.Ruler:
         return this.words.geometryRuler(journey.league);
       case GeometryBeat.Legs:
@@ -137,7 +141,77 @@ export class GeometryLessonPanel extends PagedPanel<GeometryBeat> {
       this.drawIcons(rect, (top + bottom) / 2, [UiAsset.Spellbook, UiAsset.RunePortal]);
       return;
     }
+    if (beat === GeometryBeat.Stones) {
+      this.drawStones(rect, top, bottom);
+      return;
+    }
     this.drawTriangle(rect, top, bottom, beat);
+  }
+
+  /**
+   * The way as the bottom rung's own map draws it: two legs, and a stone on
+   * every league of them.
+   *
+   * Deliberately *not* the ruled corner the other three pages share. This is
+   * the whole point of the page: a child who is asked how many stones there
+   * are has no ruler on their map and no numeral to read off one, and
+   * drawing them a graduated axis is showing them the instrument belonging
+   * to the rung above. Nothing here is numbered — the counting is the answer
+   * and printing it would be doing it for them.
+   *
+   * The stones are laid the way `stonesAlong` lays them, corner counted
+   * once, so a child holding the page beside their own map counts the same
+   * number twice. That is the only property of this drawing worth having.
+   */
+  private drawStones(rect: PanelRect, top: number, bottom: number): void {
+    const journey = this.example();
+    const across = journey.across.marks;
+    const down = journey.down.marks;
+    const room = {
+      width: Math.min(rect.width - 96, 260),
+      height: Math.max(40, bottom - top - 30),
+    };
+    const step = Math.min(room.width / Math.max(1, across), room.height / Math.max(1, down));
+    const width = step * across;
+    const height = step * down;
+    const left = rect.centreX - width / 2 + 10;
+    const foot = top + (bottom - top + height) / 2 - 12;
+    const head = foot - height;
+
+    // The path itself, faint: the stones are the subject and the line is
+    // only there to say which order they come in.
+    this.ink.lineStyle(2, RULE_HEX, 1);
+    this.ink.lineBetween(left, foot, left + width, foot);
+    this.ink.lineBetween(left + width, foot, left + width, head);
+
+    for (let mark = 1; mark <= across; mark++) {
+      this.stone(left + mark * step, foot);
+    }
+    for (let mark = 1; mark <= down; mark++) {
+      this.stone(left + width, foot - mark * step);
+    }
+
+    // Where she is standing, which is not a stone: the corner is nought and
+    // counting starts at the one after it.
+    this.ink.fillStyle(INK_HEX, 1);
+    this.ink.fillRect(
+      left - MARK_SIZE / 2 - 1,
+      foot - MARK_SIZE / 2 - 1,
+      MARK_SIZE + 2,
+      MARK_SIZE + 2,
+    );
+    this.ink.fillStyle(HERE_HEX, 1);
+    this.ink.fillRect(left - MARK_SIZE / 2, foot - MARK_SIZE / 2, MARK_SIZE, MARK_SIZE);
+
+    this.caption.setVisible(false);
+  }
+
+  /** One stepping stone: a filled circle with a rim, so it reads as laid. */
+  private stone(x: number, y: number): void {
+    this.ink.fillStyle(PATH_HEX, 1);
+    this.ink.fillCircle(x, y, STONE_SIZE);
+    this.ink.lineStyle(1, INK_HEX, 1);
+    this.ink.strokeCircle(x, y, STONE_SIZE);
   }
 
   /**

@@ -775,6 +775,25 @@ export interface DevHandle {
    */
   readonly hudClock: () => { time: string; date: string; sky: string; shown: boolean };
   /**
+   * What is currently getting out of the player's way, by the id of the
+   * thing on the grid.
+   *
+   * A sprite has no name a script can read, so the id it was placed under
+   * comes along with it. Reported for everything tall enough to hide her —
+   * see `TALL_ENOUGH_TO_HIDE` — with how much of each is left, so a scenario
+   * can tell "faded" from "not there".
+   */
+  /**
+   * The geometer's parchment, while it is open: what it says and how many
+   * pages it has.
+   *
+   * His deck is cut to the child's rung — a counting child is shown the
+   * stepping stones and a child who squares is shown the crow — and nothing
+   * else can say which lesson a browser is actually looking at.
+   */
+  readonly geometry: () => { title: string; body: string; page: string; pages: number } | null;
+  readonly hiding: () => readonly { id: string; col: number; row: number; alpha: number }[];
+  /**
    * Which building she is standing inside, or null for out of doors.
    *
    * `house` answers this for her *own* house and only for that, because it

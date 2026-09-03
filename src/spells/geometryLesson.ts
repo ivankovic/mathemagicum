@@ -23,12 +23,10 @@ import { type PortalJourney, type PortalRung, PortalTier, journeyBetween } from 
  * 3. **the legs** — the portal goes across, then down; add the two;
  * 4. **the crow** — the straight line is shorter, and here is how to get it.
  *
- * **Every beat is shown at every rung**, and only the *numbers* change with
- * the child — which is the addition lesson's rule, and the design's: a
- * lesson is not a gate. A five-year-old on the coarsest ruler meets the
- * crow's flight as a three-four-five triangle, which is the friendliest one
- * there is and teaches them nothing they can be hurt by. Hiding it would
- * mean the one child who *would* have asked cannot.
+ * **The pages are cut to the tier**, and only the *numbers* change within
+ * one. See `geometryBeatsFor` for the argument, which is the addition
+ * lesson's: a method demonstrated on a question you have not been asked is a
+ * method you cannot check against anything.
  */
 
 /**
@@ -63,6 +61,16 @@ export function geometryLessonFor(rung: PortalRung): PortalJourney {
 export const GeometryBeat = {
   /** What the spell is and where it lives: the spellbook and the dividers. */
   Rune: "rune",
+  /**
+   * The stepping stones, laid one to a league along the way.
+   *
+   * The bottom rung's own picture, and the page that was missing. A child on
+   * that rung is asked *how many stones*, and the lesson handed them a ruler
+   * — an instrument their map does draw and their question never mentions.
+   * A playtest put it plainly: the tower says the wrong tutorial, it does
+   * not match the difficulty level.
+   */
+  Stones: "stones",
   /** The ruler down the side of the map, and where nought is. */
   Ruler: "ruler",
   /** Across, then down. The distance is the two added. */
@@ -73,8 +81,16 @@ export const GeometryBeat = {
 
 export type GeometryBeat = (typeof GeometryBeat)[keyof typeof GeometryBeat];
 
+/**
+ * Every page there is, in the order the spell itself gets harder.
+ *
+ * Not the deck anybody is shown: no tier gets all five, because the stones
+ * and the ruler are two answers to the same question and a child is asked
+ * one of them. See `geometryBeatsFor`.
+ */
 export const GEOMETRY_BEATS: readonly GeometryBeat[] = [
   GeometryBeat.Rune,
+  GeometryBeat.Stones,
   GeometryBeat.Ruler,
   GeometryBeat.Legs,
   GeometryBeat.Crow,
@@ -89,24 +105,34 @@ export function squaresOf(journey: PortalJourney): number {
 /**
  * The pages he actually turns, for a child on this rung.
  *
- * All four of them was the bug a playtest found: the geometer worked through
- * the crow's flight — two legs squared, added, and rooted — at a child whose
- * own spell asks them to count stepping stones. That is the mistake
- * `lessonFor` was written to avoid on the other side of the world, said in
- * its own words: a method demonstrated on a question they have not been
- * asked is a method they cannot check.
+ * All of them was the first bug a playtest found: the geometer worked
+ * through the crow's flight — two legs squared, added, and rooted — at a
+ * child whose own spell asks them to count stepping stones. That is the
+ * mistake `lessonFor` was written to avoid on the other side of the world,
+ * said in its own words: a method demonstrated on a question they have not
+ * been asked is a method they cannot check.
  *
- * So the deck is cut to the tier. Everybody gets the rune and the ruler,
- * because everybody has to find the map and know where nought is. The legs
- * arrive when the spell starts asking for both of them, and the straight
- * line only when the spell starts asking for it.
+ * Cutting the deck to the tier fixed three of the four and left the bottom
+ * one exactly as wrong, which is what a second playtest reported. The
+ * counting child was still handed the *ruler*: a page about an instrument
+ * whose whole use is reading a numeral off it, at a child whose map has no
+ * numeral on it and whose question is how many stones there are.
+ *
+ * So the second page is now the tier's own picture rather than one page for
+ * everybody. Count gets the stones, and everyone above it gets the ruler,
+ * because the stones are gone by then and a mark has taken their place. The
+ * legs arrive when the spell asks for both of them and the straight line
+ * when it asks for that — which leaves the deck no longer a prefix of
+ * `GEOMETRY_BEATS`, and it should not be: the stones and the ruler are two
+ * answers to one question, not two steps of one method.
  */
 export function geometryBeatsFor(rung: PortalRung): readonly GeometryBeat[] {
-  if (rung.tier === PortalTier.Crow) return GEOMETRY_BEATS;
+  if (rung.tier === PortalTier.Count) return [GeometryBeat.Rune, GeometryBeat.Stones];
+  if (rung.tier === PortalTier.Read) return [GeometryBeat.Rune, GeometryBeat.Ruler];
   if (rung.tier === PortalTier.Add) {
-    return GEOMETRY_BEATS.filter((beat) => beat !== GeometryBeat.Crow);
+    return [GeometryBeat.Rune, GeometryBeat.Ruler, GeometryBeat.Legs];
   }
-  return [GeometryBeat.Rune, GeometryBeat.Ruler];
+  return [GeometryBeat.Rune, GeometryBeat.Ruler, GeometryBeat.Legs, GeometryBeat.Crow];
 }
 
 export function nextGeometryBeat(beat: GeometryBeat, step: number): GeometryBeat {

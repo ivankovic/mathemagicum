@@ -78,9 +78,10 @@ describe("the journey he works through", () => {
 });
 
 describe("the beats", () => {
-  test("are the four the panel knows how to draw, in order", () => {
+  test("are the five the panel knows how to draw, in order", () => {
     expect(GEOMETRY_BEATS).toEqual([
       GeometryBeat.Rune,
+      GeometryBeat.Stones,
       GeometryBeat.Ruler,
       GeometryBeat.Legs,
       GeometryBeat.Crow,
@@ -88,16 +89,24 @@ describe("the beats", () => {
     expect(new Set(GEOMETRY_BEATS).size).toBe(GEOMETRY_BEATS.length);
   });
 
-  // Every beat at every rung. A lesson is not a gate — the addition teacher
-  // shows all four of hers to a child adding within ten, and hiding the
-  // crow's flight would mean the one child who *would* have asked cannot.
-  test("there are as many of them as the addition lesson has", () => {
-    expect(GEOMETRY_BEATS.length).toBe(4);
+  /**
+   * Five pages, and nobody sees five.
+   *
+   * The stones and the ruler answer the same question — how far is that —
+   * and a child is asked one of them, never both. So the longest deck is
+   * four, which is what the addition lesson has, and the list here is the
+   * catalogue rather than anybody's lesson.
+   */
+  test("there is one more page than any one child is shown", () => {
+    expect(GEOMETRY_BEATS.length).toBe(5);
+    for (let at = 0; at <= HARDEST_PORTAL_RUNG; at++) {
+      expect(geometryBeatsFor(portalRungAt(at)).length).toBeLessThanOrEqual(4);
+    }
   });
 
   test("stepping forward and back walks them, and stops at the ends", () => {
-    expect(nextGeometryBeat(GeometryBeat.Rune, 1)).toBe(GeometryBeat.Ruler);
-    expect(nextGeometryBeat(GeometryBeat.Ruler, -1)).toBe(GeometryBeat.Rune);
+    expect(nextGeometryBeat(GeometryBeat.Rune, 1)).toBe(GeometryBeat.Stones);
+    expect(nextGeometryBeat(GeometryBeat.Stones, -1)).toBe(GeometryBeat.Rune);
     // Clamped rather than wrapping: a "next" that jumped back to the start
     // reads as the panel having lost its place.
     expect(nextGeometryBeat(GeometryBeat.Rune, -1)).toBe(GeometryBeat.Rune);
@@ -121,9 +130,33 @@ describe("how much of the lesson he gives", () => {
    * its own words: a method demonstrated on a question they have not been
    * asked is a method they cannot check.
    */
-  test("counting and reading get the rune and the ruler, and stop there", () => {
-    for (const at of [0, 1, 2]) {
+  /**
+   * And the half of it a second playtest found still wrong: *the tower still
+   * says the wrong tutorial, it does not match the difficulty level.*
+   *
+   * Cutting the deck left the bottom rung with the rune and the *ruler* — a
+   * page about reading a numeral off a graduated edge, at a child whose map
+   * draws no numerals and whose question is how many stones there are. Two
+   * pages each either way, and they are not the same two.
+   */
+  test("counting gets the stones and reading gets the ruler", () => {
+    expect(geometryBeatsFor(portalRungAt(0))).toEqual([GeometryBeat.Rune, GeometryBeat.Stones]);
+    for (const at of [1, 2]) {
       expect(geometryBeatsFor(portalRungAt(at))).toEqual([GeometryBeat.Rune, GeometryBeat.Ruler]);
+    }
+  });
+
+  /**
+   * And nobody above the bottom rung is shown the stones.
+   *
+   * The other direction of the same rule, and the one that would rot
+   * quietly: a page kept for everybody is a page nobody notices is wrong.
+   * The stones are gone from the map above rung nought — see `PORTAL_RUNGS`
+   * — so a lesson that laid them would be drawing a map that does not exist.
+   */
+  test("and nobody who reads a ruler is shown the stones", () => {
+    for (let at = 1; at <= HARDEST_PORTAL_RUNG; at++) {
+      expect(geometryBeatsFor(portalRungAt(at))).not.toContain(GeometryBeat.Stones);
     }
   });
 
@@ -137,20 +170,31 @@ describe("how much of the lesson he gives", () => {
 
   test("and only the rungs that ask for the straight line are shown it", () => {
     for (const at of [6, 7, 8, 9]) {
-      expect(geometryBeatsFor(portalRungAt(at))).toEqual(GEOMETRY_BEATS);
+      expect(geometryBeatsFor(portalRungAt(at))).toEqual([
+        GeometryBeat.Rune,
+        GeometryBeat.Ruler,
+        GeometryBeat.Legs,
+        GeometryBeat.Crow,
+      ]);
     }
   });
 
-  // Whatever is cut, the first two are always there: everybody has to find
-  // the map and know where nought is before any of it means anything.
-  test("every rung is shown the rune and the ruler", () => {
+  /**
+   * Whatever is cut, the rune is first and the order never changes.
+   *
+   * A deck is no longer a *prefix* of the whole lesson — the stones and the
+   * ruler sit in the same slot — so what is left to hold is that every deck
+   * is a subsequence of it. That is the property the page-turning depends
+   * on: a child who comes back on a harder rung meets the pages they had in
+   * the order they had them, with more after.
+   */
+  test("every rung starts at the rune, in the catalogue's own order", () => {
     for (let at = 0; at <= HARDEST_PORTAL_RUNG; at++) {
       const deck = geometryBeatsFor(portalRungAt(at));
       expect(deck[0]).toBe(GeometryBeat.Rune);
-      expect(deck[1]).toBe(GeometryBeat.Ruler);
-      // And the pages kept are always a prefix of the full lesson, so the
-      // order a child meets them in never changes with the rung.
-      expect(GEOMETRY_BEATS.slice(0, deck.length)).toEqual([...deck]);
+      const places = deck.map((beat) => GEOMETRY_BEATS.indexOf(beat));
+      expect(places).not.toContain(-1);
+      expect([...places].sort((a, b) => a - b)).toEqual(places);
     }
   });
 });
