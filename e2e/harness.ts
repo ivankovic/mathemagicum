@@ -328,8 +328,11 @@ export function seedButton(seed: PlantType | FlowerType): string {
  * The one menu whose *contents* change: indoors it is build-or-clear,
  * outdoors grow-or-clear, and a child who has met the astronomer gets
  * copying as a third. `patch.2` meant copying only for that last child.
+ *
+ * A crop is a legal answer here because the menu asks twice — the spell,
+ * and then, if it was planting, which seed. Same menu, same names.
  */
-export function patchButton(action: PatchAction): string {
+export function patchButton(action: PatchAction | PlantType): string {
   return `patch.${action}`;
 }
 

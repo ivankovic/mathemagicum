@@ -149,16 +149,21 @@ describe("what the great tree asks for", () => {
           null,
         ]);
 
-        // The seed first, from the pouch, which is what the button on the
-        // menu will show — a patch that chose its own crop would be a second
-        // way of picking a seed.
+        // A carrot in her hand first, and deliberately the wrong crop. A
+        // playtest found the patch sowing *whatever was last used* with
+        // nothing asking, so this scenario is only worth anything if what
+        // she is holding and what goes in the ground disagree.
         await game.tap("seeds");
-        await game.tap(seedButton(PlantType.Sunflower));
+        await game.tap(seedButton(PlantType.Carrot));
         await game.settle(300);
 
         await game.tap("spellbook");
         await game.tap(runeButton(Spell.Array));
+        // Planting, and then — the second question, on the same menu — the
+        // sunflowers.
         expect(await game.tap(patchButton(PatchAction.Plant))).toBe(true);
+        await game.settle(300);
+        expect(await game.tap(patchButton(PlantType.Sunflower))).toBe(true);
         await game.settle(300);
         await game.tapCell(bed[0]?.col ?? 0, bed[0]?.row ?? 0);
         await game.settle(300);

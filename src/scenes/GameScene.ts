@@ -1573,7 +1573,15 @@ export class GameScene extends Phaser.Scene {
   /** Which colour the seed pouch will plant next, per flower. */
   private flowerLook: Partial<Record<FlowerType, number>> = {};
   private symmetryPopup?: SymmetryPopup;
-  private patchMenu?: PatchMenu<PatchAction>;
+  /**
+   * The little menu over her head, which asks two questions in turn.
+   *
+   * `PatchAction | PlantType` rather than the action alone: after *plant* it
+   * opens again with the crops on it. Two menus would be two things to
+   * position, close and name for a script, and the second question is the
+   * same question in the same place.
+   */
+  private patchMenu?: PatchMenu<PatchAction | PlantType>;
   /** The second of the two taps: which colour of a thing to put down. */
   private decorMenu?: PatchMenu<DecorItem>;
   private flowerMenu?: PatchMenu<PlantedFlower>;
@@ -1982,8 +1990,14 @@ export class GameScene extends Phaser.Scene {
   private debugFreeze = false;
   private debugHungry = false;
   private debugHour: number | null = null;
-  /** What the patch menu is currently offering, in the order it drew them. */
-  private patchChoices: readonly PatchAction[] = [];
+  /**
+   * What the patch menu is currently offering, in the order it drew them.
+   *
+   * Strings rather than `PatchAction`, because the menu is opened twice: once
+   * to pick the spell and once — after *plant* — to pick the seed, whose
+   * choices are crops. Both name their buttons out of this list.
+   */
+  private patchChoices: readonly string[] = [];
   /**
    * Which seed the patch being cast on will be sown with.
    *
@@ -2394,7 +2408,9 @@ export class GameScene extends Phaser.Scene {
     // Above the parchment, because the parchment has closed by the time the
     // sand runs and what is underneath is the world changing colour.
     this.sandGlass = new SandGlass(this, MODAL_DEPTH + 10, (object) => this.ui(object));
-    this.patchMenu = new PatchMenu<PatchAction>(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
+    this.patchMenu = new PatchMenu<PatchAction | PlantType>(this, TOUCH_UI_DEPTH, (object) =>
+      this.ui(object),
+    );
     this.decorMenu = new PatchMenu<DecorItem>(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
     this.flowerMenu = new PatchMenu<PlantedFlower>(this, TOUCH_UI_DEPTH, (object) =>
       this.ui(object),
@@ -5326,7 +5342,60 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const above = this.screenOfPoint(this.player.x, this.player.y - TILE_SIZE);
-    this.patchMenu?.openAt(above, choices, (action) => this.beginMarking(action));
+    this.patchMenu?.openAt(above, choices, (action) => this.chosePatchSpell(action));
+  }
+
+  /**
+   * A choice off that menu, which for one of them is not the last question.
+   *
+   * Everything but planting is a spell, and a spell knows what it does. What
+   * *plant* does depends on a seed, and a playtest found the seed being
+   * chosen behind the child's back: *the multiplication planting has no way
+   * to choose the plant. It defaults to carrot — or rather to the last thing
+   * you used, and if you didn't use anything it defaults to carrot, which is
+   * going to be confusing.* It was, and it was worse than confusing: sixteen
+   * squares of the wrong crop is the largest single mistake this game lets
+   * anybody make, and nothing asked first.
+   */
+  private chosePatchSpell(action: string): void {
+    if (action === PatchAction.Plant) {
+      this.choosePatchSeed();
+      return;
+    }
+    this.beginMarking(action as PatchAction);
+  }
+
+  /**
+   * And which seed, asked in the same place with the same shape.
+   *
+   * The pouch is the obvious answer and is the wrong one: its buttons *arm a
+   * seed for one square*, and re-teaching them a second meaning for the
+   * minute the times rune is lit is how a tap comes to do two things. This
+   * is the menu that was already open, asked again — the child taps the
+   * spell, then taps the crop, and both questions are one row of pictures
+   * over her head.
+   *
+   * Every crop is offered, including ones that will not grow on the ground
+   * she is about to mark out. That is deliberate and it is the rule the
+   * menu above already follows: the rectangle does not exist yet, so what
+   * will fit in it cannot be known, and a choice that lands on nothing is
+   * refused when the corners are drawn — before any sum has been asked.
+   */
+  private choosePatchSeed(): void {
+    this.patchChoices = PLANT_TYPES;
+    const choices = PLANT_TYPES.map((plant) => ({
+      action: plant,
+      rune: uiTextureKey(cropIcon(plant)),
+    }));
+    const above = this.screenOfPoint(this.player.x, this.player.y - TILE_SIZE);
+    this.patchMenu?.openAt(above, choices, (chosen) => {
+      // Remembered as *the* seed, the way the pouch and the number keys
+      // remember it: a child who picks tomatoes here and then plants one by
+      // hand should not find a carrot in her fingers.
+      this.selectedPlantIndex = PLANT_TYPES.indexOf(chosen as PlantType);
+      this.seedTray?.refresh();
+      this.beginMarking(PatchAction.Plant);
+    });
   }
 
   /**
@@ -5337,14 +5406,19 @@ export class GameScene extends Phaser.Scene {
    * multiply* is a question they can answer without reading a word.
    *
    * Planting has no rune, because planting is not a spell — it is a tap, and
-   * it costs no arithmetic at all. So its button carries the seed it will
-   * sow, which is the other picture a child already knows: the one in the
-   * pouch they took it from. It also answers the question the button would
-   * otherwise leave open, which is *which* seed sixteen squares are about to
-   * be filled with.
+   * it costs no arithmetic at all. So its button carries the **pouch**,
+   * which is the other picture a child already knows and the one they tap to
+   * get at seeds.
+   *
+   * It carried a *crop* for a while — whichever one was last picked — and
+   * that was a promise the button had no business making. A playtest read it
+   * exactly as written: the seed was already decided, by the game, out of
+   * whatever had last been in her hand. Now the button says only *sow
+   * something*, and `choosePatchSeed` asks what.
    */
   private patchMenuIcon(action: PatchAction): string {
-    return action === PatchAction.Plant ? cropIcon(this.selectedPlant()) : SPELL_RUNES[action];
+    if (action === PatchAction.Plant) return UiAsset.SeedPouch;
+    return SPELL_RUNES[action];
   }
 
   private beginMarking(action: PatchAction): void {

@@ -368,12 +368,32 @@ always the plus rune, so nothing is asked at all: a menu of one is not a
 choice, it is a tap that asks a child to confirm a decision the game already
 made.
 
-**And it multiplies spells, only ever spells.** Planting was on the list once,
-and it was the one thing here with no arithmetic behind it: mark out six by
-seven, answer one multiplication, and forty-two squares are planted having
-cast nothing. That made planting the obvious pick every time and turned the
-times spell into a way of *avoiding* sums. A seed goes in the ground one at a
-time now, which is what putting a seed in the ground is.
+**Planting is on the menu, and it is the odd one.** It was taken off once, on
+the argument that it is the only choice here with no arithmetic behind it:
+mark out six by seven, answer one multiplication, and forty-two squares are
+planted having cast nothing. It is back because of what the great tree's
+errand needs it for — she clears twelve trees one subtraction at a time and
+is then handed the spell that fills the beds on a single answer, and the
+whole lesson is the size of that difference. See "The tree that is still
+asking".
+
+**And it asks which seed.** Tapping *plant* opens the same little menu again
+with the six crops on it, and the one she picks is the one that goes in and
+the one left in her hand afterwards. It used to sow whatever was last used,
+and a playtest read the button exactly as written: *the multiplication
+planting has no way to choose the plant — it defaults to carrot, or rather to
+the last thing you used.* Sixteen squares of the wrong crop is the largest
+single mistake this game lets anybody make, and nothing asked first. The
+button now carries the **pouch** rather than a crop, because a crop on it was
+a promise the button had no business making.
+
+Deliberately the menu rather than the pouch itself. The pouch's buttons arm a
+seed *for one square*, and teaching them a second meaning for the minute the
+times rune is lit is how one tap comes to do two things. Every crop is
+offered, including ones that will not grow on the ground she is about to mark
+out — that is the rule the menu above it already follows, since the rectangle
+does not exist yet and a choice that lands on nothing is refused when the
+corners are drawn, before any sum has been asked.
 
 **What, then where, then once, then how many.** The choice used to come after
 the rectangle was drawn, off a menu that also said how many squares each
