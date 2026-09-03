@@ -3,12 +3,14 @@
 
 import { describe, expect, test } from "bun:test";
 import type { AnchorPlacements, AreaPlacement } from "./anchors";
+import { GATE_WIDTH as CITY_GATE_WIDTH } from "./city";
 import { floodFillReachable, isReachable } from "./connectivity";
 import { type HighCorner, highEdges } from "./elevation";
 import type { Grove } from "./enchantedForest";
 import { FixtureType } from "./fixtures";
 import type { WorldGrid } from "./grid";
 import { LANDMARK_FOOTPRINT, LANDMARK_OVERHANG, LandmarkType } from "./landmarks";
+import { nearTheRim } from "./terraces";
 import { TerrainType } from "./terrain";
 import type { GridPoint } from "./topdown";
 import { generateWorld } from "./worldGenerator";
@@ -186,11 +188,13 @@ function assertYouCanGetIntoTheSettlements(
 ): void {
   expect(isReachable(reachable, grid, world.city.doorstep)).toBe(true);
   assertTheWallIsAWall(grid, world.city);
+  assertTheRoadArrivesOnLand(grid, world.city);
   // The middle of the city, not merely its gate: a gate that opened onto a
   // block walled in by its own buildings would pass a doorstep check. A cell
   // of the square rather than the tower on it, because the tower is a
   // building and you cannot walk into a building.
   expect(isReachable(reachable, grid, world.city.plazaCell)).toBe(true);
+  assertNothingInTheCityIsStranded(grid, reachable, world);
   expect(world.city.clockTower?.type).toBe(LandmarkType.ClockTower);
   assertNothingHidesBehindTheClock(world.city);
   assertSomebodyLivesThere(world);
@@ -296,7 +300,7 @@ function assertYouCanGetIntoTheSettlements(
 }
 
 /**
- * The city wall is unbroken, and the only ways through it are its gates.
+ * The citadel wall is unbroken, and the only ways through it are its gates.
  *
  * The failure this exists for is the one the village's garden gate had:
  * `ensureConnectivity` carves by *removing whatever is in the way*, so a
@@ -306,9 +310,16 @@ function assertYouCanGetIntoTheSettlements(
  *
  * So this counts the pieces. The gaps are exactly the gates the layout says
  * it opened, and they are passable; everything else on the ring is wall, and
- * it is not. It used to be "exactly one gap", which was the same check while
- * a city had one gate — and would have gone on passing a hole knocked
- * anywhere in the ring the moment it had four.
+ * it is not.
+ *
+ * **The wall is inside the town now**, which deletes half of what this used
+ * to ask and is worth saying so. It ran round the rim of the box, so every
+ * side of it faced the open world and each one had to be checked for being
+ * dry and off the world's edge — the first city ever built had its west gate
+ * opening onto deep water. Round the core, every side faces the town's own
+ * streets, so there is no such thing as a side with nothing behind it and
+ * all four always open. What is left of that question belongs to the
+ * doorstep, which is where the road arrives, and is asked below.
  */
 function assertTheWallIsAWall(
   grid: WorldGrid,
@@ -319,87 +330,21 @@ function assertTheWallIsAWall(
   // Named rather than counted: a hole and a gate are both a gap, and only
   // one of them is on the layout's own list.
   expect(new Set(ways.map((piece) => `${piece.col},${piece.row}`))).toEqual(opened);
-  // A side is skipped only where its doorstep would fall on the world's rim,
-  // so a city in open country has all four and none has fewer than one.
-  expect(city.gates.length).toBeGreaterThanOrEqual(1);
-  expect(city.gates.length).toBeLessThanOrEqual(4);
+
+  // A world too small to hold a citadel builds none, and an unwalled town is
+  // a real answer — far better than a wall running off the end of the cobble
+  // and standing in a field. Nothing below applies to one.
+  if (city.wall.length === 0) {
+    expect(city.gates).toEqual([]);
+    return;
+  }
+
+  // Three cells to a gateway on each of the four sides. *Three characters,
+  // three tiles at least* is what a playtest asked for, and one cell was a
+  // target a child walking a wall had to hit exactly — every miss looking
+  // the same as walking into stone.
+  expect(city.gates.length).toBe(4 * CITY_GATE_WIDTH);
   for (const gate of city.gates) expect(grid.isPassable(gate.col, gate.row)).toBe(true);
-
-  // And every one of them opens onto something a person could stand on.
-  //
-  // The first city this was tried on has its back to the sea, and the west
-  // gate opened straight onto deep water — a gate that cannot be walked
-  // through is a door that lies about being one. Which side is which is not
-  // known here, so this asks the weaker and sufficient question: at least
-  // one of the four cells around a gate is dry land outside the ring.
-  for (const gate of city.gates) {
-    const around = [
-      { col: gate.col, row: gate.row - 1 },
-      { col: gate.col, row: gate.row + 1 },
-      { col: gate.col - 1, row: gate.row },
-      { col: gate.col + 1, row: gate.row },
-    ].filter((at) => grid.inBounds(at.col, at.row));
-    const dry = around.filter((at) => grid.getTerrain(at.col, at.row) !== TerrainType.Water);
-    expect({ gate: `${gate.col},${gate.row}`, dry: dry.length > 1 }).toEqual({
-      gate: `${gate.col},${gate.row}`,
-      dry: true,
-    });
-  }
-
-  // **A gate on every side that has an outside**, which is the claim the
-  // four-sided wall was built on and the one thing here a picture was
-  // supposed to settle.
-  //
-  // Asserted rather than eyeballed, and it is much the better bargain: a
-  // screenshot shows one city from one viewport, and the city is wider than
-  // the window, so the honest version of the picture is four pictures. This
-  // is the property itself, on twenty worlds, and it says *which* sides are
-  // missing and why.
-  //
-  // The rule is `chooseGates`'s own: a side is worth a gate exactly when the
-  // cell outside it is dry and one clear step in from the world's rim. So
-  // the assertion is an equality in both directions — no side with an
-  // outside goes without a gate, and no gate opens onto a side that has
-  // none. A one-way check would pass a wall with four gates on the south.
-  {
-    const cols = city.wall.map((piece) => piece.col);
-    const rows = city.wall.map((piece) => piece.row);
-    const left = Math.min(...cols);
-    const right = Math.max(...cols);
-    const top = Math.min(...rows);
-    const bottom = Math.max(...rows);
-    const outside = (at: GridPoint) =>
-      at.col > 0 &&
-      at.row > 0 &&
-      at.col < grid.width - 1 &&
-      at.row < grid.height - 1 &&
-      grid.getTerrain(at.col, at.row) !== TerrainType.Water;
-    const sideOf = (gate: GridPoint): string => {
-      if (gate.row === bottom) return "south";
-      if (gate.row === top) return "north";
-      if (gate.col === right) return "east";
-      if (gate.col === left) return "west";
-      return "nowhere";
-    };
-    const midCol = Math.floor((left + right) / 2);
-    const midRow = Math.floor((top + bottom) / 2);
-    const wanted = (
-      [
-        ["south", { col: midCol, row: bottom + 1 }],
-        ["north", { col: midCol, row: top - 1 }],
-        ["east", { col: right + 1, row: midRow }],
-        ["west", { col: left - 1, row: midRow }],
-      ] as const
-    )
-      .filter(([, doorstep]) => outside(doorstep))
-      .map(([side]) => side);
-    const got = city.gates.map(sideOf).sort();
-    // A city with its back to the sea legitimately has fewer than four; a
-    // city in open country has all four and nothing may quietly drop one.
-    expect(got).toEqual([...wanted].sort());
-    // And none of them landed off the ring entirely.
-    expect(got).not.toContain("nowhere");
-  }
 
   // Every piece the layout laid is still standing where it laid it. A wall
   // that came back with three of its stones missing would still enclose a
@@ -413,18 +358,39 @@ function assertTheWallIsAWall(
     expect(grid.isPassable(piece.col, piece.row)).toBe(opened.has(`${piece.col},${piece.row}`));
   }
 
+  const cols = city.wall.map((piece) => piece.col);
+  const rows = city.wall.map((piece) => piece.row);
+  const left = Math.min(...cols);
+  const right = Math.max(...cols);
+  const top = Math.min(...rows);
+  const bottom = Math.max(...rows);
+  const width = right - left + 1;
+  const height = bottom - top + 1;
+
   // And the ring really is a ring: four corners and four runs, so the count
   // is the perimeter of the box it was laid on rather than however many
-  // cells happened to be free when it was built.
-  const width =
-    city.wall.reduce((most, p) => Math.max(most, p.col), 0) -
-    city.wall.reduce((least, p) => Math.min(least, p.col), Number.POSITIVE_INFINITY) +
-    1;
-  const height =
-    city.wall.reduce((most, p) => Math.max(most, p.row), 0) -
-    city.wall.reduce((least, p) => Math.min(least, p.row), Number.POSITIVE_INFINITY) +
-    1;
+  // cells happened to be free when it was built. This is what catches the
+  // wall being built *after* something else has stood a lamp on it — which
+  // was harmless out on the rim of an empty box and is a hole in a rampart
+  // now that the ring runs down the middle of a town.
   expect(city.wall.length).toBe(2 * width + 2 * height - 4);
+
+  // Three gates in a row on each side, in the middle of it, rather than
+  // three cells that happen to add up to twelve. Read as runs: a side whose
+  // three openings were scattered along it would be three doors, and the
+  // whole of the change is that there is one wide one.
+  const sides = {
+    north: city.gates.filter((gate) => gate.row === top).map((gate) => gate.col),
+    south: city.gates.filter((gate) => gate.row === bottom).map((gate) => gate.col),
+    west: city.gates.filter((gate) => gate.col === left).map((gate) => gate.row),
+    east: city.gates.filter((gate) => gate.col === right).map((gate) => gate.row),
+  };
+  for (const [side, along] of Object.entries(sides)) {
+    const run = [...along].sort((a, b) => a - b);
+    expect({ side, count: run.length }).toEqual({ side, count: CITY_GATE_WIDTH });
+    const contiguous = run.every((at, n) => at === (run[0] as number) + n);
+    expect({ side, contiguous }).toEqual({ side, contiguous: true });
+  }
 
   // Laid stone from wall to wall, with nothing growing between the houses.
   //
@@ -434,12 +400,12 @@ function assertTheWallIsAWall(
   // with them. Swept rather than sampled, because the failure this is
   // guarding against is exactly a patch that got missed.
   //
-  // It follows from this that nothing inside the walls can be planted —
-  // cobble is not soil — and that is intended. The garden is at home.
-  const left = city.wall.reduce((least, p) => Math.min(least, p.col), Number.POSITIVE_INFINITY);
-  const top = city.wall.reduce((least, p) => Math.min(least, p.row), Number.POSITIVE_INFINITY);
-  for (let row = top; row < top + height; row++) {
-    for (let col = left; col < left + width; col++) {
+  // The sweep is the *citadel* now rather than the whole town. Outside the
+  // ramparts the town has a wandering edge and its corners are open country
+  // — see `withinTheTown` — so "cobble everywhere" is no longer true of the
+  // box and is still exactly true of the walls.
+  for (let row = top; row <= bottom; row++) {
+    for (let col = left; col <= right; col++) {
       if (!grid.inBounds(col, row)) continue;
       expect({ at: `${col},${row}`, ground: grid.getTerrain(col, row) }).toEqual({
         at: `${col},${row}`,
@@ -447,6 +413,27 @@ function assertTheWallIsAWall(
       });
     }
   }
+}
+
+/**
+ * And the road arrives somewhere a person could stand.
+ *
+ * The half of the old gate check that survived the wall moving inward, and
+ * the half that was always the real one: `city.doorstep` is what
+ * `ensureConnectivity` carves a route to, and a doorstep in the sea or on
+ * the world's own rim is a world that fails to generate at all. The first
+ * city ever built had its back to the water.
+ */
+function assertTheRoadArrivesOnLand(
+  grid: WorldGrid,
+  city: ReturnType<typeof generateWorld>["city"],
+): void {
+  const { col, row } = city.doorstep;
+  expect({
+    at: `${col},${row}`,
+    dry: grid.getTerrain(col, row) !== TerrainType.Water,
+    offTheRim: col > 0 && row > 0 && col < grid.width - 1 && row < grid.height - 1,
+  }).toEqual({ at: `${col},${row}`, dry: true, offTheRim: true });
 }
 
 /**
@@ -488,6 +475,57 @@ function assertSomebodyLivesThere(world: ReturnType<typeof generateWorld>): void
       expect({ shop: shop.id, keepers: keepers.length }).toEqual({ shop: shop.id, keepers: 1 });
     }
   }
+}
+
+/**
+ * Every square of the city a child could stand on can be walked to.
+ *
+ * The strongest thing that can be said about a settlement's layout, and
+ * cheap: the flood fill has already been run for the doorstep. A gate, a
+ * plaza cell and a doorstep are three points, and three points passing is
+ * how a walled-in corner survives — the block behind the tower was
+ * *reachable* the whole time it was invisible, and the reverse mistake would
+ * be just as quiet.
+ *
+ * Written before the city's outline stopped being a rectangle, so it holds
+ * the old shape as well as the new one and could be watched passing on both.
+ * That is the point of it: what a rough edge risks is exactly a pocket of
+ * cobble the wall closed off, and nothing else here would have said so.
+ *
+ * The gates are named separately although they are inside the sweep, because
+ * a gate is the one cell whose whole job is to be walkable and the failure
+ * reads very differently — "the city is sealed" rather than "a corner of it
+ * is".
+ */
+function assertNothingInTheCityIsStranded(
+  grid: WorldGrid,
+  reachable: ReturnType<typeof floodFillReachable>,
+  world: ReturnType<typeof generateWorld>,
+): void {
+  for (const gate of world.city.gates) {
+    expect({
+      gate: `${gate.col},${gate.row}`,
+      reached: isReachable(reachable, grid, gate),
+    }).toEqual({ gate: `${gate.col},${gate.row}`, reached: true });
+  }
+  const box = world.anchors.bigCity;
+  const stranded: string[] = [];
+  for (let row = box.row; row < box.row + box.height; row++) {
+    for (let col = box.col; col < box.col + box.width; col++) {
+      if (!grid.isPassable(col, row)) continue;
+      // Never the world's own rim. That ring stands a step above everything
+      // inside it so a child cannot walk off the edge of the map, and a city
+      // box that reaches it has two rows of ground nobody can ever get to —
+      // by design, and nothing to do with the city. It used to be hidden
+      // here because the wall stood on the outermost ring of the box and
+      // made those cells impassable; the wall is round the core now, so the
+      // rim shows through and has to be named.
+      if (nearTheRim(grid.width, grid.height, col, row)) continue;
+      if (isReachable(reachable, grid, { col, row })) continue;
+      stranded.push(`${col},${row}`);
+    }
+  }
+  expect(stranded).toEqual([]);
 }
 
 /**

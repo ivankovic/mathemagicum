@@ -87,9 +87,9 @@ describe("what a seed grows", () => {
    * in that order and never one without the other.
    */
   const PINNED: Readonly<Record<number, number>> = {
-    1: 3735928526,
-    12345: 1506396194,
-    99991: 402439331,
+    1: 1810746765,
+    12345: 244848929,
+    99991: 4208917971,
   };
 
   for (const seed of SEEDS) {

@@ -56,6 +56,21 @@ const QUAY_DEPTH = 3;
  * the same crowd there would be a queue.
  */
 const QUAYSIDE_FOLK = 4;
+/**
+ * And how many of them are out on the jetties with a line in the water.
+ *
+ * A playtest called the harbour *an idle plane* and asked for somebody
+ * fishing in it. One to a pier, standing at the seaward end — which is the
+ * whole of what makes them anglers, because they are drawn with the same
+ * three villager sheets as everybody else. There is no rod in this game's
+ * art and no fisherman's body but the teacher's, and dressing an extra as
+ * him would undo the one thing his costume is for: the player has to know on
+ * sight which person on the quay is the one who teaches.
+ *
+ * Placement is the whole characterisation, and it is enough. Somebody
+ * standing at the end of a jetty over open water is doing one thing.
+ */
+const ANGLERS_PER_PIER = 1;
 /** What the person behind a harbour counter is, whatever their id says. */
 const SHOPKEEPER_ROLE = "shopkeeper";
 /**
@@ -699,7 +714,16 @@ export function layoutHarbour(grid: WorldGrid, box: AreaPlacement, rng: Rng): Ha
   // Warehouses and a cottage behind the quay, spaced along the coast and set
   // back from the water by the quay's own depth plus their own height, so
   // the working front stays clear to walk.
-  const roles: readonly BuildingRole[] = ["store", "house", "store"];
+  // Five, where it was three. *The harbour is an idle plane* — three
+  // buildings and a quay, on a front laid out for four piers. Two more
+  // warehouses fill the gaps between them, and the alternation keeps the
+  // place somewhere people live rather than a row of sheds.
+  //
+  // Not every one gets built: a role whose anchor falls off the end of a
+  // short shore, or whose footprint lands in the water, is quietly dropped
+  // — which is what the three were already doing and why asking for more is
+  // how a ragged coast ends up with any.
+  const roles: readonly BuildingRole[] = ["store", "house", "store", "house", "store"];
   for (const [n, role] of roles.entries()) {
     const anchorCell = shore.front[Math.min(shore.front.length - 1, (n + 1) * spacing - 2)];
     if (!anchorCell) continue;
@@ -847,6 +871,26 @@ export function layoutHarbour(grid: WorldGrid, box: AreaPlacement, rng: Rng): Ha
       homeBuildingId: "",
       indoors: false,
     });
+  }
+  // The anglers, out at the ends of the jetties.
+  //
+  // Before the crowd, for the reason the fisherman is: the four along the
+  // front are spread over whatever cells are left, and a person placed after
+  // them can land on somebody. The pier's *last* plank, which is the one out
+  // over open water — a jetty is only worth walking to the end of.
+  const taken = new Set(npcs.map((npc) => `${npc.home.col},${npc.home.row}`));
+  for (const [n, pier] of piers.entries()) {
+    for (let which = 0; which < ANGLERS_PER_PIER; which++) {
+      const tip = pier.at(-1 - which);
+      if (!tip || taken.has(`${tip.col},${tip.row}`)) continue;
+      taken.add(`${tip.col},${tip.row}`);
+      npcs.push({
+        id: `harbour-angler-${n}-${which}`,
+        homeBuildingId: "",
+        home: { ...tip },
+        indoors: false,
+      });
+    }
   }
   for (let n = 0; n < QUAYSIDE_FOLK && standing.length > 0; n++) {
     const at = standing[Math.floor((n * standing.length) / QUAYSIDE_FOLK)] as GridPoint;

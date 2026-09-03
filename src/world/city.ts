@@ -69,6 +69,44 @@ const CLOCKMAKER_ROLE = "clockmaker";
 const RING_INSET = 1;
 const RING_WIDTH = 2;
 /**
+ * How square the town's outline is, and how far its edge wanders.
+ *
+ * A playtest looked at the map and said the city and the village *look very
+ * artificial — the pure square looks too planned*, which was exactly right:
+ * the pave loop laid cobble over every cell of the box, so the city was a
+ * thirty-three by thirty-three rectangle of one colour on a map drawn at one
+ * pixel to two tiles. Nothing on the ground read as wrong; the silhouette
+ * did, and a silhouette is all a map has.
+ *
+ * The outline is a **squircle** — the p-norm ball at power three — rather
+ * than a circle, because a town is not round either. A circle inscribed in
+ * the box would throw away a fifth of it and read as a bullseye; at power
+ * three the corners are rounded off and the sides stay flat, which is what
+ * a town that grew inside a boundary actually looks like from above.
+ *
+ * And the edge wanders, by the same sum the enchanted forest's does and for
+ * the same reason: a rounded rectangle drawn exactly is still a drawn shape.
+ * The wander is deterministic in the box's own position, not drawn from the
+ * rng — a draw here would shift every later draw and rebuild every world in
+ * the game to no purpose.
+ */
+const OUTLINE_POWER = 3;
+const EDGE_WANDER = 0.13;
+/**
+ * How wide a gateway is, in cells.
+ *
+ * Three, asked for by name: *the city wall gates are way too small and hard
+ * to go through — three characters, three tiles at least.* One cell is a
+ * target a child walking a wall has to hit exactly, and every miss looks the
+ * same as walking into stone.
+ *
+ * It is three copies of the one gate piece the art ships rather than a wide
+ * gateway drawn as one thing, so a gate reads as three arches in a row. That
+ * is a real shape for a town gate and it is also simply what there is: the
+ * sheet has one tile in it.
+ */
+export const GATE_WIDTH = 3;
+/**
  * The repeating street-and-block rhythm across the city, in cells.
  *
  * A street one cell wide and blocks of five. Two-wide streets were tried and
@@ -166,6 +204,37 @@ function pave(grid: WorldGrid, col: number, row: number, terrain: TerrainType): 
   if (grid.inBounds(col, row)) grid.setTerrain(col, row, terrain);
 }
 
+/** The exact middle of a box, which is a half-cell for an even width. */
+function middleOf(box: AreaPlacement): { col: number; row: number } {
+  return { col: box.col + (box.width - 1) / 2, row: box.row + (box.height - 1) / 2 };
+}
+
+/**
+ * How far out of true the edge runs in one direction, from 0 to 1.
+ *
+ * Two sine waves at three and five turns, out of phase by the box's own
+ * position — the enchanted forest's sum, moved here rather than shared,
+ * because what the two places want from it is the same idea at different
+ * amplitudes and a common helper would be a knob with two owners.
+ */
+function wanderAt(box: AreaPlacement, angle: number): number {
+  const phase = (((box.col * 11 + box.row * 5) % 360) * Math.PI) / 180;
+  const wave = 0.6 * Math.sin(3 * angle + phase) + 0.4 * Math.sin(5 * angle - 2 * phase);
+  return (wave + 1) / 2;
+}
+
+/** Whether a cell is inside the town's paved outline. See `OUTLINE_POWER`. */
+function withinTheTown(box: AreaPlacement, col: number, row: number): boolean {
+  const middle = middleOf(box);
+  const dCol = col - middle.col;
+  const dRow = row - middle.row;
+  const out =
+    (Math.abs(dCol) ** OUTLINE_POWER + Math.abs(dRow) ** OUTLINE_POWER) ** (1 / OUTLINE_POWER);
+  const half = Math.min(box.width, box.height) / 2;
+  const reach = half * (1 - EDGE_WANDER * wanderAt(box, Math.atan2(dRow, dCol)));
+  return out <= reach;
+}
+
 /**
  * Where the gate goes, and where somebody stands to walk through it.
  *
@@ -185,29 +254,21 @@ function pave(grid: WorldGrid, col: number, row: number, terrain: TerrainType): 
  * piece of the ring that does not block — carries the route the rest of the
  * way in.
  */
-function chooseGates(
-  grid: WorldGrid,
-  box: AreaPlacement,
-): { gates: GridPoint[]; doorstep: GridPoint } {
+function chooseDoorstep(grid: WorldGrid, box: AreaPlacement): GridPoint {
   const midCol = box.col + Math.floor(box.width / 2);
   const midRow = box.row + Math.floor(box.height / 2);
   const left = box.col + RING_INSET - 1;
   const right = box.col + box.width - RING_INSET;
   const top = box.row + RING_INSET - 1;
   const bottom = box.row + box.height - RING_INSET;
-  const sides: { gate: GridPoint; doorstep: GridPoint }[] = [
-    { gate: { col: midCol, row: bottom }, doorstep: { col: midCol, row: bottom + 1 } },
-    { gate: { col: midCol, row: top }, doorstep: { col: midCol, row: top - 1 } },
-    { gate: { col: right, row: midRow }, doorstep: { col: right + 1, row: midRow } },
-    { gate: { col: left, row: midRow }, doorstep: { col: left - 1, row: midRow } },
+  const sides: GridPoint[] = [
+    { col: midCol, row: bottom + 1 },
+    { col: midCol, row: top - 1 },
+    { col: right + 1, row: midRow },
+    { col: left - 1, row: midRow },
   ];
-  // One cell in from the world's own rim, not merely in bounds. That ring
-  // stands a step above everything inside it so it cannot be walked onto,
-  // and no route may run along it — so a doorstep laid there is a doorstep
-  // nothing can reach, and world generation says so by failing to find any
-  // route at all.
-  // Two things make a side worth a gate, and both are about the cell
-  // *outside* it.
+  // Two things make a side worth arriving on, and both are about the cell
+  // itself.
   //
   // It must be one cell in from the world's own rim, not merely in bounds:
   // that ring stands a step above everything inside it so it cannot be
@@ -216,33 +277,129 @@ function chooseGates(
   // find any route at all.
   //
   // And it must be dry. The first city this was tried on sits with its back
-  // to the sea, and the west gate opened straight onto deep water: a gate
-  // that cannot be walked through is a door that lies about being one.
-  // Trees are allowed — they can be cleared, and a wood outside a city gate
-  // is a wood outside a city gate.
+  // to the sea, and the west side opened straight onto deep water. Trees are
+  // allowed — they can be cleared, and a wood outside a city is a wood
+  // outside a city.
   const clear = ({ col, row }: GridPoint) =>
     col > 0 &&
     row > 0 &&
     col < grid.width - 1 &&
     row < grid.height - 1 &&
     grid.getTerrain(col, row) !== TerrainType.Water;
-  const usable = sides.filter(({ doorstep }) => clear(doorstep));
-  // Every side that has an outside gets a gate. The *route* still goes to
-  // one of them — the south by preference, since every door in the city
-  // faces that way and arriving there is arriving at the fronts of things.
-  const opened = usable.length > 0 ? usable : [sides[0] as (typeof sides)[number]];
-  return {
-    gates: opened.map(({ gate }) => gate),
-    doorstep: (opened[0] as (typeof sides)[number]).doorstep,
-  };
+  return sides.find(clear) ?? (sides[0] as GridPoint);
 }
 
 /**
- * The ring wall, with a gate on every side that has one.
+ * The rectangle the wall is laid on: the plaza and the ring of blocks round
+ * it, with the streets between them as the rampart.
  *
- * Laid on the outermost ring of cells rather than on the ring road, so the
- * road runs *inside* the wall the way a city's does — a wall standing in the
- * middle of its own street would be a fence.
+ * Tried at one ring of blocks and then at none. A small world builds a small
+ * city and its plaza can sit two blocks from the edge of the town, where a
+ * nineteen-cell citadel would run off the cobble and stand in a field. What
+ * matters is that the wall is *inside* the town and that everything under it
+ * is paved, and both of those are asked rather than assumed.
+ *
+ * Null when neither fits, which is a real answer for a world small enough to
+ * have no room for a citadel. The town is then simply unwalled — which reads
+ * as a town, and is a great deal better than a wall with the sea in it.
+ */
+function citadel(
+  plaza: CityBlock,
+  inner: { col: number; row: number; width: number; height: number },
+  paved: (at: { col: number; row: number; width: number; height: number }) => boolean,
+): AreaPlacement | null {
+  for (let rings = 1; rings >= 1; rings--) {
+    const left = plaza.col - rings * RHYTHM - 1;
+    const top = plaza.row - rings * RHYTHM - 1;
+    const right = plaza.col + plaza.width + rings * RHYTHM;
+    const bottom = plaza.row + plaza.height + rings * RHYTHM;
+    const core: AreaPlacement = {
+      id: "citadel",
+      col: left,
+      row: top,
+      width: right - left + 1,
+      height: bottom - top + 1,
+    };
+    const held =
+      left >= inner.col &&
+      top >= inner.row &&
+      right < inner.col + inner.width &&
+      bottom < inner.row + inner.height;
+    if (held && core.width > GATE_WIDTH + 2 && paved(core)) return core;
+  }
+  return null;
+}
+
+/**
+ * The three cells of each gateway, on all four sides of the citadel.
+ *
+ * All four, unconditionally, which is the one thing the move inward
+ * simplifies: the wall no longer touches the outside world, so every side of
+ * it opens onto the town's own streets and there is no longer such a thing
+ * as a side with nothing behind it. That question has moved to
+ * `chooseDoorstep`, which is the only place it was ever really about — where
+ * the road arrives from.
+ */
+function gatesRound(core: AreaPlacement): GridPoint[] {
+  const left = core.col;
+  const right = core.col + core.width - 1;
+  const top = core.row;
+  const bottom = core.row + core.height - 1;
+  const middleCol = left + crossingNearestTheMiddle(core.width);
+  const middleRow = top + crossingNearestTheMiddle(core.height);
+  const gates: GridPoint[] = [];
+  for (let n = -1; n <= 1; n++) {
+    gates.push({ col: middleCol + n, row: top });
+    gates.push({ col: middleCol + n, row: bottom });
+    gates.push({ col: left, row: middleRow + n });
+    gates.push({ col: right, row: middleRow + n });
+  }
+  return gates;
+}
+
+/**
+ * How far along a wall its gateway is centred: the street crossing nearest
+ * the middle of that side.
+ *
+ * Not the middle itself, and this is the whole reason a gate is reachable at
+ * all. Every building in a block is pushed to the *bottom* of it so its door
+ * opens onto the street below, which means the cell immediately outside a
+ * north gate is a building's front wall unless something stops it being one.
+ * A gate centred on a crossing has the street that runs through the crossing
+ * on both sides of it, so the middle of the gateway always opens onto
+ * pavement — which is a property of the street grid rather than of what
+ * happened to get built, and therefore holds on every seed.
+ *
+ * The two cells either side of the middle are looked after separately: see
+ * where buildings are placed, which keeps them off a gate's approach.
+ *
+ * A city was sealed by this on three of twenty seeds before it was here, and
+ * sealed *silently* — a walled place with an unreachable gate still has
+ * three other gates, so nothing but a sweep over every cell says so.
+ */
+function crossingNearestTheMiddle(span: number): number {
+  const middle = (span - 1) / 2;
+  let best = RHYTHM;
+  for (let at = RHYTHM; at < span - 1; at += RHYTHM) {
+    if (Math.abs(at - middle) < Math.abs(best - middle)) best = at;
+  }
+  return best;
+}
+
+/**
+ * The wall round the citadel, with a three-cell gateway on each side.
+ *
+ * **It goes round the core, not round the city.** It used to be laid on the
+ * outermost ring of the box, which put every building in the world inside it
+ * and made the wall the town's own silhouette — a thirty-three-cell square
+ * of stone, which is the shape a playtest called *too planned*. A wall round
+ * the middle says something different and truer: the citadel was built, and
+ * the town grew round it. It is also what was asked for — *have the walls be
+ * only around the inner core of the city*.
+ *
+ * Laid down a street rather than through a block, so nothing has to be
+ * demolished to make room for it and the streets it closes are streets that
+ * end at a gate.
  *
  * Four pieces, chosen by which side of the ring a cell is on: the runs that
  * cross the camera get the panel, the runs that go away from it get the
@@ -257,15 +414,15 @@ function chooseGates(
  */
 function buildWall(
   grid: WorldGrid,
-  box: AreaPlacement,
+  core: AreaPlacement,
   gates: readonly GridPoint[],
 ): PlacedObject[] {
   const built: PlacedObject[] = [];
   const ways = new Set(gates.map(({ col, row }) => `${col},${row}`));
-  const left = box.col + RING_INSET - 1;
-  const right = box.col + box.width - RING_INSET;
-  const top = box.row + RING_INSET - 1;
-  const bottom = box.row + box.height - RING_INSET;
+  const left = core.col;
+  const right = core.col + core.width - 1;
+  const top = core.row;
+  const bottom = core.row + core.height - 1;
   for (let row = top; row <= bottom; row++) {
     for (let col = left; col <= right; col++) {
       const onEdge = row === top || row === bottom || col === left || col === right;
@@ -300,6 +457,44 @@ function buildWall(
     }
   }
   return built;
+}
+
+/**
+ * The cells immediately outside and inside every gateway.
+ *
+ * Nothing may be built on one. Which side is which is not worked out — both
+ * are, because a gate blocked from within is as sealed as one blocked from
+ * without and the wall does not say which way it faces.
+ */
+function gateApproaches(core: AreaPlacement, gates: readonly GridPoint[]): Set<string> {
+  const approaches = new Set<string>();
+  const left = core.col;
+  const right = core.col + core.width - 1;
+  const top = core.row;
+  const bottom = core.row + core.height - 1;
+  for (const gate of gates) {
+    const across = gate.row === top || gate.row === bottom;
+    const step = across ? { col: 0, row: 1 } : { col: 1, row: 0 };
+    approaches.add(`${gate.col - step.col},${gate.row - step.row}`);
+    approaches.add(`${gate.col + step.col},${gate.row + step.row}`);
+  }
+  return approaches;
+}
+
+/** Whether a footprint would stand on any of them. */
+function onAGateApproach(
+  approaches: ReadonlySet<string>,
+  col: number,
+  row: number,
+  width: number,
+  height: number,
+): boolean {
+  for (let r = row; r < row + height; r++) {
+    for (let c = col; c < col + width; c++) {
+      if (approaches.has(`${c},${r}`)) return true;
+    }
+  }
+  return false;
 }
 
 /** Stand a landmark on a square, anchored at the given top-left, or refuse. */
@@ -340,6 +535,15 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
     width: box.width - (RING_INSET + RING_WIDTH) * 2,
     height: box.height - (RING_INSET + RING_WIDTH) * 2,
   };
+  /** Whether every cell of a rectangle falls inside the town's outline. */
+  const paved = (at: { col: number; row: number; width: number; height: number }) => {
+    for (let row = at.row; row < at.row + at.height; row++) {
+      for (let col = at.col; col < at.col + at.width; col++) {
+        if (!withinTheTown(box, col, row)) return false;
+      }
+    }
+    return true;
+  };
 
   // --- the ground ---------------------------------------------------------
 
@@ -353,11 +557,17 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
   // bare orange between grey streets, a building site.
   //
   // Cobble everywhere is the third answer and the one a city actually looks
-  // like. It also settles what a block is for: nothing inside these walls is
-  // plantable, because laid stone is not soil, and a city you could farm
-  // would be a village with more houses in it. The garden is at home.
+  // like. It also settles what a block is for: nothing here is plantable,
+  // because laid stone is not soil, and a city you could farm would be a
+  // village with more houses in it. The garden is at home.
+  //
+  // Everywhere *inside the outline*, which is not the box. See
+  // `withinTheTown`: the box's corners are left as whatever grew there, and
+  // the edge between the two wanders, so the town has a silhouette instead
+  // of a rectangle.
   for (let row = box.row; row < box.row + box.height; row++) {
     for (let col = box.col; col < box.col + box.width; col++) {
+      if (!withinTheTown(box, col, row)) continue;
       pave(grid, col, row, TerrainType.Cobble);
     }
   }
@@ -376,7 +586,13 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
       // in it to stand a building. It is simply street now, which it looks
       // like, because the whole enclosure is one surface.
       if (width < 3 || height < 3) continue;
-      blocks.push({ col: inner.col + col, row: inner.row + row, width, height });
+      const block = { col: inner.col + col, row: inner.row + row, width, height };
+      // And a block the outline does not cover whole is not a block either.
+      // Half a terrace standing on grass with its other half missing is a
+      // worse edge than no terrace: what the rough outline is for is a town
+      // that stops, not one that frays.
+      if (!paved(block)) continue;
+      blocks.push(block);
     }
   }
 
@@ -402,10 +618,28 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
   // now that the middle of the city is a building.
   const plazaCell = { col: plaza.col, row: plaza.row };
 
+  // --- the citadel wall ---------------------------------------------------
+
+  // Before the buildings and before the street furniture, which is a change
+  // of order and the load-bearing part of moving the wall inward. Built
+  // last, it skipped every cell something was already standing on — which
+  // was harmless while it ran round the empty rim of the box and would now
+  // leave a lamp-shaped hole in the middle of a rampart.
+  //
+  // The ring encloses the plaza and the eight blocks round it, laid down the
+  // streets between them so nothing has to be demolished to make room. One
+  // ring of blocks if there is room for it and none if there is not: a small
+  // world builds a small city, and a wall that ran off the end of the town
+  // would be a wall standing in a field.
+  const core = citadel(plaza, inner, paved);
+  const gates = core ? gatesRound(core) : [];
+  const wall = core ? buildWall(grid, core, gates) : [];
+  const approaches = core ? gateApproaches(core, gates) : new Set<string>();
+
   // --- what stands in the blocks -----------------------------------------
 
   const buildings: PlacedObject[] = [];
-  const placed: PlacedObject[] = [];
+  const placed: PlacedObject[] = [...wall];
   // What the clock tower's art covers, which is more than what it stands on:
   // five tiles above the two, so the block behind it is drawn over entirely.
   // A playtest called that "buildings behind the clocktower are blocked".
@@ -468,10 +702,26 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
     // buildings all sitting dead centre in their block is a spreadsheet, not
     // a town, and one cell either way is enough to break it.
     const slack = block.width - width;
-    const topLeft = {
-      col: block.col + (slack > 0 ? randInt(rng, 0, slack) : 0),
-      row: block.row + block.height - height,
-    };
+    const along = slack > 0 ? randInt(rng, 0, slack) : 0;
+    const row = block.row + block.height - height;
+    // ...and never across the way out of a gateway.
+    //
+    // A gate is three cells wide and its middle one is safe by construction
+    // — see `crossingNearestTheMiddle` — but the two either side open onto
+    // the corners of the blocks that flank the crossing, and a building
+    // standing there turns two thirds of a gateway into a wall. Slid along
+    // the street until it is clear, and dropped if no offset is: an empty
+    // block beside a gate is a small yard, and half a blocked gate is the
+    // thing a child walks into.
+    const offsets = [along, ...Array.from({ length: slack + 1 }, (_, at) => at)];
+    const at0 = offsets.find(
+      (offset) => !onAGateApproach(approaches, block.col + offset, row, width, height),
+    );
+    if (at0 === undefined) {
+      n++;
+      continue;
+    }
+    const topLeft = { col: block.col + at0, row };
     const building: PlacedObject = {
       id: `city-${role}-${n}`,
       type: role,
@@ -515,6 +765,10 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
     for (let col = 0; col < inner.width; col += RHYTHM) {
       const at = { col: inner.col + col, row: inner.row + row };
       if (!grid.inBounds(at.col, at.row) || grid.getObjectAt(at.col, at.row)) continue;
+      // Only on the town's own ground. A crossing near the corner of the box
+      // is now open country — see `withinTheTown` — and a lamp post standing
+      // in a field is a lamp post somebody forgot to take away.
+      if (!withinTheTown(box, at.col, at.row)) continue;
       // Counted per *placed* thing rather than per crossing considered, so a
       // run of blocked cells does not silently skip the panel's turn.
       const type = CROSSING_CYCLE[crossing % CROSSING_CYCLE.length] ?? FixtureType.Lamp;
@@ -535,17 +789,17 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
     }
   }
 
-  // --- the wall, and the way through it -----------------------------------
+  // --- the way in ---------------------------------------------------------
 
-  const { gates, doorstep } = chooseGates(grid, box);
-  const wall = buildWall(grid, box, gates);
-  placed.push(...wall);
+  // The one cell the world's road is carved to. It is outside the box
+  // entirely and always has been: the connectivity pass carves by removing
+  // whatever is in the way, so a target within the town is a target it will
+  // reach by knocking a hole in something. Aimed in front of the town, the
+  // carve stops at the edge of the cobble and the streets carry it the rest
+  // of the way.
+  const doorstep = chooseDoorstep(grid, box);
   grid.removeObjectAt(doorstep.col, doorstep.row);
   pave(grid, doorstep.col, doorstep.row, TerrainType.Cobble);
-  // Every gateway is paved, not only the one the road arrives at: a way
-  // through the wall that is still grass underfoot reads as a gap somebody
-  // forgot to build rather than as a gate.
-  for (const gate of gates) pave(grid, gate.col, gate.row, TerrainType.Cobble);
 
   if (clockTower) placed.push(clockTower);
 
@@ -601,7 +855,14 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
   // Spaced along the cells of the ring that are clear, rather than along the
   // ring and then dropped where they are not — the lamps stand on it, and
   // sampling first put a person on a lamp post and then dropped them.
-  const ring = ringWalk(box).filter((at) => grid.isPassable(at.col, at.row));
+  // Paved as well as walkable. The ring runs one cell inside the box and the
+  // town no longer fills the box, so parts of it are grass now — and people
+  // spread along the *road* is the whole reason the ring was chosen over a
+  // scatter.
+  const ring = ringWalk(box).filter(
+    (at) =>
+      grid.isPassable(at.col, at.row) && grid.getTerrain(at.col, at.row) === TerrainType.Cobble,
+  );
   for (let n = 0; n < TOWNSFOLK && ring.length > 0; n++) {
     const at = ring[Math.floor((n * ring.length) / TOWNSFOLK)] as GridPoint;
     npcs.push({

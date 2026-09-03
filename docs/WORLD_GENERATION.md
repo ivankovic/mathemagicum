@@ -1112,22 +1112,104 @@ two coasts in three. A berth needs open water with something walkable to the
 *south* of it, and a coast that faces south has nothing there but more sea.
 The harbour is a harbour either way; it simply has no ship in today.
 
-### The city has a wall, and one way through it
+### The town has an outline, not a boundary
+
+The pave loop laid cobble over every cell of the city's box, so on the map —
+which is drawn at one pixel to two tiles, and shows terrain and nothing else
+— the city was a thirty-three by thirty-three rectangle of one grey. A
+playtest said so: *the city and the village look very artificial on the map;
+the pure square looks too planned.* Nothing on the ground read as wrong. The
+silhouette did, and a silhouette is all a map has.
+
+So the cobble stops at an **outline**: the p-norm ball at power three, with
+its edge wandering by the same pair of sine waves the enchanted forest's wood
+uses. Power three rather than a circle because a town is not round either —
+at that exponent the corners are rounded off and the sides stay flat, which
+is what a town that grew inside a boundary looks like from above. A circle
+inscribed in the box would throw away a fifth of it and read as a bullseye.
+
+The wander is deterministic in the box's own position and does **not** draw
+from the rng. A draw here would shift every later draw and rebuild every
+world in the game to no purpose.
+
+The corners of the box are left as whatever grew there — open country, which
+is what a town has round it. A block the outline does not cover *whole* is
+not built on: half a terrace standing on grass with its other half missing is
+a worse edge than no terrace, and what the rough outline is for is a town
+that stops rather than one that frays. Street furniture and the people on the
+ring road are held to the same rule, because a lamp post standing in a field
+is a lamp post somebody forgot to take away.
+
+### The wall goes round the core, and its gateways are three cells wide
+
+The wall used to sit on the outermost ring of the box, which put every
+building in the world inside it and made the wall the town's own silhouette.
+It runs round the **plaza and the eight blocks about it** now — a citadel,
+with the town grown round it — which is what the same playtest asked for:
+*have the walls be only around the inner core of the city, and make the gates
+be bigger, three characters, three tiles at least.*
 
 Four pieces, in the same shapes the garden fence comes in: a run across the
-camera, a run away from it, and a gateway in each. It sits on the outermost
-ring of cells so the ring road runs *inside* it, the way a city's does — a
-wall standing in the middle of its own street would be a fence.
+camera, a run away from it, and a gateway in each. It is laid down the
+streets between the blocks, so nothing has to be demolished to make room and
+the streets it closes are streets that end at a gate.
 
 The gate is the one piece that does not block. A closed gate on this grid
 either walls the city off or lets the player walk through solid stone; drawn
 open and left passable, it says "this is the way in" and means it. Exactly
-what the village garden's gate does, one scale up.
+what the village garden's gate does, one scale up. Three of them in a row is
+three copies of the one gate tile the art ships, which reads as a triple
+arch — a real shape for a town gate, and also simply what there is.
+
+**A gateway is centred on a street crossing, not on the middle of its wall,
+and that is what makes it reachable.** Every building in a block is pushed to
+the bottom of it so its door opens onto the street below — which means the
+cell immediately outside a north gate is a building's front wall unless
+something stops it being one. Centred on a crossing, the street that runs
+through the crossing lies on both sides of the gate, so the middle of the
+gateway always opens onto pavement. That is a property of the street grid
+rather than of what happened to get built, so it holds on every seed. Three
+cities in twenty were sealed before this, and sealed *silently*: a walled
+place with one unreachable gate still has three others, and only a sweep over
+every cell says so.
+
+The two cells either side of the middle are looked after separately —
+buildings are slid along their block until they are off a gate's approach,
+and dropped if no offset is clear. An empty block beside a gate is a small
+yard; two thirds of a blocked gateway is the thing a child walks into.
+
+**Two sides of the old wall's job have gone away with it.** It faced the open
+world on all four sides, so every side had to be checked for being dry and
+off the world's rim — the first city ever built had its west gate opening
+onto deep water. Round the core, every side faces the town's own streets and
+all four always open. What survives of that question is `city.doorstep`,
+which is where the world's road arrives and is still chosen outside the box,
+south by preference, on the first side that is dry and one clear step in from
+the rim.
 
 **Fixtures now carry their own headroom.** Sixteen pixels is the right
 overhang for something you step over and half the height of something built
 to keep people out, so the wall rises forty. Everything drawn before that was
 true still uses the module's own number and is unchanged to the byte.
+
+### The harbour has somebody fishing off every jetty
+
+*The harbour is an idle plane. It could use a few more harbour specific
+buildings … and maybe a new type of villager, someone who's doing some
+fishing.* Two more buildings on the front — five roles where there were
+three, alternating warehouse and cottage so the place stays somewhere people
+live rather than a row of sheds — and one person at the seaward end of each
+pier.
+
+The anglers are drawn with the same three villager sheets as everybody else,
+and their **placement is the whole characterisation**. There is no rod in
+this game's art and no fisherman's body but the teacher's, and dressing an
+extra as him would undo the one thing his costume is for: the player has to
+know on sight which person on the quay is the one who teaches. Somebody
+standing at the end of a jetty over open water is doing one thing.
+
+Cranes were asked for and are not here. There is no crane in the asset
+generator's output and nothing crane-shaped to stand in for one.
 
 ### The carve may cut through ground, not through architecture
 

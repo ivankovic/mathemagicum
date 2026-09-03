@@ -53,8 +53,26 @@ import type { GridPoint } from "../world/topdown";
  * that errand comes back to a thicket in different places: the squares they
  * cleared are still cleared, because a save records what was taken away, and
  * the wood the generator now puts somewhere else is wood they have not.
+ *
+ * **4** — the city stopped being a square and its wall moved inside it. A
+ * playtest looked at the map and said *the city and the village look very
+ * artificial — the pure square looks too planned*, which was exactly right:
+ * the pave loop laid cobble over every cell of the box, so the town was a
+ * thirty-three by thirty-three rectangle of one colour. It has a wandering
+ * outline now, its ramparts run round the plaza and the blocks about it
+ * rather than round the rim, and its gateways are three cells wide. The
+ * harbour moved with it — two more buildings on the front, and somebody
+ * fishing at the end of every jetty.
+ *
+ * **This is the bump that costs an existing save the most so far**, and it
+ * is worth being plain about. Everything a child put down inside the old
+ * city's walls is now being asked to fit a town with a different edge and a
+ * wall in a different place: whatever no longer fits comes back through
+ * `restoreWorld` as `refused` and is handed to her in her basket rather than
+ * lost. Her house, her garden and everything indoors are untouched — those
+ * are keyed by building, not by cell.
  */
-export const GENERATOR_VERSION = 3;
+export const GENERATOR_VERSION = 4;
 
 /**
  * Bumped when the shape below changes, which is a different thing.

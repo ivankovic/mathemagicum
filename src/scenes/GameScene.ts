@@ -2856,6 +2856,10 @@ export class GameScene extends Phaser.Scene {
         shown: this.clockHud?.time.visible ?? false,
       }),
       geometry: () => (this.geometryPanel?.isOpen ? (this.geometryPanel.readout() ?? null) : null),
+      city: () => ({
+        gates: this.city.gates.map(({ col, row }) => ({ col, row })),
+        wall: this.city.wall.length,
+      }),
       hiding: () =>
         this.tallThings
           .filter(({ sprite }) => sprite.active)

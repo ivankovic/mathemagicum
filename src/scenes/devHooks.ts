@@ -792,6 +792,14 @@ export interface DevHandle {
    * else can say which lesson a browser is actually looking at.
    */
   readonly geometry: () => { title: string; body: string; page: string; pages: number } | null;
+  /**
+   * The city's ramparts: where its gateways are, and how many stones it has.
+   *
+   * The wall is round the *core* of the town now rather than round the box
+   * it was laid in, so nothing outside the generator knows where it is —
+   * and a scenario about walking through a gate has to be able to find one.
+   */
+  readonly city: () => { gates: { col: number; row: number }[]; wall: number };
   readonly hiding: () => readonly { id: string; col: number; row: number; alpha: number }[];
   /**
    * Which building she is standing inside, or null for out of doors.
