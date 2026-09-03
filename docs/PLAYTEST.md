@@ -567,6 +567,13 @@ There is a test that walks every cell inside the wall and insists on cobble —
 swept rather than sampled, because the failure being guarded against is
 exactly a patch that got missed.
 
+*(Since superseded on where the paving stops. Paving the whole box made the
+city a perfect square of one grey on the map, which the round of 2026-09-03
+reported as "too planned"; the cobble now stops at a wandering outline and
+the sweep insists on cobble inside the citadel wall rather than inside the
+box. Everything above about what cobble means and why a block is not paved
+separately still holds.)*
+
 ## 4. Three difficulty levels, not four — **fixed**
 
 **Reported:** let's have 3 difficulty levels, not 4.
@@ -1076,3 +1083,193 @@ tests, and they all passed, and the feature could not be reached by a finger
 on a tablet or by a tap on a crop. Nothing that only exercises the rules layer
 can see either of those. An interaction change has to be driven through the
 thing a child actually touches.
+
+---
+
+# Playtest — 2026-09-03
+
+Nine things, from a session with the world in the state the last three rounds
+left it. Written down as reported. Ordered as reported, not by priority.
+
+Two of them are second reports on things an earlier round already fixed once,
+which is the most useful shape a playtest note has: it says the first fix was
+aimed at the right thing and stopped short.
+
+## 1. The tower still teaches the wrong lesson — **fixed**
+
+**Reported:** *the tower where you learn the portal spell still says the wrong
+tutorial. It doesn't match the difficulty level.*
+
+**Found:** the second report on this. The first (2026-08-20) found the
+geometer working through the crow's flight — two legs squared, added and
+rooted — at a child whose own spell asks her to count stepping stones, and
+the fix cut his deck to the tier. That fixed three rungs of four. The bottom
+one was still handed **the ruler**: a page about reading a numeral off a
+graduated edge, at a child whose map draws no numerals at all.
+
+**Fixed** by making the second page the tier's own picture rather than one
+page for everybody. She gets the stepping stones, laid one to a league along
+an unlabelled path, with nothing numbered on it — the counting is the answer
+and printing it would be doing it for her. Which means the pages a child sees
+are no longer the first *n* of the lesson, and should not be: the stones and
+the ruler are two answers to one question, not two steps of one method.
+
+## 2. Two tiles of talking distance — **built**
+
+**Reported:** *it would be good if we could interact with characters that are
+two tiles away from us.*
+
+**Built.** People, animals and the great tree, diagonals included. The reason
+it is worth the change is what a refusal costs: everything worth talking to
+is walking about, so a child aims at a villager, the villager steps while the
+finger is on its way down, and the answer is a red cross on the ground. Two
+squares absorbs one step of drift. The measure a *hand* uses is untouched at
+one orthogonal step — gardening acts on the tile she faces, and a diagonal
+neighbour is genuinely out of reach of a trowel.
+
+## 3. The great tree does not say which spell — **fixed**
+
+**Reported:** *the enchanted forest big tree could explicitly tell you to use
+the minus spell to remove the trees. Also in the Croatian translation, it says
+bushes instead of trees.*
+
+**Fixed**, both. The line names the rune now, in the vocabulary the rest of
+the game uses for spells. And the Croatian said *ukloni 12 grmova* — twelve
+bushes — where the grove is woodland, whose scenery is conifers; it counts
+`stablo`/`stabla`/`stabala` now. English and German gained the noun too:
+*take away the 12 that still stand* named nothing at all, and the two books
+that decline their nouns have to be given something to decline.
+
+## 4. The times spell plants whatever was last used — **fixed**
+
+**Reported:** *the multiplication planting has no way to choose the plant. It
+defaults to carrot — or rather defaults to the last thing you used, and if you
+didn't use anything it defaults to carrot, which is going to be confusing. We
+should allow the player to press and choose.*
+
+**Found:** worse than confusing. Sixteen squares of the wrong crop is the
+largest single mistake this game lets anybody make, and nothing asked first.
+
+**Fixed:** tapping *plant* opens the same little menu again with the six crops
+on it. The same menu rather than the pouch, deliberately — the pouch's buttons
+arm a seed *for one square*, and teaching them a second meaning for the minute
+the times rune is lit is how one tap comes to do two things. The plant button
+carries the pouch now instead of a crop; a crop on it was a promise the button
+had no business making, and it is the promise this report read off it.
+
+## 5. The city is a square on the map — **fixed**
+
+**Reported:** *the city and the village look very artificial on the map. The
+pure square looks too modern, looks too planned. Let's make the city be a
+little bit more rough around the edges, and let's have it have some
+randomness to it.*
+
+**Found:** one loop. The city paved every cell of its box, so on a map drawn
+at one pixel to two tiles it was a thirty-three by thirty-three rectangle of
+one grey. Nothing on the ground read as wrong. The silhouette did, and a
+silhouette is all a map has.
+
+**Fixed:** the cobble stops at a p-norm ball at power three with its edge
+wandering — power three rather than a circle because a town is not round
+either, and an inscribed circle throws away a fifth of the box and reads as a
+bullseye. The wander is derived from the box's own position rather than drawn
+from the rng, which would have shifted every later draw.
+
+The village is *not* changed. Its ring of buildings is already round; what a
+map shows of it is a nine-cell paved square, which is a village square and is
+meant to be one.
+
+## 6. Every shop is the same shop — **fixed**
+
+**Reported:** *the city having multiple shops that all look the same and look
+exactly the same once you go in is not great. Same goes for houses, although
+houses at least have varying roofs.*
+
+**Found:** the mechanism existed and was pointed the other way. The argument
+in `houses.ts` for leaving the store alone was *there is one school and one
+store and one post office; nothing about them needs telling apart* — true
+when written, and no longer: the city builds five and the harbour up to three.
+
+**Fixed:** a shop varies its **walls**, never its roof. In this art a roof is
+what identifies a building type at a glance, so repainting a shop's roof would
+not be variety, it would be deleting the thing that says *shop* to a child
+crossing a city. Inside, the same swap turned round — a shop repaints its
+walls where a house repaints its bedding, because a warehouse has no soft
+furnishings and a fabric ramp the art never draws is a recolour nobody can
+see.
+
+## 7. The gates are too small — **fixed**
+
+**Reported:** *the city wall gates are way too small and hard to go through.
+Combined with changing the shape of the city, we could even have the walls be
+only around the inner core of the city and make the gates be bigger. Three
+characters, three tiles at least.*
+
+**Fixed**, as asked. The wall runs round the plaza and the eight blocks about
+it — a citadel, with the town grown round it — and its gateways are three
+cells wide.
+
+**A gateway is centred on a street crossing, not on the middle of its wall,
+and that is what makes it reachable.** Every building is pushed to the bottom
+of its block so its door opens onto the street below, which means the cell
+outside a north gate is a building's front wall unless something stops it
+being one. Three cities in twenty were sealed by this before it was found, and
+sealed silently: a walled place with one dead gate still has three others.
+
+## 8. Stuck behind the lighthouse — **fixed**
+
+**Reported:** *a big bug. I got stuck behind the lighthouse. I wandered in and
+stopped moving. It seems like it can go in some one direction, but not in all.
+And tapping on the lighthouse is a problem — you need to tap way outside of
+the lighthouse to get unstuck.*
+
+**Found:** she was moving the whole time. The beacon's art is seven and a half
+tiles tall over the two cells it stands on, so six cells of quay behind it are
+painted over completely — she was walking about under a picture of a tower,
+with nothing on screen to say so, and a character who does not move when you
+press a key is a character who cannot move.
+
+The second sentence is a **separate bug wearing the first one's clothes**.
+Every landmark was made tappable whatever it was, with a hit area covering its
+full height; a game object under the pointer stops a click ever reaching the
+ground; and the beacon's only answer was a refusal. It swallowed every click
+in a tall column of the quay and drew a red cross for each one.
+
+**Fixed:** anything whose art rises three tiles or more above its footprint
+fades while she is inside its rectangle and closes up behind her. And only the
+great tree — the one landmark with something to say — answers a tap at all.
+
+I checked separately for real entrapment and there is none: over sixty
+generated worlds, eleven have unreachable cells and every one is an offshore
+islet or a cell of the world's own rim, none within twenty tiles of a beacon.
+
+## 9. The harbour is empty — **partly built**
+
+**Reported:** *the harbour is an idle plane. It could use a few more harbour
+specific buildings, maybe some loading and unloading cranes or things like
+that, and maybe a new type of villager, someone who's doing some fishing in
+the harbour.*
+
+**Built:** five buildings on the front where there were three, and somebody
+standing at the seaward end of every pier.
+
+**Not built: the cranes, and a fisherman's costume.** There is no crane in the
+asset generator's output and nothing crane-shaped to stand in for one. The
+anglers wear the ordinary villager sheets and their *placement* is the whole
+characterisation — the only fisherman's body in the game is the teacher's, and
+dressing an extra as him would undo the one thing his costume is for: the
+player has to know on sight which person on the quay is the one who teaches.
+Both of those want new art before they can be done properly.
+
+## Where this stands
+
+Eight fixed or built in full, one partly — item 9's cranes and fisher costume
+are blocked on art.
+
+**One of these costs an existing save.** Items 5, 7 and 9 move world
+generation, so `GENERATOR_VERSION` went to 4: everything a child has put down
+inside the old city walls is now being asked to fit a town with a different
+edge and a wall in a different place. Whatever no longer fits comes back
+through `restoreWorld` as *refused* and is handed to her in her basket rather
+than lost. Her house, her garden and everything indoors are untouched — those
+are keyed by building, not by cell.
