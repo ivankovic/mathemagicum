@@ -53,6 +53,43 @@ async function fadedTo(game: Game, id: string): Promise<number> {
   return tall.find((thing) => thing.id === id)?.alpha ?? 1;
 }
 
+describe("standing behind something tall", () => {
+  /**
+   * It is not only the beacon, and that is the half a scenario about one
+   * lighthouse would let rot.
+   *
+   * A townhouse is five tiles of art over two of ground, so the three cells
+   * behind one are painted over exactly the way the quay is — the same bug
+   * at a smaller scale, in every street of the city, and buildings are drawn
+   * by a different function from everything else in the world. They were
+   * left off the list the first time this was written; nothing failed,
+   * because the beacon still faded.
+   */
+  test(
+    "a house in the city gives way too, and not only the landmark",
+    async () => {
+      await play({ seams: QUAY }, async (game) => {
+        const doors = await game.seam<Record<string, { col: number; row: number }>>("doors");
+        const found = Object.entries(doors).find(([id]) => id.startsWith("city-townhouse-"));
+        if (!found) throw new Error("this world has no city to stand in");
+        const [id, door] = found;
+
+        // Behind it: the door is on the building's bottom row, so two rows
+        // up is inside its footprint and under its art.
+        await game.reload(`${QUAY}&at=${door.col},${door.row - 2}`);
+        await game.settle(900);
+        expect(await fadedTo(game, id)).toBeLessThan(0.6);
+
+        // And in front of it, where nothing covers her, it is whole.
+        await game.reload(`${QUAY}&at=${door.col},${door.row + 2}`);
+        await game.settle(900);
+        expect(await fadedTo(game, id)).toBe(1);
+      });
+    },
+    5 * MINUTES,
+  );
+});
+
 describe("the beacon on the headland", () => {
   /**
    * It gives way when she is under it, and closes again when she is not.

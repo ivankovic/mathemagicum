@@ -456,6 +456,7 @@ import {
   type LandmarkSidecar,
   type ObjectSidecar,
   type PlantSidecar,
+  type SheetSprite,
   type SpriteSidecar,
   doorCell,
   footprintBottomY,
@@ -9800,6 +9801,11 @@ export class GameScene extends Phaser.Scene {
           .setDepth(depthFor(footprintBottomY(sidecar, object.row)))
           .play(buildingAnimKey(painted, DoorState.Closed)),
       );
+      // A townhouse is five tiles of art over two of ground, so the three
+      // cells behind one are painted over exactly the way the beacon paints
+      // over the quay — the same bug at a smaller scale and in every street
+      // of the city.
+      this.noteIfItCouldHideHer(object, sidecar, image);
       const door = doorCell(sidecar, object.col, object.row);
       this.buildings.push({
         id: object.id,
@@ -10089,6 +10095,33 @@ export class GameScene extends Phaser.Scene {
     this.tallThings.length = live;
   }
 
+  /**
+   * Put a thing on the list of what has to get out of her way, if it is tall
+   * enough to need to be on it.
+   *
+   * Called from both places a sidecar is turned into a sprite — the
+   * footprint path below, which draws fixtures, landmarks, scenery and
+   * flowers, and `spawnPlacedObjects`, which draws buildings. Two call sites
+   * rather than one because the two paths do not share a function and never
+   * have; what they share is this question, so it is asked in one place and
+   * answered the same way for a conifer and a clock tower.
+   *
+   * How tall is "tall enough" is `TALL_ENOUGH_TO_HIDE`, and it is measured
+   * off the art rather than listed here: a sheet that grows a taller spire
+   * should join this list by being taller, not by somebody remembering.
+   */
+  private noteIfItCouldHideHer(
+    object: PlacedObject,
+    sidecar: SheetSprite,
+    sprite: Phaser.GameObjects.Sprite,
+  ): void {
+    const rise =
+      (sidecar.sprite_size_px.height - sidecar.footprint_tiles.height * sidecar.tile_size) /
+      sidecar.tile_size;
+    if (rise < TALL_ENOUGH_TO_HIDE) return;
+    this.tallThings.push({ id: object.id, at: { col: object.col, row: object.row }, sprite });
+  }
+
   private spawnFootprintSprite(
     object: PlacedObject,
     sidecar: SpriteSidecar,
@@ -10117,14 +10150,7 @@ export class GameScene extends Phaser.Scene {
     }
     sprite.play(animKey);
     sprite.anims.setProgress(variationFor(object.col, object.row, PHASE_STEPS) / PHASE_STEPS);
-    // Tall enough to hide her behind it? Then it has to be able to get out
-    // of the way. See `showThroughWhatHidesHer`.
-    const rise =
-      (sidecar.sprite_size_px.height - sidecar.footprint_tiles.height * sidecar.tile_size) /
-      sidecar.tile_size;
-    if (rise >= TALL_ENOUGH_TO_HIDE) {
-      this.tallThings.push({ id: object.id, at: { col: object.col, row: object.row }, sprite });
-    }
+    this.noteIfItCouldHideHer(object, sidecar, sprite);
     return sprite;
   }
 
