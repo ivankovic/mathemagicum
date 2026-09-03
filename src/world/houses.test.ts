@@ -13,9 +13,12 @@ import {
   PLAYER_HOUSE_ID,
   ROOF_SLOTS,
   VARYING_SPRITES,
+  WALL_SLOTS,
   houseLook,
   lightingDelay,
   rampOf,
+  roomSlotsFor,
+  slotsFor,
   varies,
   windowBrightness,
 } from "./houses";
@@ -156,25 +159,64 @@ describe("which house wears which look", () => {
 });
 
 describe("which buildings vary at all", () => {
-  // The generator's own note: roofs carry the saturation and are what
-  // identifies a building type at a glance. Repainting the store's would not
-  // be variety, it would be deleting the thing that says which one is the
-  // shop.
-  test("only houses, never the store or the school or the post office", () => {
+  // The ones there are many of, and only those. Four cottages in the
+  // village, twenty townhouses in the city, a hull at every pier of the
+  // harbour, and — since a playtest counted them — eight shops between the
+  // city and the quay. There is still one school and one post office, and
+  // nothing about either needs telling apart because there is nothing to
+  // tell it apart from.
+  test("only the shapes there are many of", () => {
     expect(varies("cottage")).toBe(true);
     expect(varies("townhouse")).toBe(true);
-    for (const sprite of ["barn", "tower", "schoolhouse"]) {
+    expect(varies("ship")).toBe(true);
+    expect(varies("barn")).toBe(true);
+    for (const sprite of ["tower", "schoolhouse", "observatory"]) {
       expect({ sprite, varies: varies(sprite) }).toEqual({ sprite, varies: false });
     }
   });
 
-  // There is one school and one store. Nothing about them needs telling
-  // apart, because there is nothing to tell them apart from. The three that
-  // do vary are the three there are many of — four cottages in the village,
-  // twenty townhouses in the city, and a hull at every pier of the harbour
-  // now that ships come and go from them.
   test("the shapes that vary are the ones there are many of", () => {
-    expect([...VARYING_SPRITES].sort()).toEqual(["cottage", "ship", "townhouse"]);
+    expect([...VARYING_SPRITES].sort()).toEqual(["barn", "cottage", "ship", "townhouse"]);
+  });
+
+  /**
+   * And the store varies its walls where a house varies its roof.
+   *
+   * The generator's own note is that roofs carry the saturation and are what
+   * identifies a building type at a glance — the barn is blue, the tower
+   * purple, the school teal. Repainting a shop's roof would not be variety,
+   * it would be deleting the thing that says *shop* to a child crossing a
+   * city. Walls carry none of that meaning and are most of the front, so
+   * that is what moves.
+   *
+   * Held here rather than left to a comment because it is the sort of thing
+   * a later hand tidies into "everything varies its roof".
+   */
+  test("and the store varies its walls, so a shop still looks like a shop", () => {
+    expect(slotsFor("barn")).toEqual([...WALL_SLOTS]);
+    for (const sprite of ["cottage", "townhouse", "ship"]) {
+      expect({ sprite, slots: slotsFor(sprite) }).toEqual({ sprite, slots: [...ROOF_SLOTS] });
+    }
+    // And the ramps they are repainted with really are in the art, whichever
+    // slot they land in: a shape that varies a ramp the sheet never shipped
+    // is a shape that silently does not vary.
+    expect(WALL_SLOTS.length).toBe(ROOF_SLOTS.length);
+  });
+
+  /**
+   * And the same again for the room behind the door.
+   *
+   * A house varies its bedding and its rug; a shop varies its walls, because
+   * a warehouse has no soft furnishings at all. Its room is barrels, crates
+   * and a counter, so a fabric ramp would be a recolour of pixels that are
+   * not there — which would answer *the shops look exactly the same once you
+   * go in* on paper and not on screen.
+   */
+  test("and a shop repaints the walls of its room, where a house repaints its bedding", () => {
+    expect(roomSlotsFor("barn")).toEqual([...WALL_SLOTS]);
+    for (const room of ["cottage", "townhouse", "ship"]) {
+      expect({ room, slots: roomSlotsFor(room) }).toEqual({ room, slots: [...FABRIC_SLOTS] });
+    }
   });
 
   /**

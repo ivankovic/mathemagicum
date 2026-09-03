@@ -1536,12 +1536,26 @@ wood and firelight stay put everywhere, and that is what keeps four different
 houses reading as four houses in one village rather than as four different
 games.
 
-**Only houses vary.** The barn is blue-roofed, the tower purple, the school
-teal — in this art a roof is what identifies a building *type* at a glance,
-so repainting those would not be variety, it would be deleting the thing that
-tells a child which building is the shop. There is one school and one store;
-nothing about them needs telling apart, because there is nothing to tell them
-apart from. Houses are the opposite case and the reason this exists.
+**Only what there is more than one of varies.** Four cottages, twenty
+townhouses, a hull at every pier — and, since a playtest counted them, eight
+shops between the city and the quay: *the city having multiple shops that all
+look the same, and look exactly the same once you go in, is not great.* The
+school and the post office still do not vary, because there is one of each
+and nothing to tell them apart from.
+
+**A shop varies its walls, never its roof.** The barn is blue-roofed, the
+tower purple, the school teal — in this art a roof is what identifies a
+building *type* at a glance, so repainting a shop's roof would not be
+variety, it would be deleting the thing that says *shop* to a child crossing
+a city. The walls carry none of that meaning and are most of the front, so
+five wall colours under one blue roof is eight shops that are plainly all
+shops and plainly not the same building.
+
+Inside, the same swap for the same reason turned round: a shop repaints its
+**walls** where a house repaints its bedding, because a warehouse has no soft
+furnishings. Its room is barrels, crates and a counter, and a fabric ramp the
+art never draws is a recolour nobody can see — which would have answered the
+complaint on paper and not on screen.
 
 **A house keeps its look.** Which roof it wears comes from its own name and
 the world's seed, so the house with the heather roof is the house with the

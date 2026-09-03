@@ -119,33 +119,74 @@ export function windowBrightness(darkness: number, delay: number): number {
   return Math.min(1, (darkness - delay) / (1 - delay));
 }
 
+/** The slots a house's walls occupy, for the one shape that repaints those. */
+export const WALL_SLOTS = ["wall_dark", "wall", "wall_light"] as const;
+
 /**
- * The one building shape that varies.
+ * Which building shapes vary, and **which ramp each one varies**.
  *
- * Only houses. The generator's own note says roofs carry the saturation and
- * are what identifies a building type at a glance — the barn is blue, the
- * tower purple, the school teal — so repainting those is not variety, it is
- * deleting the thing that tells a child which building is the shop. There is
- * one school and one store and one post office; nothing about them needs
- * telling apart, because there is nothing to tell them apart *from*.
+ * Houses were the whole of this and the reason it exists: there are four in
+ * the village, twenty townhouses in the city, they are the same shape by
+ * design, and without this they were one house drawn twenty-four times. The
+ * ship joined them when the harbour got traffic and four hulls started
+ * coming and going at the piers.
  *
- * Houses are the opposite case and the reason this exists: there are four of
- * them in the village, they are the same shape by design, and without this
- * they were the same house four times. The city makes the case twice over —
- * there are twenty townhouses in it, and twenty of anything identical reads
- * as wallpaper rather than as a street.
+ * The store is the newcomer and it is here for a fact that changed under the
+ * old note. That note said *there is one school and one store and one post
+ * office; nothing about them needs telling apart* — which was true when it
+ * was written and is not now. The city builds five, the harbour builds up to
+ * three, and a playtest said so: *the city having multiple shops that all
+ * look the same is not great.*
+ *
+ * **But the store varies its walls, not its roof**, and that is the same
+ * note's own argument turned round rather than abandoned. Roofs carry the
+ * saturation and are what identifies a building type at a glance — the barn
+ * is blue, the tower purple, the school teal — so repainting a shop's roof
+ * would not be variety, it would be deleting the thing that says *shop*. A
+ * child crossing a city has to be able to pick one out of a street. The
+ * walls carry none of that meaning and are most of the front, so five wall
+ * colours under one blue roof is eight shops that are plainly all shops and
+ * plainly not the same building.
+ *
+ * The ramps a wall is repainted with are the sheet's `roof_options` either
+ * way: that is the only set of alternatives the art ships, and a ramp is a
+ * ramp — three tones from dark to light, which is what the recolour wants
+ * whichever slot it lands in.
  */
-/*
- * The ship joined them when the harbour got traffic. She was one of a kind
- * while there was one moored hull in the world, which is the case above
- * against repainting: nothing needed telling her apart from. There are four
- * or five of her now, coming and going at the piers, and four identical
- * hulls read as one hull drawn four times.
- */
-export const VARYING_SPRITES: readonly string[] = ["cottage", "townhouse", "ship"];
+export const VARYING_SLOTS: Readonly<Record<string, readonly string[]>> = {
+  cottage: ROOF_SLOTS,
+  townhouse: ROOF_SLOTS,
+  ship: ROOF_SLOTS,
+  barn: WALL_SLOTS,
+};
+
+export const VARYING_SPRITES: readonly string[] = Object.keys(VARYING_SLOTS);
 
 export function varies(sprite: string): boolean {
-  return VARYING_SPRITES.includes(sprite);
+  return sprite in VARYING_SLOTS;
+}
+
+/** Which ramp this shape repaints. See `VARYING_SLOTS`. */
+export function slotsFor(sprite: string): readonly string[] {
+  return VARYING_SLOTS[sprite] ?? ROOF_SLOTS;
+}
+
+/**
+ * And which ramp the *room* behind its door repaints.
+ *
+ * A house varies its soft furnishings, because from the door of a small room
+ * the bedding and the rug are what you notice and repainting the plaster
+ * would change the light in the room rather than its character.
+ *
+ * A shop varies its **walls**, for the plainer reason that a warehouse has
+ * no soft furnishings: the barn's room is barrels, crates and a counter, and
+ * a fabric ramp it never draws is a recolour nobody can see. The complaint
+ * was that shops *look exactly the same once you go in*, and answering it
+ * with a change to pixels that are not there would have been answering it on
+ * paper.
+ */
+export function roomSlotsFor(room: string): readonly string[] {
+  return room === "barn" ? WALL_SLOTS : FABRIC_SLOTS;
 }
 
 /**

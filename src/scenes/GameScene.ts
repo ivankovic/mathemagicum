@@ -329,6 +329,8 @@ import {
   houseLook,
   lightingDelay,
   rampOf,
+  roomSlotsFor,
+  slotsFor,
   varies,
   whoLivesIn,
   windowBrightness,
@@ -4049,7 +4051,10 @@ export class GameScene extends Phaser.Scene {
     const sidecar = this.buildingSidecars.get(sprite);
     if (!varies(sprite)) return sprite;
     const options = (sidecar?.roof_options ?? []) as Ramp[];
-    const shipped = rampOf((sidecar?.palette ?? {}) as Record<string, Rgb>, ROOF_SLOTS);
+    // Which ramp this shape repaints, which is not always the roof: the
+    // store varies its *walls*, so that eight shops in one world are plainly
+    // all shops and plainly not the same building. See `VARYING_SLOTS`.
+    const shipped = rampOf((sidecar?.palette ?? {}) as Record<string, Rgb>, slotsFor(sprite));
     const look = houseLook(id, this.seed, options.length);
     const wanted = options[look];
     if (look === 0 || !shipped || !wanted || !sidecar?.sheet) return sprite;
@@ -10327,13 +10332,20 @@ export class GameScene extends Phaser.Scene {
    * notice, and repainting the plaster would change the light in the room
    * rather than its character.
    *
-   * Rooms other than the cottage get exactly one copy, because there is
-   * exactly one school and one store.
+   * The shop is the exception to the *soft furnishings* half, and it is the
+   * exception for a plain reason: a warehouse has none. Its room is barrels,
+   * crates and a counter, so it repaints its walls — see `roomSlotsFor`. A
+   * fabric ramp the art never draws is a recolour nobody can see, and the
+   * complaint being answered here is that the shops *look exactly the same
+   * once you go in*.
+   *
+   * The school and the post office get exactly one copy each, because there
+   * is one of each.
    */
   private roomSheetFor(buildingId: string, room: string, sidecar: InteriorSidecar): string {
     if (!varies(room)) return room;
     const options = (sidecar.fabric_options ?? []) as Ramp[];
-    const shipped = rampOf((sidecar.palette ?? {}) as Record<string, Rgb>, FABRIC_SLOTS);
+    const shipped = rampOf((sidecar.palette ?? {}) as Record<string, Rgb>, roomSlotsFor(room));
     const look = houseLook(buildingId, this.seed, options.length);
     const wanted = options[look];
     if (look === 0 || !shipped || !wanted || !sidecar.sheet) return room;
