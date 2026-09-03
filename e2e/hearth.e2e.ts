@@ -35,6 +35,15 @@ interface Fire {
   alpha: number;
 }
 
+/** The room she is in: its floor, and how its squares map onto hers. */
+interface Room {
+  floor: string[];
+  origin: { col: number; row: number };
+}
+
+/** How far she can point, which is how far a thing can be put down. */
+const AIM = 3;
+
 /** Indoors, at her own front door. */
 async function goHome(game: Game): Promise<void> {
   const doors = await game.seam<Record<string, { col: number; row: number }>>("doors");
@@ -70,29 +79,73 @@ describe("the fires in a room", () => {
 
         // Two more out of the crate, put down where there is floor.
         //
-        // Three taps each, not two: a piece of furniture asks which colour
-        // before it is armed, which is a menu of its own and not something
-        // `takeFromCrate` should know about.
-        const before = await game.where();
-        for (const [at, step] of [1, 2].entries()) {
-          expect(await takeFromCrate(game, DecorType.Stove)).toBe(true);
-          await game.settle(250);
-          expect(await game.tap("colour.0")).toBe(true);
-          await game.settle(250);
-          expect(await game.seam<string | null>("armed")).toBe("stove~0");
-          await game.tapCell(before.col + step, before.row + at);
+        // **On squares read off the room's own plan**, which is what this
+        // used to get wrong. It tapped one step right and two steps
+        // right-and-down from wherever she happened to be standing, and
+        // whether either of those is free floor depends on the cottage's
+        // furniture — the scenario's own note two paragraphs below says as
+        // much and then guessed anyway. When a tap landed on a wall the
+        // piece was refused, she was left holding it, and the *next* round
+        // opened the crate while she still had one in her hands: choosing
+        // the colour she was already holding is "tapping the same thing
+        // again", which is the gesture that puts it down. Two rounds, one
+        // stove, and a failure that read as the colour menu being broken.
+        //
+        // So: squares off the plan, within her reach, tried until two of
+        // them take. Nothing here asserts *which* — where a stove fits is
+        // the floor plan's business and this scenario is about the fires.
+        const start = await game.where();
+        const room = await game.seam<Room>("house");
+        if (!room) throw new Error("she is not in a room");
+        const spots = room.floor
+          .map((cell) => cell.split(",").map(Number))
+          .map(([col, row]) => ({
+            col: (col ?? 0) - room.origin.col,
+            row: (row ?? 0) - room.origin.row,
+          }))
+          // Not the square she is standing on, and not one she cannot point
+          // at: a tap outside the ring chooses nothing and leaves the rune
+          // lit, which would spend a candidate for no reason.
+          .filter((at) => !(at.col === start.col && at.row === start.row))
+          .filter(
+            (at) => Math.max(Math.abs(at.col - start.col), Math.abs(at.row - start.row)) <= AIM,
+          )
+          // Nearest first, so the two that take are usually the first two
+          // tried. Every miss costs a tap and half a second, and a
+          // seven-by-seven ring is forty-eight of them.
+          .sort(
+            (a, b) =>
+              Math.abs(a.col - start.col) +
+              Math.abs(a.row - start.row) -
+              (Math.abs(b.col - start.col) + Math.abs(b.row - start.row)),
+          );
+
+        const standing = async () =>
+          (await game.seam<{ piece: string }[]>("decor")).filter((one) => one.piece === "stove")
+            .length;
+        const was = await standing();
+        for (const at of spots) {
+          if ((await standing()) - was === 2) break;
+          // Only when her hands are empty. A refused placement leaves her
+          // holding the piece — deliberately, so a near miss costs one tap
+          // rather than the whole thing — and going back to the crate then
+          // is what put it down again.
+          if ((await game.seam<string | null>("armed")) === null) {
+            expect(await takeFromCrate(game, DecorType.Stove)).toBe(true);
+            await game.settle(250);
+            // A chooser of one is not a choice, so with a single colourway
+            // owned there is no menu and she is armed already.
+            if (await game.tap("colour.0")) await game.settle(250);
+            expect(await game.seam<string | null>("armed")).toBe("stove~0");
+          }
+          await game.tapCell(at.col, at.row);
           await game.settle(500);
         }
+        expect((await standing()) - was).toBe(2);
 
-        // Three stoves, three fires. This is the assertion the bug failed:
-        // it stayed at one however many were standing.
         // One fire per stove standing, whatever that number turns out to be.
-        //
-        // Counted against the room rather than against a number written here
-        // — where a tapped square is free floor depends on the cottage's own
-        // furniture, and a scenario that insisted on three would be testing
-        // the floor plan. What matters is that the two counts agree: before
-        // this fix the fires stayed at one however many stoves were down.
+        // This is the assertion the bug failed: the fires stayed at one
+        // however many stoves were down.
         const stoves = (await game.seam<{ piece: string }[]>("decor")).filter(
           (one) => one.piece === "stove",
         );

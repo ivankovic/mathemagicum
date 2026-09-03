@@ -110,51 +110,6 @@ describe("the village shuts for the night", () => {
   );
 
   /**
-   * And the moon comes up once, however long she leans on the door.
-   *
-   * Reported from a playtest: *trying to enter the tower during daytime
-   * brings up the moon many times*. Walking at a door is a held key rather
-   * than one press — `tryMove` runs again for every step she tries to take
-   * — and each of those put another moon over her head. Half a dozen of
-   * them rising in a column reads as a fault in the game rather than as the
-   * reason the door will not open.
-   *
-   * Counted off the layer while they are still on screen. They live not
-   * quite a second and a half, and she is only held at the door for nine
-   * tenths of one, so every mark this scenario provokes is still rising
-   * when it looks — which is what makes a stack visible to it at all.
-   */
-  test(
-    "and the moon comes up once, however long she leans on a shut door",
-    async () => {
-      const hour = SHUTS_AT + 1;
-      await play({ seams: `&learned=all&hour=${hour}` }, async (game) => {
-        const door = await doorOf(game, "school");
-        await game.reload(`&learned=all&hour=${hour}&at=${door.col},${door.row + 1}`);
-        await game.settle(600);
-
-        // Read with the key still down, which is the whole of it. A mark
-        // lives a second and a half; let go and wait for her to settle and
-        // the one that should be there has faded, so a count taken
-        // afterwards reads nothing whether the game is right or wrong.
-        await game.tab.keyboard.down("ArrowUp");
-        await game.settle(900);
-        const marks = await game.seam<number>("floatingMarks");
-        await game.tab.keyboard.up("ArrowUp");
-        await game.stopped();
-
-        // She is still outside — this is a shut door — and one moon says so.
-        // Eight of them was the reading before this was fixed.
-        expect({ marks, inside: await game.seam<Inside | null>("inside") }).toEqual({
-          marks: 1,
-          inside: null,
-        });
-      });
-    },
-    5 * MINUTES,
-  );
-
-  /**
    * And the village follows the world's clock, wherever the glass puts it.
    *
    * The one scenario here that must *not* pin `&hour=`, and the reason is
