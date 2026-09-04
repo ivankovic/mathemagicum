@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
-import { Spell } from "../spells/spellbook";
+import { SPELLS, Spell } from "../spells/spellbook";
 import {
   BIN_HOLDS,
   MACHINE_TYPES,
@@ -19,10 +19,14 @@ import {
   machinesFromSave,
   machinesToSave,
   newMachine,
+  pressable,
+  pressing,
   takeShare,
   tipBin,
   wake,
+  wouldTake,
 } from "./machines";
+import { MaterialType } from "./materials";
 import { CLEARED_YIELD } from "./materials";
 import { PLANT_TYPES } from "./plants";
 
@@ -326,6 +330,11 @@ describe("a hothouse turning one thing into another", () => {
       binned: null,
       bin: 0,
       mark: 0,
+      // And it has no eleventh, twelfth or thirteenth either, which read as
+      // a machine with one mouth — which every machine in that save had.
+      other: null,
+      otherHeap: 0,
+      otherMark: 0,
       worked: 5,
     });
     expect(takeShare(old.get("1,1") as never, 0).item).toBe("wood");
@@ -564,14 +573,242 @@ describe("a tally counting up to its mark", () => {
     expect(machinesFromSave(machinesToSave(machines)).get("2,3")?.mark).toBe(7);
   });
 
-  /** And one machine for each of the four operations, which is the set. */
-  test("and there is one machine for each of the four operations", () => {
+  /**
+   * Every machine does a different thing, and every one is woken by the
+   * spell whose arithmetic it does.
+   *
+   * **Those are two rules, and only the first is about uniqueness.** This
+   * asked for a distinct *spell* per machine as well, which was true while
+   * there were four and one operation each — and was a coincidence rather
+   * than the rule. The rule is written down in `SPARK`: "the spell whose
+   * arithmetic it does". A press takes so many of one for every so many of
+   * the other, which is a division made permanent, so sharing is the spell
+   * that wakes it and the sorter both. Asserting one-each would have made
+   * the next honest machine look like a mistake.
+   */
+  test("every machine does its own thing, woken by the spell that does it", () => {
     expect(new Set(MACHINE_TYPES.map((machine) => WORK[machine].verb)).size).toBe(
       MACHINE_TYPES.length,
     );
-    expect(new Set(MACHINE_TYPES.map((machine) => SPARK[machine])).size).toBe(MACHINE_TYPES.length);
-    expect([...MACHINE_TYPES].map((machine) => SPARK[machine]).sort()).toEqual(
-      [Spell.Growth, Spell.Clearing, Spell.Array, Spell.Share].sort(),
+    for (const machine of MACHINE_TYPES) {
+      expect({ machine, spark: SPELLS.includes(SPARK[machine]) }).toEqual({ machine, spark: true });
+    }
+    // And between them they still cover all four operations, which is the
+    // thing the old assertion was really guarding.
+    expect(new Set(MACHINE_TYPES.map((machine) => SPARK[machine]))).toEqual(
+      new Set([Spell.Growth, Spell.Clearing, Spell.Array, Spell.Share]),
     );
+  });
+});
+
+describe("a press taking so many of one for every so many of the other", () => {
+  const PRESS = MachineType.Press;
+  const WOOD = "wood";
+  const STONE = "stone";
+
+  /** Two funnels, filled in the order a child would fill them. */
+  function shown(wood: number, stone: number, from = wake(newMachine())) {
+    const first = feed(from, WOOD, wood, PRESS);
+    if (!first) throw new Error("a woken press refused wood");
+    if (stone <= 0) return first;
+    const second = feed(first, STONE, stone, PRESS);
+    if (!second) throw new Error("a woken press refused stone");
+    return second;
+  }
+
+  test("keeps its two kinds in two heaps rather than one mixture", () => {
+    const ready = shown(2, 1);
+    expect({ holding: ready.holding, heap: ready.heap }).toEqual({ holding: WOOD, heap: 2 });
+    expect({ other: ready.other, otherHeap: ready.otherHeap }).toEqual({
+      other: STONE,
+      otherHeap: 1,
+    });
+  });
+
+  /**
+   * The proportion is learned from the first pressing, not set.
+   *
+   * The same bargain the sieve and the tally make, for the reason they make
+   * it: a dial would be the first menu in the garden, and a number typed
+   * into a machine is a number a five-year-old cannot type. Pour in two wood
+   * and one stone and it works in twos and ones from then on.
+   */
+  test("learns its proportion from what it is first shown", () => {
+    const done = advance(shown(2, 1), MINUTES_PER_ROUND, PRESS);
+    expect({ mine: done.mark, theirs: done.otherMark }).toEqual({ mine: 2, theirs: 1 });
+    expect({ heap: done.heap, otherHeap: done.otherHeap }).toEqual({ heap: 0, otherHeap: 0 });
+    expect(done.crates.reduce((all, count) => all + count, 0)).toBe(1);
+  });
+
+  test("and keeps to it afterwards, however much arrives", () => {
+    let press = advance(shown(2, 1), MINUTES_PER_ROUND, PRESS);
+    press = shown(6, 3, press);
+    press = advance(press, MINUTES_PER_ROUND * 3, PRESS);
+    // Three more pressings, two wood and one stone each, and nothing left.
+    expect({ heap: press.heap, otherHeap: press.otherHeap }).toEqual({ heap: 0, otherHeap: 0 });
+    expect(press.crates.reduce((all, count) => all + count, 0)).toBe(4);
+  });
+
+  /**
+   * **The stall is the lesson.**
+   *
+   * Ten of one thing and none of the other is not nine tenths of a pressing.
+   * It is none, and it will still be none tomorrow — what changes it is the
+   * other thing arriving, not more time. That refusal is `for every`,
+   * standing in a garden where a child can walk up to it.
+   */
+  test("stalls with one funnel piled high and the other empty", () => {
+    const lopsided = advance(shown(10, 0), MINUTES_PER_ROUND * 20, PRESS);
+    expect(lopsided.crates.reduce((all, count) => all + count, 0)).toBe(0);
+    expect(lopsided.heap).toBe(10);
+    // And it banks nothing while it waits, so the moment the other arrives
+    // it does not empty both funnels in one frame.
+    expect(lopsided.worked).toBe(0);
+  });
+
+  test("and picks straight up when the other thing finally comes", () => {
+    const waiting = advance(shown(4, 0), MINUTES_PER_ROUND * 20, PRESS);
+    const fed = feed(waiting, STONE, 2, PRESS);
+    if (!fed) throw new Error("a stalled press refused the thing it was waiting for");
+    const done = advance(fed, MINUTES_PER_ROUND, PRESS);
+    expect(done.crates.reduce((all, count) => all + count, 0)).toBe(1);
+    expect({ heap: done.heap, otherHeap: done.otherHeap }).toEqual({ heap: 0, otherHeap: 0 });
+  });
+
+  /**
+   * What it is shown is what it takes, and it is not reduced.
+   *
+   * Four and two is the same *proportion* as two and one, and a press shown
+   * four and two works in fours and twos — one pressing, not two. Reducing
+   * to lowest terms was tempting and is the wrong rule: it would mean the
+   * first pressing did not match the ones after it, and a machine that
+   * quietly halves what a child poured in is a machine that argues with
+   * them. It is the tally's bargain exactly — show it five and it deals in
+   * fives, not in ones.
+   */
+  test("what it was shown is the batch, not the proportion reduced", () => {
+    const done = advance(shown(4, 2), MINUTES_PER_ROUND * 4, PRESS);
+    expect({ mine: done.mark, theirs: done.otherMark }).toEqual({ mine: 4, theirs: 2 });
+    expect(done.crates.reduce((all, count) => all + count, 0)).toBe(1);
+  });
+
+  /**
+   * Neither funnel forgets, and that is where a press differs from a sieve.
+   *
+   * A sieve runs dry and takes whatever arrives next, because a sieve is a
+   * thing you pour a stream through. A press that forgot would take stone
+   * into the funnel that had been the wood's and quietly press two stone for
+   * every wood — the wrong sum, done with the right numbers, with nothing on
+   * the machine to say so.
+   */
+  test("neither funnel forgets what it is for, even emptied", () => {
+    const done = advance(shown(2, 1), MINUTES_PER_ROUND, PRESS);
+    expect({ heap: done.heap, holding: done.holding }).toEqual({ heap: 0, holding: WOOD });
+    expect({ otherHeap: done.otherHeap, other: done.other }).toEqual({
+      otherHeap: 0,
+      other: STONE,
+    });
+    // So stone still goes into the second funnel, not the first.
+    const fed = feed(done, STONE, 3, PRESS);
+    expect({ heap: fed?.heap, otherHeap: fed?.otherHeap }).toEqual({ heap: 0, otherHeap: 3 });
+  });
+
+  test("and a third kind is refused rather than pressed into service", () => {
+    expect(feed(shown(2, 1), "wheat", 1, PRESS)).toBeNull();
+  });
+
+  /**
+   * And the scene asks the same question the feeding does.
+   *
+   * `wouldTake` exists because these were two rules in two files that said
+   * the same thing for as long as there was one mouth to disagree about. The
+   * scene's tip-in went on offering a child only what the *first* funnel
+   * held, so a press could never be handed its second thing by hand — and a
+   * press that cannot be shown its proportion cannot learn one.
+   */
+  test("would take either of its two kinds by hand, and nothing else", () => {
+    const ready = shown(2, 1);
+    expect(wouldTake(ready, WOOD, PRESS)).toBe(true);
+    expect(wouldTake(ready, STONE, PRESS)).toBe(true);
+    expect(wouldTake(ready, "wheat", PRESS)).toBe(false);
+    // An empty one takes anything: the first thing shown claims a funnel.
+    expect(wouldTake(wake(newMachine()), "wheat", PRESS)).toBe(true);
+    // And a sleeping one takes nothing at all.
+    expect(wouldTake(newMachine(), WOOD, PRESS)).toBe(false);
+  });
+
+  /**
+   * What comes out is a fact about *both* funnels, which is what makes a
+   * press different from every other machine here.
+   *
+   * A hothouse turns a crop into timber whatever crop it was, so its answer
+   * lives in one field. A press has no single answer, and that is not an
+   * inconvenience to work around — a machine whose output depends on two
+   * inputs is the same sentence as a machine that teaches a proportion.
+   */
+  test("makes a beam out of the woodland and the hills", () => {
+    const done = advance(shown(2, 1), MINUTES_PER_ROUND, PRESS);
+    expect(done.made).toBe(MaterialType.Beam);
+    expect(pressing(WOOD, STONE)).toBe(MaterialType.Beam);
+    // Neither funnel is the special one: the same pair the other way round
+    // is the same pressing, and only the numbers shown differ.
+    expect(pressing(STONE, WOOD)).toBe(MaterialType.Beam);
+  });
+
+  /**
+   * And cord out of the garden, which is the point of there being two.
+   *
+   * A beam is the woodland and the hills; cord is wheat and sunflowers. A
+   * child who has only ever cleared can make one of them and not the other,
+   * so the two pressings between them ask for both spells this game is
+   * built on rather than only the one that pays.
+   */
+  test("and cord out of the garden", () => {
+    const twisting = feed(
+      feed(wake(newMachine()), "wheat", 4, PRESS) ?? wake(newMachine()),
+      "sunflower",
+      2,
+      PRESS,
+    );
+    if (!twisting) throw new Error("a press refused the makings of cord");
+    const done = advance(twisting, MINUTES_PER_ROUND, PRESS);
+    expect(done.made).toBe(MaterialType.Cord);
+    expect(done.crates.reduce((all, count) => all + count, 0)).toBe(1);
+  });
+
+  /**
+   * A funnel filled with something no pressing wants would never empty.
+   *
+   * The one confusion this machine cannot afford. Stalling is what a press
+   * does when it is working correctly and waiting for its other half, so a
+   * press stalled because it is holding a carrot looks exactly like a press
+   * doing its job — and there is nothing on it a child could read to tell
+   * the two apart.
+   */
+  test("refuses what no pressing wants, rather than holding it for ever", () => {
+    expect(feed(wake(newMachine()), "carrot", 3, PRESS)).toBeNull();
+    expect(pressable("carrot")).toBe(false);
+    expect(pressable(WOOD)).toBe(true);
+  });
+
+  test("and refuses a second kind that does not pair with the first", () => {
+    // Wheat is pressable — with sunflowers. It is not pressable with wood,
+    // and a press holding wood must say so now rather than after the heap
+    // has gone in.
+    const holding = feed(wake(newMachine()), WOOD, 4, PRESS);
+    if (!holding) throw new Error("a press refused wood");
+    expect(feed(holding, "wheat", 2, PRESS)).toBeNull();
+    expect(feed(holding, STONE, 2, PRESS)).not.toBeNull();
+  });
+
+  test("its two funnels survive being written down", () => {
+    const done = advance(shown(4, 2), MINUTES_PER_ROUND, PRESS);
+    const machines = new Map([["3,4", done]]);
+    expect(machinesFromSave(machinesToSave(machines))).toEqual(machines);
+  });
+
+  /** A press asleep is a sculpture, the same as every other machine. */
+  test("takes nothing at all before it has been woken", () => {
+    expect(feed(newMachine(), WOOD, 2, PRESS)).toBeNull();
   });
 });

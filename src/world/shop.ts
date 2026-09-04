@@ -7,7 +7,7 @@ import { DECOR_TYPES, DecorType, decorItem } from "./decor";
 import { FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import type { Inventory, ItemType } from "./inventory";
 import { isMachine } from "./machines";
-import { MATERIAL_TYPES, type MaterialType } from "./materials";
+import { MATERIAL_TYPES, type MaterialType, isGathered } from "./materials";
 import { PLANT_TYPES, type PlantType } from "./plants";
 
 /**
@@ -102,6 +102,7 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
   hothouse: Number.POSITIVE_INFINITY,
   sieve: Number.POSITIVE_INFINITY,
   tally: Number.POSITIVE_INFINITY,
+  press: Number.POSITIVE_INFINITY,
   // The quay's and the city's dressing, not for sale for the reason the
   // market stall is not: it is a piece of a place rather than a thing
   // somebody owns.
@@ -272,9 +273,12 @@ export function priceOf(thing: Buyable, cropPrice: CropPrice = CROP_PRICE): numb
  * name is one import away from being mistaken for the built-in.
  */
 export function sellPriceOf(item: ItemType, cropPrice: CropPrice = CROP_PRICE): number {
-  const sold =
-    (PLANT_TYPES as readonly string[]).includes(item) ||
-    (MATERIAL_TYPES as readonly string[]).includes(item);
+  // Gathered materials, not every material. A beam and a coil of cord are
+  // materials to a basket and are not things the store buys — see
+  // `GATHERED_MATERIALS`, which says why at length. The short of it: a part
+  // whose only destination is the shopkeeper is the problem the machines
+  // were built to solve, arriving one tier later.
+  const sold = (PLANT_TYPES as readonly string[]).includes(item) || isGathered(item);
   return sold ? cropPrice : 0;
 }
 

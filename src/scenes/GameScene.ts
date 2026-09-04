@@ -394,8 +394,9 @@ import {
   takeShare,
   tipBin,
   wake,
+  wouldTake,
 } from "../world/machines";
-import { MATERIAL_TYPES, MaterialType, yieldOf } from "../world/materials";
+import { GATHERED_MATERIALS, MATERIAL_TYPES, MaterialType, yieldOf } from "../world/materials";
 import { markedPlaces } from "../world/minimap";
 import { NAMED_PEOPLE, nameCast } from "../world/names";
 import type { PlacedObject } from "../world/objects";
@@ -2183,7 +2184,12 @@ export class GameScene extends Phaser.Scene {
       for (const plant of PLANT_TYPES) this.inventory.add(plant, this.dev.crops);
     }
     if (this.dev.materials > 0) {
-      for (const material of MATERIAL_TYPES) this.inventory.add(material, this.dev.materials);
+      // Gathered only. Beams and cord are *made*, and a seam that handed
+      // them out would be conjuring the one class of thing in this game
+      // that never appears without a machine having produced it.
+      for (const material of GATHERED_MATERIALS) {
+        this.inventory.add(material, this.dev.materials);
+      }
     }
     if (this.dev.furniture > 0) {
       for (const item of DECOR_ITEMS) this.inventory.add(item, this.dev.furniture);
@@ -2552,6 +2558,13 @@ export class GameScene extends Phaser.Scene {
           // the mouth holds — and is the difference a scenario cannot see any
           // other way. See `MachineState.made`.
           made: state.made,
+          // A press's second funnel and the proportion it was shown. Both
+          // are invisible from outside — a press waiting for its other half
+          // and a press that has been fed the wrong pair look identical on
+          // the ground, and the proportion is a number nothing draws.
+          other: state.other,
+          otherHeap: state.otherHeap,
+          otherMark: state.otherMark,
         })),
       /**
        * Every length of wire, and whether it is actually carrying.
@@ -4850,9 +4863,11 @@ export class GameScene extends Phaser.Scene {
     // it. Tapping an item states how many of it she has rather than doing
     // anything: there is nothing to spend produce on yet, and a button that
     // silently did nothing would be worse than one that answers.
-    // Crops and what the world gave up: both are things she comes back with
-    // and both are things the store buys, which is the whole of what the
-    // basket is for.
+    // Crops, what the world gave up, and what a press made of it: everything
+    // she comes back carrying. Not everything the store buys — a beam is in
+    // here and is not for sale, because the basket is what she *has* rather
+    // than what she can sell, and a part she could not see would be a part
+    // she could not count before walking to the coast with it.
     const gathered: readonly { item: ItemType; icon: string }[] = [
       ...PLANT_TYPES.map((plant) => ({ item: plant as ItemType, icon: cropIcon(plant) })),
       ...MATERIAL_TYPES.map((material) => ({
@@ -9082,8 +9097,12 @@ export class GameScene extends Phaser.Scene {
       // Only what this machine will take, so the biggest heap she is
       // carrying is the biggest heap *it wants* — a hothouse beside a child
       // with fifty wood and six carrots is asking for the carrots.
-      if (!accepts(machine, item)) continue;
-      if (state.holding !== null && state.holding !== item) continue;
+      // One question, asked of the machine rather than worked out here. This
+      // was two lines that between them said "what it accepts, and what is
+      // already in its mouth" — true of a machine with one mouth, and quietly
+      // wrong for a press, which has two and would only ever have been
+      // offered the first.
+      if (!wouldTake(state, item, machine)) continue;
       if (!best || count > best.count) best = { item, count };
     }
     if (!best) {
@@ -12148,7 +12167,7 @@ export class GameScene extends Phaser.Scene {
       },
       fillBasket: () => {
         for (const plant of PLANT_TYPES) this.inventory.add(plant, DEBUG_EACH);
-        for (const material of MATERIAL_TYPES) this.inventory.add(material, DEBUG_EACH);
+        for (const material of GATHERED_MATERIALS) this.inventory.add(material, DEBUG_EACH);
         for (const fixture of PLACEABLE_FIXTURES) this.inventory.add(fixture, DEBUG_EACH);
         // And the furniture, which this did not give and should have: a
         // basket that fills with everything except the things a room is

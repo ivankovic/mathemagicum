@@ -3,7 +3,15 @@
 
 import { describe, expect, test } from "bun:test";
 import { Inventory } from "./inventory";
-import { CLEARED_YIELD, MATERIAL_TYPES, MaterialType, everyKindPays, yieldOf } from "./materials";
+import {
+  CLEARED_YIELD,
+  GATHERED_MATERIALS,
+  MADE_MATERIALS,
+  MATERIAL_TYPES,
+  MaterialType,
+  everyKindPays,
+  yieldOf,
+} from "./materials";
 import { SCENERY_FOR_TERRAIN } from "./scenery";
 import { CROP_PRICE, Purse, isSellable, sellCrops, sellPriceOf } from "./shop";
 
@@ -54,11 +62,34 @@ describe("what the world gives up", () => {
 });
 
 describe("selling what you gathered", () => {
-  test("the store buys both, at what a crop fetches", () => {
-    for (const material of MATERIAL_TYPES) {
+  test("the store buys what was gathered, at what a crop fetches", () => {
+    for (const material of GATHERED_MATERIALS) {
       expect(isSellable(material)).toBe(true);
       expect(sellPriceOf(material)).toBe(CROP_PRICE);
     }
+  });
+
+  /**
+   * And not what a press made of it.
+   *
+   * This asked about `MATERIAL_TYPES`, which was every material while every
+   * material was something the world gave up. The made ones are deliberately
+   * unsellable: a part whose only destination is the shopkeeper is exactly
+   * the problem the machines were built to solve — materials that are "coins
+   * with an extra step" — arriving one tier later and harder to see.
+   *
+   * It would not even pay. A beam costs two wood and a stone, which is three
+   * crops' worth, and would fetch one. The rule is written down so it is a
+   * decision rather than an accident of the numbers.
+   */
+  test("and does not buy what a press made of it", () => {
+    for (const part of MADE_MATERIALS) {
+      expect({ part, sellable: isSellable(part) }).toEqual({ part, sellable: false });
+      expect(sellPriceOf(part)).toBe(0);
+    }
+    // Between them they are still every material — a third kind added to
+    // neither list would be a thing the store had no opinion about.
+    expect([...GATHERED_MATERIALS, ...MADE_MATERIALS].sort()).toEqual([...MATERIAL_TYPES].sort());
   });
 
   test("and pays for them out of the same counter", () => {

@@ -101,6 +101,29 @@ export const MachineType = {
    * what `≥` looks like when you can walk up to it.
    */
   Tally: FixtureType.Tally,
+  /**
+   * Two funnels over a bed, and an iron beam that comes down on it.
+   *
+   * The fifth, and the first with **two mouths**. Every machine before it
+   * takes one kind at a time, and `MachineState.holding` says why: a heap of
+   * one thing dealt three ways is a division a child can see, and a mixture
+   * dealt three ways is a mess. This one is the exception, and it is worth
+   * being exact about what buys the exception — it does not *mix*. It takes
+   * so many of one and so many of the other, together, and what comes out is
+   * a third thing. Nothing is ever in the same heap as anything else.
+   *
+   * **The proportion is the arithmetic**, and it is learned rather than set:
+   * shown two of one and one of the other, it presses in twos and ones from
+   * then on. The same bargain the sieve and the tally make, for the reason
+   * they make it — a dial would be the first menu in the garden.
+   *
+   * The lesson is the stall. A press with one funnel piled high and the
+   * other empty does nothing at all, however long it is left, and no amount
+   * of the thing it has will stand in for the thing it has not. That is
+   * *for every*, which is the first idea in this garden that needs two
+   * numbers to say and the reason a machine finally needs two wires.
+   */
+  Press: FixtureType.Press,
 } as const;
 
 export type MachineType = (typeof MachineType)[keyof typeof MachineType];
@@ -148,6 +171,12 @@ export const RECIPES: Readonly<Record<MachineType, Recipe>> = {
   // and a little stone. It is also the second cheapest, because a line wants
   // one wherever it wants a number.
   [MachineType.Tally]: { [MaterialType.Wood]: 9, [MaterialType.Stone]: 3 },
+  // The dearest of the five, and it should be: it is a frame, two hoppers
+  // and an iron beam, and it is the machine a child builds when they have
+  // already understood the other four. It is also the one whose own recipe
+  // is a proportion — two wood for every stone — which is the sum it spends
+  // its life doing, paid once on the way in.
+  [MachineType.Press]: { [MaterialType.Wood]: 20, [MaterialType.Stone]: 10 },
 };
 
 /** What a machine is made of, as pairs, in a stable order. */
@@ -227,6 +256,12 @@ export const SPARK: Readonly<Record<MachineType, Spell>> = {
   // Counting up to a number on a line, which is what the growth spell walks
   // and what a tally does to a heap.
   [MachineType.Tally]: Spell.Growth,
+  // Sharing, the same spell that wakes the sorter, and deliberately so: a
+  // ratio *is* a division that has been made permanent. "Two for every one"
+  // and "share these two ways" are the same sum asked from opposite ends,
+  // and a child who has learned one has learned what this machine does. The
+  // rule here is "the spell whose arithmetic it does", not one spell each.
+  [MachineType.Press]: Spell.Share,
 };
 
 /**
@@ -244,7 +279,13 @@ export const SPARK: Readonly<Record<MachineType, Spell>> = {
  * gives, so a crop grown is worth about a tree cleared, and a growth cast
  * and a clearing cast come out level.
  */
-export const Verb = { Deal: "deal", Turn: "turn", Sift: "sift", Count: "count" } as const;
+export const Verb = {
+  Deal: "deal",
+  Turn: "turn",
+  Sift: "sift",
+  Count: "count",
+  Press: "press",
+} as const;
 export type Verb = (typeof Verb)[keyof typeof Verb];
 
 export interface Work {
@@ -278,8 +319,16 @@ export interface Work {
    *
    * A sorter takes anything, because dealing cannot mint: what comes out of
    * it is what went in, counted into three piles.
+   *
+   * A press takes only what appears in some pressing, which is a third
+   * answer rather than a stricter version of the first two. The reason is
+   * not minting — a press consumes more than it hands back — it is that a
+   * press *holds* what it is given until it can spend it. A funnel filled
+   * with something no pressing wants is a heap that never moves, and the
+   * machine would look exactly as it does when it is working properly and
+   * waiting for the other half.
    */
-  readonly wants: "anything" | "a crop";
+  readonly wants: "anything" | "a crop" | "what it can press";
 }
 
 export const WORK: Readonly<Record<MachineType, Work>> = {
@@ -302,6 +351,22 @@ export const WORK: Readonly<Record<MachineType, Work>> = {
   // rather than written down — see `MachineState.mark`. One apiece here is
   // the floor they cannot go below, not the batch it will settle on.
   [MachineType.Tally]: { verb: Verb.Count, takes: 1, puts: 1, gives: null, wants: "anything" },
+  // `takes` is the floor a press cannot go below rather than the batch it
+  // will settle on — like the tally's, the numbers that matter are learned.
+  // What it `gives` is one line of content and is meant to be: which part
+  // comes off a press is a thing to argue about over a playtest, and the
+  // shape of the machine does not change when the answer does.
+  [MachineType.Press]: {
+    verb: Verb.Press,
+    takes: 1,
+    puts: 1,
+    // Null, and the only null that is not a machine that deals: what a press
+    // makes depends on *both* of its funnels, so it is looked up in
+    // `PRESSINGS` rather than written here. A single answer in this field
+    // would be a press that made the same thing out of anything.
+    gives: null,
+    wants: "what it can press",
+  },
 };
 
 /**
@@ -316,8 +381,65 @@ export const WORK: Readonly<Record<MachineType, Work>> = {
  */
 export const BIN_HOLDS = 12;
 
+/**
+ * What comes out of a press, by what goes into it.
+ *
+ * The other four machines have one answer each, written into `WORK.gives`: a
+ * hothouse turns a crop into timber whatever crop it was. A press cannot,
+ * because what it makes is a fact about *both* of its funnels — and that is
+ * not an inconvenience, it is the machine. A press is the first thing in the
+ * garden whose output is a function of two inputs, which is the same
+ * sentence as "the first thing that teaches a proportion".
+ *
+ * Keyed by the pair, sorted, so that neither funnel is the special one: a
+ * child who fills the left with stone and the right with wood has built the
+ * same press as one who did it the other way round, and only the *numbers*
+ * they were shown differ.
+ *
+ * **Two pressings, and they send a child to different halves of the world.**
+ * A beam is the woodland and the hills — the same two-material errand the
+ * machine recipes are praised for, one tier up. Cord is the garden, so a
+ * child who has only ever cleared and never grown cannot make one. Between
+ * them they ask for both spells this game is built on.
+ */
+export const PRESSINGS: Readonly<Record<string, MaterialType>> = {
+  // Squared timber, pinned with stone.
+  "stone+wood": MaterialType.Beam,
+  // Rope, twisted out of straw and stem.
+  "sunflower+wheat": MaterialType.Cord,
+};
+
+/** The two kinds, as the key `PRESSINGS` is written in. */
+function pairKey(one: string, two: string): string {
+  return [one, two].sort().join("+");
+}
+
+/** What these two make together, or nothing at all. */
+export function pressing(one: string | null, two: string | null): MaterialType | null {
+  if (one === null || two === null || one === two) return null;
+  return PRESSINGS[pairKey(one, two)] ?? null;
+}
+
+/**
+ * Whether a press has any use for this at all.
+ *
+ * Every ingredient of every pressing, and nothing else. A press that took
+ * carrots would fill a funnel with something it can never do anything with,
+ * and then stall for ever with no way for a child to find out why — the one
+ * failure this machine's whole design is arranged to avoid, since stalling
+ * is also what it does when it is working correctly.
+ */
+export function pressable(item: string): boolean {
+  return Object.keys(PRESSINGS).some((pair) => pair.split("+").includes(item));
+}
+
 /** Whether this machine will take this in. See `Work.wants`. */
 export function accepts(machine: MachineType, item: string): boolean {
+  // A press only takes what it could press. The others take "anything" and
+  // can afford to: a sorter deals whatever it is given, so a heap of the
+  // wrong thing is still a heap it can hand back. A press would hold it for
+  // ever.
+  if (WORK[machine].verb === Verb.Press) return pressable(item);
   return WORK[machine].wants === "anything" || (PLANT_TYPES as readonly string[]).includes(item);
 }
 
@@ -375,6 +497,38 @@ export interface MachineState {
    * Nought for ever on anything that is not a tally.
    */
   readonly mark: number;
+  /**
+   * The press's second funnel, and how much is in it.
+   *
+   * Null and nought on every other machine. A press is the one thing in the
+   * garden with two mouths, and they are two mouths rather than one mouth
+   * holding a mixture: what is in each stays its own heap, is counted on its
+   * own, and is spent against its own share.
+   *
+   * **Neither mouth ever forgets what it holds**, which is where a press
+   * differs from a sieve — that one runs dry and takes whatever arrives
+   * next, because a sieve is a thing you pour a stream through. Here,
+   * forgetting would be a trap: a press shown two wood and one stone that
+   * emptied and then took stone in the first funnel would quietly be
+   * pressing two stone for every wood, doing the wrong sum with the right
+   * numbers and nothing on it to say so.
+   */
+  readonly other: string | null;
+  readonly otherHeap: number;
+  /**
+   * How many of the second funnel's kind go into one pressing.
+   *
+   * The first funnel's is `mark`, which is the tally's field doing the same
+   * job — a number this machine was shown once and keeps. Together they are
+   * the proportion, and a press is the only thing here that needs two
+   * numbers to say what it does.
+   *
+   * Nought until it presses for the first time, and learned then from what
+   * is actually in the two funnels: pour in two wood and one stone and it
+   * works in twos and ones from that moment. Nought for ever on anything
+   * that is not a press.
+   */
+  readonly otherMark: number;
   /** Minutes of work into the round in progress. */
   readonly worked: number;
 }
@@ -391,6 +545,9 @@ export function newMachine(): MachineState {
     binned: null,
     bin: 0,
     mark: 0,
+    other: null,
+    otherHeap: 0,
+    otherMark: 0,
     worked: 0,
   };
 }
@@ -409,20 +566,60 @@ export function wake(state: MachineState): MachineState {
  * in there is a child's, and a machine that quietly dropped it to make room
  * would be a machine that stole.
  */
+/**
+ * Whether this machine would take this in at all, given what it holds.
+ *
+ * The mouth rules, in one place. They used to be a line inside `feed` and a
+ * matching line in the scene's tip-in, which agreed for as long as there was
+ * one mouth to disagree about — and the moment a press had two, the scene
+ * went on offering a child only the first funnel's kind. A press that cannot
+ * be handed the second thing by hand is a press that cannot be *shown* its
+ * proportion, which is the whole of how it learns.
+ */
+export function wouldTake(state: MachineState, item: string, machine: MachineType): boolean {
+  if (!state.awake || !accepts(machine, item)) return false;
+  if (WORK[machine].verb === Verb.Press) {
+    if (state.holding === null || state.holding === item) return true;
+    if (state.other !== null) return state.other === item;
+    // The second funnel takes only what pairs with the first. Anything else
+    // is a heap it could never spend, and a machine that swallowed it would
+    // stall in exactly the way it stalls when it is working — which is the
+    // one confusion this design cannot afford, because the stall is the
+    // lesson.
+    return pressing(state.holding, item) !== null;
+  }
+  if (state.holding !== null && state.holding !== item) return false;
+  // A sieve with a full bin takes nothing it would only bin again.
+  return !(state.bin >= BIN_HOLDS && state.passes !== null && state.passes !== item);
+}
+
 export function feed(
   state: MachineState,
   item: string,
   count: number,
   machine: MachineType,
 ): MachineState | null {
-  if (!state.awake || !Number.isFinite(count) || Math.trunc(count) <= 0) return null;
-  if (!accepts(machine, item)) return null;
-  if (state.holding !== null && state.holding !== item) return null;
+  if (!Number.isFinite(count) || Math.trunc(count) <= 0) return null;
+  if (!wouldTake(state, item, machine)) return null;
+  // A press has two funnels, and which one a delivery goes into is decided
+  // by what is already in them rather than by which wire brought it. The
+  // first thing it is ever shown claims the first funnel; the first thing
+  // that is *not* that claims the second. After that both are spoken for and
+  // a third kind is refused, which is what backs a line up rather than
+  // quietly pressing the wrong sum.
+  if (WORK[machine].verb === Verb.Press) {
+    const amount = Math.trunc(count);
+    if (state.holding === null || state.holding === item) {
+      return { ...state, holding: item, heap: state.heap + amount };
+    }
+    if (state.other === null || state.other === item) {
+      return { ...state, other: item, otherHeap: state.otherHeap + amount };
+    }
+    return null;
+  }
   // A sieve with a full bin takes nothing more, and that is what backs a
-  // line up rather than swallowing everything it is sent for ever. The bin
-  // only ever fills with what the sieve does *not* pass, so a line carrying
-  // what it should carry never meets this at all.
-  if (state.bin >= BIN_HOLDS && state.passes !== null && state.passes !== item) return null;
+  // line up rather than swallowing everything it is sent for ever — see
+  // `wouldTake`, which is where that rule now lives.
   return { ...state, holding: item, heap: state.heap + Math.trunc(count) };
 }
 
@@ -444,6 +641,7 @@ export function advance(state: MachineState, minutes: number, machine: MachineTy
   if (!state.awake || !Number.isFinite(minutes) || minutes <= 0) return state;
   const work = WORK[machine];
   const worked = state.worked + minutes;
+  if (work.verb === Verb.Press) return pressed(state, worked, work);
   // A tally waits for its mark rather than for a round's worth, so how many
   // batches it can tip is a different sum — see `counted`.
   const batch = work.verb === Verb.Count ? Math.max(1, state.mark || state.heap) : work.takes;
@@ -531,6 +729,64 @@ function counted(state: MachineState, worked: number, held: string | null): Mach
     made: state.made ?? held,
     mark,
     worked: worked - batches * MINUTES_PER_ROUND,
+  };
+}
+
+/**
+ * A press taking so many of one for every so many of the other.
+ *
+ * Its own arithmetic, like the tally's and for a related reason: everything
+ * else works on one heap, and this one cannot start until *both* of its
+ * funnels can pay. What it spends per pressing is a pair of numbers, and the
+ * pair is the whole machine.
+ *
+ * **The proportion is learned at the first pressing**, from what is actually
+ * in the two funnels — the same bargain the sieve and the tally make. Pour
+ * in two wood and one stone and it presses in twos and ones from then on. A
+ * dial would be the first menu in the garden, and a number typed into a
+ * machine is a number a five-year-old cannot type.
+ *
+ * **And it stalls rather than improvises.** Ten of one and none of the other
+ * is not nine tenths of a pressing, it is none, and it will still be none
+ * tomorrow — what changes it is the other thing arriving, not more time. So
+ * the banked work is thrown away rather than kept, exactly as a tally under
+ * its mark throws its away: a press that stored months of work while it
+ * waited would empty both funnels in one frame the moment a wire reached it.
+ * That refusal *is* the lesson. It is `for every`, standing in a garden.
+ */
+function pressed(state: MachineState, worked: number, work: Work): MachineState {
+  const mine = state.mark || state.heap;
+  const theirs = state.otherMark || state.otherHeap;
+  if (mine <= 0 || theirs <= 0) return { ...state, worked: 0 };
+  if (state.heap < mine || state.otherHeap < theirs) return { ...state, worked: 0 };
+  const rounds = Math.min(
+    Math.floor(worked / MINUTES_PER_ROUND),
+    Math.floor(state.heap / mine),
+    Math.floor(state.otherHeap / theirs),
+  );
+  // Learned the moment it *can* press, whether or not the minutes are in
+  // yet. A press that had been shown its proportion but had not yet had time
+  // to use it should already know what it is going to do.
+  if (rounds <= 0) return { ...state, worked, mark: mine, otherMark: theirs };
+  return {
+    ...state,
+    heap: state.heap - rounds * mine,
+    otherHeap: state.otherHeap - rounds * theirs,
+    crates: spread(state.crates, rounds * work.puts),
+    // Neither funnel forgets, even emptied — see `MachineState.other`. A
+    // press that forgot would take the next delivery into whichever mouth
+    // came free and press the proportion backwards.
+    //
+    // What it made is looked up from the pair rather than read off `WORK`,
+    // which is the one place a press differs from every other machine here:
+    // its output is a fact about both funnels. `feed` will not let an
+    // unpressable pair into them, so this cannot be null by the time work
+    // has happened — the fallback is for a save hand-edited into a state the
+    // machine could not have reached.
+    made: pressing(state.holding, state.other) ?? state.made,
+    mark: mine,
+    otherMark: theirs,
+    worked: worked - rounds * MINUTES_PER_ROUND,
   };
 }
 
@@ -671,7 +927,7 @@ export function machinesToSave(
   const saved: Record<string, string> = {};
   for (const [where, state] of machines) {
     saved[where] =
-      `${state.awake ? 1 : 0},${state.holding ?? ""},${state.heap},${state.crates.join("/")},${Math.round(state.worked)},${state.made ?? ""},${state.passes ?? ""},${state.binned ?? ""},${state.bin},${state.mark}`;
+      `${state.awake ? 1 : 0},${state.holding ?? ""},${state.heap},${state.crates.join("/")},${Math.round(state.worked)},${state.made ?? ""},${state.passes ?? ""},${state.binned ?? ""},${state.bin},${state.mark},${state.other ?? ""},${state.otherHeap},${state.otherMark}`;
   }
   return saved;
 }
@@ -688,8 +944,21 @@ export function machinesFromSave(saved: unknown): Map<string, MachineState> {
   if (typeof saved !== "object" || saved === null) return machines;
   for (const [where, entry] of Object.entries(saved as Record<string, unknown>)) {
     if (typeof entry !== "string" || !/^-?\d+,-?\d+$/.test(where)) continue;
-    const [awake, holding, heap, crates, worked, made, passes, binned, bin, mark] =
-      entry.split(",");
+    const [
+      awake,
+      holding,
+      heap,
+      crates,
+      worked,
+      made,
+      passes,
+      binned,
+      bin,
+      mark,
+      other,
+      otherHeap,
+      otherMark,
+    ] = entry.split(",");
     if (awake === undefined || heap === undefined || crates === undefined) continue;
     if (!/^\d+$/.test(heap) || !/^\d+$/.test(worked ?? "")) continue;
     const dealt = crates.split("/").map(Number);
@@ -719,6 +988,15 @@ export function machinesFromSave(saved: unknown): Map<string, MachineState> {
       binned: binned ? binned : null,
       bin: /^\d+$/.test(bin ?? "") ? Number(bin) : 0,
       mark: /^\d+$/.test(mark ?? "") ? Number(mark) : 0,
+      // And a save from before there was a press has none of the last
+      // three, which read as a machine with one mouth — which every machine
+      // in an older save had. Appended rather than woven in for exactly
+      // this reason: a positional record grows at the end, and a field
+      // inserted in the middle would silently reinterpret every save on
+      // every device.
+      other: other ? other : null,
+      otherHeap: /^\d+$/.test(otherHeap ?? "") ? Number(otherHeap) : 0,
+      otherMark: /^\d+$/.test(otherMark ?? "") ? Number(otherMark) : 0,
       worked: Number(worked),
     });
   }

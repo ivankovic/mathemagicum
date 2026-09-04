@@ -84,6 +84,7 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Hothouse]: noun({ bare: "Gewächshaus", gender: "n", plural: "Gewächshäuser" }),
   [FixtureType.Sieve]: noun({ bare: "Sieb", gender: "n", plural: "Siebe" }),
   [FixtureType.Tally]: noun({ bare: "Zählwerk", gender: "n", plural: "Zählwerke" }),
+  [FixtureType.Press]: noun({ bare: "Presse", gender: "f", plural: "Pressen" }),
   [FixtureType.Windpump]: noun({ bare: "Windpumpe", gender: "f", plural: "Windpumpen" }),
   [FixtureType.Planter]: noun({ bare: "Pflanzkasten", gender: "m", plural: "Pflanzkästen" }),
   [FixtureType.Gate]: noun({ bare: "Tor", gender: "n", plural: "Tore" }),
@@ -183,6 +184,10 @@ const MATERIALS: Record<MaterialType, Noun> = {
   // Stoffnamen: man bringt Holz mit, nicht ein Holz.
   [MaterialType.Wood]: noun({ bare: "Holz", gender: "n", plural: "Holz" }),
   [MaterialType.Stone]: noun({ bare: "Stein", gender: "m", plural: "Steine" }),
+  // Zählbar, anders als die beiden darüber: man bringt Holz mit, aber drei
+  // Balken.
+  [MaterialType.Beam]: noun({ bare: "Balken", gender: "m", plural: "Balken" }),
+  [MaterialType.Cord]: noun({ bare: "Seil", gender: "n", plural: "Seile" }),
 };
 
 const FURNITURE: Record<DecorType, Noun> = {

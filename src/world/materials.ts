@@ -4,7 +4,8 @@
 import { SCENERY_FOR_TERRAIN } from "./scenery";
 
 /**
- * What the world gives up when it is cleared.
+ * What a basket holds that is not a crop, a fixture or a bit of furniture:
+ * what the world gave up, and what a press has since made of it.
  *
  * The clearing spell used to give nothing. A child solved a subtraction
  * problem, a tree came out of the ground, and that was the whole of it —
@@ -29,11 +30,47 @@ export const MaterialType = {
   Wood: "wood",
   /** From anything that did not: boulders, spires, outcrops. */
   Stone: "stone",
+  /**
+   * Squared timber, pinned with stone. The first thing in this game that is
+   * *made* rather than found.
+   */
+  Beam: "beam",
+  /** Rope, twisted out of straw and stem. The other half of a vessel. */
+  Cord: "cord",
 } as const;
 
 export type MaterialType = (typeof MaterialType)[keyof typeof MaterialType];
 
 export const MATERIAL_TYPES: readonly MaterialType[] = Object.values(MaterialType);
+
+/**
+ * The ones the world hands over, and the ones a press hands back.
+ *
+ * A basket does not care about the difference — both are counted, carried
+ * and drawn the same way, which is why they are one type. Two places do
+ * care, and both of them are about *where a thing can go*.
+ *
+ * **The store buys the gathered ones and not the made ones.** That is the
+ * whole reason this split exists. Wood and stone are paid for because
+ * subtraction is the spell this game under-uses and paying for it is the
+ * plainest way to have it practised. A beam is what that wood was spent on;
+ * putting a price on it would make a press a slower way of selling wood,
+ * which is the exact shape the machines were built to get away from — the
+ * design doc's complaint that materials with nowhere to go are "coins with
+ * an extra step".
+ *
+ * Selling them would not even pay: a beam costs more wood than it is worth.
+ * The rule is here because it should be a decision rather than an accident
+ * of arithmetic.
+ */
+export const GATHERED_MATERIALS: readonly MaterialType[] = [MaterialType.Wood, MaterialType.Stone];
+
+export const MADE_MATERIALS: readonly MaterialType[] = [MaterialType.Beam, MaterialType.Cord];
+
+/** Whether the world gave this up, as opposed to a machine having made it. */
+export function isGathered(material: string): boolean {
+  return (GATHERED_MATERIALS as readonly string[]).includes(material);
+}
 
 /**
  * What one of each kind of scenery is worth, by the generator's own name for

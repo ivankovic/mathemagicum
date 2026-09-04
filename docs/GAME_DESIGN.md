@@ -2923,11 +2923,33 @@ boulders are up the hills — the first time this game has asked a child to go
 to two places for one thing, and the cheapest way to make terrain matter to
 something other than what will grow on it.
 
-**There is no assembly puzzle, and that is deliberate.** No parts to
-fabricate, no stages, no sum standing between a child and the machine. The
-arithmetic in a machine belongs to what it *does* — a sorter deals a heap
-into equal shares, which is the share spell — and a lock on the door of the
-classroom is not a lesson.
+**There is no assembly puzzle in front of a machine, and that is
+deliberate.** No parts to fabricate, no stages, no sum standing between a
+child and the thing that teaches the sum. The arithmetic in a machine belongs
+to what it *does* — a sorter deals a heap into equal shares, which is the
+share spell — and a lock on the door of the classroom is not a lesson.
+
+**That rule was written absolutely and has since been narrowed, on purpose.**
+It said "no parts to fabricate, no stages" full stop, and there are parts
+now: a press makes beams and cord, and a vessel will be built out of them.
+The narrowing is not a climbdown, it is the rule's own reason applied where
+it belongs. What the sentence was ever protecting is the *classroom door* —
+nothing may stand between a child and the machine that would teach them
+something. A ship is not a classroom door. It is the thing you sail away in,
+and a destination worth several afternoons is the opposite of a lock.
+
+So the rule as it now stands: **no stages in front of a machine; stages are
+allowed in front of a destination.** A press costs twenty wood and ten stone
+and is then *there*, immediately, like every machine before it. What takes
+time is the vessel, and the time is the point of it.
+
+**And a made part is not for sale.** Wood and stone are bought by the store
+because subtraction is the spell this game under-uses and paying for it is
+the plainest way to have it practised. A beam is what that wood was spent on,
+and pricing it would make a press a slower way of selling timber — which is
+this section's own complaint about materials that have nowhere to go, "coins
+with an extra step", arriving one tier up and harder to see. Parts go into a
+vessel or they go nowhere. See `GATHERED_MATERIALS` in `src/world/materials.ts`.
 
 **Where the solarpunk went, second time round.** The first pass put sun
 panels on city crossings and wind pumps on the quay, and a playtest called

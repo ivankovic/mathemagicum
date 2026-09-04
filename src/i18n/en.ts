@@ -68,6 +68,9 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Sieve]: noun("sieve"),
   // Named for what it keeps rather than for the bucket it keeps it in.
   [FixtureType.Tally]: noun("tally"),
+  // Named for what it does rather than for the beam that does it: a child
+  // asked to fetch "the press" will find the thing with two funnels.
+  [FixtureType.Press]: noun("press"),
   [FixtureType.Windpump]: noun("wind pump"),
   [FixtureType.Planter]: noun("planter"),
   [FixtureType.Gate]: noun("gate"),
@@ -150,6 +153,23 @@ const MATERIALS: Record<MaterialType, Noun> = {
     definite: "the wood",
     none: "no wood",
     plural: "wood",
+  },
+  // And these two are not mass nouns, which is the point of them: you come
+  // back with wood, and you come back with *three beams*. A thing that has
+  // been made is a thing you can count.
+  [MaterialType.Beam]: {
+    bare: "beam",
+    indefinite: "a beam",
+    definite: "the beam",
+    none: "no beams",
+    plural: "beams",
+  },
+  [MaterialType.Cord]: {
+    bare: "cord",
+    indefinite: "a cord",
+    definite: "the cord",
+    none: "no cord",
+    plural: "cords",
   },
   [MaterialType.Stone]: {
     bare: "stone",

@@ -140,6 +140,20 @@ export const FixtureType = {
    */
   Tally: "tally",
   /**
+   * The fifth machine: two funnels over a bed, and an iron beam that comes
+   * down on it.
+   *
+   * The first with **two mouths**, and the first that can only be fed
+   * properly by wire — two lines arriving with different things in them. It
+   * takes them in a fixed proportion, and the proportion is the arithmetic:
+   * shown two of one and one of the other, it works in twos and ones for
+   * ever, and stalls with one funnel piled high when the other runs dry.
+   *
+   * That stall is the lesson. Everything before it says *how much*; the
+   * tally says *enough*; this says **for every**.
+   */
+  Press: "press",
+  /**
    * Brass and greenery, for the places that are not the village square.
    *
    * A playtest liked the fairytale look and asked for somewhere with a bit
@@ -193,6 +207,7 @@ export const PLACEABLE_FIXTURES: readonly FixtureType[] = [
   FixtureType.Hothouse,
   FixtureType.Sieve,
   FixtureType.Tally,
+  FixtureType.Press,
 ];
 
 export function isPlaceable(fixture: FixtureType): boolean {
@@ -243,6 +258,7 @@ export const FIXTURE_TURNS: Partial<Record<FixtureType, number>> = {
   [FixtureType.Hothouse]: TURNS_DRAWN,
   [FixtureType.Sieve]: TURNS_DRAWN,
   [FixtureType.Tally]: TURNS_DRAWN,
+  [FixtureType.Press]: TURNS_DRAWN,
 };
 
 /** How many drawings this fixture has: three if it turns, one if it does not. */

@@ -178,6 +178,14 @@ const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
     few: "brojila",
     many: "brojila",
   },
+  // Feminine, so its accusative differs from its nominative — unlike the
+  // sorter and the tally, which are inanimate masculine and neuter.
+  [FixtureType.Press]: {
+    one: "preša",
+    acc: "prešu",
+    few: "preše",
+    many: "preša",
+  },
   // One feminine and one masculine, and the masculine is inanimate, so its
   // accusative is its nominative — the same shape as *bunar* and the sorter.
   [FixtureType.Windpump]: {
@@ -247,6 +255,12 @@ const MATERIAL_FORMS: Record<MaterialType, HrNoun> = {
   // it — tri drva, pet drva.
   [MaterialType.Wood]: { one: "drvo", acc: "drvo", few: "drva", many: "drva" },
   [MaterialType.Stone]: { one: "kamen", acc: "kamen", few: "kamena", many: "kamena" },
+  // Countable, unlike the two above — you come back with wood, and with
+  // three beams. Both inanimate masculine, so the accusative is the
+  // nominative; *greda* would be feminine, but a *balvan* is what a child
+  // would call the squared timber a press turns out.
+  [MaterialType.Beam]: { one: "balvan", acc: "balvan", few: "balvana", many: "balvana" },
+  [MaterialType.Cord]: { one: "konop", acc: "konop", few: "konopa", many: "konopa" },
 };
 
 const PLANTS: Record<PlantType, Noun> = Object.fromEntries(

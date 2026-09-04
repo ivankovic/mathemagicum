@@ -207,6 +207,11 @@
       "width": 32,
       "height": 32
     },
+    "item-press": {
+      "file": "item_press.png",
+      "width": 32,
+      "height": 32
+    },
     "item-wire": {
       "file": "item_wire.png",
       "width": 32,
@@ -239,6 +244,16 @@
     },
     "material-stone": {
       "file": "material_stone.png",
+      "width": 32,
+      "height": 32
+    },
+    "material-beam": {
+      "file": "material_beam.png",
+      "width": 32,
+      "height": 32
+    },
+    "material-cord": {
+      "file": "material_cord.png",
       "width": 32,
       "height": 32
     },

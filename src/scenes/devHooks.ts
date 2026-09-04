@@ -103,12 +103,19 @@ export interface DevOptions {
    */
   readonly wall: boolean;
   /**
-   * Start with this many of every material in the basket.
+   * Start with this many of every **gathered** material in the basket.
    *
    * Wood and stone come from the clearing spell, so playtesting anything
    * that *spends* them otherwise begins with several minutes of taking
    * trees out of the ground — which is the loop, and not the loop being
    * looked at. `?materials=6` is three rooms' worth.
+   *
+   * Gathered and not every material, which used to be the same thing. A
+   * press makes beams and cord, and handing those out here would conjure
+   * the one class of thing in this game that is only ever *made* — and did,
+   * quietly: twenty scenarios say `?materials=`, machines take the biggest
+   * heap she is carrying, and the biggest heap silently became a pile of
+   * beams nobody had pressed. See `GATHERED_MATERIALS`.
    */
   readonly materials: number;
   /**
@@ -526,6 +533,10 @@ export interface DevHandle {
     binned: string | null;
     bin: number;
     mark: number;
+    /** A press's second funnel, and the proportion it was shown. */
+    other: string | null;
+    otherHeap: number;
+    otherMark: number;
   }[];
   /** Every length of wire, and whether it is carrying. See `wires.ts`. */
   readonly wires: () => { from: string; to: string; moved: number }[];
