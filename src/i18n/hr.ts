@@ -544,6 +544,9 @@ export const HR: Phrases = {
   optionsButton: "postavke",
   optionsTitle: "Postavke",
   languageHeading: "Jezik",
+  soundHeading: "Zvuk",
+  soundOn: "Uklju\u010dena",
+  soundOff: "Isklju\u010dena",
 
   aboutButton: "O igri",
   aboutTitle: "O igri",

@@ -1,0 +1,468 @@
+{
+  "format": "mathemagicum-sfx",
+  "version": 1,
+  "seed": 7,
+  "effects": {
+    "coin": {
+      "name": "coin",
+      "ms": 280,
+      "voices": [
+        {
+          "name": "ring",
+          "wave": "pulse",
+          "duty": 0.25,
+          "gain": 0.3,
+          "envelope": {
+            "attack_ms": 1,
+            "decay_ms": 90,
+            "sustain": 0.0,
+            "release_ms": 60
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 55,
+              "midi": 93,
+              "velocity": 1.0,
+              "slide": 2
+            },
+            {
+              "at_ms": 70,
+              "ms": 150,
+              "midi": 100,
+              "velocity": 0.75,
+              "slide": 1
+            }
+          ]
+        }
+      ]
+    },
+    "seed": {
+      "name": "seed",
+      "ms": 200,
+      "voices": [
+        {
+          "name": "drop",
+          "wave": "triangle",
+          "duty": 0.5,
+          "gain": 0.34,
+          "envelope": {
+            "attack_ms": 8,
+            "decay_ms": 120,
+            "sustain": 0.0,
+            "release_ms": 80
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 120,
+              "midi": 57,
+              "velocity": 0.9,
+              "slide": -7
+            }
+          ]
+        },
+        {
+          "name": "earth",
+          "wave": "noise",
+          "duty": 0.5,
+          "gain": 0.14,
+          "envelope": {
+            "attack_ms": 8,
+            "decay_ms": 120,
+            "sustain": 0.0,
+            "release_ms": 80
+          },
+          "notes": [
+            {
+              "at_ms": 20,
+              "ms": 90,
+              "midi": 59,
+              "velocity": 0.5
+            }
+          ]
+        }
+      ]
+    },
+    "harvest": {
+      "name": "harvest",
+      "ms": 210,
+      "voices": [
+        {
+          "name": "pluck",
+          "wave": "pulse",
+          "duty": 0.125,
+          "gain": 0.22,
+          "envelope": {
+            "attack_ms": 1,
+            "decay_ms": 90,
+            "sustain": 0.0,
+            "release_ms": 60
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 90,
+              "midi": 79,
+              "velocity": 0.9,
+              "slide": 5
+            }
+          ]
+        },
+        {
+          "name": "leaves",
+          "wave": "noise",
+          "duty": 0.5,
+          "gain": 0.11,
+          "envelope": {
+            "attack_ms": 8,
+            "decay_ms": 120,
+            "sustain": 0.0,
+            "release_ms": 80
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 130,
+              "midi": 81,
+              "velocity": 0.45
+            }
+          ]
+        }
+      ]
+    },
+    "spell_add": {
+      "name": "spell_add",
+      "ms": 600,
+      "voices": [
+        {
+          "name": "chime",
+          "wave": "pulse",
+          "duty": 0.25,
+          "gain": 0.24,
+          "envelope": {
+            "attack_ms": 2,
+            "decay_ms": 180,
+            "sustain": 0.18,
+            "release_ms": 220
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 90,
+              "midi": 76,
+              "velocity": 0.9
+            },
+            {
+              "at_ms": 60,
+              "ms": 90,
+              "midi": 80,
+              "velocity": 0.9
+            },
+            {
+              "at_ms": 120,
+              "ms": 260,
+              "midi": 83,
+              "velocity": 1.0,
+              "slide": 2
+            }
+          ]
+        }
+      ]
+    },
+    "spell_take": {
+      "name": "spell_take",
+      "ms": 600,
+      "voices": [
+        {
+          "name": "chime",
+          "wave": "pulse",
+          "duty": 0.25,
+          "gain": 0.24,
+          "envelope": {
+            "attack_ms": 2,
+            "decay_ms": 180,
+            "sustain": 0.18,
+            "release_ms": 220
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 90,
+              "midi": 83,
+              "velocity": 0.9
+            },
+            {
+              "at_ms": 60,
+              "ms": 90,
+              "midi": 80,
+              "velocity": 0.9
+            },
+            {
+              "at_ms": 120,
+              "ms": 260,
+              "midi": 76,
+              "velocity": 1.0,
+              "slide": -2
+            }
+          ]
+        }
+      ]
+    },
+    "door": {
+      "name": "door",
+      "ms": 235,
+      "voices": [
+        {
+          "name": "latch",
+          "wave": "noise",
+          "duty": 0.5,
+          "gain": 0.2,
+          "envelope": {
+            "attack_ms": 1,
+            "decay_ms": 45,
+            "sustain": 0.0,
+            "release_ms": 40
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 30,
+              "midi": 54,
+              "velocity": 0.8
+            }
+          ]
+        },
+        {
+          "name": "timber",
+          "wave": "triangle",
+          "duty": 0.5,
+          "gain": 0.26,
+          "envelope": {
+            "attack_ms": 8,
+            "decay_ms": 120,
+            "sustain": 0.0,
+            "release_ms": 80
+          },
+          "notes": [
+            {
+              "at_ms": 15,
+              "ms": 140,
+              "midi": 40,
+              "velocity": 0.7,
+              "slide": -3
+            }
+          ]
+        }
+      ]
+    },
+    "portal": {
+      "name": "portal",
+      "ms": 640,
+      "voices": [
+        {
+          "name": "sweep",
+          "wave": "pulse",
+          "duty": 0.125,
+          "gain": 0.22,
+          "envelope": {
+            "attack_ms": 2,
+            "decay_ms": 180,
+            "sustain": 0.18,
+            "release_ms": 220
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 420,
+              "midi": 64,
+              "velocity": 0.85,
+              "slide": 19
+            }
+          ]
+        },
+        {
+          "name": "wash",
+          "wave": "noise",
+          "duty": 0.5,
+          "gain": 0.1,
+          "envelope": {
+            "attack_ms": 2,
+            "decay_ms": 180,
+            "sustain": 0.18,
+            "release_ms": 220
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 420,
+              "midi": 86,
+              "velocity": 0.4,
+              "slide": 7
+            }
+          ]
+        }
+      ]
+    },
+    "machine": {
+      "name": "machine",
+      "ms": 117,
+      "voices": [
+        {
+          "name": "tick",
+          "wave": "noise",
+          "duty": 0.5,
+          "gain": 0.17,
+          "envelope": {
+            "attack_ms": 1,
+            "decay_ms": 45,
+            "sustain": 0.0,
+            "release_ms": 40
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 22,
+              "midi": 75,
+              "velocity": 0.9
+            },
+            {
+              "at_ms": 55,
+              "ms": 22,
+              "midi": 70,
+              "velocity": 0.6
+            }
+          ]
+        }
+      ]
+    },
+    "pick_up": {
+      "name": "pick_up",
+      "ms": 120,
+      "voices": [
+        {
+          "name": "lift",
+          "wave": "pulse",
+          "duty": 0.5,
+          "gain": 0.18,
+          "envelope": {
+            "attack_ms": 1,
+            "decay_ms": 90,
+            "sustain": 0.0,
+            "release_ms": 60
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 60,
+              "midi": 84,
+              "velocity": 0.8,
+              "slide": 4
+            }
+          ]
+        }
+      ]
+    },
+    "put_down": {
+      "name": "put_down",
+      "ms": 120,
+      "voices": [
+        {
+          "name": "set",
+          "wave": "pulse",
+          "duty": 0.5,
+          "gain": 0.18,
+          "envelope": {
+            "attack_ms": 1,
+            "decay_ms": 90,
+            "sustain": 0.0,
+            "release_ms": 60
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 60,
+              "midi": 84,
+              "velocity": 0.8,
+              "slide": -4
+            }
+          ]
+        }
+      ]
+    },
+    "page": {
+      "name": "page",
+      "ms": 150,
+      "voices": [
+        {
+          "name": "paper",
+          "wave": "noise",
+          "duty": 0.5,
+          "gain": 0.12,
+          "envelope": {
+            "attack_ms": 8,
+            "decay_ms": 120,
+            "sustain": 0.0,
+            "release_ms": 80
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 70,
+              "midi": 92,
+              "velocity": 0.5,
+              "slide": -4
+            }
+          ]
+        }
+      ]
+    },
+    "refuse": {
+      "name": "refuse",
+      "ms": 110,
+      "voices": [
+        {
+          "name": "thud",
+          "wave": "triangle",
+          "duty": 0.5,
+          "gain": 0.3,
+          "envelope": {
+            "attack_ms": 1,
+            "decay_ms": 45,
+            "sustain": 0.0,
+            "release_ms": 40
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 70,
+              "midi": 45,
+              "velocity": 0.8,
+              "slide": -2
+            }
+          ]
+        },
+        {
+          "name": "dull",
+          "wave": "noise",
+          "duty": 0.5,
+          "gain": 0.1,
+          "envelope": {
+            "attack_ms": 1,
+            "decay_ms": 45,
+            "sustain": 0.0,
+            "release_ms": 40
+          },
+          "notes": [
+            {
+              "at_ms": 0,
+              "ms": 40,
+              "midi": 46,
+              "velocity": 0.4
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

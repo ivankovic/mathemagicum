@@ -127,6 +127,9 @@ function sample(p: Phrases): Record<string, string> {
     optionsButton: p.optionsButton,
     optionsTitle: p.optionsTitle,
     languageHeading: p.languageHeading,
+    soundHeading: p.soundHeading,
+    soundOn: p.soundOn,
+    soundOff: p.soundOff,
 
     aboutButton: p.aboutButton,
     aboutTitle: p.aboutTitle,

@@ -365,6 +365,9 @@ export const DE: Phrases = {
   optionsButton: "Optionen",
   optionsTitle: "Optionen",
   languageHeading: "Sprache",
+  soundHeading: "Ton",
+  soundOn: "An",
+  soundOff: "Aus",
 
   aboutButton: "\u00dcber",
   aboutTitle: "\u00dcber dieses Spiel",

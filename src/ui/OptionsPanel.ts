@@ -47,19 +47,24 @@ import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
 
 const PANEL_MAX_W = 420;
 /**
- * Tall enough for a row that has taken a second line.
+ * Tall enough for a row that has taken a second line, and now for a fourth row.
  *
  * Three hundred and forty-four was right while every row was one line of
  * three or fewer. A fourth band made the sums row wrap on a phone held
  * upright — and at that height it missed the room to do so by six pixels, so
  * it stayed on one line and the six-digit sum ran out of its own button
- * instead. The panel is not padding: what it holds grew.
+ * instead. Four hundred was right until the game had music and this screen
+ * became the place to turn it off. The panel is not padding: what it holds
+ * grew, twice.
  */
-const PANEL_MAX_H = 400;
+const PANEL_MAX_H = 452;
 const PANEL_MIN_W = 280;
 const PANEL_MIN_H = 290;
 
 const CHOSEN_HEX = 0xc8901c;
+
+/** On first, because that is what the game does unless somebody says otherwise. */
+const SOUND_CHOICES: readonly boolean[] = [true, false];
 
 const TITLE_SIZE = 17;
 const ROW_SIZE = 13;
@@ -116,6 +121,15 @@ export class OptionsPanel {
    * all. The game moves *inside* a band; only a person moves between them.
    */
   private readonly bandChoices: Choice[] = [];
+  /**
+   * Whether the game makes a sound at all, as two words.
+   *
+   * On the same screen as the language and the sums rather than in a corner
+   * of the game, because that is where the adult who wants it off is already
+   * looking — and because a mute button on the playing screen is a button a
+   * child will find, press, and not be able to explain afterwards.
+   */
+  private readonly soundChoices: Choice[] = [];
   private readonly closeButton: Choice;
   /** The games row: one tile per saved game, and the "+" that starts another. */
   private readonly gameChoices: Choice[] = [];
@@ -216,7 +230,8 @@ export class OptionsPanel {
     });
 
     this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
-    for (let i = 0; i < 3; i++) {
+    // One per row: language, sums, music, world.
+    for (let i = 0; i < 4; i++) {
       this.headings.push(this.own(this.text("", SMALL_SIZE, INK_DIM).setOrigin(0, 0)));
     }
     this.aboutButton = this.choice("", () => this.onAbout?.());
@@ -243,6 +258,9 @@ export class OptionsPanel {
       this.bandChoices.push(
         this.choice(`${sample.start} + ${sample.addend}`, () => this.chooseBand(index)),
       );
+    }
+    for (const on of SOUND_CHOICES) {
+      this.soundChoices.push(this.choice("", () => this.choose({ sound: on })));
     }
     for (let n = 0; n < MAX_GAMES; n++) {
       this.gameChoices.push(this.choice("", () => this.tapGame(n)));
@@ -275,6 +293,7 @@ export class OptionsPanel {
     return [
       ...this.languageChoices,
       ...this.bandChoices,
+      ...this.soundChoices,
       ...this.gameChoices,
       this.exportButton,
       this.newButton,
@@ -355,6 +374,15 @@ export class OptionsPanel {
     for (const [n, button] of this.languageChoices.entries()) {
       at[`language.${n}`] = { x: button.box.x, y: button.box.y };
     }
+    // And the sound, which a scenario has to be able to press for the same
+    // reason it has to press the bands: it is the only way the sound is
+    // turned off, and a script cannot hear whether it worked. Named by the
+    // answer rather than by an index — there are two of them and they mean
+    // yes and no, which is not something to count.
+    for (const [n, on] of SOUND_CHOICES.entries()) {
+      const button = this.soundChoices[n];
+      if (button) at[`sound.${on ? "on" : "off"}`] = { x: button.box.x, y: button.box.y };
+    }
     return at;
   }
 
@@ -419,7 +447,12 @@ export class OptionsPanel {
 
   private choose(change: Partial<Settings>): void {
     const next: Settings = { ...this.settings, ...change };
-    if (next.language === this.settings.language) return;
+    // Every field, not just the language. This asked `next.language ===
+    // this.settings.language` while there was one setting, which is the same
+    // question by accident — and the day a second arrived it would have been
+    // a music button that lit up and did nothing, because tapping it changed
+    // no language and so counted as tapping nothing.
+    if (next.language === this.settings.language && next.sound === this.settings.sound) return;
     this.settings = next;
     this.onChange?.(next);
     this.render();
@@ -453,11 +486,22 @@ export class OptionsPanel {
       this.settings.language,
     );
 
-    // The lowest the sums may reach: what the world row and the button
-    // under it need, measured back from the foot of the panel rather than
-    // guessed.
+    // The lowest the sums may reach: what the rows and the button under it
+    // need, measured back from the foot of the panel rather than guessed.
+    //
+    // **Every row below, not just the world.** This counted the world row
+    // alone while the world row was the only thing under the sums, which is
+    // the same number by accident — and the music row went in between them.
+    // A phone held sideways gives the panel three hundred and sixty-six
+    // pixels: with the music row unaccounted for, the sums were told they
+    // had room for a second line, took it, and pushed the world row and its
+    // tick and cross forty pixels down through the About button. The row
+    // that has to give way when there is no height is the sums row, by
+    // shrinking its type — which is what `row` does when it is told the
+    // truth about the floor.
     const aboutTop = rect.top + rect.height - PAD - BUTTON_H;
-    const worldNeeds = AFTER_ROW + SMALL_SIZE + 8 + BUTTON_H;
+    const rowNeeds = AFTER_ROW + SMALL_SIZE + 8 + BUTTON_H;
+    const belowNeeds = rowNeeds * 2;
     below = this.row(
       rect,
       below + AFTER_ROW,
@@ -466,7 +510,29 @@ export class OptionsPanel {
       this.bandChoices,
       BANDS.map((_, index) => index),
       this.band,
-      aboutTop - AFTER_ROW - worldNeeds,
+      aboutTop - AFTER_ROW - belowNeeds,
+    );
+
+    // Two short words, which is the narrowest row on this panel — it fits on
+    // one line at every size the game runs at and so is the one row that
+    // never has to be given a floor to wrap against.
+    //
+    // One switch for the tune and the world's noises together. A parent who
+    // reaches for this has decided the room should be quiet; offering them a
+    // choice between the music and the coins is asking for a distinction
+    // they did not come here to make.
+    for (const [index, on] of SOUND_CHOICES.entries()) {
+      const button = this.soundChoices[index];
+      if (button) button.label.setText(on ? this.words.soundOn : this.words.soundOff);
+    }
+    below = this.row(
+      rect,
+      below + AFTER_ROW,
+      2,
+      this.words.soundHeading,
+      this.soundChoices,
+      SOUND_CHOICES,
+      this.settings.sound,
     );
 
     // Where the price of a crop used to be stated. That was a fact about
@@ -556,7 +622,7 @@ export class OptionsPanel {
    * spell rules a ruler across.
    */
   private worldRow(rect: { left: number; width: number; centreX: number }, top: number): void {
-    const label = this.headings[2];
+    const label = this.headings[3];
     label
       ?.setText(this.words.gamesHeading)
       .setPosition(rect.left + PAD, top)

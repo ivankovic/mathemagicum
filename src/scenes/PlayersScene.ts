@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Phaser from "phaser";
+import { sound } from "../audio/sound";
 import {
   AVATAR_COLOURS,
   type AvatarCatalogue,
@@ -200,6 +201,16 @@ export class PlayersScene extends Phaser.Scene {
     this.words = phrasesFor(settings.language);
     this.draftLanguage = settings.language;
     this.catalogue = avatarCatalogue(this);
+
+    // Whether the game makes any sound. The device's choice, not this child's —
+    // it is read here because this screen runs before anybody has been
+    // chosen, which is the same reason the device remembers a language.
+    //
+    // The gesture that lets the audio *start* is caught in `main.ts`, on the
+    // window rather than through Phaser: a Phaser input handler runs a frame
+    // later than the touch that caused it, and WebKit only counts a gesture
+    // inside its own call stack. See `listenForTheFirstTouch`.
+    sound().setEnabled(settings.sound);
 
     this.profiles = byRecency(readProfiles(this.store));
 
@@ -1246,7 +1257,12 @@ export class PlayersScene extends Phaser.Scene {
     // The device follows whoever played last, so the next morning's
     // who's-playing screen is written in the language of this house rather
     // than of this browser.
-    writeSettings(this.store, { language: playing.language });
+    // Spread rather than built fresh: this is a write of the *whole* device
+    // settings file, and a field left out of it is a field deleted. It said
+    // `{ language }` while language was the only one, and the day a second
+    // arrived that line would have quietly switched the music back on every
+    // time a child started playing.
+    writeSettings(this.store, { ...readSettings(this.store), language: playing.language });
     this.hideNameBox();
     this.scene.start("game", { profile: playing });
   }

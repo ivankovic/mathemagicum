@@ -362,6 +362,19 @@ export interface Phrases {
   optionsButton: string;
   optionsTitle: string;
   languageHeading: string;
+  /**
+   * The sound row, and the two answers to it.
+   *
+   * Words rather than a speaker with a line through it, which is the icon
+   * everything else does this with. Every button on this panel that carries
+   * a picture carries one the game drew for its own world — a flag, a map, a
+   * tick — and there is no drawing of a loudspeaker anywhere in a game about
+   * spellbooks and paper. A row of two short words is also the one thing on
+   * this screen guaranteed to fit at any width.
+   */
+  soundHeading: string;
+  soundOn: string;
+  soundOff: string;
 
   // --- about ---------------------------------------------------------------
   //

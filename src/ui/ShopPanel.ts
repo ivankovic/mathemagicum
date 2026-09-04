@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type Phaser from "phaser";
+import { Sfx } from "../audio/sfx";
+import { sound } from "../audio/sound";
 import type { Phrases } from "../i18n/phrases";
 import {
   CURRENCY,
@@ -869,15 +871,29 @@ export class ShopPanel {
       .setVisible(true);
   }
 
+  /**
+   * A coin on the counter, and the sound of one.
+   *
+   * The sound is here rather than asked for through a callback, unlike
+   * everything else this panel does not do itself. A coin's chink is not a
+   * thing that happens in the world — the purse has not changed, nothing has
+   * been bought, and if she takes it back nothing ever will. It is what this
+   * button sounds like when it is pressed, which makes it this panel's, the
+   * same as the outline that goes round the coin she chose.
+   */
   private putDown(value: number): void {
     if (this.mode !== "buy" || !this.tender || this.settled) return;
     this.tender = addCoin(this.tender, value);
+    sound().effect(Sfx.Coin);
     this.render();
   }
 
   private takeBack(value: number): void {
     if (this.mode !== "buy" || !this.tender || this.settled) return;
     this.tender = removeCoin(this.tender, value);
+    // The same sound going the other way. A coin lifted off a counter makes
+    // the noise a coin makes; it is not an undo, it is a coin.
+    sound().effect(Sfx.Coin);
     this.render();
   }
 

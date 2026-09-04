@@ -345,6 +345,9 @@ export const EN: Phrases = {
   optionsButton: "options",
   optionsTitle: "Options",
   languageHeading: "Language",
+  soundHeading: "Sound",
+  soundOn: "On",
+  soundOff: "Off",
 
   aboutButton: "About",
   aboutTitle: "About",

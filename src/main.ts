@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Phaser from "phaser";
+import { sound } from "./audio/sound";
 import { BootScene } from "./scenes/BootScene";
 import { GameScene } from "./scenes/GameScene";
 import { PlayersScene } from "./scenes/PlayersScene";
@@ -92,8 +93,50 @@ function fitToWindow(game: Phaser.Game): void {
   game.renderer.resize(game.canvas.width, game.canvas.height);
 }
 
+/**
+ * Listen for the first real touch, so the music is allowed to start.
+ *
+ * Here, on `window`, rather than on a Phaser scene — and that distinction is
+ * the entire reason this function exists rather than one line in a scene's
+ * `create`.
+ *
+ * No browser will start audio before the page has been interacted with, and
+ * they disagree about what counts. Chrome remembers that it happened and
+ * will oblige some time later. WebKit only honours the permission inside the
+ * *synchronous call stack of the event itself* — and WebKit is every browser
+ * on an iPhone, because iOS allows no other engine, so Firefox and Chrome
+ * there are Safari wearing a coat.
+ *
+ * Phaser cannot give us that stack. It listens to the DOM, queues what it
+ * hears, and raises its own `pointerdown` during the next step of the game
+ * loop, which is a `requestAnimationFrame` callback with no gesture attached
+ * to it. Audio started from there works on a desktop and is silent on a
+ * phone, which is the worst shape a bug can have: it cannot be seen from the
+ * machine it is written on.
+ *
+ * `capture` so it runs on the way down, before anything else has a chance to
+ * stop it, and three events because a tap, a touch and a key are all
+ * somebody saying they are here. They stay attached: a tab left open
+ * overnight comes back with its audio suspended, and the touch that returns
+ * to it should bring the sound back with it.
+ */
+function listenForTheFirstTouch(): void {
+  const wake = () => sound().unlock();
+  for (const event of ["pointerdown", "touchend", "keydown"]) {
+    window.addEventListener(event, wake, { capture: true, passive: true });
+  }
+  // And when the tab comes back. Returning to a backgrounded page is not a
+  // gesture, so this cannot *start* audio — but a context that was only
+  // suspended will resume, and one that WebKit marked `interrupted` for a
+  // phone call needs asking twice.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) wake();
+  });
+}
+
 async function start(): Promise<void> {
   await faceReady();
+  listenForTheFirstTouch();
   const game = boot();
   window.addEventListener("resize", () => {
     fitToWindow(game);

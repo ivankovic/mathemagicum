@@ -63,13 +63,16 @@ describe("reading a language tag", () => {
 
 describe("remembering the choice", () => {
   test("with nothing saved, the browser's language is the first guess", () => {
-    expect(readSettings(memory(), "de-CH")).toEqual({ language: Language.German });
+    expect(readSettings(memory(), "de-CH")).toEqual({
+      ...DEFAULT_SETTINGS,
+      language: Language.German,
+    });
     expect(readSettings(memory(), "en-GB")).toEqual(DEFAULT_SETTINGS);
   });
 
   test("what was written comes back", () => {
     const store = memory();
-    const chosen: Settings = { language: Language.German };
+    const chosen: Settings = { ...DEFAULT_SETTINGS, language: Language.German };
     writeSettings(store, chosen);
     expect(readSettings(store, "en")).toEqual(chosen);
   });
@@ -83,7 +86,7 @@ describe("remembering the choice", () => {
 
   test("rubbish in storage costs at most the field that is rubbish", () => {
     const store = memory(JSON.stringify({ language: "klingon" }));
-    expect(readSettings(store, "de")).toEqual({ language: Language.German });
+    expect(readSettings(store, "de")).toEqual({ ...DEFAULT_SETTINGS, language: Language.German });
   });
 
   // Anybody who played while the game offered kuna, francs and euros has a
@@ -91,17 +94,46 @@ describe("remembering the choice", () => {
   // language they chose, and an unknown key must not read as corruption.
   test("a settings blob from before the money was dropped still loads", () => {
     const store = memory(JSON.stringify({ language: "de", money: "franc", introSeen: true }));
-    expect(readSettings(store, "en")).toEqual({ language: Language.German });
+    expect(readSettings(store, "en")).toEqual({ ...DEFAULT_SETTINGS, language: Language.German });
   });
 
   test("unparseable storage falls back rather than throwing", () => {
-    expect(readSettings(memory("{not json"), "de")).toEqual({ language: Language.German });
+    expect(readSettings(memory("{not json"), "de")).toEqual({
+      ...DEFAULT_SETTINGS,
+      language: Language.German,
+    });
     expect(readSettings(memory("null"), "en")).toEqual(DEFAULT_SETTINGS);
+  });
+
+  test("the sound choice comes back too", () => {
+    const store = memory();
+    writeSettings(store, { ...DEFAULT_SETTINGS, sound: false });
+    expect(readSettings(store, "en").sound).toBe(false);
+  });
+
+  /**
+   * A settings file written before the game had any sound.
+   *
+   * Every device that has ever played this has one. The field is missing
+   * from all of them, and what they must get is the default rather than
+   * `undefined` — which is falsy, and would have quietly shipped a game that
+   * is silent for every existing player and audible only for new ones.
+   */
+  test("a settings blob from before there was sound still loads, with sound", () => {
+    const store = memory(JSON.stringify({ language: "hr" }));
+    expect(readSettings(store, "en")).toEqual({ ...DEFAULT_SETTINGS, language: Language.Croatian });
+    expect(readSettings(store, "en").sound).toBe(true);
+  });
+
+  test("and a music field that is not a yes or a no is rubbish, like any other", () => {
+    const store = memory(JSON.stringify({ language: "de", sound: "loud" }));
+    expect(readSettings(store, "en").sound).toBe(DEFAULT_SETTINGS.sound);
+    expect(readSettings(store, "en").language).toBe(Language.German);
   });
 
   // Storage switched off is a supported way to play, not an error path.
   test("no storage at all still gives a playable set", () => {
-    expect(readSettings(null, "de")).toEqual({ language: Language.German });
+    expect(readSettings(null, "de")).toEqual({ ...DEFAULT_SETTINGS, language: Language.German });
     expect(() => writeSettings(null, DEFAULT_SETTINGS)).not.toThrow();
   });
 
@@ -127,7 +159,7 @@ describe("remembering the choice", () => {
 });
 
 describe("a run's overrides", () => {
-  const saved: Settings = { language: Language.English };
+  const saved: Settings = { ...DEFAULT_SETTINGS, language: Language.English };
 
   test("nothing asked for leaves the saved settings alone", () => {
     expect(settingsWithOverrides(saved, {})).toEqual(saved);

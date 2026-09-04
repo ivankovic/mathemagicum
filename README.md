@@ -63,6 +63,8 @@ uv run asset-generator terrain-fixtures --seed 7 --out-dir output/terrain_fixtur
 uv run asset-generator terrain-effects --seed 7 --out-dir output/terrain_effects
 uv run asset-generator terrain-objects --seed 7 --sheets --out-dir output/terrain_objects
 uv run asset-generator ui --seed 7 --out-dir output/ui
+uv run asset-generator music --seed 7 --out-dir output/music
+uv run asset-generator sfx   --seed 7 --out-dir output/sfx
 
 cd -
 OUT=../asset-generator/output
@@ -110,10 +112,12 @@ cp $OUT/ui/rune_*.png                                              public/assets
 cp $OUT/ui/{crop_*.png,item_*.png,coin_*.png,flower_*.png}         public/assets/ui/
 cp $OUT/ui/{mark_*.png,sign_*.png,material_*.png,flag_*.png}       public/assets/ui/
 cp $OUT/ui/{star_chart.png,thought_bubble.png}                     public/assets/ui/
+cp $OUT/music/*.json                                               public/assets/music/
+cp $OUT/sfx/sfx.json                                               public/assets/sfx/
 bun test   # src/world/assets.test.ts checks the sync
 ```
 
-Three things are worth knowing about what gets copied:
+Four things are worth knowing about what gets copied:
 
 - **The terrain atlas holds a finished tile for every one of the 8⁴ ways
   terrain can meet at a tile's four corners**, including the cells where
@@ -135,6 +139,23 @@ Three things are worth knowing about what gets copied:
   will roll as many generic villagers as you ask for; the list in the loop
   above has to stay in step with `VILLAGER_CHARACTERS` in
   `src/world/characters.ts`, which is what the game loads.
+
+- **The sound is copied as notes, not as audio.** `music` writes a score per
+  place per time of day — tempo, mode and every note on a tick grid — and
+  `sfx` writes one small file holding all twelve one-shot effects. The game
+  plays both with a small Web Audio synth (`src/audio/`). Together they are
+  a couple of hundred kilobytes that way and would be over ten megabytes
+  rendered, which for a PWA that precaches everything it owns is the whole
+  argument. `--wav` renders either of them to audio in that repo, for
+  listening to before committing them; those files stay there.
+
+  The effects are the world making a noise — a coin, a door, a spell taking
+  hold — and never the game marking a child's work. There is no right-answer
+  chime and no wrong-answer buzz, because `src/spells/cast.ts` says there is
+  no fail state and the difficulty moves with "no level, no badge and no
+  sound". `refuse` is a knock: it says *not there*, not *wrong*. Both the
+  generator's tests and `src/audio/sfx.test.ts` assert that absence, so the
+  thirteenth sound cannot quietly become a verdict.
 
 Nothing in the game draws a placeholder any more. An object the world places
 that resolves to neither a building sprite nor a fixture throws at spawn
@@ -301,6 +322,6 @@ service worker comes back as a perfectly successful `404`, which
 
 - Source code: [PolyForm Noncommercial 1.0.0](LICENSE) — noncommercial use,
   modification, and redistribution only.
-- Art, audio, and other creative assets (once added): CC-BY-NC-ND-4.0.
+- Art, audio, and other creative assets: CC-BY-NC-ND-4.0.
 
 See [`REUSE.toml`](REUSE.toml) for the per-path license mapping.

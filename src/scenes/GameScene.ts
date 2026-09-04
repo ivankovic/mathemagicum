@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Phaser from "phaser";
+import { tuneFor } from "../audio/score";
+import { Sfx } from "../audio/sfx";
+import { sound } from "../audio/sound";
 import {
   type AvatarCatalogue,
   type AvatarStyle,
@@ -2329,7 +2332,11 @@ export class GameScene extends Phaser.Scene {
     // ?lang= is for scripts: it overrides the language for this run without
     // touching what the player saved.
     this.settings = settingsWithOverrides(
-      { language: this.profile.language },
+      // Two owners, one object. The language is this child's and comes off
+      // their profile; whether there is music is the room's and comes off
+      // the device, which is where the who's-playing screen already read it
+      // from before any child had been chosen.
+      { language: this.profile.language, sound: readSettings(browserStore()).sound },
       {
         language: this.dev.language,
       },
@@ -2647,6 +2654,7 @@ export class GameScene extends Phaser.Scene {
         };
       },
       mapMark: () => this.whereOnTheMap(),
+      sound: () => sound().report(),
       ships: () => this.traffic?.positions() ?? [],
       blimps: () => this.blimps?.positions() ?? [],
       scenery: () => [...this.liveScenery.values()].reduce((n, list) => n + list.length, 0),
@@ -3085,6 +3093,12 @@ export class GameScene extends Phaser.Scene {
     // And the clock beside it, for the same reason: it is two hands of the
     // world's own state and nothing else repaints it.
     this.refreshClockHud();
+    // And the music, which is the same two facts a third time: where the
+    // child is, and what hour it is. Asked every frame and answers on the
+    // few where it changed — a tune is not something to work out on arrival
+    // at a place, because there is no arrival, only a step that happened to
+    // be over a line.
+    this.followTheMusic();
 
     // Depth follows the sprite's own y, which is its feet — so it stays
     // correct part-way through a step rather than only at whole tiles.
@@ -4194,6 +4208,13 @@ export class GameScene extends Phaser.Scene {
    * away, so the cleanup is here rather than in a general sweep.
    */
   private playEffect(effect: EffectType, col: number, row: number): void {
+    // The sound of the spell taking hold, at the moment its picture does.
+    // Here rather than at the seven places a cast is recorded, because this
+    // is already the funnel for "magic landed on a square" — and the two
+    // spells differ in the ear the same way they differ on screen: the plus
+    // rises and the minus falls. See `world/effects.ts` on why that is not
+    // arbitrary.
+    sound().effect(effect === EffectType.Minus ? Sfx.SpellTake : Sfx.SpellAdd);
     const feet = this.toFeet(col, row);
     const sprite = this.world(
       this.add
@@ -5510,6 +5531,9 @@ export class GameScene extends Phaser.Scene {
     this.disarm();
     if (same) return;
     this.armed = what;
+    // Lifted. Its answer is in `placeFixture`, and the two sounds are each
+    // other reversed for the same reason planting and picking are.
+    sound().effect(Sfx.PickUp);
     // A stick still held when the rune lights never sends its release, and
     // she walks on while the ground she is choosing from slides away.
     this.joystick?.release();
@@ -6115,6 +6139,8 @@ export class GameScene extends Phaser.Scene {
         // One bend of the back for the lot of them, where a single seed gets
         // one for itself. Sixteen gestures in a frame is a seizure.
         this.playGesture(PLANT);
+        // And one sound, on the same argument.
+        sound().effect(Sfx.Seed);
         this.autosave();
       }
     } else if (action === PatchAction.Grow) {
@@ -6143,6 +6169,8 @@ export class GameScene extends Phaser.Scene {
         this.pickCropAt(at.col, at.row);
         done++;
       }
+      // One for the lot, as with the seeds above.
+      if (done > 0) sound().effect(Sfx.Harvest);
     } else if (action === PatchAction.Copy) {
       // Planned before either parchment opened, and held since: the ground
       // it was measured against has not moved, and re-planning here would
@@ -6281,6 +6309,7 @@ export class GameScene extends Phaser.Scene {
    * camera there in the same frame.
    */
   private travelThrough(journey: PortalJourney): void {
+    sound().effect(Sfx.Portal);
     this.stopMarking();
     const facing = this.session.facing;
     const world = { width: this.grid.width, height: this.grid.height };
@@ -6566,6 +6595,7 @@ export class GameScene extends Phaser.Scene {
    * it will be.
    */
   private windClockTo(face: ClockTime, over: number, asked: number): void {
+    sound().effect(Sfx.Machine);
     const now = new Date(this.worldNow());
     // Where the world stands on a twelve-hour face, to the minute — not to
     // whatever the rung rounds to. The child answered about two rounded
@@ -7221,6 +7251,13 @@ export class GameScene extends Phaser.Scene {
    * the question a refused seed raises is where to take it instead.
    */
   private report(result: ActionResult, icon?: string, plant?: PlantType): void {
+    // A knock, and only a knock. This is the funnel every refusal in the
+    // game arrives at, which makes it the one place a "wrong!" buzzer would
+    // ever have been wired — so it is worth saying here that it is not one
+    // on purpose. The sound says *not there*: the square is taken, the
+    // basket is empty, she is too far away. None of those is a child being
+    // wrong at arithmetic, and this game has no sound for that at all.
+    if (!result.ok) sound().effect(Sfx.Refuse);
     if (result.ok) {
       if (icon && result.tile) this.showResult(icon, result.tile.col, result.tile.row);
       return;
@@ -8278,6 +8315,46 @@ export class GameScene extends Phaser.Scene {
    * for a number that changes once a minute is a whole frame's budget spent
    * on nothing.
    */
+  /**
+   * Tell the music where it is.
+   *
+   * The player is a place and an hour and nothing else — it does not know
+   * what a wood is, and this does not know what a crossfade is.
+   *
+   * `whereOnTheMap` and not `session.tile`, which is the same trap the map
+   * on the post office wall fell into: indoors her tile is a **room**
+   * coordinate, three across and four down a floor, and asking `placeAt`
+   * about that asks which named place cell 3,4 is in — a cell up in the
+   * far north-west corner of the world. It would have answered "nowhere" for
+   * every interior in this village and quietly answered *something* for a
+   * child who lived near the top-left of the map.
+   *
+   * What it should answer is where the building stands, which is what going
+   * through the returnTo door gives. A cottage in the village is in the
+   * village, and a child who steps inside for a basket should not be handed
+   * a change of scene for it.
+   */
+  private followTheMusic(): void {
+    // Guarded against the two facts rather than run every frame, the same
+    // way the clock beside it is: `placeAt` walks the five named areas and
+    // builds a list to do it, which is nothing at all once and sixty times
+    // nothing a second for a question whose answer changes when somebody
+    // walks over a line.
+    const daylight = isDaylight(this.hourNow());
+    const where = this.whereOnTheMap();
+    const standing = `${where.col},${where.row},${daylight}`;
+    if (standing === this.musicStanding) return;
+    this.musicStanding = standing;
+    const player = sound();
+    // What is playing is handed back in, because the ground between two
+    // named places is not nowhere — it is still whatever the child last
+    // walked out of, and the tune should stay put rather than go home.
+    player.wants(tuneFor(placeAt(this.anchors, where), daylight, player.tune));
+  }
+
+  /** Where the child was standing when the music was last asked about. */
+  private musicStanding = "";
+
   private refreshClockHud(): void {
     const hud = this.clockHud;
     if (!hud) return;
@@ -8319,6 +8396,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private openOptions(): void {
+    sound().effect(Sfx.Page);
     if (this.modalOpen) return;
     this.closeTrays();
     this.optionsPanel?.open_(() => this.refreshOptionsButton());
@@ -8657,6 +8735,11 @@ export class GameScene extends Phaser.Scene {
 
   private applySettings(next: Settings): void {
     this.settings = next;
+    // Before the rest of it. Turning the sound off is the one change on that
+    // panel whose whole point is to take effect *now* — a parent who has
+    // just asked for quiet should get it while their finger is still on the
+    // button, not after the language has been reset in nine other panels.
+    sound().setEnabled(next.sound);
     // The language belongs to the child, not to the device — two siblings on
     // one tablet do not have to read the same one. The device copy follows
     // along so that tomorrow's who's-playing screen is written in the
@@ -8773,6 +8856,7 @@ export class GameScene extends Phaser.Scene {
     // so nothing that cannot turn gains a field, and a save from before this
     // reads back byte for byte.
     if (turn !== Turn.Toward) result.object.turn = turn;
+    sound().effect(Sfx.PutDown);
     const sprite = this.spawnFootprintSprite(
       result.object,
       sidecar,
@@ -9277,6 +9361,7 @@ export class GameScene extends Phaser.Scene {
     const result = this.session.harvest();
     this.report(result, result.crop ? cropIcon(result.crop.plant) : undefined);
     if (!result.ok || !result.tile) return;
+    sound().effect(Sfx.Harvest);
 
     // The sprite has to go *and* leave the registry: a stale entry would have
     // the growth spell re-animating a destroyed object the next time this
@@ -9338,6 +9423,11 @@ export class GameScene extends Phaser.Scene {
     const result = this.session.plant(plant);
     this.report(result, cropIcon(plant), plant);
     if (!result.ok || !result.tile) return;
+    // On the route a person takes, not on `plantCropAt` — that one is the
+    // patch putting sixteen seeds down at once and is nobody's single
+    // action. The patch gets one sound of its own, the same way it gets one
+    // bend of the back rather than sixteen.
+    sound().effect(Sfx.Seed);
 
     const { col, row } = result.tile;
     this.spawnCropSprite(col, row, { plant, stage: PLANTED_STAGE });
@@ -10309,6 +10399,11 @@ export class GameScene extends Phaser.Scene {
    * instead, so there is no second place to forget.
    */
   private setInterior<T extends InteriorRuntime | null>(interior: T): T {
+    // Only when it actually changes hands. This is called on the way in and
+    // on the way out, and also by `leaveInterior` on its way to putting the
+    // origin back — a door that sounded on all three would give a child two
+    // doors for one step through it.
+    if ((this.interior === null) !== (interior === null)) sound().effect(Sfx.Door);
     this.interior = interior;
     this.session.indoors = interior !== null;
     // Nothing pointed at survives a doorway either — `enterInterior` says
@@ -10773,6 +10868,7 @@ export class GameScene extends Phaser.Scene {
    * child on the same tablet could never find that one at all.
    */
   private pickWildFlower(object: PlacedObject, flower: FlowerType): void {
+    sound().effect(Sfx.Harvest);
     if (this.modalOpen) return;
     if (stepsToSpeak(this.session.tile, { col: object.col, row: object.row }) > 1) {
       this.markRefusal(object.col, object.row);

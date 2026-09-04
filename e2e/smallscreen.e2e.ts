@@ -148,3 +148,85 @@ describe("the trays on a phone", () => {
     5 * MINUTES,
   );
 });
+
+/**
+ * A phone held sideways, which is the tightest the options panel is ever laid
+ * out in — and the case the panel's own comments keep worrying about without
+ * anything ever checking.
+ *
+ * Turned over rather than upright on purpose. Upright, the panel gets its
+ * whole four hundred and fifty pixels and every row fits with room to spare;
+ * sideways it gets three hundred and sixty-six, which is about ten more than
+ * its four rows need. That is where its two degradations live: a row whose
+ * words will not fit is set smaller, and a row that has the height for it
+ * takes a second line instead.
+ *
+ * The bug this was written for: the sums row is told how low it may reach by
+ * measuring back from the foot of the panel, and that measurement counted
+ * *the world row* rather than everything under it. A sound row went in
+ * between the two and was not counted — so on this screen the sums were told
+ * they had room to wrap, took it, and pushed the world row and the tick and
+ * cross that throw a game away down through the About button at the bottom.
+ *
+ * Which is why this asserts about *positions* rather than about a
+ * screenshot: two buttons drawn on top of each other both report a sensible
+ * coordinate, and the one underneath still takes the tap.
+ */
+describe("the options panel on a phone turned over", () => {
+  const SIDEWAYS = { width: PHONE.height, height: PHONE.width };
+
+  test(
+    "fits all four rows in without laying any of them over the footer",
+    async () => {
+      await play({ seams: "&hour=12&freezeNpcs", viewport: SIDEWAYS }, async (game) => {
+        expect(await game.tap("options")).toBe(true);
+        await game.settle(600);
+        const at = await game.ui();
+
+        // The rows come down the panel in the order they are written, and
+        // the world row clears the footer. A gap of half a button, because
+        // these are centres: two whose centres are thirty apart are two
+        // buttons touching.
+        const y = (name: string) => at[name]?.y ?? Number.NaN;
+        expect(y("language.0")).toBeLessThan(y("band.0"));
+        expect(y("band.0")).toBeLessThan(y("sound.on"));
+        expect(y("sound.on")).toBeLessThan(y("newGame"));
+        expect(y("newGame")).toBeLessThan(y("about") - 30);
+
+        // And nothing on show has been pushed off the bottom of the screen.
+        //
+        // Named one at a time rather than swept, because the panel offers a
+        // position for every button it *has* and not only for the ones it is
+        // drawing: the tick and cross that throw a world away appear once
+        // the world row has been tapped, and the games row keeps a slot per
+        // save whether or not there is a save in it. Those sit wherever they
+        // were made — off screen — and that is correct. Asked about all of
+        // them, this failed twice on buttons nobody can see.
+        for (const name of [
+          "language.0",
+          "language.2",
+          "band.0",
+          "band.3",
+          "sound.on",
+          "sound.off",
+          "game.0",
+          "newGame",
+          "exportSaves",
+          "about",
+        ]) {
+          const spot = at[name];
+          expect({ name, drawn: spot !== undefined }).toEqual({ name, drawn: true });
+          expect({
+            name,
+            onScreen: (spot?.y ?? -1) > 0 && (spot?.y ?? 0) < SIDEWAYS.height,
+          }).toEqual({ name, onScreen: true });
+        }
+
+        // The two sound buttons are side by side on one line, which is what
+        // makes this the one row that never needs a floor of its own.
+        expect(y("sound.on")).toBe(y("sound.off"));
+      });
+    },
+    5 * MINUTES,
+  );
+});

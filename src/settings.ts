@@ -58,10 +58,36 @@ export const LANGUAGE_NAMES: Record<Language, string> = {
  */
 export interface Settings {
   readonly language: Language;
+  /**
+   * Whether the game makes any sound at all: the music and the world's own
+   * noises together, under one switch.
+   *
+   * One switch and not two, which is a decision rather than a shortcut. A
+   * parent who reaches for this has decided the room should be quiet, and
+   * handing them a choice between "the tune" and "the coins" is asking them
+   * to make a distinction they did not come here to make. It was called
+   * `music` while music was all there was.
+   *
+   * Here rather than in a profile, and it is the same argument the language
+   * of the who's-playing screen makes: that screen exists before anybody has
+   * been chosen, and it is where the first touch of the session lands —
+   * which is the touch a browser needs before it will make a sound at all. A
+   * preference kept per player could not be consulted at the one moment it
+   * has to be.
+   *
+   * It is also the shape the household wants. Two siblings may not read the
+   * same language, but "not right now, we are at the table" is a fact about
+   * the room and not about either of them.
+   */
+  readonly sound: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   language: Language.English,
+  // On. A game that has to be switched on to have any sound is a game most
+  // players will never hear, and the control is one tap away on the screen
+  // every parent opens anyway.
+  sound: true,
 };
 
 /**
@@ -126,7 +152,19 @@ export function readSettings(store: SettingsStore | null, browserLanguage?: stri
   }
   if (typeof saved !== "object" || saved === null) return fallback;
   const record = saved as Record<string, unknown>;
-  return { language: isLanguage(record.language) ? record.language : fallback.language };
+  return {
+    language: isLanguage(record.language) ? record.language : fallback.language,
+    // `music` is what this was called for the fortnight it governed only the
+    // tune. Read as a second chance rather than migrated: a household that
+    // had turned the music off and then found the coins chinking at them
+    // would rightly file that as the switch having been ignored.
+    sound:
+      typeof record.sound === "boolean"
+        ? record.sound
+        : typeof record.music === "boolean"
+          ? record.music
+          : fallback.sound,
+  };
 }
 
 /** Remember a choice, or carry on without remembering it. */

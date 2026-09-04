@@ -647,6 +647,25 @@ export interface DevHandle {
    */
   readonly mapMark: () => { col: number; row: number };
   /**
+   * What the sound is doing: which tune, how many notes and how many effects
+   * have been struck, and whether the browser ever let the audio start.
+   *
+   * The one seam here that exists because a test *cannot* observe the thing
+   * itself. Everything else in this handle can be checked against a
+   * screenshot in the end; a scenario has no ears. The two counts are the
+   * facts that matter — a tune that loaded, chose itself correctly and
+   * handed nothing to the sound card looks identical from outside to one
+   * that is playing, and so does a coin that made no noise.
+   */
+  readonly sound: () => {
+    tune: string | null;
+    notes: number;
+    effects: number;
+    knows: number;
+    enabled: boolean;
+    state: string;
+  };
+  /**
    * Which patch spell is waiting for ground, or null.
    *
    * `armed` answers about the spells that land on one square. A patch spell
