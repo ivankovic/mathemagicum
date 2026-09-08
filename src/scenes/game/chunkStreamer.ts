@@ -21,13 +21,17 @@
 
 import type Phaser from "phaser";
 import {
-  CHUNK_SIZE,
   type ChunkCoord,
+  type ChunkSpan,
   chunkKey,
   chunksCoveringTileRange,
+  coldestKeys,
   dualChunkScreenBounds,
   dualTileRange,
   dualTileToChunk,
+  sameSpan,
+  spanOf,
+  tilesUnder,
 } from "../../world/chunks";
 import { CLIFF_ATLAS_KEY, cliffFrameFor, cornerLevelsFor } from "../../world/cliffAtlas";
 import { DECK_SHEET_KEY } from "../../world/decking";
@@ -189,10 +193,7 @@ export class ChunkStreamer {
     grid: WorldGrid;
     originX: number;
     originY: number;
-    startCol: number;
-    startRow: number;
-    endCol: number;
-    endRow: number;
+    span: ChunkSpan;
     keys: ReadonlySet<string>;
   } | null = null;
   /** When the last refresh ran, which is the last frame the settled chunks were seen. */
@@ -274,52 +275,36 @@ export class ChunkStreamer {
     const camera = this.scene.cameras.main;
     const seenWidth = camera.width / camera.zoom;
     const seenHeight = camera.height / camera.zoom;
-    let viewX: number;
-    let viewY: number;
-    let viewWidth: number;
-    let viewHeight: number;
-    if (around) {
-      viewX = around.x - seenWidth / 2;
-      viewY = around.y - seenHeight / 2;
-      viewWidth = seenWidth;
-      viewHeight = seenHeight;
-    } else {
-      const view = camera.worldView;
-      viewX = view.x;
-      viewY = view.y;
-      viewWidth = view.width;
-      viewHeight = view.height;
-    }
+    // What the camera shows, or a rectangle of the same size somewhere else
+    // entirely — see above for why the portal needs the second.
+    const view = around
+      ? {
+          minX: around.x - seenWidth / 2,
+          minY: around.y - seenHeight / 2,
+          maxX: around.x + seenWidth / 2,
+          maxY: around.y + seenHeight / 2,
+        }
+      : {
+          minX: camera.worldView.x,
+          minY: camera.worldView.y,
+          maxX: camera.worldView.x + camera.worldView.width,
+          maxY: camera.worldView.y + camera.worldView.height,
+        };
     const grid = this.host.grid();
     const originX = this.host.originX();
     const originY = this.host.originY();
-    // The four corners of the view in tiles, which for an axis-aligned grid
-    // is the two opposite ones: `screenToGrid` is a floor on each axis, and
-    // a floor keeps its order. Written out rather than called so that the
-    // frame that finds nothing to do has made nothing.
-    const tiles = {
-      minCol: Math.floor((viewX - originX) / TILE_SIZE),
-      maxCol: Math.floor((viewX + viewWidth - originX) / TILE_SIZE),
-      minRow: Math.floor((viewY - originY) / TILE_SIZE),
-      maxRow: Math.floor((viewY + viewHeight - originY) / TILE_SIZE),
-    };
+    const tiles = tilesUnder(view, originX, originY);
     // The first and last chunk the view touches before any margin or clamp,
     // which is all `chunksCoveringTileRange` needs beyond the grid: the same
     // pair means the same visible ring and the same on-screen set.
-    const startCol = Math.floor((tiles.minCol - 1 - DUAL_ORIGIN) / CHUNK_SIZE);
-    const startRow = Math.floor((tiles.minRow - 1 - DUAL_ORIGIN) / CHUNK_SIZE);
-    const endCol = Math.floor((tiles.maxCol - DUAL_ORIGIN) / CHUNK_SIZE);
-    const endRow = Math.floor((tiles.maxRow - DUAL_ORIGIN) / CHUNK_SIZE);
+    const span = spanOf(tiles);
     const settled = this.settled;
     if (
       settled &&
       settled.grid === grid &&
       settled.originX === originX &&
       settled.originY === originY &&
-      settled.startCol === startCol &&
-      settled.startRow === startRow &&
-      settled.endCol === endCol &&
-      settled.endRow === endRow
+      sameSpan(settled.span, span)
     ) {
       this.lastRefreshFrame = this.frameCounter;
       return;
@@ -378,16 +363,7 @@ export class ChunkStreamer {
       if (!onScreen.has(key)) this.despawnWaterIn(key);
     }
     this.evictColdChunks(visibleKeys);
-    this.settled = {
-      grid,
-      originX,
-      originY,
-      startCol,
-      startRow,
-      endCol,
-      endRow,
-      keys: visibleKeys,
-    };
+    this.settled = { grid, originX, originY, span, keys: visibleKeys };
   }
 
   private activateChunk(chunk: ChunkCoord): void {
@@ -707,15 +683,12 @@ export class ChunkStreamer {
   }
 
   private evictColdChunks(protectedKeys: ReadonlySet<string>): void {
-    if (this.activeChunks.size <= CHUNK_CACHE_LIMIT) return;
-    const evictable = [...this.activeChunks.entries()]
-      .filter(([key]) => !protectedKeys.has(key))
-      .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt);
-    const overBy = this.activeChunks.size - CHUNK_CACHE_LIMIT;
-    for (let i = 0; i < overBy && i < evictable.length; i++) {
-      const item = evictable[i];
-      if (!item) continue;
-      const [key, entry] = item;
+    const stamps = [...this.activeChunks.entries()].map(
+      ([key, entry]) => [key, entry.lastUsedAt] as const,
+    );
+    for (const key of coldestKeys(stamps, CHUNK_CACHE_LIMIT, protectedKeys)) {
+      const entry = this.activeChunks.get(key);
+      if (!entry) continue;
       entry.texture.destroy();
       this.activeChunks.delete(key);
       this.despawnSceneryIn(key);
