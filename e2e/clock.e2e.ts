@@ -147,7 +147,7 @@ describe("winding the world's clock", () => {
     "but saying the wrong number winds nothing",
     async () => {
       await play({ seams: "&learned=all&clockRung=0" }, async (game) => {
-        const opened = await castHourglass(game);
+        await castHourglass(game);
         await game.swipeClock(48);
         expect((await game.seam<Cast>("clock")).hours).toBe(4);
 
@@ -238,7 +238,7 @@ describe("winding the world's clock", () => {
     "and the world lands on the time she pointed at, not near it",
     async () => {
       await play({ seams: "&learned=all&clockRung=4" }, async (game) => {
-        const opened = await castHourglass(game);
+        await castHourglass(game);
         await game.swipeClock(36);
         await game.swipeClock(8);
         const asked = await game.seam<Cast>("clock");
@@ -285,7 +285,7 @@ describe("winding the world's clock", () => {
     async () => {
       await play({ seams: "&learned=all&clockRung=0" }, async (game) => {
         const before = await game.seam<World>("worldClock");
-        const opened = await castHourglass(game);
+        await castHourglass(game);
         // Nearly a whole face, which is the longest the sand ever runs.
         await game.swipeClock(108);
         const asked = await game.seam<Cast>("clock");
@@ -325,7 +325,7 @@ describe("winding the world's clock", () => {
     "the clock stays where she put it, even after the tab is closed",
     async () => {
       await play({ seams: "&learned=all&clockRung=0" }, async (game) => {
-        const opened = await castHourglass(game);
+        await castHourglass(game);
         await game.swipeClock(60);
         const asked = await game.seam<Cast>("clock");
         await game.type(asked.hours);

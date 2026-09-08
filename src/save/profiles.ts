@@ -8,10 +8,13 @@ import { HARDEST_BRICK_RUNG } from "../spells/bricks";
 import { type Band, DEFAULT_BAND, bandAt, bandOn, rungInBand } from "../spells/difficulty";
 import { HARDEST_SHARE_RUNG } from "../spells/division";
 import { HARDEST_CLOCK_RUNG } from "../spells/hourglass";
+import { HARDEST_LOGIC_RUNG } from "../spells/logic";
 import { HARDEST_ARRAY_RUNG } from "../spells/multiplication";
 import { readLearned } from "../spells/spellbook";
 import { HARDEST_SYMMETRY_RUNG } from "../spells/symmetry";
+import { readGuided } from "../ui/guide";
 import { readFound } from "../world/flowers";
+import { readJobs } from "../world/jobs";
 import { HOME_PLACE, PLACE_NAMES, type PlaceName } from "../world/places";
 import type { PlayerSnapshot } from "./snapshot";
 
@@ -90,6 +93,28 @@ export interface Progress {
    * remembered is only whether it opens by itself.
    */
   readonly introSeen: boolean;
+  /**
+   * How many of the postal worker's news beats this child has already had.
+   *
+   * An index into `NEWS_BEATS` (see `ui/news.ts`), not a version: the list
+   * is append-only, so "how far down it have they got" is the whole of what
+   * has to be remembered, and there is no build number anywhere to keep in
+   * step with it.
+   *
+   * A save written before this existed reads as nought, which is the right
+   * answer for it — that child has been told none of it, and everything on
+   * the list is genuinely news to them. A new child is caught up by the
+   * welcome instead: see `rememberIntroSeen` in GameScene, which sets this
+   * to the end of the list when he walks them through the basics, because
+   * somebody being told what the game *is* does not also need to be told
+   * what changed in it.
+   *
+   * It is deliberately not clamped to the list's length on the way in. A
+   * count past the end can only come from a save written by a *later* build
+   * than this one, and the two readers of it — "is there anything owed" and
+   * "which beats are owed" — both answer harmlessly for that case.
+   */
+  readonly newsSeen: number;
   /**
    * Whether this child's game shows the debug panel.
    *
@@ -174,6 +199,15 @@ export interface Progress {
    */
   readonly symmetryRung: number;
   /**
+   * Where the logic spell's ladder sits: from one swatch to two gates.
+   *
+   * The seventh number, and the second that no band touches — see the
+   * mirror's. Whether a five-year-old can read "red and round" off two
+   * pictures and a machine has nothing to do with how big their sums are,
+   * so every child starts at the bottom and climbs at their own pace.
+   */
+  readonly logicRung: number;
+  /**
    * Which flowers this child has walked into, and may now plant.
    *
    * A set of names, like `learned`, and for the same reason: what is locked
@@ -212,6 +246,27 @@ export interface Progress {
    * away from them. See src/spells/spellbook.ts.
    */
   readonly learned: readonly string[];
+  /**
+   * The guides this child has been walked through.
+   *
+   * A set of names, like `learned`, and per child for the reason the
+   * welcome is: a sibling on the same tablet has not been shown any of it.
+   * A guide is a glowing button and an arrow, given once when its action
+   * is first worth doing — see `ui/guide.ts`. Absent in every save written
+   * before there were guides, which reads as none given: a child who has
+   * been playing for a month is pointed at the pouch once and presses it,
+   * which is a small price for the child who never found the crate.
+   */
+  readonly guided: readonly string[];
+  /**
+   * The mechanic's jobs this child has finished.
+   *
+   * A set of names, like `learned`, and what the crate reads to decide
+   * which machines to offer — see `world/jobs.ts`. Per child, because a
+   * line built in a shared garden is still one child's doing: the sibling
+   * who has not made a funnel work is not offered a bell.
+   */
+  readonly jobs: readonly string[];
   /**
    * What this child is carrying, and where they left off.
    *
@@ -335,6 +390,7 @@ export function createProfile(
     language: wanted.language,
     lastPlayed: now,
     introSeen: false,
+    newsSeen: 0,
     debug: false,
     band: wanted.band,
     // The first cottage nobody has taken. Houses are not handed out in the
@@ -349,6 +405,7 @@ export function createProfile(
     // A new world's clock is the real one until somebody moves it.
     clockOffset: 0,
     symmetryRung: 0,
+    logicRung: 0,
     found: [],
     brickRung: brickFloor(bandAt(wanted.band)),
     // The village, because that is where they live. A portal spell whose
@@ -356,6 +413,8 @@ export function createProfile(
     reached: [HOME_PLACE],
     // Nothing but the garden yet. The portal spell is up the tower.
     learned: [],
+    guided: [],
+    jobs: [],
     carried: null,
   };
 }
@@ -396,6 +455,7 @@ export function freshProgress(bandAt_: number): Progress {
   const band = bandAt(bandAt_);
   return {
     introSeen: false,
+    newsSeen: 0,
     debug: false,
     rung: band.from,
     portalRung: band.from,
@@ -404,10 +464,13 @@ export function freshProgress(bandAt_: number): Progress {
     clockRung: clockFloor(band),
     clockOffset: 0,
     symmetryRung: 0,
+    logicRung: 0,
     found: [],
     brickRung: brickFloor(band),
     reached: [HOME_PLACE],
     learned: [],
+    guided: [],
+    jobs: [],
     carried: null,
   };
 }
@@ -456,6 +519,12 @@ function readOffset(raw: unknown): number {
 function readSymmetryRung(raw: unknown): number {
   const rung = Math.trunc(Number(raw ?? 0));
   return Number.isFinite(rung) ? Math.max(0, Math.min(HARDEST_SYMMETRY_RUNG, rung)) : 0;
+}
+
+/** The same again, against the logic ladder. */
+function readLogicRung(raw: unknown): number {
+  const rung = Math.trunc(Number(raw ?? 0));
+  return Number.isFinite(rung) ? Math.max(0, Math.min(HARDEST_LOGIC_RUNG, rung)) : 0;
 }
 
 /** The same again, against the clock ladder. */
@@ -545,39 +614,67 @@ export function readProfile(value: unknown): Profile | null {
     house: Number.isInteger(record.house)
       ? Math.max(0, Math.min(MAX_PROFILES - 1, record.house as number))
       : 0,
+    band,
+    ...readProgress(record, band),
+  };
+}
+
+/**
+ * A child's progress read back, field by field, against their band.
+ *
+ * Shared by the players index, where an old row holds both halves of a
+ * profile, and by the game body, where progress lives now. It used to run
+ * only on the index: the game body was cast straight to `Progress` on the
+ * way in, so a rung of `"lots"` or a spell nobody has heard of walked into
+ * a running game untouched. Every promise the fields below make about a
+ * save being checked on the way in holds only if this is what reads them.
+ */
+export function readProgress(value: unknown, bandNumber: number): Progress {
+  const record =
+    typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+  const band = bandAt(bandNumber);
+  return {
     introSeen: record.introSeen === true,
+    newsSeen: Number.isFinite(Number(record.newsSeen))
+      ? Math.max(0, Math.floor(Number(record.newsSeen)))
+      : 0,
     // Absent in every save written before the panel existed, which is the
     // right answer for all of them: off.
     debug: record.debug === true,
     // A child saved before there was a choice was playing the hardest sums
     // the game had, because that was the only setting there was. Anything
     // else here would quietly restyle their game on the way in.
-    band,
-    rung: rungInBand(bandAt(band), Number(record.rung ?? bandAt(band).to)),
+    rung: rungInBand(band, Number(record.rung ?? band.to)),
     // A child saved before the portal existed starts it at the bottom of
     // their own band, exactly as a new child does — they have never cast it.
-    portalRung: rungInBand(bandAt(band), Number(record.portalRung ?? bandAt(band).from)),
+    portalRung: rungInBand(band, Number(record.portalRung ?? band.from)),
     // A child saved before the great tree existed starts it at the bottom of
     // their own band, exactly as a new child does — they have never cast it.
-    arrayRung: arrayRungInBand(bandAt(band), Number(record.arrayRung ?? arrayFloor(bandAt(band)))),
+    arrayRung: arrayRungInBand(band, Number(record.arrayRung ?? arrayFloor(band))),
     // A child saved before the fisherman existed starts it at the bottom of
     // their own band, exactly as a new child does — they have never cast it.
-    shareRung: shareRungInBand(bandAt(band), Number(record.shareRung ?? shareFloor(bandAt(band)))),
+    shareRung: shareRungInBand(band, Number(record.shareRung ?? shareFloor(band))),
     // A child saved before the astronomer existed starts it at the bottom of
     // their own band, exactly as a new child does — they have never cast it.
-    clockRung: clockRungInBand(bandAt(band), Number(record.clockRung ?? clockFloor(bandAt(band)))),
+    clockRung: clockRungInBand(band, Number(record.clockRung ?? clockFloor(band))),
     // A child saved before the glass could wind the clock has not wound it.
     clockOffset: readOffset(record.clockOffset),
     // A child saved before the astronomer taught folding has never folded.
     symmetryRung: readSymmetryRung(record.symmetryRung),
+    // A child saved before the mechanic taught anything has never lit a lamp.
+    logicRung: readLogicRung(record.logicRung),
     found: readFound(record.found),
     // A child saved before anybody could build a room has never laid a
     // brick: the bottom of their own band, exactly as a new child gets.
-    brickRung: brickRungInBand(bandAt(band), Number(record.brickRung ?? brickFloor(bandAt(band)))),
+    brickRung: brickRungInBand(band, Number(record.brickRung ?? brickFloor(band))),
     reached: readReached(record.reached),
     // A child saved before the tower taught anything has not been taught it:
     // they walk up and meet him like everybody else.
     learned: readLearned(record.learned),
+    // A child saved before there were guides has been walked through none.
+    guided: readGuided(record.guided),
+    // A child saved before there were jobs has done none of them.
+    jobs: readJobs(record.jobs),
     carried: readCarried(record.carried),
   };
 }

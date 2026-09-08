@@ -71,6 +71,17 @@ const BADGE_PAD = 4;
 // corner. A player carrying a hundred of something does not need the exact
 // number; they need to know it is a lot.
 const BADGE_MAX = 99;
+/**
+ * How much of a button the little cloud takes, and the floor below which it
+ * stops being a shape at all.
+ *
+ * Smaller than the count badge on purpose. The badge is a number somebody
+ * has to read; this is a mark somebody has to *notice*, and a mark that
+ * takes as much of the button as the picture does starts competing with it.
+ */
+const CLOUD_SCALE = 0.34;
+const CLOUD_MIN = 15;
+
 // How faded an item the player has none of looks. Low enough to read as
 // "none of these", high enough that the icon still says which one it is.
 const EMPTY_ALPHA = 0.3;
@@ -214,6 +225,8 @@ interface Button {
   readonly box: Phaser.GameObjects.Rectangle;
   readonly icon: Phaser.GameObjects.Image;
   readonly badge?: Badge;
+  /** The little cloud that says what this is, if it has anything to say. */
+  readonly cloud?: Phaser.GameObjects.Image;
   readonly available?: () => boolean;
   readonly shown?: () => boolean;
   readonly name?: string;
@@ -270,6 +283,24 @@ export interface TrayItem {
    * about it belongs to whoever owns the spell, not to the tray.
    */
   readonly available?: () => boolean;
+  /**
+   * What tapping this button's little cloud does, if it has one.
+   *
+   * **The question and the answer in the same place.** A child looking at a
+   * picture of a machine they have never built has two questions — what is
+   * it, and what does it cost — and the crate could answer neither. Dimming
+   * a slot says *not yet*; it never says *how much*, and it certainly never
+   * says what the thing is for.
+   *
+   * A cloud rather than a number, because a number can only answer the
+   * second question. The cloud is also already a word in this game's
+   * vocabulary: it is what an animal wonders in, and what hangs over a child
+   * who has picked a seed for the wrong ground. It means *there is something
+   * to be said about this*, which is exactly what it means here.
+   *
+   * Absent on everything with nothing to explain. A carrot is a carrot.
+   */
+  readonly tell?: () => void;
 }
 
 export interface IconTrayOptions {
@@ -332,6 +363,15 @@ export interface IconTrayOptions {
   readonly back?: () => boolean;
   /** Called after any change, open or closed, so a caption can follow it. */
   readonly onChange?: () => void;
+  /**
+   * The texture of the little cloud, for items that have something to say.
+   *
+   * Passed in rather than reached for, like the container's own texture: the
+   * tray draws buttons and has no business knowing this game's catalogue of
+   * pictures. A tray given none simply has no clouds, whatever its items ask
+   * for.
+   */
+  readonly cloud?: string;
 }
 
 export class IconTray {
@@ -350,6 +390,7 @@ export class IconTray {
       available?: () => boolean,
       shown?: () => boolean,
       name?: string,
+      tell?: () => void,
     ): Button => {
       const box = scene.add
         .rectangle(0, 0, size, size, BUTTON_FILL, BUTTON_ALPHA)
@@ -363,7 +404,43 @@ export class IconTray {
         .setDepth(options.depth + 1);
       options.register(box);
       options.register(icon);
-      if (!count) return { box, icon, available, shown, name };
+
+      // The cloud, in the corner the badge is not in.
+      //
+      // Top-left against the badge's bottom-right, which is the furthest two
+      // marks on one button can be from each other — and the corner a thumb
+      // coming up from the bottom of a phone is least likely to find by
+      // accident. Tucked inside rather than overhanging, for the reason the
+      // badge is: the containers sit ten pixels apart and anything hung off
+      // one lands on its neighbour.
+      let cloud: Phaser.GameObjects.Image | undefined;
+      if (tell && options.cloud) {
+        const cloudSize = Math.max(CLOUD_MIN, Math.round(size * CLOUD_SCALE));
+        cloud = scene.add
+          .image(0, 0, options.cloud)
+          .setScrollFactor(0)
+          .setDepth(options.depth + 2)
+          .setInteractive({ useHandCursor: true });
+        // Fitted by height and left to keep its own proportions: the cloud
+        // is a wide drawing and squaring it up would be a different picture.
+        const width = (cloud.width / Math.max(cloud.height, 1)) * cloudSize;
+        cloud.setDisplaySize(width, cloudSize);
+        cloud.on("pointerdown", (_p: unknown, _x: number, _y: number, event?: Event) => {
+          // Swallowed, or the tap goes on to the button underneath and a
+          // child asking *what is this* is handed one instead. The tray's
+          // own note about the badge is the same worry from the other side:
+          // "a badge that swallowed taps would make the fullest slot the
+          // hardest one to press" — so this is the only thing in a tray that
+          // is allowed to swallow, and it is small and in the far corner
+          // because of it.
+          (event as { stopPropagation?: () => void } | undefined)?.stopPropagation?.();
+          this.setOpen(false);
+          tell();
+        });
+        options.register(cloud);
+      }
+
+      if (!count) return { box, icon, available, shown, name, cloud };
 
       const badgeSize = Math.max(BADGE_MIN, Math.round(size * BADGE_SCALE));
       // Neither the bubble nor the number is interactive, so a tap on the
@@ -391,6 +468,7 @@ export class IconTray {
         available,
         shown,
         name,
+        cloud,
         badge: { bubble, text, size: badgeSize, count, right: 0, middle: 0 },
       };
     };
@@ -424,6 +502,7 @@ export class IconTray {
         item.available,
         item.shown,
         item.name,
+        item.tell,
       );
       button.box.on("pointerdown", () => {
         // Closed before acting, not after: acting can open a popup over the
@@ -438,6 +517,26 @@ export class IconTray {
 
   get isOpen(): boolean {
     return this.open;
+  }
+
+  /**
+   * Take the tray apart.
+   *
+   * Every piece of it is interactive and pinned to the UI camera, and a scene
+   * that restarts without doing this leaves the old tray's buttons live under
+   * the new one's — invisible, and still taking taps. Destroying a game
+   * object drops its listeners with it, so the `pointerdown` handlers on the
+   * boxes and clouds go too.
+   */
+  destroy(): void {
+    for (const button of [this.container, ...this.items]) {
+      button.box.destroy();
+      button.icon.destroy();
+      button.cloud?.destroy();
+      button.badge?.bubble.destroy();
+      button.badge?.text.destroy();
+    }
+    this.items.length = 0;
   }
 
   setOpen(open: boolean): void {
@@ -484,6 +583,11 @@ export class IconTray {
   private paint(button: Button, visible: boolean): void {
     const badge = button.badge;
     const here = visible && (button.shown?.() ?? true);
+    // The cloud goes with the button and not with the count. A machine a
+    // child cannot afford yet is exactly the one they most want explained,
+    // so it is shown at full strength over a dimmed picture rather than
+    // dimmed along with it.
+    button.cloud?.setVisible(here);
     // Two ways to be dim and one look for both: nothing of it in the basket,
     // or nobody has taught it yet.
     const label = badge ? badgeLabel(badge.count(), this.options.mostShown) : "";
@@ -514,14 +618,28 @@ export class IconTray {
    * is the worst kind of seam: it passes.
    */
   itemPositions(): { name: string; x: number; y: number }[] {
-    return this.items
+    const shown = this.items
       .map((item, index) => ({ item, index }))
-      .filter(({ item }) => item.shown?.() ?? true)
-      .map(({ item, index }) => ({
+      .filter(({ item }) => item.shown?.() ?? true);
+    return [
+      ...shown.map(({ item, index }) => ({
         name: item.name ?? String(index),
         x: item.box.x,
         y: item.box.y,
-      }));
+      })),
+      // And the clouds, named for what they sit on. Their own entry rather
+      // than the button's, because a cloud is a *different tap* landing a
+      // few pixels away — which is exactly the thing a scenario has to be
+      // able to get wrong on purpose, since a cloud that swallowed the
+      // button's tap would look like a working cloud and a broken crate.
+      ...shown
+        .filter(({ item }) => item.cloud !== undefined)
+        .map(({ item, index }) => ({
+          name: `${item.name ?? String(index)}.tell`,
+          x: item.cloud?.x ?? 0,
+          y: item.cloud?.y ?? 0,
+        })),
+    ];
   }
 
   /**
@@ -549,6 +667,7 @@ export class IconTray {
     this.container.box.setPosition(x, y);
     this.container.icon.setPosition(x, y);
     this.placeBadge(this.container, x, y, size);
+    this.placeCloud(this.container, x, y, size);
     // Sized from the *items*, not from the container's button. Those differ
     // by eight pixels, and measuring the grid against the bigger of the two
     // cost a row — which is how twenty things came to need three columns
@@ -568,6 +687,7 @@ export class IconTray {
       item.box.setPosition(itemX, itemY);
       item.icon.setPosition(itemX, itemY);
       this.placeBadge(item, itemX, itemY, itemSize);
+      this.placeCloud(item, itemX, itemY, itemSize);
     }
     // Content last, and here rather than only in the constructor, so a badge
     // can never be made visible before it has been given a position. The
@@ -582,6 +702,20 @@ export class IconTray {
   // Overhanging reads better in isolation and collides in a row: the
   // containers sit ten pixels apart, and a badge hung off the basket landed
   // on the seed pouch beside it.
+  /**
+   * The cloud, in the opposite corner from the count.
+   *
+   * Same tucking-in as the badge and the same reason — see `placeBadge`.
+   * What differs is only which corner, and that difference is the whole of
+   * how a child tells "how many of these have I got" from "what is this".
+   */
+  private placeCloud(button: Button, x: number, y: number, size: number): void {
+    const cloud = button.cloud;
+    if (!cloud) return;
+    const offset = (size - cloud.displayHeight) / 2 - 1;
+    cloud.setPosition(x - offset, y - offset);
+  }
+
   private placeBadge(button: Button, x: number, y: number, size: number): void {
     const badge = button.badge;
     if (!badge) return;

@@ -64,6 +64,8 @@ const SHOPKEEPER_ROLE = "shopkeeper";
  * it is a teacher nobody finds.
  */
 const CLOCKMAKER_ROLE = "clockmaker";
+/** The mechanic, behind the bench in the garage. */
+const MECHANIC_ROLE = "mechanic";
 
 /** How far inside the box the ring road runs, and how wide it is. */
 const RING_INSET = 1;
@@ -468,8 +470,6 @@ function buildWall(
  */
 function gateApproaches(core: AreaPlacement, gates: readonly GridPoint[]): Set<string> {
   const approaches = new Set<string>();
-  const left = core.col;
-  const right = core.col + core.width - 1;
   const top = core.row;
   const bottom = core.row + core.height - 1;
   for (const gate of gates) {
@@ -686,9 +686,33 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
   while (shopBlocks.size < Math.min(CITY_SHOPS, buildable.length)) {
     shopBlocks.add(randInt(rng, 0, buildable.length - 1));
   }
+  // And one garage, in the first block that is not a shop and has the
+  // three tiles of frontage a garage takes. One, because there is one
+  // mechanic in the world and she is the one who teaches the logic spell;
+  // a city that happened to have no block wide enough has no garage, and
+  // the spell is learned nowhere — which a small world already does to the
+  // citadel, and for the same reason.
+  //
+  // And not a block whose street is the rampart. The ring is laid down the
+  // streets between the blocks it encloses, so a building at the foot of a
+  // block on the ring's inner edge has its door against the wall — which
+  // the first garage did, and a workshop nobody can walk into is a
+  // workshop that is not there.
+  const walled = (block: CityBlock) =>
+    wall.some(
+      (stone) =>
+        stone.row === block.row + block.height &&
+        stone.col >= block.col &&
+        stone.col < block.col + block.width,
+    );
+  const garageAt = buildable.findIndex(
+    (block, at) =>
+      !shopBlocks.has(at) && block.width >= footprintFor("garage").width && !walled(block),
+  );
   let n = 0;
   for (const [at, block] of buildable.entries()) {
-    const role: BuildingRole = shopBlocks.has(at) ? "store" : "townhouse";
+    const role: BuildingRole =
+      at === garageAt ? "garage" : shopBlocks.has(at) ? "store" : "townhouse";
     const { width, height } = footprintFor(role);
     if (width > block.width || height > block.height) {
       n++;
@@ -815,6 +839,18 @@ export function layoutCity(grid: WorldGrid, box: AreaPlacement, rng: Rng): CityL
       role: SHOPKEEPER_ROLE,
       homeBuildingId: shop.id,
       home: { col: shop.col + Math.floor(shop.width / 2), row: shop.row + shop.height },
+      indoors: true,
+    });
+  }
+  // The mechanic, behind her bench in the garage, the way a keeper is
+  // behind her counter: indoors, and spawned into the room when somebody
+  // walks in.
+  for (const garage of buildings.filter((building) => building.type === "garage")) {
+    npcs.push({
+      id: `${garage.id}-mechanic`,
+      role: MECHANIC_ROLE,
+      homeBuildingId: garage.id,
+      home: { col: garage.col + Math.floor(garage.width / 2), row: garage.row + garage.height },
       indoors: true,
     });
   }

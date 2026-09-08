@@ -16,18 +16,19 @@ import {
   totalOf,
   typeArrayDigit,
 } from "../spells/multiplication";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type CloseChip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
 import {
   ACTIVE_HEX,
   DONE_HEX,
   DONE_INK,
-  FACE,
   INK,
   INK_DIM,
   INK_HEX,
   PAPER_HEX,
   PAPER_PALE_HEX,
+  TYPE,
   WRONG_HEX,
   WRONG_INK,
 } from "./parchment";
@@ -64,11 +65,11 @@ const PANEL_MIN_H = 310;
 const SEED_HEX = 0x5f8f3a;
 const SEED_COUNTED_HEX = 0x2f5c1c;
 
-const TITLE_SIZE = 20;
-const ASK_SIZE = 12;
-const LABEL_SIZE = 13;
+const TITLE_SIZE = TYPE.spellTitle;
+const ASK_SIZE = TYPE.small;
+const LABEL_SIZE = TYPE.body;
 const BOX_SIZE = 17;
-const HINT_SIZE = 12;
+const HINT_SIZE = TYPE.small;
 
 const BOX_W = 62;
 const BOX_H = 28;
@@ -98,11 +99,6 @@ const DOT_GAP = 5;
 const TOTALS_GAP = 8;
 const TOTALS_W = 34;
 
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
-
 interface PadKey {
   readonly rect: Phaser.GameObjects.Rectangle;
   readonly text: Phaser.GameObjects.Text;
@@ -111,9 +107,7 @@ interface PadKey {
   readonly span: number;
 }
 
-export class ArrayPopup {
-  private readonly parts: PanelPart[] = [];
-  private readonly paper: ParchmentPanel;
+export class ArrayPopup extends Panel {
   private readonly ink: Phaser.GameObjects.Graphics;
   private readonly title: Phaser.GameObjects.Text;
   private readonly ask: Phaser.GameObjects.Text;
@@ -122,58 +116,46 @@ export class ArrayPopup {
   private readonly box: Phaser.GameObjects.Rectangle;
   private readonly boxText: Phaser.GameObjects.Text;
   private readonly keys: PadKey[] = [];
-  private readonly closeRect: Phaser.GameObjects.Rectangle;
-  private readonly closeText: Phaser.GameObjects.Text;
+  private readonly closeButton: CloseChip;
 
   private state: ArrayCast | null = null;
   private finish: ((result: CastResult) => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
+  /** The beat on a finished parchment before it goes, so a close can cancel it. */
+  private beat: Phaser.Time.TimerEvent | null = null;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     private words: Phrases,
-    private readonly register: (object: Phaser.GameObjects.GameObject) => void,
+    register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
     const add = scene.add;
 
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
+      lift: 0,
     });
 
     this.ink = this.own(add.graphics());
-    this.title = this.own(this.label("", TITLE_SIZE, INK).setOrigin(0.5, 0));
-    this.ask = this.own(this.label("", ASK_SIZE, INK_DIM).setOrigin(0.5, 0));
-    this.hint = this.own(this.label("", HINT_SIZE, INK_DIM).setOrigin(0.5, 0));
+    this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
+    this.ask = this.own(this.text("", ASK_SIZE, INK_DIM).setOrigin(0.5, 0));
+    this.hint = this.own(this.text("", HINT_SIZE, INK_DIM).setOrigin(0.5, 0));
     for (let n = 0; n < MAX_SIDE; n++) {
-      this.totals.push(this.own(this.label("", LABEL_SIZE, DONE_INK).setOrigin(0, 0.5)));
+      this.totals.push(this.own(this.text("", LABEL_SIZE, DONE_INK).setOrigin(0, 0.5)));
     }
     this.box = this.own(
       add.rectangle(0, 0, BOX_W, BOX_H, PAPER_PALE_HEX).setStrokeStyle(3, ACTIVE_HEX),
     );
-    this.boxText = this.own(this.label("", BOX_SIZE, INK).setOrigin(0.5));
+    this.boxText = this.own(this.text("", BOX_SIZE, INK).setOrigin(0.5));
 
     this.buildKeypad();
 
-    this.closeRect = this.own(
-      add
-        .rectangle(0, 0, 26, 26, PAPER_HEX)
-        .setStrokeStyle(2, INK_HEX)
-        .setInteractive({ useHandCursor: true }),
-    );
-    this.closeText = this.own(this.label("x", LABEL_SIZE, INK).setOrigin(0.5));
-    this.closeRect.on("pointerdown", () => this.dismiss(false));
+    this.closeButton = this.closeChip(LABEL_SIZE, () => this.dismiss(false), "key");
 
-    for (const part of this.parts) {
-      part.setDepth(depth).setScrollFactor(0).setVisible(false);
-      register(part);
-    }
     this.ink.setDepth(depth + 1);
     this.box.setDepth(depth + 2);
     for (const text of [this.boxText, ...this.totals]) text.setDepth(depth + 3);
@@ -181,8 +163,6 @@ export class ArrayPopup {
       key.rect.setDepth(depth + 2);
       key.text.setDepth(depth + 3);
     }
-    this.closeRect.setDepth(depth + 2);
-    this.closeText.setDepth(depth + 3);
   }
 
   setPhrases(words: Phrases): void {
@@ -201,7 +181,7 @@ export class ArrayPopup {
     return this.state;
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.state !== null;
   }
 
@@ -218,22 +198,18 @@ export class ArrayPopup {
     this.finish = onDone;
     this.paper.setVisible(true);
     for (const part of this.parts) part.setVisible(true);
-    this.keyHandler = (event: KeyboardEvent) => this.onKeyDown(event);
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    this.watchKeys((event) => this.onKeyDown(event));
     this.layout();
   }
 
   /** Closes without reporting anything — for a scene shutting down. */
-  close(): void {
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+  override close(): void {
+    this.beat?.remove();
+    this.beat = null;
+    super.close();
     this.state = null;
     this.finish = null;
-    this.paper.setVisible(false);
     this.ink.clear();
-    for (const part of this.parts) part.setVisible(false);
   }
 
   private dismiss(solved: boolean): void {
@@ -262,7 +238,8 @@ export class ArrayPopup {
     if (next.done) {
       // A beat on the finished parchment, with every row lit and the answer
       // in the box, before the patch appears in the world.
-      this.scene.time.delayedCall(650, () => this.dismiss(true));
+      this.beat?.remove();
+      this.beat = this.scene.time.delayedCall(650, () => this.dismiss(true));
     }
   }
 
@@ -302,7 +279,7 @@ export class ArrayPopup {
             .setStrokeStyle(2, INK_HEX)
             .setInteractive({ useHandCursor: true }),
         );
-        const text = this.own(this.label(label, BOX_SIZE, INK).setOrigin(0.5));
+        const text = this.own(this.text(label, BOX_SIZE, INK).setOrigin(0.5));
         rect.on("pointerdown", press(label));
         this.keys.push({ rect, text, col, row, span });
         col += span;
@@ -310,38 +287,18 @@ export class ArrayPopup {
     }
   }
 
-  private label(text: string, size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, text, {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-    });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
-  }
-
-  /** Re-place everything for the current viewport. Safe to call when shut. */
-  layout(): void {
-    if (!this.state) return;
-    this.render();
-  }
-
-  private render(): void {
+  protected render(): void {
     const state = this.state;
     if (!state) return;
     const { rows, columns } = state.problem;
     const { width, height } = this.scene.scale;
     const rect = this.paper.layout(width, height);
-    const { left, top } = rect;
+    const { top } = rect;
     const panelW = rect.width;
     const panelH = rect.height;
     const cx = rect.centreX;
 
-    this.closeRect.setPosition(left + panelW - PAD - 2, top + PAD + 2);
-    this.closeText.setPosition(this.closeRect.x, this.closeRect.y);
+    this.closeButton.place(rect);
 
     const innerW = panelW - PAD * 2;
     const innerH = panelH - PAD * 2;
@@ -477,11 +434,5 @@ export class ArrayPopup {
     const counted = arrayHint(state);
     if (counted === 0) return "";
     return this.words.arrayHintRows(columns, counted);
-  }
-
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
   }
 }

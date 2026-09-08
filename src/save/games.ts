@@ -8,6 +8,7 @@ import {
   type Progress,
   freshProgress,
   joinProfile,
+  readProgress,
   splitProfile,
 } from "./profiles";
 import { GENERATOR_VERSION, type GameSnapshot, fromTheFuture, migrate } from "./snapshot";
@@ -223,11 +224,12 @@ export function loadGame(store: SettingsStore | null, id: string): SavedGame | n
   // Walked up to today before anything reads it, and left alone if it came
   // from a build that knew more than this one — see `migrate`.
   const usable = world ? migrate(world) : null;
-  const progress =
-    typeof record.progress === "object" && record.progress !== null
-      ? (record.progress as Record<string, Progress>)
-      : {};
-  return { ...entry, world: usable, progress, groundMoved: movedSince(usable) };
+  return {
+    ...entry,
+    world: usable,
+    progress: readProgressTable(record.progress),
+    groundMoved: movedSince(usable),
+  };
 }
 
 export function deleteGame(store: SettingsStore | null, id: string): readonly GameEntry[] {
@@ -332,7 +334,28 @@ function carryOverTheOldWorld(store: SettingsStore | null, now: number): void {
  * been anywhere yet.
  */
 export function profileIn(game: SavedGame, player: Player): Profile {
-  return joinProfile(player, game.progress[player.id] ?? freshProgress(player.band));
+  const saved = game.progress[player.id];
+  // Read against the child's band on the way in, not trusted: the body is
+  // whatever the browser had under that key, and a rung that is not a
+  // number is a sum nobody can be set.
+  return joinProfile(player, saved ? readProgress(saved, player.band) : freshProgress(player.band));
+}
+
+/**
+ * Everybody's progress in a game, keeping only the rows that are rows.
+ *
+ * The fields inside are read by `readProgress` when a child opens the game,
+ * because reading them needs the child's band and this does not have it.
+ * What this catches is the shape being wrong entirely: a string where the
+ * table should be, or a number where a child's row should be.
+ */
+function readProgressTable(value: unknown): Readonly<Record<string, Progress>> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  const table: Record<string, Progress> = {};
+  for (const [id, row] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof row === "object" && row !== null && !Array.isArray(row)) table[id] = row as Progress;
+  }
+  return table;
 }
 
 /** And back apart again, for saving. */

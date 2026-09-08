@@ -4,6 +4,12 @@ pre-commit:
     lint:
       glob: "*.{ts,tsx,js,jsx,json}"
       run: bunx biome check --no-errors-on-unmatched {staged_files}
+    # These two run on the whole project, not on the staged files: the glob
+    # only decides *whether* they run (a commit touching no TypeScript skips
+    # them), and neither `tsc` nor `bun test` can be told about a subset in
+    # any way that means something — a change in one file breaks a type in
+    # another. The whole project is about twenty-five seconds, which is
+    # cheap enough to pay on every commit.
     typecheck:
       glob: "*.{ts,tsx}"
       run: bunx tsc --noEmit

@@ -4,9 +4,10 @@
 import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import { isLastPage, stepPage } from "../pages";
-import { PANEL_PAD as PAD, type PanelRect, ParchmentPanel } from "./ParchmentPanel";
+import { type Chip, Panel } from "./Panel";
+import { PANEL_PAD as PAD, type PanelRect } from "./ParchmentPanel";
 import { type UiIndex, uiTextureKey } from "./assets";
-import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
+import { ACTIVE_HEX, DONE_HEX, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX, TYPE } from "./parchment";
 
 /**
  * A short deck of parchment pages: a title, a line or two, a picture, and a
@@ -24,11 +25,8 @@ import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
  * resizing, which page you are on — is here, once.
  */
 
-const HERE_HEX = 0xc8901c;
-const LAST_HEX = 0x3d6b2a;
-
-const TITLE_SIZE = 17;
-const BODY_SIZE = 13;
+const TITLE_SIZE = TYPE.title;
+const BODY_SIZE = TYPE.body;
 const ICON_ART = 40;
 const ICON_GAP = 22;
 const DOT_GAP = 14;
@@ -43,15 +41,9 @@ const BUTTON_PAD = 14;
 const BUTTON_GAP = 12;
 const BUTTON_MIN_SIZE = 10;
 
-export interface Chip {
-  readonly box: Phaser.GameObjects.Rectangle;
-  readonly label: Phaser.GameObjects.Text;
-}
-
-export type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
+// Where these two lived before there was a `Panel` for them to belong to;
+// still importable from here.
+export type { Chip, PanelPart } from "./Panel";
 
 export interface PagedPanelOptions {
   readonly maxWidth: number;
@@ -62,9 +54,7 @@ export interface PagedPanelOptions {
   readonly icons: number;
 }
 
-export abstract class PagedPanel<TPage> {
-  protected readonly paper: ParchmentPanel;
-  protected readonly parts: PanelPart[] = [];
+export abstract class PagedPanel<TPage> extends Panel {
   protected readonly ink: Phaser.GameObjects.Graphics;
   private readonly title: Phaser.GameObjects.Text;
   private readonly body: Phaser.GameObjects.Text;
@@ -78,33 +68,16 @@ export abstract class PagedPanel<TPage> {
   private opened = false;
   private page: TPage;
   private onClose: (() => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
-
-  /**
-   * Depth and registration, kept so that `own` can set a part up the moment
-   * it is made.
-   *
-   * They used to be applied in a loop at the end of this constructor, which
-   * was fine while a panel was one class: everything existed by then. It
-   * stopped being fine the moment a *subclass* made objects of its own —
-   * those are built after this constructor returns, so the loop never saw
-   * them, and a panel that had not been opened yet left its unhidden pieces
-   * sitting in the top-left corner of the screen over the status line.
-   */
-  private readonly partDepth: number;
-  private readonly registerPart: (object: Phaser.GameObjects.GameObject) => void;
 
   constructor(
-    protected readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     protected words: Phrases,
     register: (object: Phaser.GameObjects.GameObject) => void,
     options: PagedPanelOptions,
   ) {
-    this.partDepth = depth;
-    this.registerPart = register;
-    this.paper = new ParchmentPanel(scene, index, { ...options, depth, register });
+    super(scene, index, depth, register, { ...options, lineSpacing: 3 });
     this.ink = this.own(scene.add.graphics());
     this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
     this.body = this.own(this.text("", BODY_SIZE, INK).setOrigin(0.5, 0).setAlign("center"));
@@ -153,7 +126,7 @@ export abstract class PagedPanel<TPage> {
 
   // --- being a panel --------------------------------------------------------
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.opened;
   }
 
@@ -189,7 +162,7 @@ export abstract class PagedPanel<TPage> {
     this.page = this.deck()[0] as TPage;
     this.paper.setVisible(true);
     this.render();
-    this.keyHandler = (event: KeyboardEvent) => {
+    this.watchKeys((event) => {
       if (event.key === "Escape") {
         event.preventDefault();
         this.close();
@@ -200,26 +173,16 @@ export abstract class PagedPanel<TPage> {
         event.preventDefault();
         this.turn(-1);
       }
-    };
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    });
   }
 
-  close(): void {
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+  override close(): void {
+    super.close();
     this.opened = false;
-    this.paper.setVisible(false);
     this.ink.clear();
-    for (const part of this.parts) part.setVisible(false);
     const done = this.onClose;
     this.onClose = null;
     done?.();
-  }
-
-  layout(): void {
-    if (this.opened) this.render();
   }
 
   /** Forward off the last page closes: "next" there says something final. */
@@ -232,7 +195,7 @@ export abstract class PagedPanel<TPage> {
     this.render();
   }
 
-  private render(): void {
+  protected render(): void {
     const { width, height } = this.scene.scale;
     const rect = this.paper.layout(width, height);
     for (const part of this.parts) part.setVisible(false);
@@ -285,7 +248,7 @@ export abstract class PagedPanel<TPage> {
       const spread = (this.dots.length - 1) * DOT_GAP;
       dot
         .setPosition(rect.centreX - spread / 2 + i * DOT_GAP, dotsY)
-        .setFillStyle(deck[i] === this.page ? HERE_HEX : PAPER_PALE_HEX)
+        .setFillStyle(deck[i] === this.page ? ACTIVE_HEX : PAPER_PALE_HEX)
         .setVisible(true);
     }
 
@@ -311,7 +274,7 @@ export abstract class PagedPanel<TPage> {
       this.show(this.backButton);
     }
     this.place(this.nextButton, left + total - nextWidth / 2, buttonY, nextWidth, BUTTON_H);
-    this.nextButton.box.setStrokeStyle(2, last ? LAST_HEX : INK_HEX);
+    this.nextButton.box.setStrokeStyle(2, last ? DONE_HEX : INK_HEX);
     this.show(this.nextButton);
   }
 
@@ -382,45 +345,7 @@ export abstract class PagedPanel<TPage> {
     chip.label.setVisible(true);
   }
 
-  protected text(value: string, size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, value, {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-      lineSpacing: 3,
-    });
-  }
-
   protected dimText(value: string, size: number): Phaser.GameObjects.Text {
     return this.text(value, size, INK_DIM);
-  }
-
-  /**
-   * Adopt a part: depth, camera, hidden, registered — all of it, at once.
-   *
-   * Everything a panel draws goes through here, including anything a
-   * subclass makes for itself, which is what keeps a half-built panel from
-   * showing pieces of itself before it is ever opened.
-   */
-  protected own<T extends PanelPart>(object: T): T {
-    object
-      .setDepth(this.partDepth + 1)
-      .setScrollFactor(0)
-      .setVisible(false);
-    this.registerPart(object);
-    this.parts.push(object);
-    return object;
-  }
-
-  /** A label or a picture that has to sit above the box it belongs to. */
-  protected raise<T extends PanelPart>(object: T): T {
-    object.setDepth(this.partDepth + 2);
-    return object;
-  }
-
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
   }
 }

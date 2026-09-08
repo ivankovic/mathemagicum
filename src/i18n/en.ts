@@ -1,7 +1,3 @@
-// SPDX-FileCopyrightText: 2026 Marko Ivankovic
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-
-import { AnimalKind } from "../world/animals";
 import { DecorType } from "../world/decor";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
@@ -42,13 +38,6 @@ const PLANTS: Record<PlantType, Noun> = {
   [PlantType.Wheat]: noun("wheat", "wheat"),
 };
 
-const ANIMALS: Record<AnimalKind, Noun> = {
-  [AnimalKind.Chicken]: noun("chicken"),
-  [AnimalKind.Duck]: noun("duck"),
-  [AnimalKind.Cat]: noun("cat"),
-  [AnimalKind.Rabbit]: noun("rabbit"),
-};
-
 const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Well]: noun("well"),
   [FixtureType.Fence]: noun("fence"),
@@ -71,6 +60,14 @@ const FIXTURES: Record<FixtureType, Noun> = {
   // Named for what it does rather than for the beam that does it: a child
   // asked to fetch "the press" will find the thing with two funnels.
   [FixtureType.Press]: noun("press"),
+  [FixtureType.Funnel]: noun("funnel"),
+  [FixtureType.Bell]: noun("bell"),
+  // Named for the door in its top rather than for the logic, because a
+  // child asked to fetch "the inverter" would look for something inverted.
+  [FixtureType.Inverter]: noun("trapdoor"),
+  [FixtureType.Seesaw]: noun("seesaw"),
+  [FixtureType.Latch]: noun("strongbox", "strongboxes"),
+  [FixtureType.Blueprint]: noun("blueprint"),
   [FixtureType.Windpump]: noun("wind pump"),
   [FixtureType.Planter]: noun("planter"),
   [FixtureType.Gate]: noun("gate"),
@@ -114,6 +111,7 @@ const ROOMS: Record<string, string> = {
   barn: "barn",
   tower: "tower",
   schoolhouse: "schoolhouse",
+  garage: "garage",
 };
 
 const PLACES = ["ones", "tens", "hundreds"];
@@ -137,6 +135,11 @@ const PLACE_NAMES: Record<string, string> = {
 // The welcome, a page at a time. Keyed by IntroBeat rather than written as
 // four fields, so a beat added to the tour fails the coverage test in every
 // language instead of silently showing an empty page in one of them.
+const NEWS_EN: Record<string, string> = {
+  press:
+    "There is a new machine for your garden: the press. Build one out of wood and stone, take it from your crate, and it will take two things at once and press them into something new.",
+};
+
 const INTRO_EN: Record<string, string> = {
   seeds: `I am ${NAMED_PEOPLE["postal-worker"]}, the postman. That is your garden. Take a seed from the pouch, then tap the square you want it in.`,
   spell: `Seeds do not grow on their own here. Open the spellbook, cast the + rune on one, and answer the sum. Two casts and it is ripe. ${NAMED_PEOPLE.teacher} in the school will show you how, if you ask her.`,
@@ -352,6 +355,39 @@ export const EN: Phrases = {
   mirrorDone: "Both sides match. That is a mirror.",
   mirrorHint: "This square is one of them.",
 
+  logicTitle: "The switch",
+  logicAskTray: "Tap everything the rule lets through.",
+  logicAskCircuit: "Flip the switches until the lamp lights.",
+  logicWrong: "Not that one. Read the rule again.",
+  logicWasted: "That flip did not help. Look at what each machine needs.",
+  logicDoneTray: "Those are the ones. The rule let them through.",
+  logicDoneCircuit: "The lamp is lit. That is the circuit.",
+  logicHintTray: "This one gets through.",
+  logicHintCircuit: "Try this switch.",
+
+  jobsTitle: `${NAMED_PEOPLE.mechanic}'s bench`,
+  jobAsk: (job, left) =>
+    ({
+      either: `Wire two lines into one funnel, and the funnel into a tally. ${left === 1 ? "One line" : `${left} lines`} still to go.`,
+      ring: `Put a bell on a line and send ten things through it. ${left === 1 ? "One ring" : `${left} rings`} to go.`,
+      else: `Show a trapdoor one thing, and send six other things through it. ${left === 1 ? "One" : `${left}`} still to pass.`,
+      parity: `Put a seesaw on a line and let it deal six things, three each way. ${left === 1 ? "One" : `${left}`} still to tip.`,
+      hold: `Fill a strongbox by day and let it out at night. ${left === 1 ? "One thing" : `${left} things`} still to let out.`,
+      twice: `Wake a blueprint beside a line, pick it up, and stamp it down somewhere else. ${left === 1 ? "One stamp" : `${left} stamps`} to go.`,
+    })[job] ?? "",
+  jobBargain: (job) =>
+    ({
+      either: "Do that and the crate will offer you a bell.",
+      ring: "Do that and the crate will offer you a trapdoor.",
+      else: "Do that and the crate will offer you a seesaw.",
+      parity: "Do that and the crate will offer you a strongbox.",
+      hold: "Do that and the crate will offer you a blueprint.",
+      twice:
+        "Do that and you have built the same line twice, which is the last thing she has to teach.",
+    })[job] ?? "",
+  jobEarned: "Done. Ask her again for the next one.",
+  jobsAllDone: "Every job is done. Come back when there are more machines to mend.",
+
   hourglassTitle: "The hourglass",
   hourglassAsk: "How far are you moving the clock?",
   hourglassTurnIt: "Swipe round to turn the clock.",
@@ -361,6 +397,32 @@ export const EN: Phrases = {
   hourglassNow: "it is now",
   hourglassCountOn: (hours) => `Count round the dial: ${hours}, and keep going…`,
   hourglassSolved: (hours) => `${hours} hours. The glass turns.`,
+
+  thingDoes: (fixture: FixtureType) =>
+    ({
+      [FixtureType.Sorter]:
+        "It shares a heap out into three equal piles, and what will not go stays in its mouth.",
+      [FixtureType.Hothouse]: "One crop goes in at the door, and three lengths of timber come out.",
+      [FixtureType.Sieve]:
+        "Show it one thing. It lets that through and drops everything else in its bin.",
+      [FixtureType.Tally]:
+        "It fills up and up, and tips the whole lot the moment it reaches its mark.",
+      [FixtureType.Press]:
+        "It takes two things at once — so many of one for every so many of the other — and presses them into something new.",
+      [FixtureType.Funnel]:
+        "Two mouths, one spout. Whatever comes in at either goes on down, and it never waits for the other.",
+      [FixtureType.Bell]:
+        "It rings once for each thing that goes through it, and sends the thing on. A line with a bell at the end is a line you can hear working.",
+      [FixtureType.Inverter]:
+        "Show it one thing. It drops that through the trap into its bin and lets everything else through — the sieve, inside out.",
+      [FixtureType.Seesaw]:
+        "It tips. The first thing goes down one end, the next down the other, and so on: one this way, one that way, never both.",
+      [FixtureType.Latch]:
+        "It keeps whatever it is given, all day, and lets it all out when night falls.",
+      [FixtureType.Blueprint]:
+        "Wake it and it draws the machines round it, wires and all. Pick it up and tap it down somewhere else, and it builds the same line there — paid for out of your basket.",
+    })[fixture as string] ?? "",
+  thingCosts: "Built from",
 
   optionsButton: "options",
   optionsTitle: "Options",
@@ -450,6 +512,9 @@ export const EN: Phrases = {
 
   introTitle: "Welcome to the village",
   intro: (beat) => INTRO_EN[beat] ?? "",
+
+  newsTitle: "A letter for you",
+  news: (beat) => NEWS_EN[beat] ?? "",
 
   lessonTitle: "The addition spell",
   lessonRune:

@@ -3,10 +3,8 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
-import { DecorType } from "../src/world/decor";
-import { Turn } from "../src/world/facing";
 import { PatchAction } from "../src/world/selection";
-import { type Game, patchButton, play, runeButton, shutDown, takeFromCrate } from "./harness";
+import { type Game, patchButton, play, runeButton, shutDown } from "./harness";
 
 /**
  * Building a house, and the wall of bricks that pays for each square of it.
@@ -67,27 +65,6 @@ interface Piece {
 }
 
 /**
- * In through her own front door.
- *
- * Put down on the doorstep rather than walked there from the spawn: a child
- * starts in the middle of their own garden beds, eight rows off, and walking
- * that on a held arrow key is eight seconds of nothing being tested that
- * gets stuck the first time a fence moves.
- */
-async function goHome(game: Game): Promise<House> {
-  const door = (await game.seam<Record<string, { col: number; row: number }>>("doors"))[
-    "player-house"
-  ];
-  if (!door) throw new Error("the village has no house for the player");
-  await game.standAt(door.col, door.row + 2, "up");
-  await game.walk("ArrowUp", 900);
-  await game.stopped();
-  const house = await game.seam<House | null>("house");
-  if (!house) throw new Error("walking through the front door did not go indoors");
-  return house;
-}
-
-/**
  * Plan coordinates to the grid ones a tap is aimed in.
  *
  * The two are the same room described from two places, and every square
@@ -118,7 +95,7 @@ describe("building a room out", () => {
     "a square of floor costs a wall of bricks, a plank and a stone",
     async () => {
       await play({ seams: AT_HOME }, async (game) => {
-        const before = await goHome(game);
+        const before = await game.goHome();
         const wood = await game.held("wood");
         const stone = await game.held("stone");
 
@@ -156,7 +133,7 @@ describe("building a room out", () => {
     "with nothing in the basket, no wall is even offered",
     async () => {
       await play({ seams: "&hour=12&brickRung=1" }, async (game) => {
-        const before = await goHome(game);
+        const before = await game.goHome();
         expect(await game.held("wood")).toBe(0);
         expect(await game.held("stone")).toBe(0);
 
@@ -186,7 +163,7 @@ describe("building a room out", () => {
     "the minus rune takes one back up, with the materials returned",
     async () => {
       await play({ seams: AT_HOME }, async (game) => {
-        const before = await goHome(game);
+        const before = await game.goHome();
         const wood = await game.held("wood");
 
         await game.tap("spellbook");
@@ -221,8 +198,11 @@ describe("building a room out", () => {
     "but never the square behind the front door",
     async () => {
       await play({ seams: AT_HOME }, async (game) => {
-        const before = await goHome(game);
+        const before = await game.goHome();
         await tapPlan(game, before, 3, 3);
+        await game.settle(250);
+        // A tap asks what to do with it now; the basket is the answer here.
+        expect(await game.tap("wheel.take")).toBe(true);
         await game.settle(500);
         expect((await game.seam<Piece[]>("decor")).some((one) => one.piece === "rug")).toBe(false);
 
@@ -268,7 +248,7 @@ describe("building a room out", () => {
     "a wing goes up for one wall and one multiplication",
     async () => {
       await play({ seams: `${AT_HOME}&learned=all&arrayRung=0` }, async (game) => {
-        const before = await goHome(game);
+        const before = await game.goHome();
         const wood = await game.held("wood");
 
         await game.tap("spellbook");

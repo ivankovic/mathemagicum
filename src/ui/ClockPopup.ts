@@ -13,7 +13,6 @@ import {
   asksMinutes,
   backspaceClock,
   beginHourglassCast,
-  forwardMinutes,
   handAngles,
   hourglassHint,
   moved,
@@ -23,18 +22,19 @@ import {
   typeClockDigit,
   windMinutes,
 } from "../spells/hourglass";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type CloseChip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
 import {
   ACTIVE_HEX,
   DONE_HEX,
   DONE_INK,
-  FACE,
   INK,
   INK_DIM,
   INK_HEX,
   PAPER_HEX,
   PAPER_PALE_HEX,
+  TYPE,
   WRONG_HEX,
   WRONG_INK,
 } from "./parchment";
@@ -67,13 +67,12 @@ const RIM_HEX = 0x8a6a48;
 const HOUR_HAND_HEX = 0x4a3422;
 const MINUTE_HAND_HEX = 0x8a6a48;
 /** The sweep the help draws between the two times. */
-const SWEEP_HEX = 0xc8901c;
 
 const TITLE_SIZE = 18;
-const ASK_SIZE = 12;
-const LABEL_SIZE = 12;
+const ASK_SIZE = TYPE.small;
+const LABEL_SIZE = TYPE.small;
 const BOX_SIZE = 17;
-const HINT_SIZE = 12;
+const HINT_SIZE = TYPE.small;
 
 const BOX_W = 62;
 const BOX_H = 28;
@@ -89,11 +88,6 @@ const FACE_GAP = 30;
 /** Twelve numerals a face, two faces. */
 const NUMERALS = 24;
 
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
-
 interface PadKey {
   readonly rect: Phaser.GameObjects.Rectangle;
   readonly text: Phaser.GameObjects.Text;
@@ -102,9 +96,7 @@ interface PadKey {
   readonly span: number;
 }
 
-export class ClockPopup {
-  private readonly parts: PanelPart[] = [];
-  private readonly paper: ParchmentPanel;
+export class ClockPopup extends Panel {
   private readonly ink: Phaser.GameObjects.Graphics;
   private readonly title: Phaser.GameObjects.Text;
   private readonly ask: Phaser.GameObjects.Text;
@@ -133,70 +125,58 @@ export class ClockPopup {
   private lastAt: { x: number; y: number } | null = null;
   private travel = 0;
   private readonly keys: PadKey[] = [];
-  private readonly closeRect: Phaser.GameObjects.Rectangle;
-  private readonly closeText: Phaser.GameObjects.Text;
+  private readonly closeButton: CloseChip;
 
   private state: HourglassCast | null = null;
+  /** The beat on a finished parchment before it goes, so a close can cancel it. */
+  private beat: Phaser.Time.TimerEvent | null = null;
   private moveHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
   private downHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
   private finish: ((result: CastResult, to: ClockTime | null, minutes: number) => void) | null =
     null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     private words: Phrases,
     register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
     const add = scene.add;
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
+      lift: 0,
     });
 
     this.ink = this.own(add.graphics());
-    this.title = this.own(this.label("", TITLE_SIZE, INK).setOrigin(0.5, 0));
-    this.ask = this.own(this.label("", ASK_SIZE, INK_DIM).setOrigin(0.5, 0));
-    this.hint = this.own(this.label("", HINT_SIZE, INK_DIM).setOrigin(0.5, 0));
+    this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
+    this.ask = this.own(this.text("", ASK_SIZE, INK_DIM).setOrigin(0.5, 0));
+    this.hint = this.own(this.text("", HINT_SIZE, INK_DIM).setOrigin(0.5, 0));
     for (let n = 0; n < 2; n++) {
-      this.captions.push(this.own(this.label("", LABEL_SIZE, INK).setOrigin(0.5, 0)));
+      this.captions.push(this.own(this.text("", LABEL_SIZE, INK).setOrigin(0.5, 0)));
     }
     for (let n = 0; n < NUMERALS; n++) {
-      this.numerals.push(this.own(this.label("", LABEL_SIZE - 2, INK_DIM).setOrigin(0.5)));
+      this.numerals.push(this.own(this.text("", LABEL_SIZE - 2, INK_DIM).setOrigin(0.5)));
     }
     this.box = this.own(
       add.rectangle(0, 0, BOX_W, BOX_H, PAPER_PALE_HEX).setStrokeStyle(3, ACTIVE_HEX),
     );
-    this.boxText = this.own(this.label("", BOX_SIZE, INK).setOrigin(0.5));
+    this.boxText = this.own(this.text("", BOX_SIZE, INK).setOrigin(0.5));
     this.minuteBox = this.own(
       add.rectangle(0, 0, BOX_W, BOX_H, PAPER_PALE_HEX).setStrokeStyle(3, INK_HEX),
     );
-    this.minuteText = this.own(this.label("", BOX_SIZE, INK).setOrigin(0.5));
+    this.minuteText = this.own(this.text("", BOX_SIZE, INK).setOrigin(0.5));
     for (let which = 0; which < 2; which++) {
-      this.units.push(this.own(this.label("", LABEL_SIZE, INK_DIM).setOrigin(0, 0.5)));
+      this.units.push(this.own(this.text("", LABEL_SIZE, INK_DIM).setOrigin(0, 0.5)));
     }
 
     this.buildKeypad();
 
-    this.closeRect = this.own(
-      add
-        .rectangle(0, 0, 26, 26, PAPER_HEX)
-        .setStrokeStyle(2, INK_HEX)
-        .setInteractive({ useHandCursor: true }),
-    );
-    this.closeText = this.own(this.label("x", LABEL_SIZE, INK).setOrigin(0.5));
-    this.closeRect.on("pointerdown", () => this.dismiss(false));
+    this.closeButton = this.closeChip(LABEL_SIZE, () => this.dismiss(false), "key");
 
-    for (const part of this.parts) {
-      part.setDepth(depth).setScrollFactor(0).setVisible(false);
-      register(part);
-    }
     this.ink.setDepth(depth + 1);
     this.box.setDepth(depth + 2);
     for (const text of [this.boxText, ...this.numerals, ...this.captions]) {
@@ -206,8 +186,6 @@ export class ClockPopup {
       key.rect.setDepth(depth + 2);
       key.text.setDepth(depth + 3);
     }
-    this.closeRect.setDepth(depth + 2);
-    this.closeText.setDepth(depth + 3);
   }
 
   setPhrases(words: Phrases): void {
@@ -232,7 +210,7 @@ export class ClockPopup {
     return this.swipeArea;
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.state !== null;
   }
 
@@ -245,8 +223,7 @@ export class ClockPopup {
     this.finish = onDone;
     this.paper.setVisible(true);
     for (const part of this.parts) part.setVisible(true);
-    this.keyHandler = (event: KeyboardEvent) => this.onKeyDown(event);
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    this.watchKeys((event) => this.onKeyDown(event));
     // On the scene, not on the face: a finger that slides off the clock is
     // still holding the hand it grabbed, and letting go anywhere lets go.
     this.moveHandler = (pointer: Phaser.Input.Pointer) => {
@@ -260,11 +237,10 @@ export class ClockPopup {
     this.layout();
   }
 
-  close(): void {
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+  override close(): void {
+    this.beat?.remove();
+    this.beat = null;
+    super.close();
     if (this.moveHandler) {
       this.scene.input.off("pointermove", this.moveHandler);
       this.scene.input.off("pointerup", this.moveHandler);
@@ -279,9 +255,7 @@ export class ClockPopup {
     this.swipeArea = null;
     this.state = null;
     this.finish = null;
-    this.paper.setVisible(false);
     this.ink.clear();
-    for (const part of this.parts) part.setVisible(false);
   }
 
   private dismiss(solved: boolean): void {
@@ -322,7 +296,10 @@ export class ClockPopup {
   private apply(next: HourglassCast): void {
     this.state = next;
     this.render();
-    if (next.done) this.scene.time.delayedCall(650, () => this.dismiss(true));
+    if (next.done) {
+      this.beat?.remove();
+      this.beat = this.scene.time.delayedCall(650, () => this.dismiss(true));
+    }
   }
 
   /**
@@ -398,7 +375,7 @@ export class ClockPopup {
             .setStrokeStyle(2, INK_HEX)
             .setInteractive({ useHandCursor: true }),
         );
-        const text = this.own(this.label(label, BOX_SIZE, INK).setOrigin(0.5));
+        const text = this.own(this.text(label, BOX_SIZE, INK).setOrigin(0.5));
         rect.on("pointerdown", press(label));
         this.keys.push({ rect, text, col, row, span });
         col += span;
@@ -406,25 +383,7 @@ export class ClockPopup {
     }
   }
 
-  private label(text: string, size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, text, {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-    });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
-  }
-
-  layout(): void {
-    if (!this.state) return;
-    this.render();
-  }
-
-  private render(): void {
+  protected render(): void {
     const state = this.state;
     if (!state) return;
     const asked = askedOf(state);
@@ -435,8 +394,7 @@ export class ClockPopup {
     const panelH = rect.height;
     const cx = rect.centreX;
 
-    this.closeRect.setPosition(left + panelW - PAD - 2, top + PAD + 2);
-    this.closeText.setPosition(this.closeRect.x, this.closeRect.y);
+    this.closeButton.place(rect);
 
     const innerW = panelW - PAD * 2;
     const innerH = panelH - PAD * 2;
@@ -610,7 +568,7 @@ export class ClockPopup {
     done: boolean,
   ): void {
     const start = handAngles(from).hour;
-    this.ink.lineStyle(3, SWEEP_HEX, done ? 1 : 0.85);
+    this.ink.lineStyle(3, ACTIVE_HEX, done ? 1 : 0.85);
     for (let n = 0; n < hours; n++) {
       const a0 = ((start + n * 30 - 90) * Math.PI) / 180;
       const a1 = ((start + (n + 1) * 30 - 90) * Math.PI) / 180;
@@ -642,11 +600,5 @@ export class ClockPopup {
     if (!moved(state)) return this.words.hourglassTurnIt;
     const shown = hourglassHint(state);
     return shown > 0 ? this.words.hourglassCountOn(shown) : "";
-  }
-
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
   }
 }

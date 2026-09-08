@@ -1,7 +1,3 @@
-// SPDX-FileCopyrightText: 2026 Marko Ivankovic
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-
-import { AnimalKind } from "../world/animals";
 import { DecorType } from "../world/decor";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
@@ -114,14 +110,6 @@ const PLANT_FORMS: Record<PlantType, HrNoun> = {
   [PlantType.Wheat]: { one: "pšenica", acc: "pšenicu", few: "pšenice", many: "pšenica" },
 };
 
-const ANIMALS: Record<AnimalKind, Noun> = {
-  [AnimalKind.Chicken]: noun({ one: "kokoš", acc: "kokoš", few: "kokoši", many: "kokoši" }),
-  [AnimalKind.Duck]: noun({ one: "patka", acc: "patku", few: "patke", many: "pataka" }),
-  [AnimalKind.Cat]: noun({ one: "mačka", acc: "mačku", few: "mačke", many: "mačaka" }),
-  // Masculine and animate, so the accusative is the genitive: vidiš zeca.
-  [AnimalKind.Rabbit]: noun({ one: "zec", acc: "zeca", few: "zeca", many: "zečeva" }),
-};
-
 const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
   [FixtureType.Well]: { one: "bunar", acc: "bunar", few: "bunara", many: "bunara" },
   [FixtureType.Fence]: { one: "ograda", acc: "ogradu", few: "ograde", many: "ograda" },
@@ -186,6 +174,19 @@ const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
     few: "preše",
     many: "preša",
   },
+  // A funnel is *lijevak*, masculine and inanimate; a bell is *zvono*,
+  // neuter, so its accusative is its nominative as well.
+  [FixtureType.Funnel]: { one: "lijevak", acc: "lijevak", few: "lijevka", many: "lijevaka" },
+  [FixtureType.Bell]: { one: "zvono", acc: "zvono", few: "zvona", many: "zvona" },
+  [FixtureType.Inverter]: { one: "zaklopka", acc: "zaklopku", few: "zaklopke", many: "zaklopki" },
+  [FixtureType.Seesaw]: {
+    one: "klackalica",
+    acc: "klackalicu",
+    few: "klackalice",
+    many: "klackalica",
+  },
+  [FixtureType.Latch]: { one: "škrinja", acc: "škrinju", few: "škrinje", many: "škrinja" },
+  [FixtureType.Blueprint]: { one: "nacrt", acc: "nacrt", few: "nacrta", many: "nacrta" },
   // One feminine and one masculine, and the masculine is inanimate, so its
   // accusative is its nominative — the same shape as *bunar* and the sorter.
   [FixtureType.Windpump]: {
@@ -271,10 +272,6 @@ const FIXTURES: Record<FixtureType, Noun> = Object.fromEntries(
   Object.entries(FIXTURE_FORMS).map(([key, forms]) => [key, noun(forms)]),
 ) as Record<FixtureType, Noun>;
 
-const MATERIALS: Record<MaterialType, Noun> = Object.fromEntries(
-  Object.entries(MATERIAL_FORMS).map(([key, forms]) => [key, noun(forms)]),
-) as Record<MaterialType, Noun>;
-
 /** The three forms of anything the player can hold. */
 const FURNITURE_FORMS: Record<DecorType, HrNoun> = {
   [DecorType.Bed]: { one: "krevet", acc: "krevet", few: "kreveta", many: "kreveta" },
@@ -343,6 +340,7 @@ const ROOMS: Record<string, string> = {
   barn: "štagalj",
   tower: "kula",
   schoolhouse: "škola",
+  garage: "radionica",
 };
 
 const PLACES = ["jedinice", "desetice", "stotice"];
@@ -360,6 +358,11 @@ const PLACE_NAMES: Record<string, string> = {
   bigCity: "grad",
   observatory: "zvjezdarnica",
   enchantedForest: "stara šuma",
+};
+
+const NEWS_HR: Record<string, string> = {
+  press:
+    "Za tvoj vrt postoji novi stroj: preša. Napravi je od drva i kamena, uzmi je iz sanduka — uzima dvije stvari odjednom i od njih preša nešto novo.",
 };
 
 const INTRO_HR: Record<string, string> = {
@@ -545,6 +548,38 @@ export const HR: Phrases = {
   mirrorDone: "Obje su strane jednake. To je zrcalo.",
   mirrorHint: "Ovo je polje jedno od njih.",
 
+  logicTitle: "Prekidač",
+  logicAskTray: "Dodirni sve što pravilo propušta.",
+  logicAskCircuit: "Prebacuj prekidače dok se svjetiljka ne upali.",
+  logicWrong: "To ne. Pročitaj pravilo još jednom.",
+  logicWasted: "To nije pomoglo. Pogledaj što svaki stroj treba.",
+  logicDoneTray: "To su oni. Pravilo ih je propustilo.",
+  logicDoneCircuit: "Svjetiljka svijetli. To je strujni krug.",
+  logicHintTray: "Ovaj prolazi.",
+  logicHintCircuit: "Probaj ovaj prekidač.",
+
+  jobsTitle: `${NAMED_PEOPLE.mechanic}in stol`,
+  jobAsk: (job, left) =>
+    ({
+      either: `Spoji dva niza u jedan lijevak, a lijevak u brojilo. ${left === 1 ? "Još jedan niz" : `Još ${left} niza`}.`,
+      ring: `Stavi zvono na niz i pošalji deset stvari kroz njega. ${left === 1 ? "Još jedno zvonjenje" : `Još ${left} zvonjenja`}.`,
+      else: `Pokaži zaklopki jednu stvar i pošalji kroz nju šest drugih. ${left === 1 ? "Još jedna" : `Još ${left}`} mora proći.`,
+      parity: `Stavi klackalicu na niz i pusti je da podijeli šest stvari, po tri na svaku stranu. ${left === 1 ? "Još jedna" : `Još ${left}`} mora preko.`,
+      hold: `Napuni škrinju danju i pusti je noću. ${left === 1 ? "Još jedna stvar" : `Još ${left} stvari`} mora van.`,
+      twice: `Probudi nacrt uz niz, podigni ga i dodirni negdje drugdje. ${left === 1 ? "Još jedan otisak" : `Još ${left} otiska`}.`,
+    })[job] ?? "",
+  jobBargain: (job) =>
+    ({
+      either: "Učini to i sanduk će ti ponuditi zvono.",
+      ring: "Učini to i sanduk će ti ponuditi zaklopku.",
+      else: "Učini to i sanduk će ti ponuditi klackalicu.",
+      parity: "Učini to i sanduk će ti ponuditi škrinju.",
+      hold: "Učini to i sanduk će ti ponuditi nacrt.",
+      twice: "Učini to i sagradila si isti niz dvaput — to je zadnje što te ima naučiti.",
+    })[job] ?? "",
+  jobEarned: "Gotovo. Pitaj je opet za sljedeći.",
+  jobsAllDone: "Svi su poslovi gotovi. Vrati se kad bude više strojeva za popravak.",
+
   hourglassTitle: "Pješčani sat",
   hourglassAsk: "Za koliko pomičeš sat?",
   hourglassTurnIt: "Prevuci ukrug da pomakneš sat.",
@@ -554,6 +589,29 @@ export const HR: Phrases = {
   hourglassNow: "sada je",
   hourglassCountOn: (count) => `Broji po brojčaniku: ${count}, pa dalje…`,
   hourglassSolved: (count) => `${hours(count)}. Pješčani sat se okreće.`,
+
+  thingDoes: (fixture: FixtureType) =>
+    ({
+      [FixtureType.Sorter]:
+        "Dijeli hrpu na tri jednaka dijela, a što ne prođe ostaje mu u ždrijelu.",
+      [FixtureType.Hothouse]: "Uđe jedna biljka, izađu tri daske.",
+      [FixtureType.Sieve]: "Pokaži mu jednu stvar. Nju propušta, a sve ostalo pada u sanduk.",
+      [FixtureType.Tally]: "Puni se i puni, pa prevrne sve čim dođe do crte.",
+      [FixtureType.Press]:
+        "Uzima dvije stvari odjednom — toliko jedne na svaku toliko druge — i spoji ih u nešto novo.",
+      [FixtureType.Funnel]:
+        "Dva otvora, jedan izljev. Što god uđe u bilo koji, izlazi dolje — i nikad ne čeka drugi.",
+      [FixtureType.Bell]:
+        "Zazvoni jednom za svaku stvar koja prođe kroz njega i pošalje je dalje. Niz sa zvonom na kraju čuješ kako radi.",
+      [FixtureType.Inverter]:
+        "Pokaži joj jednu stvar. Nju pusti kroz zaklopku u svoju kantu, a sve ostalo propušta — sito naopako.",
+      [FixtureType.Seesaw]:
+        "Ljulja se. Prva stvar ode niz jednu stranu, sljedeća niz drugu, i tako redom: jedna ovamo, jedna onamo, nikad obje.",
+      [FixtureType.Latch]: "Čuva sve što joj daš, cijeli dan — a kad padne noć, pusti sve van.",
+      [FixtureType.Blueprint]:
+        "Probudi ga i nacrta strojeve oko sebe, zajedno sa žicama. Podigni ga i dodirni negdje drugdje, pa ondje sagradi isti niz — plaćen iz tvoje košare.",
+    })[fixture as string] ?? "",
+  thingCosts: "Gradi se od",
 
   optionsButton: "postavke",
   optionsTitle: "Postavke",
@@ -646,6 +704,9 @@ export const HR: Phrases = {
   // which this book does not do — see the note at the top of the file.
   introTitle: "Dobro došli u selo",
   intro: (beat) => INTRO_HR[beat] ?? "",
+
+  newsTitle: "Pismo za tebe",
+  news: (beat) => NEWS_HR[beat] ?? "",
 
   lessonTitle: "Čarolija zbrajanja",
   lessonRune:

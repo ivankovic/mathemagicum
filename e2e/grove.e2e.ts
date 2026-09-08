@@ -5,7 +5,15 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
 import { PlantType } from "../src/world/plants";
 import { PatchAction } from "../src/world/selection";
-import { type Game, patchButton, play, runeButton, seedButton, shutDown } from "./harness";
+import {
+  type Game,
+  type Handles,
+  patchButton,
+  play,
+  runeButton,
+  seedButton,
+  shutDown,
+} from "./harness";
 
 const MINUTES = 60_000;
 
@@ -38,12 +46,9 @@ interface Grove {
 function cropOn(game: Game, col: number, row: number): Promise<string | null> {
   return game.tab.evaluate(
     ([c, r]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
+      const handle = (globalThis as never as Handles).__mathemagicum;
       if (!handle) throw new Error("the game has not put its handle out");
-      const session = handle.session as {
-        grid: { getCrop: (col: number, row: number) => { plant: string } | null };
-      };
+      const session = handle.session;
       return session.grid.getCrop(c as number, r as number)?.plant ?? null;
     },
     [col, row] as const,
@@ -62,11 +67,9 @@ function cropOn(game: Game, col: number, row: number): Promise<string | null> {
  */
 function takeTheWoodAway(game: Game, thicket: { col: number; row: number }[]): Promise<void> {
   return game.tab.evaluate((cells) => {
-    const handle = (globalThis as never as Record<string, Record<string, unknown>>).__mathemagicum;
+    const handle = (globalThis as never as Handles).__mathemagicum;
     if (!handle) throw new Error("the game has not put its handle out");
-    const session = handle.session as {
-      grid: { removeObjectAt: (col: number, row: number) => unknown };
-    };
+    const session = handle.session;
     for (const at of cells as { col: number; row: number }[]) {
       session.grid.removeObjectAt(at.col, at.row);
     }

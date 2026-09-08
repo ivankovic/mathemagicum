@@ -43,6 +43,8 @@ export const BuildingSprite = {
   Observatory: "observatory",
   Tower: "tower",
   Schoolhouse: "schoolhouse",
+  /** The mechanic's workshop in the city: wide doors and a cog on the wall. */
+  Garage: "garage",
 } as const;
 
 export type BuildingSprite = (typeof BuildingSprite)[keyof typeof BuildingSprite];
@@ -68,6 +70,7 @@ export const BUILDING_FOOTPRINTS: Record<BuildingSprite, Footprint> = {
   [BuildingSprite.Barn]: { width: 4, height: 3 },
   [BuildingSprite.Tower]: { width: 2, height: 2 },
   [BuildingSprite.Schoolhouse]: { width: 4, height: 3 },
+  [BuildingSprite.Garage]: { width: 3, height: 2 },
 };
 
 // The village's roles, mapped onto the shapes that read most like them.
@@ -80,7 +83,8 @@ export type BuildingRole =
   | "post-office"
   | "store"
   | "ship"
-  | "observatory";
+  | "observatory"
+  | "garage";
 
 export const ROLE_SPRITES: Record<BuildingRole, BuildingSprite> = {
   house: BuildingSprite.Cottage,
@@ -94,6 +98,10 @@ export const ROLE_SPRITES: Record<BuildingRole, BuildingSprite> = {
   school: BuildingSprite.Schoolhouse,
   "post-office": BuildingSprite.Tower,
   store: BuildingSprite.Barn,
+  // Its own building and its own role, because the layout has to know: a
+  // garage takes three tiles of frontage where a townhouse takes two, and
+  // it is the one building in the city that is not a house or a shop.
+  garage: BuildingSprite.Garage,
 };
 
 export function footprintFor(role: BuildingRole): Footprint {

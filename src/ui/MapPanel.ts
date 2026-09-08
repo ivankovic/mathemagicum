@@ -6,9 +6,10 @@ import type { Phrases } from "../i18n/phrases";
 import type { AnchorPlacements } from "../world/anchors";
 import type { WorldGrid } from "../world/grid";
 import { areaCentre, markedPlaces, minimapPoint, minimapSize } from "../world/minimap";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type CloseChip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
-import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
+import { INK, INK_DIM, INK_HEX, TYPE, WRONG_HEX } from "./parchment";
 import { paintWorldMap } from "./worldMapTexture";
 
 /**
@@ -30,40 +31,30 @@ const PANEL_MAX_H = 470;
 const PANEL_MIN_W = 300;
 const PANEL_MIN_H = 320;
 
-const MARK_HEX = 0xa8321e;
 // White rather than parchment: at the start of a game the player is standing
 // in the village, so their mark lands on top of the village's own — and two
 // marks of similar weight in one place read as one odd symbol.
 const HERE_HEX = 0xffffff;
 
-const TITLE_SIZE = 17;
-const LABEL_SIZE = 11;
+const TITLE_SIZE = TYPE.title;
+const LABEL_SIZE = TYPE.tiny;
 const MARK_SIZE = 5;
 const HERE_SIZE = 7;
 
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
-
-export class MapPanel {
-  private readonly paper: ParchmentPanel;
-  private readonly parts: PanelPart[] = [];
+export class MapPanel extends Panel {
   private readonly title: Phaser.GameObjects.Text;
   private readonly caption: Phaser.GameObjects.Text;
   private readonly sheet: Phaser.GameObjects.Image;
   private readonly ink: Phaser.GameObjects.Graphics;
   private readonly labels: Phaser.GameObjects.Text[] = [];
-  private readonly closeBox: Phaser.GameObjects.Rectangle;
-  private readonly closeLabel: Phaser.GameObjects.Text;
+  private readonly closeButton: CloseChip;
 
   private open = false;
   private painted = false;
   private onClose: (() => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     private words: Phrases,
@@ -80,13 +71,11 @@ export class MapPanel {
     private readonly playerCell: () => { col: number; row: number },
     register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
     });
 
     this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
@@ -102,28 +91,12 @@ export class MapPanel {
     for (const _place of markedPlaces(anchors)) {
       this.labels.push(this.own(this.text("", LABEL_SIZE, INK).setOrigin(0.5, 1)));
     }
-    this.closeBox = this.own(
-      scene.add
-        .rectangle(0, 0, 28, 24, PAPER_PALE_HEX)
-        .setStrokeStyle(2, INK_HEX)
-        .setInteractive({ useHandCursor: true }),
-    );
-    this.closeLabel = this.own(this.text("x", LABEL_SIZE, INK).setOrigin(0.5));
-    this.closeBox.on("pointerdown", () => this.close());
-
-    for (const part of this.parts) {
-      part
-        .setDepth(depth + 1)
-        .setScrollFactor(0)
-        .setVisible(false);
-      register(part);
-    }
-    this.ink.setDepth(depth + 2);
-    for (const label of this.labels) label.setDepth(depth + 3);
-    this.closeLabel.setDepth(depth + 3);
+    this.closeButton = this.closeChip(LABEL_SIZE, () => this.close());
+    this.raise(this.ink);
+    for (const label of this.labels) this.raise(label, 3);
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.open;
   }
 
@@ -138,30 +111,16 @@ export class MapPanel {
     this.onClose = onClose;
     this.paper.setVisible(true);
     this.render();
-    this.keyHandler = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      this.close();
-    };
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    this.escapeCloses();
   }
 
-  close(): void {
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+  override close(): void {
+    super.close();
     this.open = false;
-    this.paper.setVisible(false);
     this.ink.clear();
-    for (const part of this.parts) part.setVisible(false);
     const done = this.onClose;
     this.onClose = null;
     done?.();
-  }
-
-  layout(): void {
-    if (this.open) this.render();
   }
 
   /**
@@ -179,7 +138,7 @@ export class MapPanel {
     if (key) this.sheet.setTexture(key);
   }
 
-  private render(): void {
+  protected render(): void {
     const { width, height } = this.scene.scale;
     const rect = this.paper.layout(width, height);
     for (const part of this.parts) part.setVisible(false);
@@ -190,10 +149,7 @@ export class MapPanel {
       .setText(this.words.mapTitle)
       .setPosition(rect.centreX, rect.top + PAD)
       .setVisible(true);
-    this.closeBox
-      .setPosition(rect.left + rect.width - PAD - 14, rect.top + PAD + 10)
-      .setVisible(true);
-    this.closeLabel.setPosition(this.closeBox.x, this.closeBox.y).setVisible(true);
+    this.closeButton.place(rect);
 
     // The sheet, as big as the paper will take it and square, because the
     // world is.
@@ -221,7 +177,7 @@ export class MapPanel {
     for (const [index, place] of markedPlaces(this.anchors).entries()) {
       const centre = areaCentre(place.area);
       const at = onSheet(centre.col, centre.row);
-      this.ink.fillStyle(MARK_HEX, 1);
+      this.ink.fillStyle(WRONG_HEX, 1);
       this.ink.fillRect(at.x - MARK_SIZE / 2, at.y - MARK_SIZE / 2, MARK_SIZE, MARK_SIZE);
       const label = this.labels[index];
       if (!label) continue;
@@ -254,24 +210,5 @@ export class MapPanel {
       .setText(this.words.mapYouAreHere)
       .setPosition(rect.centreX, rect.top + rect.height - PAD)
       .setVisible(true);
-  }
-
-  private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, value, {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-    });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
-  }
-
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
   }
 }

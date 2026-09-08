@@ -10,7 +10,7 @@ import { LessonBeat, lessonBeatsFor, lessonFor, partsOf } from "../spells/lesson
 import { type Chip, PagedPanel } from "./PagedPanel";
 import type { PanelRect } from "./ParchmentPanel";
 import { UiAsset, type UiIndex } from "./assets";
-import { DONE_HEX, INK, INK_HEX } from "./parchment";
+import { ACTIVE_HEX, DONE_HEX, INK, INK_HEX, TYPE } from "./parchment";
 
 /**
  * What the teacher shows you: the addition spell, in four pictures.
@@ -35,9 +35,7 @@ import { DONE_HEX, INK, INK_HEX } from "./parchment";
  * real problem, so what she teaches cannot drift from what the spell sets.
  */
 
-const RUNE_HEX = 0xc8901c;
-
-const SMALL_SIZE = 12;
+const SMALL_SIZE = TYPE.small;
 const CHIP_W = 74;
 const CHIP_H = 34;
 const ARC_HEIGHTS = [22, 34, 46];
@@ -194,12 +192,12 @@ export class LessonPanel extends PagedPanel<LessonBeat> {
         stopX(i + 1),
         lineY,
         ARC_HEIGHTS[i] as number,
-        last ? DONE_HEX : RUNE_HEX,
+        last ? DONE_HEX : ACTIVE_HEX,
       );
     }
     for (let i = 0; i < places; i++) {
       const last = answering && i === places - 1;
-      this.arcHead(stopX(i + 1), lineY, last ? DONE_HEX : RUNE_HEX);
+      this.arcHead(stopX(i + 1), lineY, last ? DONE_HEX : ACTIVE_HEX);
     }
 
     this.startLabel

@@ -5,7 +5,6 @@ import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_SETTINGS,
   LANGUAGES,
-  LANGUAGE_NAMES,
   Language,
   SETTINGS_KEY,
   type Settings,

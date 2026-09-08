@@ -19,7 +19,6 @@ import {
   marksAcross,
   marksOnLegs,
   portalHelp,
-  portalHint,
   readingOf,
   stonesAlong,
   submitPortal,
@@ -29,18 +28,19 @@ import type { AnchorPlacements } from "../world/anchors";
 import type { WorldGrid } from "../world/grid";
 import { minimapPoint, minimapSize } from "../world/minimap";
 import type { GridPoint } from "../world/topdown";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type CloseChip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
 import {
   DONE_HEX,
   DONE_INK,
-  FACE,
   INK,
   INK_DIM,
   INK_HEX,
   PAPER_HEX,
   PAPER_PALE_HEX,
   RULE_HEX,
+  TYPE,
   WRONG_HEX,
   WRONG_INK,
 } from "./parchment";
@@ -105,14 +105,13 @@ const PANEL_TAIL = 320;
  */
 const PANEL_TAIL_CHOOSING = 150;
 
-const MARK_HEX = 0xa8321e;
 const DIM_MARK_HEX = 0x9a8a72;
 const HERE_HEX = 0xffffff;
 const PATH_HEX = 0x2f6f9e;
 
 const TITLE_SIZE = 18;
-const LABEL_SIZE = 11;
-const ASK_SIZE = 13;
+const LABEL_SIZE = TYPE.tiny;
+const ASK_SIZE = TYPE.body;
 const BOX_SIZE = 20;
 
 const MARK_SIZE = 7;
@@ -179,11 +178,6 @@ const KEY_ROWS = 3;
 const KEY_MAX = 44;
 const KEY_MIN = 26;
 
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
-
 interface Key {
   readonly label: string;
   readonly box: Phaser.GameObjects.Rectangle;
@@ -201,9 +195,7 @@ interface Sheet {
   readonly at: (col: number, row: number) => { x: number; y: number };
 }
 
-export class PortalPanel {
-  private readonly paper: ParchmentPanel;
-  private readonly parts: PanelPart[] = [];
+export class PortalPanel extends Panel {
   private readonly title: Phaser.GameObjects.Text;
   private readonly ask: Phaser.GameObjects.Text;
   private readonly hint: Phaser.GameObjects.Text;
@@ -216,13 +208,14 @@ export class PortalPanel {
   private readonly keys: Key[] = [];
   private readonly answerBox: Phaser.GameObjects.Rectangle;
   private readonly answerText: Phaser.GameObjects.Text;
-  private readonly closeBox: Phaser.GameObjects.Rectangle;
-  private readonly closeLabel: Phaser.GameObjects.Text;
+  private readonly closeButton: CloseChip;
 
   private open = false;
   private stops: readonly PortalStop[] = [];
   private cast: PortalCast | null = null;
   private rung: PortalRung | null = null;
+  /** The beat on a finished parchment before it goes, so a close can cancel it. */
+  private beat: Phaser.Time.TimerEvent | null = null;
   private at: GridPoint = { col: 0, row: 0 };
   private note = "";
   private markPoints: Record<string, { x: number; y: number }> = {};
@@ -236,10 +229,9 @@ export class PortalPanel {
    */
   private readonly plates: { x: number; y: number; width: number; height: number }[] = [];
   private finish: ((result: CastResult, journey: PortalJourney | null) => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     private words: Phrases,
@@ -248,13 +240,11 @@ export class PortalPanel {
     private readonly anchors: AnchorPlacements,
     register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
     });
 
     this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
@@ -293,31 +283,17 @@ export class PortalPanel {
     this.answerText = this.own(this.text("", BOX_SIZE, INK).setOrigin(0.5));
     this.buildKeypad();
 
-    this.closeBox = this.own(
-      scene.add
-        .rectangle(0, 0, 28, 24, PAPER_PALE_HEX)
-        .setStrokeStyle(2, INK_HEX)
-        .setInteractive({ useHandCursor: true }),
-    );
-    this.closeLabel = this.own(this.text("x", LABEL_SIZE, INK).setOrigin(0.5));
-    this.closeBox.on("pointerdown", () => this.dismiss(false));
+    this.closeButton = this.closeChip(LABEL_SIZE, () => this.dismiss(false));
 
-    for (const part of this.parts) {
-      part
-        .setDepth(depth + 1)
-        .setScrollFactor(0)
-        .setVisible(false);
-      register(part);
-    }
     this.ink.setDepth(depth + 2);
-    for (const label of [...this.labels, ...this.ticks, this.answerText, this.closeLabel]) {
+    for (const label of [...this.labels, ...this.ticks, this.answerText]) {
       label.setDepth(depth + 3);
     }
     for (const hit of this.hits) hit.setDepth(depth + 4);
     for (const key of this.keys) key.text.setDepth(depth + 3);
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.open;
   }
 
@@ -367,16 +343,18 @@ export class PortalPanel {
     this.open = true;
     this.paper.setVisible(true);
     this.render();
-    this.keyHandler = (event: KeyboardEvent) => this.onKey(event);
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    this.watchKeys((event) => this.onKey(event));
   }
 
-  layout(): void {
-    if (this.open) this.render();
-  }
-
-  destroy(): void {
-    this.detachKeys();
+  /** Closes without reporting anything — for a scene shutting down. */
+  override close(): void {
+    this.beat?.remove();
+    this.beat = null;
+    super.close();
+    this.open = false;
+    this.ink.clear();
+    this.finish = null;
+    this.cast = null;
   }
 
   private onKey(event: KeyboardEvent): void {
@@ -431,35 +409,26 @@ export class PortalPanel {
       this.render();
       // A beat on the finished parchment, so the answer is readable as an
       // answer rather than as a flash before the world moves.
-      this.scene.time.delayedCall(650, () => this.dismiss(true));
+      this.beat?.remove();
+      this.beat = this.scene.time.delayedCall(650, () => this.dismiss(true));
       return;
     }
     this.render();
   }
 
   private dismiss(travelled: boolean): void {
-    this.detachKeys();
-    this.open = false;
-    this.paper.setVisible(false);
-    this.ink.clear();
-    for (const part of this.parts) part.setVisible(false);
+    // Read before closing: `close` throws the cast away, and the cast is
+    // what says where she went and whether the answer went in first time.
     const done = this.finish;
     const journey = travelled ? (this.cast?.journey ?? null) : null;
     const result = castResult(this.cast, travelled);
-    this.finish = null;
-    this.cast = null;
+    this.close();
     done?.(result, journey);
-  }
-
-  private detachKeys(): void {
-    if (!this.keyHandler) return;
-    this.scene.input.keyboard?.off("keydown", this.keyHandler);
-    this.keyHandler = null;
   }
 
   // --- drawing -------------------------------------------------------------
 
-  private render(): void {
+  protected render(): void {
     const { width, height } = this.scene.scale;
     // Laid out twice on purpose. How tall this sheet should be depends on
     // how wide it came out, and how wide it came out is the panel's own
@@ -476,10 +445,7 @@ export class PortalPanel {
       .setText(this.words.portalTitle)
       .setPosition(rect.centreX, rect.top + PAD)
       .setVisible(true);
-    this.closeBox
-      .setPosition(rect.left + rect.width - PAD - 14, rect.top + PAD + 10)
-      .setVisible(true);
-    this.closeLabel.setPosition(this.closeBox.x, this.closeBox.y).setVisible(true);
+    this.closeButton.place(rect);
 
     this.ask
       .setText(this.question())
@@ -501,7 +467,7 @@ export class PortalPanel {
       ? rect.top + rect.height - PAD - 20
       : (keypad?.top ?? rect.top + rect.height - PAD) - (this.cast ? 62 : 18);
     const mapRoom = wide ? rect.width * 0.5 : rect.width;
-    const sheet = this.drawSheet(rect, mapCentre, mapRoom, mapTop, mapBottom);
+    const sheet = this.drawSheet(mapCentre, mapRoom, mapTop, mapBottom);
     this.drawPlaces(sheet);
     if (this.cast) {
       this.drawRulers(sheet, this.cast.journey);
@@ -527,13 +493,7 @@ export class PortalPanel {
     return this.words.portalAskAdd;
   }
 
-  private drawSheet(
-    rect: { left: number; top: number; width: number; height: number; centreX: number },
-    centreX: number,
-    available: number,
-    top: number,
-    bottom: number,
-  ): Sheet {
+  private drawSheet(centreX: number, available: number, top: number, bottom: number): Sheet {
     // The rulers eat into the paper on two edges, so the map itself is
     // smaller than the space it sits in whenever they are drawn.
     const band = this.cast ? RULER_BAND : 0;
@@ -600,7 +560,7 @@ export class PortalPanel {
       const point = journey
         ? this.markPoint(sheet, journey.league, journey.toMark.col, journey.toMark.row)
         : sheet.at(stop.landing.col, stop.landing.row);
-      const colour = stop.reached ? MARK_HEX : DIM_MARK_HEX;
+      const colour = stop.reached ? WRONG_HEX : DIM_MARK_HEX;
       this.ink.fillStyle(colour, 1);
       this.ink.fillRect(point.x - MARK_SIZE / 2, point.y - MARK_SIZE / 2, MARK_SIZE, MARK_SIZE);
       if (!stop.reached) {
@@ -956,19 +916,6 @@ export class PortalPanel {
       key.text.setPosition(x, y);
     }
     return { top };
-  }
-
-  private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, value, {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-    });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
   }
 }
 

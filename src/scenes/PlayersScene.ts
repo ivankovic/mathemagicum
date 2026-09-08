@@ -52,7 +52,6 @@ import {
   tileGrid,
 } from "../ui/playersLayout";
 import {
-  ALL_CHARACTERS,
   DEFAULT_FACING,
   IDLE,
   characterAnimKey,

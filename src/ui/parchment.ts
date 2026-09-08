@@ -74,7 +74,12 @@ export const INK_DIM = "#8a6a48";
 /** And ruled lines, which are that colour drawn rather than written. */
 export const RULE_HEX = 0x8a6a48;
 
-/** A wrong answer, and a finished one. Never a scolding; see the panels. */
+/**
+ * A wrong answer, and a finished one. Never a scolding; see the panels.
+ *
+ * The red is also the mark on a map and the crow in a lesson: the one
+ * colour on a sheet that says *look here*, whatever it is pointing at.
+ */
 export const WRONG_INK = "#a8321e";
 export const WRONG_HEX = 0xa8321e;
 export const DONE_INK = "#3d6b2a";
@@ -84,5 +89,36 @@ export const DONE_HEX = 0x3d6b2a;
 export const PAPER_PALE_HEX = 0xf6e8c4;
 export const PAPER_HEX = 0xdec694;
 
-/** The gold a box waiting for an answer is outlined in. */
+/**
+ * The gold anything in play is marked in: the box waiting for an answer,
+ * the page you are on, the choice that is chosen, the axis of a symmetry,
+ * the sweep of a clock's hand — and, the same pigment, the brass of the
+ * sandglass and the bar of the loading card.
+ *
+ * It was written out under eight names before it was one: `HERE`, `SWEEP`,
+ * `CHOSEN`, `AXIS`, `RUNE`, `BRASS`, `BAR_FILL` — each right about what it
+ * was for and none of them saying it was the same gold as the others.
+ */
 export const ACTIVE_HEX = 0xc8901c;
+
+/**
+ * The sizes writing on parchment comes in.
+ *
+ * Five, from what the sheets were already using: every panel had declared
+ * its own `TITLE_SIZE` and `BODY_SIZE`, and they agreed — seventeen and
+ * thirteen, in every file — without anything saying they had to. Now they
+ * have to. A sheet still names its own roles (`HINT_SIZE`, `ROW_SIZE`) and
+ * says which of these it means, so what changes together changes here.
+ */
+export const TYPE = {
+  /** The heading of a sheet. */
+  title: 17,
+  /** The heading of a spell's parchment: one short line over a keypad. */
+  spellTitle: 20,
+  /** Prose, the words on buttons, and the digits on a keypad. */
+  body: 13,
+  /** Captions, hints, and the heading over a row of choices. */
+  small: 12,
+  /** A place name on a map, a line of copyright. */
+  tiny: 11,
+} as const;

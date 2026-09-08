@@ -84,7 +84,7 @@ describe("coins on the counter", () => {
       const sameRow = before.every((spot, i) => spot.y === (after[i] as Spot).y);
       // A new row may lift the whole tray, which is honest; what must not
       // happen is coins changing their order or their column.
-      const sameOrder = before.every((spot, i) => {
+      const sameOrder = before.every((_, i) => {
         const now = after[i] as Spot;
         return i === 0 || now.x > (after[i - 1] as Spot).x || now.y > (after[i - 1] as Spot).y;
       });

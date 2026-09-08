@@ -49,22 +49,6 @@ const WITH_TIMBER = "&materials=20&hour=12&freezeNpcs";
 /** What the recipe asks for, read from the recipe rather than written down. */
 const COST = new Map(recipeFor(MachineType.Sorter));
 
-/** What is standing on a square, by the world's own name for it. */
-function objectOn(game: Game, col: number, row: number): Promise<string | null> {
-  return game.tab.evaluate(
-    ([c, r]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
-      if (!handle) throw new Error("the game has not put its handle out");
-      const session = handle.session as {
-        grid: { getObjectAt: (col: number, row: number) => { type: string } | null };
-      };
-      return session.grid.getObjectAt(c as number, r as number)?.type ?? null;
-    },
-    [col, row] as const,
-  );
-}
-
 /**
  * Three empty squares in a row, near enough to put machines on.
  *
@@ -81,25 +65,10 @@ async function threeInARow(game: Game): Promise<{ col: number; row: number }[]> 
       { col: here.col + 1, row },
     ].filter((at) => at.col !== here.col || at.row !== here.row);
     if (cells.length < 3) continue;
-    const free = await Promise.all(cells.map((at) => objectOn(game, at.col, at.row)));
+    const free = await Promise.all(cells.map((at) => game.objectOn(at.col, at.row)));
     if (free.every((standing) => standing === null)) return cells;
   }
   throw new Error("there is no clear row of three squares beside her");
-}
-
-/** An empty square next to her, to put things down on. */
-async function squareBeside(game: Game): Promise<{ col: number; row: number }> {
-  const here = await game.where();
-  for (const step of [
-    { col: 1, row: 0 },
-    { col: -1, row: 0 },
-    { col: 0, row: 1 },
-    { col: 0, row: -1 },
-  ]) {
-    const at = { col: here.col + step.col, row: here.row + step.row };
-    if ((await objectOn(game, at.col, at.row)) === null) return at;
-  }
-  throw new Error("she is boxed in on all four sides");
 }
 
 describe("building a machine", () => {
@@ -134,15 +103,15 @@ describe("building a machine", () => {
         // Lit and waiting for a square, exactly as a bought fence is.
         expect(await game.seam<string | null>("armed")).toContain(FixtureType.Sorter);
 
-        const at = await squareBeside(game);
+        const at = await game.squareBeside();
         await game.tapCell(at.col, at.row);
         await game.settle(500);
-        expect(await objectOn(game, at.col, at.row)).toBe(FixtureType.Sorter);
+        expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Sorter);
         expect(await game.held(FixtureType.Sorter)).toBe(0);
 
         await game.reload(WITH_TIMBER);
         await game.settle(600);
-        expect(await objectOn(game, at.col, at.row)).toBe(FixtureType.Sorter);
+        expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Sorter);
       });
     },
     5 * MINUTES,
@@ -207,7 +176,7 @@ describe("building a machine", () => {
           await game.tapCell(at.col, at.row);
           await game.settle(400);
         }
-        const standing = await Promise.all(row.map((at) => objectOn(game, at.col, at.row)));
+        const standing = await Promise.all(row.map((at) => game.objectOn(at.col, at.row)));
         expect(standing).toEqual([FixtureType.Sorter, FixtureType.Sorter, FixtureType.Sorter]);
         expect(await game.held(FixtureType.Sorter)).toBe(0);
 
@@ -229,7 +198,7 @@ describe("building a machine", () => {
 
         // Every square bare, and all three machines back in the basket.
         expect({
-          standing: await Promise.all(row.map((at) => objectOn(game, at.col, at.row))),
+          standing: await Promise.all(row.map((at) => game.objectOn(at.col, at.row))),
           held: await game.held(FixtureType.Sorter),
         }).toEqual({ standing: [null, null, null], held: 3 });
       });

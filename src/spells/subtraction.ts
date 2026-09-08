@@ -1,9 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { type Rng, randInt } from "../world/rng";
-import { type NumberLine, PLACES } from "./addition";
+import type { Rng } from "../world/rng";
+import type { NumberLine } from "./addition";
 import { HARDEST_RUNG, type Rung, rungAt } from "./difficulty";
+import {
+  type PlaceRule,
+  ceilingFor,
+  countWithin,
+  digitsOf,
+  drawPair,
+  nthWithin,
+  pairTable,
+  widthOf,
+} from "./numberLine";
 
 /**
  * The subtraction spell: the same number line, walked the other way.
@@ -32,79 +42,6 @@ export interface SubtractionProblem extends NumberLine {
 }
 
 /**
- * What each amount may be taken from, counted rather than listed.
- *
- * The mirror of addition's `Pairs`, and it lost its list of starts for the
- * same reason: the list is a table of every problem the spell can set, which
- * at three places nobody noticed and at six places cannot be built. The
- * weight is a count and the k-th start is arithmetic. See `startsFor`.
- */
-interface Pairs {
-  readonly taken: readonly number[];
-  readonly weights: readonly number[];
-  /**
-   * The weights added up as we go, for finding one without walking them.
-   *
-   * A running total rather than a scan. The scan was fine while a rung held
-   * a few hundred addends and became half a million of them at six places —
-   * every problem set walked the lot, in the tests and on a tablet.
-   */
-  readonly running: Float64Array;
-  readonly total: number;
-}
-
-/**
- * Which entry a ticket falls in, by halving rather than by walking.
- *
- * `running[i]` is the weight of everything up to and including `i`, so the
- * answer is the first entry whose running total reaches the ticket.
- */
-function ticketAt(running: Float64Array, ticket: number): number {
-  let low = 0;
-  let high = running.length - 1;
-  while (low < high) {
-    const middle = (low + high) >> 1;
-    if ((running[middle] as number) < ticket) low = middle + 1;
-    else high = middle;
-  }
-  return low;
-}
-
-const PAIRS = new Map<string, Pairs>();
-
-function digitsOf(value: number, places: number): number[] {
-  const out: number[] = [];
-  for (let at = 0; at < places; at++) out.push(Math.floor(value / 10 ** at) % 10);
-  return out;
-}
-
-/**
- * How high the number being taken *from* may go.
- *
- * The mirror of addition's `sumCeiling`, and it exists for the same one
- * case. At a single place, "crossing" has nothing to cross: 7 − 5 borrows
- * from nowhere, so the rung would be identical to the one below it. What
- * bridging ten actually looks like coming down is a start above ten — 12 − 5
- * — which is exactly the reflection of addition's 7 + 5 = 12.
- */
-function startCeiling(places: number, crossing: boolean): number {
-  const most = 10 ** places - 1;
-  return crossing && places === 1 ? most * 2 : most;
-}
-
-/**
- * Whether every jump lands without borrowing.
- *
- * Digit by digit: you can take this place's digit away without reaching into
- * the one above it. Far more restrictive than addition's rule, which only
- * asks that two digits not overflow — so the pair counts are checked in the
- * tests rather than assumed.
- */
-function noJumpBorrows(startDigits: readonly number[], takenDigits: readonly number[]): boolean {
-  return takenDigits.every((digit, at) => digit <= (startDigits[at] ?? 0));
-}
-
-/**
  * How many starts an amount may be taken from, and what the k-th of them is.
  *
  * Two shapes, one per rule, and both closed form — the mirror of addition's,
@@ -120,24 +57,39 @@ function noJumpBorrows(startDigits: readonly number[], takenDigits: readonly num
  * product. One start is then struck out: the one whose every digit equals
  * the amount's, which is the amount itself, and which would land on nought.
  * It is the *smallest* of them, so striking it out is a shift of one, and
- * the k-th start is the (k+1)-th mixed-radix number.
+ * the k-th start is the (k+1)-th mixed-radix number. The reading is
+ * `countWithin` and `nthWithin`; the rule they read is `noBorrow`.
  *
  * The top place needs no exception here. Its digit is at least the amount's,
  * which is never nought, so a number of the right width comes out for free.
  */
+function noBorrow(places: number, takenDigits: readonly number[]): PlaceRule {
+  const first: number[] = [];
+  const span: number[] = [];
+  for (let at = 0; at < places; at++) {
+    const digit = takenDigits[at] ?? 0;
+    first.push(digit);
+    span.push(10 - digit);
+  }
+  return { first, span };
+}
+
+/** The smallest start a borrow may run from: this wide, and above the amount. */
+function lowestFrom(places: number, amount: number): number {
+  return Math.max(widthOf(places).low, amount + 1);
+}
+
 function startsFor(
   places: number,
   crossing: boolean,
   amount: number,
   takenDigits: readonly number[],
 ): number {
-  const low = places === 1 ? 1 : 10 ** (places - 1);
-  const ceiling = startCeiling(places, crossing);
-  if (crossing) return Math.max(0, ceiling - Math.max(low, amount + 1) + 1);
-  let count = 1;
-  for (let at = 0; at < places; at++) count *= 10 - (takenDigits[at] ?? 0);
+  if (crossing) {
+    return Math.max(0, ceilingFor(places, crossing) - lowestFrom(places, amount) + 1);
+  }
   // Less the amount itself, which is the one start that leaves nothing.
-  return Math.max(0, count - 1);
+  return Math.max(0, countWithin(noBorrow(places, takenDigits)) - 1);
 }
 
 /** The k-th start, counting from the smallest. See `startsFor`. */
@@ -148,52 +100,13 @@ function nthStart(
   takenDigits: readonly number[],
   k: number,
 ): number {
-  const low = places === 1 ? 1 : 10 ** (places - 1);
-  if (crossing) return Math.max(low, amount + 1) + k;
+  if (crossing) return lowestFrom(places, amount) + k;
   // Shifted past the amount itself, which is the smallest and is struck out.
-  let rest = k + 1;
-  let start = 0;
-  for (let at = places - 1; at >= 0; at--) {
-    let below = 1;
-    for (let under = at - 1; under >= 0; under--) below *= 10 - (takenDigits[under] ?? 0);
-    const step = Math.floor(rest / below);
-    rest -= step * below;
-    start += ((takenDigits[at] ?? 0) + step) * 10 ** at;
-  }
-  return start;
+  return nthWithin(noBorrow(places, takenDigits), k + 1);
 }
 
-function pairsFor(places: number, crossing: boolean): Pairs {
-  const key = `${places}:${crossing}`;
-  const cached = PAIRS.get(key);
-  if (cached) return cached;
-
-  const low = places === 1 ? 1 : 10 ** (places - 1);
-  const high = 10 ** places - 1;
-  const taken: number[] = [];
-  const weights: number[] = [];
-
-  for (let amount = low; amount <= high; amount++) {
-    // No zero digit in what is taken, for the reason the addend has none: a
-    // `−0` jump lands where it started, and an arrow pointing back at the
-    // number it came from reads as a piece missing rather than as an easy one.
-    const takenDigits = digitsOf(amount, places);
-    if (takenDigits.some((digit) => digit === 0)) continue;
-    const count = startsFor(places, crossing, amount, takenDigits);
-    if (count === 0) continue;
-    taken.push(amount);
-    weights.push(count);
-  }
-
-  const pairs: Pairs = {
-    taken,
-    weights,
-    running: runningTotals(weights),
-    total: weights.reduce((sum, weight) => sum + weight, 0),
-  };
-  PAIRS.set(key, pairs);
-  return pairs;
-}
+/** Every pair this spell may set, per rung. See `pairTable`. */
+const pairsFor = pairTable(startsFor);
 
 /** `nthStart`, for the test that checks the counting against counting. */
 export function nthStartForTest(
@@ -223,19 +136,8 @@ export function makeSubtractionProblem(
   rng: Rng,
   rung: Rung = rungAt(HARDEST_RUNG),
 ): SubtractionProblem {
-  const pairs = pairsFor(rung.places, rung.crossing);
-  const index = ticketAt(pairs.running, randInt(rng, 1, pairs.total));
-  const amount = pairs.taken[index] as number;
-  // Uniform over the starts this amount leaves, without ever building the
-  // list of them: the k-th is arithmetic. See `nthStart`.
-  const count = pairs.weights[index] as number;
-  const start = nthStart(
-    rung.places,
-    rung.crossing,
-    amount,
-    digitsOf(amount, rung.places),
-    randInt(rng, 0, count - 1),
-  );
+  const { amount, digits, k } = drawPair(rng, pairsFor(rung.places, rung.crossing), rung.places);
+  const start = nthStart(rung.places, rung.crossing, amount, digits, k);
   return subtractionFor(start, amount, rung.places);
 }
 
@@ -261,15 +163,4 @@ export function subtractionFor(
     stops.push(at);
   }
   return { start, taken, jumps, stops };
-}
-
-/** The weights added up as we go. See `ticketAt`. */
-function runningTotals(weights: readonly number[]): Float64Array {
-  const running = new Float64Array(weights.length);
-  let sum = 0;
-  for (const [at, weight] of weights.entries()) {
-    sum += weight;
-    running[at] = sum;
-  }
-  return running;
 }

@@ -15,7 +15,7 @@ import {
 import { PagedPanel } from "./PagedPanel";
 import type { PanelRect } from "./ParchmentPanel";
 import { UiAsset, type UiIndex } from "./assets";
-import { INK, RULE_HEX } from "./parchment";
+import { INK, RULE_HEX, TYPE, WRONG_HEX } from "./parchment";
 
 /**
  * What the fisherman shows you: the sharing spell, in pictures.
@@ -33,9 +33,8 @@ import { INK, RULE_HEX } from "./parchment";
 
 const CROP_HEX = 0x5f8f3a;
 const CROP_DEALT_HEX = 0x2f5c1c;
-const OVER_HEX = 0xa8321e;
 
-const SMALL_SIZE = 12;
+const SMALL_SIZE = TYPE.small;
 const CROP = 11;
 const CROP_GAP = 4;
 /** How wide a heap is laid out before it starts a second row. */
@@ -128,7 +127,7 @@ export class ShareLessonPanel extends PagedPanel<ShareBeat> {
    * because *that* is the page's whole idea and it is already on the sheet.
    */
   private drawHeap(rect: PanelRect, top: number, bottom: number, beat: ShareBeat): void {
-    const { total, parts, each, left } = this.example();
+    const { total, parts, each } = this.example();
     const dealt = beat === Beat.Heap ? 0 : parts;
     const inHeap = total - dealt * each;
     const step = CROP + CROP_GAP;
@@ -144,7 +143,7 @@ export class ShareLessonPanel extends PagedPanel<ShareBeat> {
     for (let n = 0; n < inHeap; n++) {
       // The ones that would not go are the point of the last page, so they
       // are the one thing on it drawn in another colour.
-      this.ink.fillStyle(beat === Beat.Over ? OVER_HEX : CROP_HEX, 1);
+      this.ink.fillStyle(beat === Beat.Over ? WRONG_HEX : CROP_HEX, 1);
       this.ink.fillCircle(
         heapLeft + (n % wide) * step + step / 2,
         heapTop + Math.floor(n / wide) * step + step / 2,

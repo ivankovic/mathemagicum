@@ -266,13 +266,13 @@ describe("how many the picker will offer", () => {
   // shopkeeper rather than by the child, so ten was a rule with no reason
   // anybody could see — a basket of forty carrots sold four at a time.
   test("but a whole basket can be sold at once", () => {
-    expect(mostSellable(PlantType.Carrot, 40)).toBe(40);
-    expect(mostSellable(PlantType.Carrot, 40)).toBeGreaterThan(MAX_TRADE);
+    expect(mostSellable(40)).toBe(40);
+    expect(mostSellable(40)).toBeGreaterThan(MAX_TRADE);
   });
 
   test("selling is capped by the basket", () => {
-    expect(mostSellable(PlantType.Carrot, 3)).toBeLessThanOrEqual(3);
-    expect(mostSellable(PlantType.Carrot, 0)).toBe(1);
+    expect(mostSellable(3)).toBeLessThanOrEqual(3);
+    expect(mostSellable(0)).toBe(1);
   });
 
   /**
@@ -283,7 +283,7 @@ describe("how many the picker will offer", () => {
    */
   test("and by nothing else at all", () => {
     for (const held of [1, 2, 5, 10, 99, 400]) {
-      const most = mostSellable(PlantType.Carrot, held);
+      const most = mostSellable(held);
       expect({ held, most }).toEqual({ held, most: Math.max(1, held) });
       // However big the sale, she lays it out in at most one pile per kind
       // of coin — which is why there is no ceiling left to hit. Counting

@@ -6,6 +6,7 @@ import { DEFAULT_AVATAR } from "../avatar/style";
 import { Language, type SettingsStore } from "../settings";
 import { DEFAULT_BAND } from "../spells/difficulty";
 import { Spell } from "../spells/spellbook";
+import { HOME_PLACE } from "../world/places";
 import {
   GAMES_KEY,
   MAX_GAMES,
@@ -193,6 +194,93 @@ describe("a child in a game", () => {
     // Their band is theirs and comes with them: nothing about a new village
     // makes a six-year-old ready for three-digit sums.
     expect(there.band).toBe(played.band);
+  });
+
+  /**
+   * And what the browser had under their row is read, not trusted.
+   *
+   * The players index has always been read field by field; the game body
+   * was cast straight to `Progress`, so a rung of `"lots"` walked into a
+   * running game and a spell nobody has heard of was one a child "knew".
+   */
+  test("and a mangled row is read against their band rather than believed", () => {
+    const store = memory();
+    const game = newGame(store, 0.11, CLOCK);
+    const player = splitOff(mia());
+    store.setItem(
+      gameKey(game.id),
+      JSON.stringify({
+        ...game,
+        progress: {
+          [player.id]: { rung: "lots", learned: "portal", reached: 5, introSeen: "yes" },
+          other: 4,
+        },
+      }),
+    );
+
+    const back = loadGame(store, game.id);
+    if (!back) throw new Error("the game did not come back");
+    expect(Object.keys(back.progress)).toEqual([player.id]);
+    const there = profileIn(back, player);
+    expect(Number.isInteger(there.rung)).toBe(true);
+    expect(there.learned).toEqual([]);
+    expect(there.reached).toEqual([HOME_PLACE]);
+    expect(there.introSeen).toBe(false);
+  });
+
+  /**
+   * The one path a returning child actually takes to the postman's letter.
+   *
+   * `newsSeen` is an index into a list that grows (see `ui/news.ts`), and
+   * every save written before a beat was appended is missing the count
+   * entirely — that is not a corrupt row, it is the normal row, and reading
+   * it as nought is the whole of how anybody is ever told anything. A child
+   * who has had the welcome and has never had a letter is owed every letter
+   * there is, and this is the field that says so.
+   *
+   * The browser scenarios reach the letter through `?news`, which is a seam
+   * and cannot prove this: they force it rather than being owed it.
+   */
+  test("a save from before the letters existed is owed all of them", () => {
+    const store = memory();
+    const game = newGame(store, 0.11, CLOCK);
+    const player = splitOff(mia());
+    store.setItem(
+      gameKey(game.id),
+      JSON.stringify({
+        ...game,
+        // A child part-way through the game as it stood: welcomed, and with
+        // no idea there was ever going to be a letter.
+        progress: { [player.id]: { introSeen: true } },
+      }),
+    );
+
+    const back = loadGame(store, game.id);
+    if (!back) throw new Error("the game did not come back");
+    const there = profileIn(back, player);
+    expect(there.introSeen).toBe(true);
+    expect(there.newsSeen).toBe(0);
+  });
+
+  // And a count that is not a number does not become one by being written
+  // down: `newsSeen` gates a panel that opens by itself, and `NaN < length`
+  // is false, so a mangled row would quietly mean "tell them nothing ever
+  // again" rather than "tell them everything".
+  test("and a mangled count of letters reads as none read", () => {
+    const store = memory();
+    const game = newGame(store, 0.11, CLOCK);
+    const player = splitOff(mia());
+    store.setItem(
+      gameKey(game.id),
+      JSON.stringify({
+        ...game,
+        progress: { [player.id]: { introSeen: true, newsSeen: "lots" } },
+      }),
+    );
+
+    const back = loadGame(store, game.id);
+    if (!back) throw new Error("the game did not come back");
+    expect(profileIn(back, player).newsSeen).toBe(0);
   });
 });
 

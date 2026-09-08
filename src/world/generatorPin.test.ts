@@ -87,9 +87,12 @@ describe("what a seed grows", () => {
    * in that order and never one without the other.
    */
   const PINNED: Readonly<Record<number, number>> = {
+    // Unchanged at five: a hundred-and-fifty-square world's city has no block
+    // the garage can stand in off the rampart, so seed one builds without
+    // one — which is the small-world rule the citadel already follows.
     1: 1810746765,
-    12345: 244848929,
-    99991: 4208917971,
+    12345: 552879380,
+    99991: 2522563725,
   };
 
   for (const seed of SEEDS) {

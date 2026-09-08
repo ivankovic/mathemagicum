@@ -74,6 +74,7 @@ describe("who is named by hand", () => {
       "clockmaker",
       "fisher",
       "geometer",
+      "mechanic",
       "postal-worker",
       "shopkeeper",
       "teacher",

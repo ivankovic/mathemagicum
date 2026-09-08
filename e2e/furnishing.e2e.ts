@@ -5,8 +5,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
 import { DecorType } from "../src/world/decor";
 import { Turn } from "../src/world/facing";
-import { PatchAction } from "../src/world/selection";
-import { type Game, patchButton, play, runeButton, shutDown, takeFromCrate } from "./harness";
+import { type Game, play, runeButton, shutDown, takeFromCrate } from "./harness";
 
 /**
  * Furnishing the room, and finding it all still there tomorrow.
@@ -61,27 +60,6 @@ interface Piece {
 }
 
 /**
- * In through her own front door.
- *
- * Put down on the doorstep rather than walked there from the spawn: a child
- * starts in the middle of their own garden beds, eight rows off, and walking
- * that on a held arrow key is eight seconds of nothing being tested that
- * gets stuck the first time a fence moves.
- */
-async function goHome(game: Game): Promise<House> {
-  const door = (await game.seam<Record<string, { col: number; row: number }>>("doors"))[
-    "player-house"
-  ];
-  if (!door) throw new Error("the village has no house for the player");
-  await game.standAt(door.col, door.row + 2, "up");
-  await game.walk("ArrowUp", 900);
-  await game.stopped();
-  const house = await game.seam<House | null>("house");
-  if (!house) throw new Error("walking through the front door did not go indoors");
-  return house;
-}
-
-/**
  * Plan coordinates to the grid ones a tap is aimed in.
  *
  * The two are the same room described from two places, and every square
@@ -95,6 +73,19 @@ function grid(house: House, col: number, row: number): { col: number; row: numbe
 async function tapPlan(game: Game, house: House, col: number, row: number): Promise<void> {
   const at = grid(house, col, row);
   await game.tapCell(at.col, at.row);
+}
+
+/**
+ * Pick a thing up off the floor: tap it, then choose the basket.
+ *
+ * A tap on a thing asks what to do with it now — use it, or take it — and
+ * the basket is the second answer. See `using.e2e.ts` for the first, and for
+ * the ring itself; here it is only the way furniture comes up.
+ */
+async function takeUp(game: Game, house: House, col: number, row: number): Promise<void> {
+  await tapPlan(game, house, col, row);
+  await game.settle(250);
+  expect(await game.tap("wheel.take")).toBe(true);
 }
 
 /*
@@ -112,12 +103,12 @@ describe("furnishing it", () => {
     "a chair is picked up, carried, and put down somewhere else",
     async () => {
       await play({ seams: AT_HOME }, async (game) => {
-        const house = await goHome(game);
+        const house = await game.goHome();
         const chair = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "chair");
         if (!chair) throw new Error("the room she starts in has no chair");
         expect(await game.held("chair~0")).toBe(0);
 
-        await tapPlan(game, house, chair.col, chair.row);
+        await takeUp(game, house, chair.col, chair.row);
         await game.settle(600);
         expect(await game.held("chair~0")).toBe(1);
         expect((await game.seam<Piece[]>("decor")).some((one) => one.piece === "chair")).toBe(
@@ -149,7 +140,7 @@ describe("furnishing it", () => {
         // left of her at all, which is how it was reported.
         const rug = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "rug");
         if (!rug) throw new Error("the room she starts in has no rug");
-        await tapPlan(game, house, rug.col, rug.row);
+        await takeUp(game, house, rug.col, rug.row);
         await game.settle(600);
         expect(await game.held("rug~0")).toBe(1);
 
@@ -192,12 +183,12 @@ describe("furnishing it", () => {
     "the oven can be carried across the room, and only one of it exists",
     async () => {
       await play({ seams: AT_HOME }, async (game) => {
-        const house = await goHome(game);
+        const house = await game.goHome();
         const stove = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "stove");
         if (!stove) throw new Error("the room she starts in has no stove");
         expect(await game.held("stove~0")).toBe(0);
 
-        await tapPlan(game, house, stove.col, stove.row);
+        await takeUp(game, house, stove.col, stove.row);
         await game.settle(600);
         expect(await game.held("stove~0")).toBe(1);
         // The floor it stood on is bare. This is the assertion the bug
@@ -233,7 +224,7 @@ describe("furnishing it", () => {
         // repair had merely been moved to the way in rather than gated on
         // how old the save is.
         await game.reload(AT_HOME);
-        await goHome(game);
+        await game.goHome();
         expect((await game.seam<Piece[]>("decor")).filter((one) => one.piece === "stove")).toEqual([
           { piece: "stove", col: 2, row: 3, look: 0, turn: Turn.Toward },
         ]);
@@ -263,10 +254,10 @@ describe("furnishing it", () => {
     "a rug is laid on the square she is standing on, and a chair is not",
     async () => {
       await play({ seams: AT_HOME }, async (game) => {
-        const house = await goHome(game);
+        const house = await game.goHome();
         const rug = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "rug");
         if (!rug) throw new Error("the room she starts in has no rug");
-        await tapPlan(game, house, rug.col, rug.row);
+        await takeUp(game, house, rug.col, rug.row);
         await game.settle(600);
         expect(await game.held("rug~0")).toBe(1);
 
@@ -290,7 +281,7 @@ describe("furnishing it", () => {
         // standing inside, so it is still refused and stays in the basket.
         const chair = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "chair");
         if (!chair) throw new Error("the room she starts in has no chair");
-        await tapPlan(game, house, chair.col, chair.row);
+        await takeUp(game, house, chair.col, chair.row);
         await game.settle(600);
         expect(await game.held("chair~0")).toBe(1);
         await takeFromCrate(game, DecorType.Chair);
@@ -318,7 +309,7 @@ describe("furnishing it", () => {
     "and the floor under it is safe from the minus rune, where it now stands",
     async () => {
       await play({ seams: AT_HOME }, async (game) => {
-        const house = await goHome(game);
+        const house = await game.goHome();
 
         await game.tap("spellbook");
         await game.tap(runeButton(Spell.Clearing));
@@ -336,7 +327,7 @@ describe("furnishing it", () => {
 
         const chair = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "chair");
         if (!chair) throw new Error("no chair");
-        await tapPlan(game, house, chair.col, chair.row);
+        await takeUp(game, house, chair.col, chair.row);
         await game.settle(600);
         const standing = grid(house, 2, 2);
         await game.standAt(standing.col, standing.row, "down");
@@ -375,7 +366,7 @@ describe("coming back tomorrow", () => {
     "the room she built and the chair she moved are both still there",
     async () => {
       await play({ seams: AT_HOME }, async (game) => {
-        const before = await goHome(game);
+        const before = await game.goHome();
 
         await game.tap("spellbook");
         await game.tap(runeButton(Spell.Growth));
@@ -395,7 +386,7 @@ describe("coming back tomorrow", () => {
         const grown = await game.seam<House>("house");
         const chair = (await game.seam<Piece[]>("decor")).find((one) => one.piece === "chair");
         if (!chair) throw new Error("no chair");
-        await tapPlan(game, grown, chair.col, chair.row);
+        await takeUp(game, grown, chair.col, chair.row);
         await game.settle(600);
         // Said out loud, because this scenario went on to check the floor
         // and the reload and never once looked at whether the chair had
@@ -419,7 +410,7 @@ describe("coming back tomorrow", () => {
         expect(furnished.find((one) => one.piece === "chair")).toMatchObject({ col: 2, row: 3 });
 
         await game.reload();
-        const back = await goHome(game);
+        const back = await game.goHome();
 
         expect(back.floor.slice().sort()).toEqual(built);
         expect(await game.seam<Piece[]>("decor")).toEqual(furnished);

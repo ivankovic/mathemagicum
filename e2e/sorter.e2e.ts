@@ -3,7 +3,6 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
-import { CRATE_WIRE } from "../src/world/crate";
 import { FixtureType } from "../src/world/fixtures";
 import { MINUTES_PER_ROUND, SHARES } from "../src/world/machines";
 import { type Game, play, runeButton, shutDown, takeFromCrate } from "./harness";
@@ -30,12 +29,6 @@ afterAll(shutDown);
  */
 const WITH_TIMBER = "&materials=60&hour=12&freezeNpcs&learned=all";
 
-interface Strung {
-  from: string;
-  to: string;
-  moved: number;
-}
-
 interface Machine {
   where: string;
   awake: boolean;
@@ -51,33 +44,6 @@ interface Machine {
 
 const machines = (game: Game) => game.seam<Machine[]>("machines");
 
-/** An empty square next to her, to stand a machine on. */
-async function squareBeside(game: Game): Promise<{ col: number; row: number }> {
-  const here = await game.where();
-  for (const step of [
-    { col: 1, row: 0 },
-    { col: -1, row: 0 },
-    { col: 0, row: 1 },
-    { col: 0, row: -1 },
-  ]) {
-    const at = { col: here.col + step.col, row: here.row + step.row };
-    const on = await game.tab.evaluate(
-      ([c, r]) => {
-        const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-          .__mathemagicum;
-        if (!handle) throw new Error("the game has not put its handle out");
-        const session = handle.session as {
-          grid: { getObjectAt: (col: number, row: number) => unknown };
-        };
-        return session.grid.getObjectAt(c as number, r as number) !== null;
-      },
-      [at.col, at.row] as const,
-    );
-    if (!on) return at;
-  }
-  throw new Error("she is boxed in on all four sides");
-}
-
 /** Build one, put it down beside her, and give back the square it is on. */
 async function aMachineBeside(
   game: Game,
@@ -85,7 +51,7 @@ async function aMachineBeside(
 ): Promise<{ col: number; row: number }> {
   expect(await takeFromCrate(game, machine)).toBe(true);
   await game.settle(400);
-  const at = await squareBeside(game);
+  const at = await game.squareBeside();
   await game.tapCell(at.col, at.row);
   await game.settle(500);
   return at;

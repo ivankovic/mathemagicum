@@ -12,7 +12,6 @@ import type { WorldGrid } from "./grid";
 import { LANDMARK_FOOTPRINT, LANDMARK_OVERHANG, LandmarkType } from "./landmarks";
 import { nearTheRim } from "./terraces";
 import { TerrainType } from "./terrain";
-import type { GridPoint } from "./topdown";
 import { generateWorld } from "./worldGenerator";
 
 // Smaller than the real 500x500 target so a 20-seed sweep stays fast

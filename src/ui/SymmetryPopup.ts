@@ -15,16 +15,18 @@ import {
   symmetryHint,
 } from "../spells/symmetry";
 import type { Rng } from "../world/rng";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type CloseChip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
 import {
+  ACTIVE_HEX,
   DONE_HEX,
   DONE_INK,
   FACE,
   INK,
   INK_DIM,
   INK_HEX,
-  PAPER_HEX,
+  TYPE,
   WRONG_HEX,
   WRONG_INK,
 } from "./parchment";
@@ -61,11 +63,10 @@ const GIVEN_HEX = 0x4f7fae;
 /** And the squares she has put in, told apart from it by colour. */
 const FILLED_HEX = 0x63a95c;
 /** The line, which is the thing the whole puzzle is about. */
-const AXIS_HEX = 0xc8901c;
 
-const TITLE_SIZE = 20;
-const ASK_SIZE = 12;
-const HINT_SIZE = 12;
+const TITLE_SIZE = TYPE.spellTitle;
+const ASK_SIZE = TYPE.small;
+const HINT_SIZE = TYPE.small;
 
 /** Air between two squares, so a run of them is countable. */
 const CELL_GAP = 2;
@@ -73,11 +74,6 @@ const CELL_GAP = 2;
 const WRONG_MS = 450;
 /** A beat on the finished picture before the parchment goes. */
 const DONE_BEAT_MS = 900;
-
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
 
 /** Where the grid is on the screen, so a script can aim at a square. */
 export interface Board {
@@ -89,19 +85,15 @@ export interface Board {
   readonly size: number;
 }
 
-export class SymmetryPopup {
-  private readonly parts: PanelPart[] = [];
-  private readonly paper: ParchmentPanel;
+export class SymmetryPopup extends Panel {
   private readonly ink: Phaser.GameObjects.Graphics;
   private readonly title: Phaser.GameObjects.Text;
   private readonly ask: Phaser.GameObjects.Text;
   private readonly hint: Phaser.GameObjects.Text;
-  private readonly closeRect: Phaser.GameObjects.Rectangle;
-  private readonly closeText: Phaser.GameObjects.Text;
+  private readonly closeButton: CloseChip;
 
   private state: SymmetryCast | null = null;
   private finish: ((result: CastResult) => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
   private downHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
   private upHandler: (() => void) | null = null;
   /**
@@ -120,23 +112,24 @@ export class SymmetryPopup {
    */
   private swallow = false;
   private forget: Phaser.Time.TimerEvent | null = null;
+  /** The beat on a finished parchment before it goes, so a close can cancel it. */
+  private beat: Phaser.Time.TimerEvent | null = null;
 
   private board: Board = { left: 0, top: 0, step: 1, cell: 1, size: 1 };
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     private words: Phrases,
     register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
+      lift: 0,
     });
 
     this.ink = this.own(scene.add.graphics());
@@ -144,22 +137,9 @@ export class SymmetryPopup {
     this.ask = this.own(this.label("", ASK_SIZE, INK_DIM).setOrigin(0.5, 0));
     this.hint = this.own(this.label("", HINT_SIZE, INK_DIM).setOrigin(0.5, 0));
 
-    this.closeRect = this.own(
-      scene.add
-        .rectangle(0, 0, 26, 26, PAPER_HEX)
-        .setStrokeStyle(2, INK_HEX)
-        .setInteractive({ useHandCursor: true }),
-    );
-    this.closeText = this.own(this.label("x", HINT_SIZE, INK).setOrigin(0.5));
-    this.closeRect.on("pointerdown", () => this.dismiss(false));
+    this.closeButton = this.closeChip(HINT_SIZE, () => this.dismiss(false), "key");
 
-    for (const part of this.parts) {
-      part.setDepth(depth).setScrollFactor(0).setVisible(false);
-      register(part);
-    }
     this.ink.setDepth(depth + 1);
-    this.closeRect.setDepth(depth + 2);
-    this.closeText.setDepth(depth + 3);
   }
 
   setPhrases(words: Phrases): void {
@@ -185,7 +165,7 @@ export class SymmetryPopup {
     return this.state ? this.board : null;
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.state !== null;
   }
 
@@ -196,12 +176,7 @@ export class SymmetryPopup {
     this.paper.setVisible(true);
     for (const part of this.parts) part.setVisible(true);
 
-    this.keyHandler = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      this.dismiss(false);
-    };
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    this.escapeCloses(() => this.dismiss(false));
 
     // One handler on the scene rather than a hit area per square: a grid of
     // forty-nine interactive rectangles is forty-nine objects to build,
@@ -220,11 +195,8 @@ export class SymmetryPopup {
   }
 
   /** Closes without reporting anything — for a scene shutting down. */
-  close(): void {
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+  override close(): void {
+    super.close();
     if (this.downHandler) this.scene.input.off("pointerdown", this.downHandler);
     if (this.upHandler) {
       this.scene.input.off("pointerup", this.upHandler);
@@ -234,22 +206,12 @@ export class SymmetryPopup {
     this.upHandler = null;
     this.forget?.remove();
     this.forget = null;
+    this.beat?.remove();
+    this.beat = null;
     this.swallow = false;
     this.state = null;
     this.finish = null;
-    this.paper.setVisible(false);
     this.ink.clear();
-    for (const part of this.parts) part.setVisible(false);
-  }
-
-  layout(): void {
-    if (this.isOpen) this.render();
-  }
-
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
   }
 
   private dismiss(solved: boolean): void {
@@ -287,15 +249,14 @@ export class SymmetryPopup {
     }
     if (!next.done) return;
     // A beat on the finished picture, both halves matching, before it goes.
-    this.scene.time.delayedCall(DONE_BEAT_MS, () => this.dismiss(true));
+    this.beat?.remove();
+    this.beat = this.scene.time.delayedCall(DONE_BEAT_MS, () => this.dismiss(true));
   }
 
   private overClose(pointer: Phaser.Input.Pointer): boolean {
-    const half = this.closeRect.width / 2 + 4;
-    return (
-      Math.abs(pointer.x - this.closeRect.x) <= half &&
-      Math.abs(pointer.y - this.closeRect.y) <= half
-    );
+    const { box } = this.closeButton;
+    const half = box.width / 2 + 4;
+    return Math.abs(pointer.x - box.x) <= half && Math.abs(pointer.y - box.y) <= half;
   }
 
   /** Which square a point is on, or nothing if it is off the grid. */
@@ -309,17 +270,16 @@ export class SymmetryPopup {
 
   // --- drawing -------------------------------------------------------------
 
-  private render(): void {
+  protected render(): void {
     const state = this.state;
     if (!state) return;
     const { width, height } = this.scene.scale;
     const rect = this.paper.layout(width, height);
-    const { left, top } = rect;
+    const { top } = rect;
     const cx = rect.centreX;
     const innerW = rect.width - PAD * 2;
 
-    this.closeRect.setPosition(left + rect.width - PAD - 2, top + PAD + 2);
-    this.closeText.setPosition(this.closeRect.x, this.closeRect.y);
+    this.closeButton.place(rect);
 
     this.title.setText(this.words.mirrorTitle).setPosition(cx, top + PAD);
     this.ask
@@ -401,7 +361,7 @@ export class SymmetryPopup {
     const g = this.ink;
     const { left, top } = this.board;
     const middle = span / 2;
-    g.lineStyle(3, AXIS_HEX, 1);
+    g.lineStyle(3, ACTIVE_HEX, 1);
     if (state.axis === MirrorAxis.Down) {
       g.lineBetween(left + middle, top - 6, left + middle, top + span + 6);
       return;
@@ -445,10 +405,5 @@ export class SymmetryPopup {
       color,
       align: "center",
     });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
   }
 }

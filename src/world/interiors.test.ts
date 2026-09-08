@@ -312,7 +312,10 @@ describe("the fire in a room that has one", () => {
     const animated: string[] = [];
     for (const name of INTERIOR_ROOMS) {
       const sidecar = readJson<InteriorSidecar>(name);
-      if (hearthCell(sidecar)) withFire.push(name);
+      // A hearth, or the garage's bench with the sparks coming off it: the
+      // two pieces of furniture that move, and the only two rooms that do.
+      const sparks = sidecar.furniture.some((piece) => piece.name === "workbench");
+      if (hearthCell(sidecar) || sparks) withFire.push(name);
       if ((sidecar.sheet?.frame_count ?? 1) > 1) animated.push(name);
     }
     expect(withFire.sort()).toEqual(animated.sort());

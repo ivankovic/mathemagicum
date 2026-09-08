@@ -1,9 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Marko Ivankovic
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-
-import { EN } from "../i18n/en";
-import type { Phrases } from "../i18n/phrases";
-import { type Facing, facingFor, stepForFacing } from "./characters";
+import { DEFAULT_FACING, type Facing, facingFor, stepForFacing } from "./characters";
 import { type FixtureType, isPlaceable } from "./fixtures";
 import type { WorldGrid } from "./grid";
 import { Inventory, type ItemType } from "./inventory";
@@ -126,8 +121,6 @@ export interface SessionOptions {
   readonly grid: WorldGrid;
   readonly start: GridPoint;
   readonly facing?: Facing;
-  /** Defaults to English, so a test of the rules need not pick a language. */
-  readonly phrases?: Phrases;
 }
 
 /** How far a thing can be and still be worked: one orthogonal step. */
@@ -237,8 +230,8 @@ export class GameSession {
   /**
    * What a crop fetches for the child playing.
    *
-   * Held here and swappable for the same reason the phrases are: it is a
-   * fact about who is playing rather than about the shop, and the panel that
+   * Held here and swappable because it is a fact about who is playing
+   * rather than about the shop, and the panel that
    * draws the counter should be asking the session rather than being handed
    * a number to keep in step with everything else that quotes one.
    */
@@ -259,7 +252,7 @@ export class GameSession {
   constructor(options: SessionOptions) {
     this.grid = options.grid;
     this.position = { col: options.start.col, row: options.start.row };
-    this.heading = options.facing ?? ("down" as Facing);
+    this.heading = options.facing ?? DEFAULT_FACING;
   }
 
   get col(): number {
@@ -548,7 +541,7 @@ export class GameSession {
     const ahead = this.targetTile();
     const picked = this.pickAt(ahead) ?? this.pickAt(this.tile);
     if (picked) {
-      const held = this.inventory.add(picked.crop.plant, HARVEST_YIELD);
+      this.inventory.add(picked.crop.plant, HARVEST_YIELD);
       return {
         ok: true,
         outcome: Outcome.Picked,
@@ -655,7 +648,7 @@ export class GameSession {
       return { ok: false, outcome: Outcome.TooFar, tile: { col, row } };
     }
     if (!this.grid.removeObjectAt(col, row)) return { ok: false, outcome: Outcome.NothingThere };
-    const held = this.inventory.add(fixture, 1);
+    this.inventory.add(fixture, 1);
     return {
       ok: true,
       outcome: Outcome.PickedUp,

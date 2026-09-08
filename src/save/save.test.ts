@@ -7,12 +7,12 @@ import { describe, expect, test } from "bun:test";
 const CLOCK = new Date(2026, 0, 5, 9, 0, 0, 0).getTime();
 import { DEFAULT_AVATAR } from "../avatar/style";
 import { LANGUAGES, Language, type SettingsStore } from "../settings";
-import { BANDS, DEFAULT_BAND, HARDEST_RUNG, bandAt, bandOn } from "../spells/difficulty";
+import { DEFAULT_BAND, HARDEST_RUNG, bandAt, bandOn } from "../spells/difficulty";
 import { HARDEST_ARRAY_RUNG } from "../spells/multiplication";
-import { Spell, knowsSpell } from "../spells/spellbook";
 import { Facing } from "../world/characters";
+import { FLOWER_TYPES, type FlowerType, flowerObject, flowerParts } from "../world/flowers";
 import { WorldGrid } from "../world/grid";
-import { PlantStage, PlantType } from "../world/plants";
+import { PLANTED_STAGE, PlantStage, PlantType } from "../world/plants";
 import { createRng } from "../world/rng";
 import { GameSession } from "../world/session";
 import { TerrainType } from "../world/terrain";
@@ -25,9 +25,9 @@ import {
   canAddProfile,
   createProfile,
   findProfile,
-  freshStart,
   isUsableName,
   readProfile,
+  readProgress,
   replaceProfile,
   tidyName,
   withoutProfile,
@@ -154,6 +154,7 @@ describe("the list of players", () => {
     lastPlayed,
     house: 0,
     introSeen: false,
+    newsSeen: 0,
     debug: false,
     band: DEFAULT_BAND,
     rung: HARDEST_RUNG,
@@ -163,10 +164,13 @@ describe("the list of players", () => {
     clockRung: 0,
     clockOffset: 0,
     symmetryRung: 0,
+    logicRung: 0,
     found: [],
     brickRung: 0,
     reached: ["village"],
     learned: [],
+    guided: [],
+    jobs: [],
     carried: null,
   });
 
@@ -313,6 +317,18 @@ describe("reading a player back", () => {
     expect(readProfiles(store)).toEqual([mia]);
   });
 
+  // The guides a child has had are a set of names, and a save is a thing
+  // some other build may have written: a name that is not a guide is
+  // dropped, a shape that is not a list is no guides, and a save from before
+  // there were guides reads as none given rather than as a crash.
+  test("the guides a child has had come back, less what is not a guide", () => {
+    expect(
+      readProgress({ guided: ["plant", "grow", "plant", "trebuchet"] }, DEFAULT_BAND).guided,
+    ).toEqual(["plant", "grow"]);
+    expect(readProgress({ guided: "plant" }, DEFAULT_BAND).guided).toEqual([]);
+    expect(readProgress({}, DEFAULT_BAND).guided).toEqual([]);
+  });
+
   // One bad entry must not cost the other children their farms.
   test("a broken entry is dropped and the rest survive", () => {
     const good = createProfile(
@@ -401,7 +417,6 @@ describe("deleting a player", () => {
 describe("a world written down and put back", () => {
   test("crops come back where they were and as grown as they were", () => {
     const grid = world();
-    const session = sessionOn(grid);
     const baseline = worldBaseline(grid);
     grid.plant(4, 4, PlantType.Carrot);
     grid.growCrop(4, 4);
@@ -477,6 +492,61 @@ describe("a world written down and put back", () => {
     fresh.placeObject({ ...fence(1, 1), type: "well" });
     restoreWorld(fresh, saved.world);
     expect(fresh.getObjectAt(1, 1)?.type).toBe("fence");
+  });
+
+  /**
+   * A bed of flowers is a thing a child put down, and it was being thrown
+   * away on the way back in.
+   *
+   * `placed` is read out of a file, so every entry is checked against what a
+   * child could actually have made — and that check asked only whether the
+   * type was a `FixtureType`. A planted flower is named `daisy~2`, because
+   * its colour rides in its type (see `PlantedFlower`, which says in as many
+   * words that this is what makes one survive being saved). No such name is
+   * a fixture, so the snapshot wrote every flower down correctly and the
+   * reader dropped every one of them: a bed planted in the evening was bare
+   * in the morning.
+   *
+   * Both halves are asserted here on purpose. The save was never the broken
+   * half, and a test that only checked what came back could be "fixed" by
+   * writing flowers somewhere new — which would leave every bed already in
+   * somebody's save file lost.
+   */
+  test("a bed of flowers she planted is still there tomorrow", () => {
+    const grid = world();
+    const baseline = worldBaseline(grid);
+    const daisy = flowerObject(FLOWER_TYPES[0] as FlowerType, 2);
+    grid.placeObject({ ...fence(3, 3), type: daisy, blocksMovement: false });
+    grid.placeObject({ ...fence(5, 3), type: daisy, blocksMovement: false });
+
+    const saved = snapshotGame(grid, baseline, 99, CLOCK);
+    expect(saved.world.placed.map((one) => one.type)).toEqual([daisy, daisy]);
+
+    const fresh = world();
+    restoreWorld(fresh, saved.world);
+    expect(fresh.getObjectAt(3, 3)?.type).toBe(daisy);
+    expect(fresh.getObjectAt(5, 3)?.type).toBe(daisy);
+    // And the colour with it, which is the whole reason it is in the name.
+    expect(flowerParts(fresh.getObjectAt(3, 3)?.type ?? "")).toEqual({
+      flower: FLOWER_TYPES[0] as FlowerType,
+      look: 2,
+    });
+  });
+
+  // A type nobody could have made is still dropped: the check was widened
+  // to cover flowers, not taken away.
+  test("but a square naming something nobody could have put there is dropped", () => {
+    const fresh = world();
+    restoreWorld(fresh, {
+      crops: [],
+      cleared: [],
+      placed: [
+        { ...fence(2, 2), type: "wild-daisy" },
+        { ...fence(4, 4), type: "unicorn" },
+      ],
+    } as never);
+    expect(fresh.getObjectAt(2, 2)).toBeNull();
+    expect(fresh.getObjectAt(4, 4)).toBeNull();
   });
 
   test("a generated thing the player took away stays away", () => {
@@ -597,7 +667,6 @@ describe("a world written down and put back", () => {
 
   test("saving twice in a row writes the same thing", () => {
     const grid = world();
-    const session = sessionOn(grid);
     const baseline = worldBaseline(grid);
     grid.plant(2, 2, PlantType.Carrot);
     const once = snapshotGame(grid, baseline, 99, CLOCK);
@@ -658,8 +727,6 @@ describe("a save that no longer fits its world", () => {
 });
 
 describe("what a house somebody built out remembers", () => {
-  const store = memory();
-
   // The plan lives with the *world* rather than with the child, and this is
   // why: two siblings on one tablet own different cottages in one village,
   // and a plan kept on the player would put sister's extension in brother's
@@ -788,6 +855,48 @@ describe("a world the generator no longer builds the same way", () => {
     const put = restoreWorld(fresh, saved);
     expect(put.refused).toEqual([]);
     expect(fresh.getObjectAt(3, 3)?.type).toBe("fence");
+  });
+
+  /**
+   * And one bad entry is one bad entry.
+   *
+   * Every list in a save is walked with `for…of`, and `for…of` over a number
+   * throws — so a save whose crops had been mangled into `5` used to take
+   * the whole load down, rooms and machines and all, for a field that only
+   * ever held four carrots. What does not pass is dropped; the rest is put
+   * back exactly as if it had never been next to it.
+   */
+  test("and a mangled entry is dropped without taking the rest down", () => {
+    const grid = world();
+    const saved = {
+      crops: [5, [1, 1, "nonsense", PLANTED_STAGE], [2, 2, PlantType.Carrot, PLANTED_STAGE]],
+      placed: 3,
+      cleared: [7, [4, 4]],
+    } as unknown as WorldSnapshot;
+    expect(() => restoreWorld(grid, saved)).not.toThrow();
+    expect(grid.getCrop(2, 2)?.plant).toBe(PlantType.Carrot);
+    // And a thing of a kind the game has never placed does not get stood
+    // up as a mystery: only fixtures reach `placed`, so anything else is a
+    // mangled save and is dropped with the rest.
+    const strange = {
+      placed: [{ ...fence(6, 6), type: "dragon" }, fence(7, 7)],
+    } as unknown as WorldSnapshot;
+    restoreWorld(grid, strange);
+    expect(grid.getObjectAt(6, 6)).toBeNull();
+    expect(grid.getObjectAt(7, 7)?.type).toBe("fence");
+    expect(grid.getCrop(1, 1)).toBeNull();
+
+    const session = sessionOn(world());
+    const player = {
+      col: 3,
+      row: 3,
+      facing: "sideways",
+      coins: 2,
+      items: [4, ["carrot"], ["carrot", 2], ["nothing", 1]],
+    } as unknown as Parameters<typeof restorePlayer>[1];
+    expect(() => restorePlayer(session, player)).not.toThrow();
+    expect(session.inventory.count("carrot")).toBe(2);
+    expect(session.facing).toBe(Facing.Down);
   });
 });
 

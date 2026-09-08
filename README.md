@@ -11,9 +11,12 @@ commercial use.
 ## Status
 
 Early. A generated 500×500 world you can walk around, with the Starting
-Village laid out in it, and the first spell in place: crops are planted as
-seedlings and grown by casting **addition** on them, a number-line minigame
-opened from the spellbook. The player bends to plant, and a golden plus
+Village laid out in it, and seven spells in the spellbook — addition,
+subtraction, measuring, multiplication, division, telling the time and
+mirror symmetry (`src/spells/spellbook.ts`), each a minigame with a job in
+the world. The first of them: crops are planted as seedlings and grown by
+casting **addition** on them, a number-line minigame opened from the
+spellbook. The player bends to plant, and a golden plus
 sinks into the tile a spell lands on. Seeds and spells are picked from two icon trays
 in the corner of the screen, and both act on the tile the player faces.
 Ripe crops are picked with a tap and go into a basket, and Mira, the village
@@ -22,9 +25,9 @@ put down — and there are things for the house too, a shelf each for the room,
 the kitchen and the washroom. The counter is the second minigame: buying
 means counting the exact sum out in coins — ducats and mites, which are nobody's real money — and
 selling means checking the payment she counts back, which one time in ten is
-wrong. Planting and harvesting are still direct actions — those spells
-are not speced. The game is playable in English and German — every line of it
-— and the language is the player's to pick.
+wrong. Planting is still a direct action, not a spell. The game is playable
+in English, German and Croatian — every line of it — and the language is the
+player's to pick.
 
 How hard the sums are is a per-child setting, picked from four sample sums
 rather than from ages or difficulty labels: one, two or three places on the
@@ -70,9 +73,9 @@ cd -
 OUT=../asset-generator/output
 cp $OUT/terrain_atlas/terrain*.{png,json} public/assets/terrain/
 cp $OUT/terrain_cliffs/cliffs*.{png,json} public/assets/cliffs/
-cp $OUT/terrain_buildings/{cottage,barn,tower,schoolhouse}{.json,_sheet.png} public/assets/buildings/
+cp $OUT/terrain_buildings/{cottage,barn,tower,schoolhouse,garage}{.json,_sheet.png} public/assets/buildings/
 for c in player player-bun player-trousers player-short player-broad player-crop \
-         teacher postal-worker shopkeeper geometer astronomer clockmaker fisher \
+         teacher postal-worker shopkeeper geometer astronomer clockmaker fisher mechanic \
          villager-0 villager-1 villager-2; do
   cp "$OUT/terrain_characters/$c.json" "$OUT/terrain_characters/${c}_sheet.png" \
      public/assets/characters/
@@ -81,7 +84,7 @@ cp $OUT/terrain_characters/avatar.json public/assets/characters/
 for a in chicken cat rabbit duck; do
   cp "$OUT/terrain_animals/$a.json" "$OUT/terrain_animals/${a}_sheet.png" public/assets/animals/
 done
-for r in cottage barn tower schoolhouse; do
+for r in cottage barn tower schoolhouse garage; do
   cp $OUT/terrain_interiors/${r}{.json,_sheet.png} public/assets/interiors/
 done
 # The cottage is shipped twice: once as a picture, like the other rooms, and
@@ -95,7 +98,8 @@ for p in carrot sunflower cactus tomato pepper wheat; do
   cp $OUT/terrain_plants/${p}{.json,_sheet.png} public/assets/plants/
 done
 for f in well fence fence-side table lamp gate stall bench scarecrow flowerpot \
-         sorter windpump planter \
+         sorter hothouse sieve tally press funnel bell inverter seesaw latch blueprint \
+         windpump planter \
          fence-corner gate-side gate-side-lower glowcap \
          city-wall city-wall-side city-gate city-gate-side \
          tulip daisy bellflower; do
@@ -224,19 +228,76 @@ tile, a tray that opens. Keep these few.
 ### Driving the game from a script
 
 The game offers deliberate seams rather than being monkeypatched from
-outside, all gated on `import.meta.env.DEV` (see `src/scenes/devHooks.ts`):
+outside (see `src/scenes/devHooks.ts`): options read off the URL, and a
+handle at `window.__mathemagicum` to read state back through. **All of it
+ships.** The seams are not gated on `import.meta.env.DEV`; a production
+build reads the same parameters and exposes the same handle.
+
+They used to be gated, on the argument that a `?coins=` surviving into a
+release would be a cheat code, and that was given up deliberately. Nothing
+here is a security boundary and never was: there is no server, no account
+and no money, and a world is a few keys in `localStorage` on one tablet that
+anybody with a console could already write a purse into. What the seams make
+convenient is cheating at arithmetic a child is doing for their own sake —
+and a child who works out that `?learned=all` skips the geometer has shown
+something the game would rather reward than prevent. What shipping them buys
+is the browser suite: every scenario in `e2e/` is written against these
+seams and runs against the *built* site, which is what ships, rather than a
+dev server that degrades under repeated page loads until whole files fail.
+The one real cost is that `session` is the live object and the game
+autosaves, so a poke through it can persist a world the restore path never
+expected.
+
+The URL parameters, as `parseDevOptions` reads them (a flag is on when
+present at all — `?freezeNpcs`, not `?freezeNpcs=true`):
 
 | | |
 |---|---|
-| `?seed=N` | fixes the spell's problems, so a script knows the sums |
+| `?skipTitle` | starts without waiting at the title card **or at the who's-playing screen**. Plays the most recent player and makes one (saved) if the device has none. Every browser script needs this, since the world does not exist until somebody has said go |
+| `?seed=N` | fixes the spell RNG, so a script knows the sums |
+| `?at=col,row` | starts the player on that tile — the world is five hundred across, and walking a script there takes minutes |
+| `?hour=N` | pins the clock (`?hour=22`, `?hour=6.5`); moves the tint, the lights *and* whether the villagers are out |
 | `?freezeNpcs` | holds villagers on their home tiles |
-| `?coins=N` | starts with money, so a shop test need not farm first |
+| `?hungry` | makes every animal ask for food, and keep asking |
 | `?lang=xx` | forces the language for one run, over the browser's and the saved choice |
-| `?intro` | asks the postal worker for the welcome again, without clearing the saved settings — and is the one thing `?freezeNpcs` still lets him move for |
-| `?skipTitle` | starts the game without waiting at the title card **or at the who's-playing screen** — every browser script needs this, since the world does not exist until somebody has said go and picked a player. Plays the most recent player, and makes one (saved, so a reload finds the same world) if the device has none |
-| `?at=col,row` | starts the player on that tile. The world is five hundred tiles across and most of what is worth looking at is nowhere near where they start; walking a script there takes minutes and gets stuck on the first thing it cannot path around, and moving the session alone leaves the sprite and the camera behind |
-| `?hour=N` | pins the clock, so night can be looked at without waiting for it (`?hour=22`, `?hour=6.5`). Moves the tint, the lights *and* whether the villagers are out — everything that reads the hour, which is the point |
-| `window.__mathemagicum` | `{ session, ui(), doors(), npcs(), screenOf(), spell() }` — read state; look up buttons, doors and people by name; convert a tile to a screen position; read the cast on the parchment, since a script cannot answer a sum it cannot see |
+| `?intro` | asks the postal worker for the welcome again — the one thing `?freezeNpcs` still lets him move for |
+| `?coins=N` | starts with money, so a shop test need not farm first |
+| `?crops=N` | this many of every crop in the basket |
+| `?materials=N` | this many of every *gathered* material (wood, stone) — never the pressed ones, see the comment on why |
+| `?made=N` | this many of every *made* material (beams, cord) — the explicit opt-in `?materials=` refuses to be, for a scenario about the machines built from them |
+| `?jobs=all`, `?jobs=a,b` | the mechanic's jobs to count as done, which is what makes the crate offer the machines they earn |
+| `?furniture=N` | this many of every piece of furniture, in every colour |
+| `?learned=all`, `?learned=a,b` | spells to count as already taught |
+| `?flowers=all`, `?flowers=a,b` | flowers to count as already found |
+| `?guided=all`, `?guided=a,b` | guides to count as already given — the glow and arrow that walk a child through each action; the browser suite sends `all` so no screenshot has a glowing pouch in it |
+| `?reached=all`, `?reached=a,b` | places to count as already walked into, for the portal spell |
+| `?rung=N`, `?portalRung=N`, `?arrayRung=N`, `?shareRung=N`, `?brickRung=N`, `?clockRung=N`, `?symmetryRung=N`, `?logicRung=N` | holds one spell's ladder at a rung, so a parchment can be looked at without climbing to it |
+| `?wall` | puts a wall on the parchment as soon as the world is up (with `?brickRung=`) |
+| `?share=N` | opens the division parchment on that rung at once |
+| `?drown=col,row` | turns one square to water after the world is grown, for the save-compatibility story |
+
+The handle is a `DevHandle`, set by `exposeForTests` once the scene is up.
+It has thirty-odd seams, and they group:
+
+- `session` — the live `GameSession`. Assert on this, not on pixels.
+- **Where to tap**: `ui()` (buttons by name), `doors()`, `npcs()`,
+  `screenOf(col, row)`, `portalMarks()`, `mapMark()`.
+- **What a parchment shows**: `spell()`, `share()`, `array()`, `clock()`,
+  `bricks()`, `symmetry()`, `logic()`, `portal()`, `geometry()`, `spellHint()` — a
+  script cannot answer a sum it cannot see.
+- **What the world is doing**: `house()`, `shop()`, `machines()`, `wires()`,
+  `animals()`, `flowers()`, `hearths()`, `lamps()`, `sea()`, `ships()`,
+  `blimps()`, `city()`, `worldClock()`, `hudClock()`, `openHours()`,
+  `shade()`, `inside()`, `hiding()`, `sound()`, `decor()`, `grove()`.
+- **What the player is doing**: `armed()`, `aimed()`, `armedTurn()`,
+  `telling()`, `using()`, `resting()`, `marking()`, `teaching()`,
+  `thought()`, `spells()`, `mapOpen()`, `zoom()`, `wiring()`, `guide()`, `jobs()`.
+- **Rendering**: `stats()`, `scenery()`, `sceneryOnScreen()`,
+  `floatingMarks()`.
+
+The screens *before* the game have a handle of their own,
+`window.__mathemagicum_making`, with one seam: `step()` says which screen
+is up.
 
 Each replaced something that had gone wrong. Pinning `Date.now` to make the
 spell predictable also stalled the walk tween, so sprites drew a tile from
@@ -257,13 +318,6 @@ shopkeeper and the game answered "Can't walk there".
 So: assert on state read back through the handle, look buttons up by name,
 and keep screenshots as artefacts for a human rather than as assertions.
 
-On the gate, precisely: `__mathemagicum` is **absent** from a production
-bundle — the export is dropped. The parameter names are not; a minifier
-leaves the parsing function's string literals behind even though nothing
-reaches them, because `devOptions()` folds to a constant before the call. So
-grepping a release for `freezeNpcs` finds a hit, and the gate is still
-holding: the options are never read, and there is no handle to reach.
-
 ## Stack
 
 - [Bun](https://bun.sh) — runtime, package manager, test runner
@@ -271,6 +325,7 @@ holding: the options are never read, and there is no handle to reach.
 - [Vite](https://vitejs.dev) — dev server / static build (+ `vite-plugin-pwa` for offline support)
 - [Biome](https://biomejs.dev) — lint + format
 - [Lefthook](https://github.com/evilmartians/lefthook) — git hooks
+- [Playwright](https://playwright.dev) — the browser scenarios in `e2e/`, driven from `bun test`
 
 ## Getting started
 
@@ -281,7 +336,22 @@ bun run test      # bun:test
 bun run typecheck # tsc --noEmit
 bun run lint      # biome check
 bun run build     # production build to dist/
+bun run e2e       # every browser scenario, against a fresh build (~20 min)
 ```
+
+One scenario file at a time:
+
+```sh
+bun node_modules/playwright/cli.js install chromium   # once
+bun test ./e2e/house.e2e.ts
+```
+
+The `./` is required — without it `bun test house.e2e.ts` treats the name
+as a filter and runs the whole suite in one process, which is exactly what
+`e2e/run.ts` exists to avoid (Bun kills each file's spawned processes at the
+file boundary, and the next file's browser goes with them). Playwright's CLI
+is run through `bun` rather than `bunx` because its `#!/usr/bin/env node`
+shebang picks up the host's system Node.
 
 > `dev`/`build`/`preview` run through `bunx --bun` rather than plain `vite`:
 > Vite's bin has a `#!/usr/bin/env node` shebang, and the PWA plugin's

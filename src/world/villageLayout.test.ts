@@ -975,7 +975,7 @@ describe("the four plots", () => {
    */
   test("every child gets the same number of squares to plant", () => {
     const areas = new Set<number>();
-    for (const name of ["N", "E", "S", "W"]) {
+    for (const name of ["N", "E", "S", "W"] as const) {
       const plot = plotFor(DIRECTIONS[name] as never);
       areas.add(plot.width * plot.height);
     }

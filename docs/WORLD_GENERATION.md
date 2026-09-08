@@ -1,10 +1,25 @@
 # World Generation — working draft
 
-Status: brainstorm, not implemented. The pipeline, anchor placement, and
-fill strategies below are settled enough to build against. Remaining open
-items are either deferred content design (what an NPC actually does) or
-implementation-time tuning — neither blocks starting on the mechanical
-parts (border generation, anchor placement, connectivity).
+Status: implemented. This document is the original design sketch the
+generator was built from and is kept as the record of the reasoning; where
+it and the code disagree, the code (and its tests) are the truth. The
+remaining open items below are either deferred content design (what an NPC
+actually does) or tuning.
+
+## Where it lives
+
+- `src/world/worldGenerator.ts` — the pipeline: border, anchors, fill,
+  connectivity, in order
+- `src/world/villageLayout.ts` — the Starting Village
+- `src/world/city.ts`, `src/world/harbour.ts`, `src/world/enchantedForest.ts`,
+  `src/world/observatory.ts` — the other story areas
+- `src/world/terrain.ts`, `src/world/terrainFill.ts`, `src/world/elevation.ts`,
+  `src/world/noise.ts` — ground, height and the noise under both
+- `src/world/anchors.ts`, `src/world/connectivity.ts` — placement and the
+  guarantee that everything can be walked to
+- `src/world/chunks.ts` — how the 500×500 result is cut up for drawing
+
+Each has a `.test.ts` beside it.
 
 ## Goal
 

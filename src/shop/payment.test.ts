@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { BANDS } from "../spells/difficulty";
 import { createRng } from "../world/rng";
-import { CROP_PRICE, MAX_TRADE, SHOP_STOCK, priceOf } from "../world/shop";
+import { MAX_TRADE, SHOP_STOCK, priceOf } from "../world/shop";
 import { CURRENCY, coinsFor, smallestCoin, stacksOf, totalOf } from "./currency";
 import { MISTAKE_IN, MISTAKE_MAX_COINS, judgeOffer, makeOffer } from "./payment";
 

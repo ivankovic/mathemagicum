@@ -3,7 +3,7 @@
 
 import { Spell } from "../spells/spellbook";
 import { FixtureType } from "./fixtures";
-import type { Inventory } from "./inventory";
+import { ITEM_TYPES, type Inventory, type ItemType } from "./inventory";
 import { MaterialType } from "./materials";
 import { PLANT_TYPES } from "./plants";
 
@@ -124,6 +124,73 @@ export const MachineType = {
    * numbers to say and the reason a machine finally needs two wires.
    */
   Press: FixtureType.Press,
+  /**
+   * Two mouths and one spout.
+   *
+   * The sixth, and the first that **decides rather than counts** — the
+   * press's opposite. A press waits for both of its mouths; this takes
+   * whatever arrives at either and sends it on down the one spout, and it
+   * never waits. That is *either*, which is OR, and a child who has watched
+   * carrots and wood come out of the same spout has seen the gate before
+   * anybody has drawn a truth table.
+   *
+   * It merges without mixing: what is in the throat is one kind at a time,
+   * and a second kind arriving while the first is still going through
+   * waits its turn at the mouth. `MachineState.holding` says why — a
+   * mixture dealt on is a mess — and a funnel that took turns is a funnel
+   * whose lines back up for a round and then flow, which is what a real
+   * one does.
+   */
+  Funnel: FixtureType.Funnel,
+  /**
+   * A bell in a gallows, on the line.
+   *
+   * The seventh, and the one that **says something rather than making
+   * anything**: it rings once for each thing that passes through it, and
+   * passes the thing on unchanged. It is the garden's own way of telling a
+   * child that a line *worked* — a bell at the end of a line is a line she
+   * can hear — and it is what the mechanic's jobs are checked by: ten
+   * rings is ten things through, and nobody has to count crates.
+   */
+  Bell: FixtureType.Bell,
+  /**
+   * A box on legs with a trapdoor in its top.
+   *
+   * The eighth, and the sieve inside out: shown one thing, it drops *that*
+   * through the trap into its bin and lets everything else slide off the
+   * side. That is NOT, and the first *else* a child meets — the sieve says
+   * "this one", and this says "anything but this one".
+   */
+  Inverter: FixtureType.Inverter,
+  /**
+   * A plank on a post, tipping one way and then the other.
+   *
+   * The ninth, and the one that alternates: the first thing goes down one
+   * end, the plank tips, the next goes down the other. Odd to the crates
+   * and even to the bin, which is parity, and is XOR as a child meets it —
+   * either end and never both at once.
+   */
+  Seesaw: FixtureType.Seesaw,
+  /**
+   * A strongbox with a lid.
+   *
+   * The tenth, and the one that remembers: it holds whatever it is given
+   * all day and lets it all out at night. Everything else here passes a
+   * thing on the moment it can; this keeps it until a signal, which is
+   * what a variable is.
+   */
+  Latch: FixtureType.Latch,
+  /**
+   * An easel with a drawing on it.
+   *
+   * The eleventh, and not a machine at all: a drawing of the machines
+   * standing round it and the wires between them, made the moment it is
+   * woken. Tapped, it is picked up like a coil, and tapped down somewhere
+   * else it builds the same line there — paying each machine's recipe out
+   * of the basket, because a drawing that built for free would be
+   * conjuring. That is a function: written once, called wherever.
+   */
+  Blueprint: FixtureType.Blueprint,
 } as const;
 
 export type MachineType = (typeof MachineType)[keyof typeof MachineType];
@@ -177,6 +244,26 @@ export const RECIPES: Readonly<Record<MachineType, Recipe>> = {
   // is a proportion — two wood for every stone — which is the sum it spends
   // its life doing, paid once on the way in.
   [MachineType.Press]: { [MaterialType.Wood]: 20, [MaterialType.Stone]: 10 },
+  // The first machine made of what a *machine* made, which is the whole of
+  // the tech tree in one line: a funnel is beams and cord, and beams and
+  // cord come out of a press, so a child who wants the gate that takes
+  // either has to have built and fed the gate that takes both. Nothing
+  // gathered goes into it at all.
+  [MachineType.Funnel]: { [MaterialType.Beam]: 3, [MaterialType.Cord]: 2 },
+  // A bell is bronze, which this world casts from stone, hung in a gallows
+  // of beams. Stone so it is not a second funnel's worth of pressing, and
+  // beams so it is still a thing the press had to make. Two materials, like
+  // every other machine: the sheet that says what a thing costs has room
+  // for two, and a recipe of three would be a cost nobody could read.
+  [MachineType.Bell]: { [MaterialType.Stone]: 6, [MaterialType.Beam]: 2 },
+  // The rest of the tree, each two materials and each wanting something a
+  // press made, so the chain never lets go of the press.
+  [MachineType.Inverter]: { [MaterialType.Stone]: 4, [MaterialType.Cord]: 3 },
+  [MachineType.Seesaw]: { [MaterialType.Beam]: 2, [MaterialType.Cord]: 4 },
+  [MachineType.Latch]: { [MaterialType.Stone]: 8, [MaterialType.Beam]: 3 },
+  // Paper and an easel: the cheapest of them, because it makes nothing and
+  // what it builds is paid for again every time it is stamped down.
+  [MachineType.Blueprint]: { [MaterialType.Wood]: 6, [MaterialType.Cord]: 2 },
 };
 
 /** What a machine is made of, as pairs, in a stable order. */
@@ -261,7 +348,18 @@ export const SPARK: Readonly<Record<MachineType, Spell>> = {
   // and "share these two ways" are the same sum asked from opposite ends,
   // and a child who has learned one has learned what this machine does. The
   // rule here is "the spell whose arithmetic it does", not one spell each.
-  [MachineType.Press]: Spell.Share,
+  // The three machines that decide are woken by the spell about deciding.
+  // The press used to be the sharing spell's, on the argument that a ratio
+  // is a division made permanent — which is true of the *proportion* it
+  // learns and not of what it *does*, which is wait for both. Both is AND,
+  // and the logic spell is the one whose parchment asks it.
+  [MachineType.Press]: Spell.Logic,
+  [MachineType.Funnel]: Spell.Logic,
+  [MachineType.Bell]: Spell.Logic,
+  [MachineType.Inverter]: Spell.Logic,
+  [MachineType.Seesaw]: Spell.Logic,
+  [MachineType.Latch]: Spell.Logic,
+  [MachineType.Blueprint]: Spell.Logic,
 };
 
 /**
@@ -285,6 +383,18 @@ export const Verb = {
   Sift: "sift",
   Count: "count",
   Press: "press",
+  /** Either mouth onto the one spout, one kind at a time. */
+  Merge: "merge",
+  /** Straight through, and a ring for each. */
+  Ring: "ring",
+  /** The shown thing into the bin, everything else through. */
+  Invert: "invert",
+  /** One this way, the next that way. */
+  Tilt: "tilt",
+  /** Kept until night, then let out. */
+  Hold: "hold",
+  /** Nothing at all: a drawing. */
+  Draw: "draw",
 } as const;
 export type Verb = (typeof Verb)[keyof typeof Verb];
 
@@ -307,7 +417,7 @@ export interface Work {
    */
   readonly puts: number;
   /** What comes out, for a machine that turns. Null for one that deals. */
-  readonly gives: string | null;
+  readonly gives: ItemType | null;
   /**
    * What it will take in, and this one is not decoration.
    *
@@ -328,7 +438,7 @@ export interface Work {
    * machine would look exactly as it does when it is working properly and
    * waiting for the other half.
    */
-  readonly wants: "anything" | "a crop" | "what it can press";
+  readonly wants: "anything" | "a crop" | "what it can press" | "nothing";
 }
 
 export const WORK: Readonly<Record<MachineType, Work>> = {
@@ -367,6 +477,17 @@ export const WORK: Readonly<Record<MachineType, Work>> = {
     gives: null,
     wants: "what it can press",
   },
+  // Both pass things through unchanged, a kind at a time, and forget the
+  // kind when they run dry — the sieve's rule, for the sieve's reason: a
+  // thing a stream is poured through has to take whatever arrives next.
+  [MachineType.Funnel]: { verb: Verb.Merge, takes: 1, puts: 1, gives: null, wants: "anything" },
+  [MachineType.Bell]: { verb: Verb.Ring, takes: 1, puts: 1, gives: null, wants: "anything" },
+  [MachineType.Inverter]: { verb: Verb.Invert, takes: 1, puts: 1, gives: null, wants: "anything" },
+  [MachineType.Seesaw]: { verb: Verb.Tilt, takes: 1, puts: 1, gives: null, wants: "anything" },
+  [MachineType.Latch]: { verb: Verb.Hold, takes: 1, puts: 1, gives: null, wants: "anything" },
+  // Takes nothing: a drawing is not fed. What it does is done by the scene
+  // when it is stamped down — see `GameScene.stampPlanAt`.
+  [MachineType.Blueprint]: { verb: Verb.Draw, takes: 0, puts: 0, gives: null, wants: "nothing" },
 };
 
 /**
@@ -415,7 +536,7 @@ function pairKey(one: string, two: string): string {
 }
 
 /** What these two make together, or nothing at all. */
-export function pressing(one: string | null, two: string | null): MaterialType | null {
+export function pressing(one: ItemType | null, two: ItemType | null): MaterialType | null {
   if (one === null || two === null || one === two) return null;
   return PRESSINGS[pairKey(one, two)] ?? null;
 }
@@ -429,18 +550,35 @@ export function pressing(one: string | null, two: string | null): MaterialType |
  * failure this machine's whole design is arranged to avoid, since stalling
  * is also what it does when it is working correctly.
  */
-export function pressable(item: string): boolean {
+export function pressable(item: ItemType): boolean {
   return Object.keys(PRESSINGS).some((pair) => pair.split("+").includes(item));
 }
 
 /** Whether this machine will take this in. See `Work.wants`. */
-export function accepts(machine: MachineType, item: string): boolean {
+export function accepts(machine: MachineType, item: ItemType): boolean {
   // A press only takes what it could press. The others take "anything" and
   // can afford to: a sorter deals whatever it is given, so a heap of the
   // wrong thing is still a heap it can hand back. A press would hold it for
   // ever.
   if (WORK[machine].verb === Verb.Press) return pressable(item);
+  if (WORK[machine].wants === "nothing") return false;
   return WORK[machine].wants === "anything" || (PLANT_TYPES as readonly string[]).includes(item);
+}
+
+/**
+ * Whether this machine would put this in its bin rather than pass it on.
+ *
+ * A sieve bins what is not the thing it was shown; an inverter bins the
+ * thing it was shown, and learns it from the first thing that arrives, so
+ * the first thing always goes in the bin. Nothing else has a rule about
+ * what it bins: a seesaw bins every other thing, which is not a fact about
+ * the thing.
+ */
+export function binsThis(machine: MachineType, state: MachineState, item: ItemType): boolean {
+  const verb = WORK[machine].verb;
+  if (verb === Verb.Sift) return state.passes !== null && state.passes !== item;
+  if (verb === Verb.Invert) return state.passes === null || state.passes === item;
+  return false;
 }
 
 /** What a machine is holding, and how far into the round it has got. */
@@ -458,7 +596,7 @@ export interface MachineState {
    * heap of one thing dealt into three piles is a division a child can see,
    * and a mixture dealt into three piles is a mess.
    */
-  readonly holding: string | null;
+  readonly holding: ItemType | null;
   readonly heap: number;
   /** What has been dealt, one count per crate. Always `SHARES` long. */
   readonly crates: readonly number[];
@@ -471,7 +609,7 @@ export interface MachineState {
    * remembered rather than worked out at the moment of taking, because the
    * mouth can run empty while the crates are still full.
    */
-  readonly made: string | null;
+  readonly made: ItemType | null;
   /**
    * What a sieve was shown, and so what it lets through.
    *
@@ -482,9 +620,9 @@ export interface MachineState {
    *
    * Null for ever on anything that is not a sieve.
    */
-  readonly passes: string | null;
+  readonly passes: ItemType | null;
   /** What a sieve has rejected, and how much of it. */
-  readonly binned: string | null;
+  readonly binned: ItemType | null;
   readonly bin: number;
   /**
    * How many a tally waits for before it tips, and nought until it is shown.
@@ -513,7 +651,7 @@ export interface MachineState {
    * pressing two stone for every wood, doing the wrong sum with the right
    * numbers and nothing on it to say so.
    */
-  readonly other: string | null;
+  readonly other: ItemType | null;
   readonly otherHeap: number;
   /**
    * How many of the second funnel's kind go into one pressing.
@@ -531,6 +669,16 @@ export interface MachineState {
   readonly otherMark: number;
   /** Minutes of work into the round in progress. */
   readonly worked: number;
+  /**
+   * How many times a bell has rung: one for each thing that has gone
+   * through it, ever.
+   *
+   * A running total rather than a rate, for the reason a wire's carried
+   * count is: a bell that has finished ringing and one that never rang are
+   * the same picture this second, and what a job asks is whether ten
+   * things have *ever* gone through. Nought on every other machine.
+   */
+  readonly rung: number;
 }
 
 /** A machine as it comes: asleep, empty, and waiting to be shown a sum. */
@@ -549,6 +697,7 @@ export function newMachine(): MachineState {
     otherHeap: 0,
     otherMark: 0,
     worked: 0,
+    rung: 0,
   };
 }
 
@@ -576,7 +725,7 @@ export function wake(state: MachineState): MachineState {
  * be handed the second thing by hand is a press that cannot be *shown* its
  * proportion, which is the whole of how it learns.
  */
-export function wouldTake(state: MachineState, item: string, machine: MachineType): boolean {
+export function wouldTake(state: MachineState, item: ItemType, machine: MachineType): boolean {
   if (!state.awake || !accepts(machine, item)) return false;
   if (WORK[machine].verb === Verb.Press) {
     if (state.holding === null || state.holding === item) return true;
@@ -589,13 +738,16 @@ export function wouldTake(state: MachineState, item: string, machine: MachineTyp
     return pressing(state.holding, item) !== null;
   }
   if (state.holding !== null && state.holding !== item) return false;
-  // A sieve with a full bin takes nothing it would only bin again.
-  return !(state.bin >= BIN_HOLDS && state.passes !== null && state.passes !== item);
+  // A sieve with a full bin takes nothing it would only bin again, and nor
+  // does an inverter; a seesaw with a full bin has nowhere to put every
+  // other thing, so it takes nothing at all.
+  if (state.bin >= BIN_HOLDS && WORK[machine].verb === Verb.Tilt) return false;
+  return !(state.bin >= BIN_HOLDS && binsThis(machine, state, item));
 }
 
 export function feed(
   state: MachineState,
-  item: string,
+  item: ItemType,
   count: number,
   machine: MachineType,
 ): MachineState | null {
@@ -637,11 +789,22 @@ export function feed(
  * function does not know what a clock is, which is the point of it being
  * here rather than there.
  */
-export function advance(state: MachineState, minutes: number, machine: MachineType): MachineState {
+export function advance(
+  state: MachineState,
+  minutes: number,
+  machine: MachineType,
+  /** Whether a latch's lid is open right now — night, in the garden. */
+  open = false,
+): MachineState {
   if (!state.awake || !Number.isFinite(minutes) || minutes <= 0) return state;
   const work = WORK[machine];
+  // A drawing does no work, and banks none.
+  if (work.verb === Verb.Draw) return state;
   const worked = state.worked + minutes;
   if (work.verb === Verb.Press) return pressed(state, worked, work);
+  // A latch with its lid shut holds everything and banks nothing: what
+  // changes that is the hour, not the minutes.
+  if (work.verb === Verb.Hold && !open) return { ...state, worked: 0 };
   // A tally waits for its mark rather than for a round's worth, so how many
   // batches it can tip is a different sum — see `counted`.
   const batch = work.verb === Verb.Count ? Math.max(1, state.mark || state.heap) : work.takes;
@@ -657,9 +820,11 @@ export function advance(state: MachineState, minutes: number, machine: MachineTy
     return state.heap >= batch ? { ...state, worked } : { ...state, worked: 0 };
   }
   const held = state.holding;
+  if (work.verb === Verb.Tilt && held !== null) return tilted(state, worked, rounds, held);
   // A sieve puts a round's work in one of two places, and which one is the
-  // whole of what it is for. Everything else always fills the crates.
-  if (work.verb === Verb.Sift && held !== null && held !== (state.passes ?? held)) {
+  // whole of what it is for — and an inverter the other way round.
+  // Everything else always fills the crates.
+  if (held !== null && binsThis(machine, state, held)) {
     const room = Math.max(0, BIN_HOLDS - state.bin);
     const dropped = Math.min(rounds * work.puts, room);
     if (dropped <= 0) return { ...state, worked };
@@ -675,27 +840,39 @@ export function advance(state: MachineState, minutes: number, machine: MachineTy
       holding: left > 0 ? state.holding : null,
       binned: held,
       bin: state.bin + dropped,
+      // An inverter learns what it bins from the first thing it bins, the
+      // way a sieve learns what it passes from the first thing it passes.
+      passes: work.verb === Verb.Invert ? (state.passes ?? held) : state.passes,
       worked: worked - dropped * MINUTES_PER_ROUND,
     };
   }
-  const sifting = work.verb === Verb.Sift;
+  const sifting = work.verb === Verb.Sift || work.verb === Verb.Invert;
+  // A funnel and a bell pass things through the way a sieve passes what
+  // belongs: the mouth forgets its kind when it runs dry, and the crates
+  // hold what went in.
+  const passing =
+    sifting || work.verb === Verb.Merge || work.verb === Verb.Ring || work.verb === Verb.Hold;
   const left = state.heap - rounds * work.takes;
   if (work.verb === Verb.Count) return counted(state, worked, held);
   return {
     ...state,
     heap: left,
-    holding: sifting && left <= 0 ? null : state.holding,
+    holding: passing && left <= 0 ? null : state.holding,
     crates: spread(state.crates, rounds * work.puts),
     // What the crates hold is not always what the mouth holds. See `made`.
     //
     // A sieve names it too, and has to: its mouth empties between batches,
     // so by the time anybody takes a share there may be nothing in there to
     // ask. What is in its crates is what it passes, which it knows.
-    made: sifting ? (state.passes ?? held) : work.gives,
+    // A sieve's crates hold what it passes, which it learned; a trapdoor's
+    // hold whatever came through, which is everything but what it learned.
+    made: work.verb === Verb.Sift ? (state.passes ?? held) : passing ? held : work.gives,
     // Shown once, and only ever by the first thing that goes in. A sieve
     // that relearned every batch would pass whatever it was last handed,
     // which is a sieve that does nothing.
-    passes: sifting ? (state.passes ?? held) : state.passes,
+    passes: work.verb === Verb.Sift ? (state.passes ?? held) : state.passes,
+    // A ring for each thing through the bell, and only the bell.
+    rung: work.verb === Verb.Ring ? state.rung + rounds * work.puts : state.rung,
     worked: worked - rounds * MINUTES_PER_ROUND,
   };
 }
@@ -712,7 +889,45 @@ export function advance(state: MachineState, minutes: number, machine: MachineTy
  * The mark is learned from the first heap it is shown, the same bargain the
  * sieve makes: show it five and it deals in fives from then on.
  */
-function counted(state: MachineState, worked: number, held: string | null): MachineState {
+/**
+ * A seesaw's round: one thing down each end in turn.
+ *
+ * `mark` is the plank: nought means the next thing goes to the crates,
+ * one means the bin. It is the one field a seesaw has no other use for,
+ * and a tally's mark it is not — a seesaw never counts up to anything.
+ * Stops when the bin is full, with the plank left where it was.
+ */
+function tilted(state: MachineState, worked: number, rounds: number, held: ItemType): MachineState {
+  let crates = [...state.crates];
+  let bin = state.bin;
+  let plank = state.mark ? 1 : 0;
+  let done = 0;
+  for (let round = 0; round < rounds; round++) {
+    if (plank === 0) {
+      crates = spread(crates, 1);
+    } else {
+      if (bin >= BIN_HOLDS) break;
+      bin++;
+    }
+    plank = 1 - plank;
+    done++;
+  }
+  if (done <= 0) return { ...state, worked };
+  const left = state.heap - done;
+  return {
+    ...state,
+    heap: left,
+    holding: left > 0 ? state.holding : null,
+    crates,
+    made: held,
+    binned: held,
+    bin,
+    mark: plank,
+    worked: worked - done * MINUTES_PER_ROUND,
+  };
+}
+
+function counted(state: MachineState, worked: number, held: ItemType | null): MachineState {
   const mark = state.mark || state.heap;
   if (mark <= 0 || state.heap < mark) return { ...state, worked: 0 };
   const batches = Math.min(Math.floor(worked / MINUTES_PER_ROUND), Math.floor(state.heap / mark));
@@ -819,7 +1034,7 @@ function spread(crates: readonly number[], many: number): number[] {
 export function takeShare(
   state: MachineState,
   crate: number,
-): { state: MachineState; item: string | null; count: number } {
+): { state: MachineState; item: ItemType | null; count: number } {
   const index = Math.trunc(crate);
   const count = state.crates[index] ?? 0;
   // What comes out is what the machine *made*, and only a machine that deals
@@ -857,7 +1072,7 @@ export function takeShare(
 export function drawOff(
   state: MachineState,
   many: number,
-): { state: MachineState; item: string | null; count: number } {
+): { state: MachineState; item: ItemType | null; count: number } {
   const item = state.made ?? state.holding;
   const wanted = Math.max(0, Math.trunc(many));
   if (item === null || wanted <= 0) return { state, item: null, count: 0 };
@@ -893,7 +1108,7 @@ export function drawOff(
  */
 export function tipBin(state: MachineState): {
   state: MachineState;
-  item: string | null;
+  item: ItemType | null;
   count: number;
 } {
   if (state.bin <= 0 || state.binned === null) return { state, item: null, count: 0 };
@@ -927,7 +1142,7 @@ export function machinesToSave(
   const saved: Record<string, string> = {};
   for (const [where, state] of machines) {
     saved[where] =
-      `${state.awake ? 1 : 0},${state.holding ?? ""},${state.heap},${state.crates.join("/")},${Math.round(state.worked)},${state.made ?? ""},${state.passes ?? ""},${state.binned ?? ""},${state.bin},${state.mark},${state.other ?? ""},${state.otherHeap},${state.otherMark}`;
+      `${state.awake ? 1 : 0},${state.holding ?? ""},${state.heap},${state.crates.join("/")},${Math.round(state.worked)},${state.made ?? ""},${state.passes ?? ""},${state.binned ?? ""},${state.bin},${state.mark},${state.other ?? ""},${state.otherHeap},${state.otherMark},${state.rung}`;
   }
   return saved;
 }
@@ -958,6 +1173,7 @@ export function machinesFromSave(saved: unknown): Map<string, MachineState> {
       other,
       otherHeap,
       otherMark,
+      rung,
     ] = entry.split(",");
     if (awake === undefined || heap === undefined || crates === undefined) continue;
     if (!/^\d+$/.test(heap) || !/^\d+$/.test(worked ?? "")) continue;
@@ -968,11 +1184,16 @@ export function machinesFromSave(saved: unknown): Map<string, MachineState> {
     // A heap with nothing in the mouth is not a heap, and nor are full
     // crates with nothing named in them. Dropped rather than kept as an
     // anonymous pile, which nothing could ever be taken out of.
-    const item = holding ? holding : null;
+    // Only things the game has: a mouth holding "gold" is a mangled save,
+    // and a machine that dealt it would be dealing something nothing can
+    // take out again. Read the way every other field here is — what does
+    // not pass is dropped rather than repaired.
+    const item = itemNamed(holding);
     // A save from before there was a machine that turns has no sixth field,
     // and everything in one of those deals — so its crates hold what its
     // mouth holds, which is what `made` being absent means.
-    const gives = made ? made : null;
+    const gives = itemNamed(made);
+    if ((holding && !item) || (made && !gives)) continue;
     if (item === null && Number(heap) > 0) continue;
     if (gives === null && item === null && dealt.some((count) => count > 0)) continue;
     machines.set(where, {
@@ -984,8 +1205,8 @@ export function machinesFromSave(saved: unknown): Map<string, MachineState> {
       // A save from before there were sieves has none of these three, and
       // an absent one reads as a machine that never sifted — which every
       // machine in an older save was.
-      passes: passes ? passes : null,
-      binned: binned ? binned : null,
+      passes: itemNamed(passes),
+      binned: itemNamed(binned),
       bin: /^\d+$/.test(bin ?? "") ? Number(bin) : 0,
       mark: /^\d+$/.test(mark ?? "") ? Number(mark) : 0,
       // And a save from before there was a press has none of the last
@@ -994,11 +1215,19 @@ export function machinesFromSave(saved: unknown): Map<string, MachineState> {
       // this reason: a positional record grows at the end, and a field
       // inserted in the middle would silently reinterpret every save on
       // every device.
-      other: other ? other : null,
+      other: itemNamed(other),
       otherHeap: /^\d+$/.test(otherHeap ?? "") ? Number(otherHeap) : 0,
       otherMark: /^\d+$/.test(otherMark ?? "") ? Number(otherMark) : 0,
+      // And before there was a bell, none of this: a fourteenth field that
+      // an older save reads as a bell that has never rung.
+      rung: /^\d+$/.test(rung ?? "") ? Number(rung) : 0,
       worked: Number(worked),
     });
   }
   return machines;
+}
+
+/** The item a save named, or null for nothing or for a name the game has no item by. */
+function itemNamed(name: string | undefined): ItemType | null {
+  return name && (ITEM_TYPES as readonly string[]).includes(name) ? (name as ItemType) : null;
 }

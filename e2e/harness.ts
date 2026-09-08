@@ -2,16 +2,54 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { type Page, chromium } from "playwright";
+import { GAMES_KEY, PLAYING_KEY, gameKey } from "../src/save/games";
+// The seams as the game *declares* them, not as a scenario remembers them.
+// Type-only, so nothing of the game is loaded into the test process — what
+// crosses is the shape, and the shape is the contract. See `Handles`.
+import type { DevHandle, MakingHandle } from "../src/scenes/devHooks";
 // The game's own feel constant rather than a copy: a harness holding its own
 // idea of how far a swipe goes is a harness that silently stops matching.
 import { SAND_MOST_MS, SWIPE_PER_TICK, TICK_MINUTES } from "../src/spells/hourglass";
 import { SPELLS, Spell } from "../src/spells/spellbook";
+import type { Facing } from "../src/world/characters";
 import { type CrateWire, groupOf } from "../src/world/crate";
-import { DECOR_TYPES, type DecorType } from "../src/world/decor";
-import { type FixtureType, PLACEABLE_FIXTURES } from "../src/world/fixtures";
+import type { DecorType } from "../src/world/decor";
+import type { FixtureType } from "../src/world/fixtures";
 import { FLOWER_TYPES, type FlowerType } from "../src/world/flowers";
+import type { ItemType } from "../src/world/inventory";
 import { PLANT_TYPES, type PlantType } from "../src/world/plants";
 import type { PatchAction } from "../src/world/selection";
+
+/**
+ * What the game hangs on the window for a script, with its real types.
+ *
+ * Every `page.evaluate` in this suite begins the same way: reach for
+ * `globalThis.__mathemagicum` and cast it to something. For a long time that
+ * something was `Record<string, Record<string, unknown>>` — a shape that
+ * says nothing — followed by a second cast to whichever three fields the
+ * caller wanted, written out by hand. Forty-one copies of that, and not one
+ * of them could tell the compiler anything: a seam renamed in `devHooks.ts`
+ * was a scenario that typechecked, built, opened a browser, and failed thirty
+ * seconds later with "not a function" from inside the page.
+ *
+ * This is the same cast with the game's own interface behind it. A seam that
+ * moves now fails `tsc`, before anything is run. The cast itself cannot be
+ * shared — a function handed to `evaluate` is serialised and runs in the
+ * page, where nothing from this file exists — so the one line every body
+ * still needs is:
+ *
+ *     const handle = (globalThis as never as Handles).__mathemagicum;
+ *
+ * Prefer a method on `Game` where one exists; add one where a scenario finds
+ * itself writing the same body twice.
+ */
+export interface Handles {
+  readonly __mathemagicum?: DevHandle;
+  readonly __mathemagicum_making?: MakingHandle;
+}
+
+/** The room she is in, as the `house` seam describes it. */
+export type House = NonNullable<ReturnType<DevHandle["house"]>>;
 
 /**
  * Playing the real game, in a real browser, as a test.
@@ -56,16 +94,6 @@ let origin: string | null = null;
 /** `E2E_TRACE=1` prints every step and what it cost, for finding a stall. */
 const TRACE = process.env.E2E_TRACE === "1";
 
-/**
- * Where the dev server's own output goes, for when it is the thing at fault.
- *
- * One per process, because the port is read back out of it: two runs at once
- * sharing a path would have each reading the other's address, which is a
- * confusing way to test the wrong server — the exact mistake this whole
- * arrangement exists to make impossible.
- */
-const SERVER_LOG = process.env.E2E_SERVER_LOG ?? `e2e/shots/server-${process.pid}.log`;
-
 let serving: ReturnType<typeof Bun.serve> | null = null;
 
 /**
@@ -106,28 +134,6 @@ async function answering(at: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/**
- * The address Vite says it is listening on, read from its own output.
- *
- * Asked rather than assumed, and that distinction cost most of a day. The
- * suite used to name a port and take whatever answered there — so an orphan
- * left by an interrupted run went on serving every run after it, for hours,
- * and the runs got slower until one stalled outright. `--strictPort` did not
- * help: the new server exited with `Port 5178 is already in use` into a log
- * nobody was reading, and the wait loop then found the *orphan* answering
- * and called it success.
- *
- * So Vite is allowed to pick — it walks up from the asked-for port until it
- * finds a free one — and this reads back which it chose. A run can then only
- * ever be talking to the server it started.
- */
-async function listeningOn(): Promise<string | null> {
-  const log = Bun.file(SERVER_LOG);
-  if (!(await log.exists())) return null;
-  const found = /http:\/\/localhost:(\d+)/.exec(await log.text());
-  return found ? `http://localhost:${found[1]}` : null;
 }
 
 /**
@@ -202,7 +208,19 @@ export async function serve(): Promise<string> {
 async function built(): Promise<void> {
   if (process.env.E2E_PREBUILT === "1") return;
   const build = Bun.spawn(["bun", "run", "build"], { stdout: "ignore", stderr: "inherit" });
-  if ((await build.exited) !== 0) throw new Error("the build failed, so there is nothing to serve");
+  // Bounded, like every other process this file starts, and it was the one
+  // that was not: a Vite that hangs — a stuck plugin, a disk that has filled
+  // — hung this `await` and the scenario with it, until the runner's own
+  // five-minute timeout named the scenario and said nothing about the build.
+  // Killed on the way out, so a run that gave up on it does not leave it
+  // behind writing into `dist/` under the next run.
+  try {
+    const code = await bounded("the build to finish", build.exited, BUILD_MS);
+    if (code !== 0) throw new Error("the build failed, so there is nothing to serve");
+  } catch (whyNot) {
+    build.kill();
+    throw whyNot;
+  }
 }
 
 /**
@@ -257,6 +275,18 @@ export interface Opening {
    * canvas and the DOM, which is what these screens are made of.
    */
   readonly onboarding?: boolean;
+  /**
+   * Meet the game as a child does, with every guide still to come.
+   *
+   * A guide lights the next button and hangs an arrow over the next square
+   * from the moment its action is worth doing (see `ui/guide.ts`). It gets
+   * in the way of no tap, but by default the harness opens with
+   * `?guided=all` all the same: a glow on the pouch is a difference in every
+   * screenshot, and the guide writes to the child's progress, which is a
+   * save changing under a scenario about saves. The scenario about the
+   * guides is the one that sets this.
+   */
+  readonly firstTime?: boolean;
   /**
    * How big the screen is, when the scenario is *about* how big the screen
    * is.
@@ -385,9 +415,45 @@ export async function takeFromCrate(
  *
  * The world seed is pinned by default, because a scenario that walks to a
  * building has to find the same building every time — and the seed lives in
- * storage rather than in the address bar, which is the sort of thing worth
- * knowing once here rather than discovering per test.
+ * a saved game in storage rather than in the address bar (`?seed=` is the
+ * spells' seed, not the world's), which is the sort of thing worth knowing
+ * once here rather than discovering per test.
  */
+/** The logic parchment's circuit, as the seam publishes it. */
+type LogicNode =
+  | { kind: "switch"; index: number }
+  | { kind: "not"; of: LogicNode }
+  | { kind: "and"; left: LogicNode; right: LogicNode }
+  | { kind: "or"; left: LogicNode; right: LogicNode }
+  | { kind: "xor"; left: LogicNode; right: LogicNode };
+
+/** Whether the lamp lights, evaluated the way the spell evaluates it. */
+function lightsLamp(node: LogicNode, on: readonly boolean[]): boolean {
+  switch (node.kind) {
+    case "switch":
+      return on[node.index] === true;
+    case "not":
+      return !lightsLamp(node.of, on);
+    case "and":
+      return lightsLamp(node.left, on) && lightsLamp(node.right, on);
+    case "or":
+      return lightsLamp(node.left, on) || lightsLamp(node.right, on);
+    case "xor":
+      return lightsLamp(node.left, on) !== lightsLamp(node.right, on);
+  }
+}
+
+/**
+ * `&guided=all`, unless the scenario wants to meet the guides.
+ *
+ * On the opening URL and on every `reload` with seams, because a reload
+ * with seams is a fresh URL: a scenario that reloaded "somewhere else" and
+ * lost the seam would meet the guides from its second half onwards.
+ */
+function guidedSeam(opening: Pick<Opening, "firstTime">): string {
+  return opening.firstTime ? "" : "&guided=all";
+}
+
 export async function play(opening: Opening, act: (game: Game) => Promise<void>): Promise<void> {
   if (TRACE) process.stderr.write(`  ▸ opening ${opening.seams ?? ""}\n`);
   const at = await bounded("a dev server", serve(), SETUP_MS);
@@ -415,12 +481,35 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
     }),
     SETUP_MS,
   );
+  // A saved game with the seed in it, written the way the game writes one.
+  //
+  // This used to set the one key a single-world build kept its seed under,
+  // and lean on the game carrying that old world over into a saved game on
+  // first open. It worked, and it would have stopped working — silently,
+  // with every scenario growing a random world — the day that carry-over
+  // was deleted as the dead code it is meant to become.
+  const id = "e2e";
+  const seed = opening.seed ?? 12345;
+  const records: readonly (readonly [string, string])[] = [
+    [GAMES_KEY, JSON.stringify([{ id, seed, savedAt: 0 }])],
+    [gameKey(id), JSON.stringify({ id, seed, savedAt: 0, world: null, progress: {} })],
+    [PLAYING_KEY, id],
+  ];
+  // Only where nothing is written yet. An init script runs on *every*
+  // navigation, and `reload` is a navigation: written unconditionally, this
+  // put the empty saved game back over the one the game had been writing —
+  // `world: null`, on a world with two machines and a wire in it — and every
+  // scenario that reloaded to ask "is it still there tomorrow" found it was
+  // not. The legacy seed key this replaced was harmless to rewrite, because
+  // the game never wrote it; a saved game is the game's to keep.
   await context.addInitScript(
-    ([seed, players]) => {
-      localStorage.setItem("mathemagicum.world.seed", String(seed));
+    ([records, players]) => {
+      for (const [key, value] of records) {
+        if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
+      }
       if (players) localStorage.setItem("mathemagicum.players", JSON.stringify(players));
     },
-    [opening.seed ?? 12345, opening.players ?? null] as const,
+    [records, opening.players ?? null] as const,
   );
   const page = await bounded("a tab to open", context.newPage(), SETUP_MS);
   const complaints: string[] = [];
@@ -464,10 +553,13 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
     // enough to put its handle out, which it cannot do until its assets are
     // in, so this is the stricter signal as well as the more patient one.
     await Promise.race([
-      page.goto(`${at}/?${opening.onboarding ? "" : "skipTitle"}${opening.seams ?? ""}`, {
-        waitUntil: "domcontentloaded",
-        timeout: SETUP_MS,
-      }),
+      page.goto(
+        `${at}/?${opening.onboarding ? "" : "skipTitle"}${opening.seams ?? ""}${guidedSeam(opening)}`,
+        {
+          waitUntil: "domcontentloaded",
+          timeout: SETUP_MS,
+        },
+      ),
       lost,
     ]);
     // Generous, because booting this game is the most expensive thing in a
@@ -491,6 +583,8 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
     // console fills with errors is a scenario that will pass through the
     // bug it was written for.
     if (complaints.length > 0) throw new Error(complaints.join("\n"));
+  } catch (whyNot) {
+    throw await pictured(page, opening, whyNot);
   } finally {
     // Bounded like everything else, and for the same reason: a browser that
     // will not close is indistinguishable from a scenario that will not end.
@@ -544,6 +638,63 @@ const ANSWER_MS = 30_000;
  * the cost of opening three times over.
  */
 const SETUP_MS = 180_000;
+
+/**
+ * How long the build may take before it is the thing that has failed.
+ *
+ * Ten seconds on an idle machine, and short of the five minutes a scenario
+ * is allowed — deliberately, because a bound that is not shorter than the
+ * runner's own says nothing: the runner would fire first and blame the
+ * scenario. See `built`.
+ */
+const BUILD_MS = 240_000;
+
+/** How many scenarios this process has failed so far, for naming their pictures. */
+let failed = 0;
+
+/**
+ * A picture of the page as the scenario failed, and the failure with the
+ * picture's name on it.
+ *
+ * The suite asserts on what the game *says* about itself, which is right
+ * for deciding pass or fail and useless for working out what actually
+ * happened: "expected 3, got 0" from a machine that should have woken tells
+ * nobody whether the parchment never opened, opened and was mis-answered, or
+ * closed on a rectangle drawn one square short. Every one of those was
+ * diagnosed, at some point, by adding a `look()` and running it again — on
+ * a failure that had taken a two-minute scenario to reach, and that did not
+ * always come back.
+ *
+ * So the picture is taken here, once, before the window closes and the
+ * evidence goes with it, and the error carries the path so it is beside the
+ * assertion in the runner's output. Named by a count and the clock rather
+ * than by the test — bun does not say which test is running from inside a
+ * helper — with the seams the scenario opened with for a hint. `look()`
+ * stays for a picture of a moment that is not a failure.
+ *
+ * Best effort, and swallowed if it cannot be had: a page that has stopped
+ * answering will not answer a screenshot either, and the failure worth
+ * reporting is the one that was already in hand.
+ */
+async function pictured(page: Page, opening: Opening, whyNot: unknown): Promise<unknown> {
+  failed += 1;
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const hint = (opening.seams ?? "plain")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+  const path = `e2e/shots/failed-${failed}-${hint}-${stamp}.png`;
+  const taken = await bounded("a picture of the failure", page.screenshot({ path }), ANSWER_MS)
+    .then(() => true)
+    .catch(() => false);
+  if (!taken) return whyNot;
+  const note = `\n  (a picture of the page at that moment: ${path})`;
+  if (whyNot instanceof Error) {
+    whyNot.message += note;
+    return whyNot;
+  }
+  return new Error(`${String(whyNot)}${note}`, { cause: whyNot });
+}
 
 /**
  * What each page has complained about, reachable from anywhere that has one.
@@ -612,11 +763,9 @@ async function running(page: Page): Promise<void> {
   try {
     await page.waitForFunction(
       () => {
-        const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-          .__mathemagicum;
+        const handle = (globalThis as never as Handles).__mathemagicum;
         if (!handle) throw new Error("the game has not put its handle out");
-        const stats = handle.stats as () => { frames: number };
-        return stats().frames > 20;
+        return handle.stats().frames > 20;
       },
       null,
       { timeout: SETUP_MS },
@@ -633,10 +782,8 @@ async function running(page: Page): Promise<void> {
     // the machine, leaving nothing behind to say which it had been.
     const reached = await page
       .evaluate(() => {
-        const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-          .__mathemagicum;
-        const stats = handle?.stats as (() => { frames: number }) | undefined;
-        return stats ? stats().frames : -1;
+        const handle = (globalThis as never as Handles).__mathemagicum;
+        return handle ? handle.stats().frames : -1;
       })
       .catch(() => -1);
     const why =
@@ -654,6 +801,15 @@ async function running(page: Page): Promise<void> {
  * No handle to wait for — that belongs to the game scene. What can be waited
  * on is the canvas existing at a real size, which is what the loading bar and
  * the title card and the three making-a-player steps all draw onto.
+ *
+ * And then for the loading to be *over*, which is the part that used to be
+ * a fixed two and a half seconds. A canvas with a size is a canvas with a
+ * loading bar on it; the title card does not listen for a tap until every
+ * asset is in (`BootScene.begin` is where the listener goes on), so a
+ * scenario that taps before that taps at nothing. Two hundred sprite sheets
+ * take as long as they take, and the loader keeps the wire busy the whole
+ * way through — so the wire going quiet is the loader finishing, and it is
+ * a condition rather than a guess about how long a busy machine needs.
  */
 async function drawn(page: Page): Promise<void> {
   await page.waitForFunction(
@@ -664,7 +820,7 @@ async function drawn(page: Page): Promise<void> {
     null,
     { timeout: SETUP_MS },
   );
-  await page.waitForTimeout(2500);
+  await page.waitForLoadState("networkidle", { timeout: SETUP_MS });
 }
 
 /** A child playing, as a scenario can drive her. */
@@ -694,8 +850,7 @@ export class Game {
   async making(): Promise<string> {
     return this.ask("which making screen is up", (page) =>
       page.evaluate(() => {
-        const handle = (globalThis as never as Record<string, { step: () => string } | undefined>)
-          .__mathemagicum_making;
+        const handle = (globalThis as never as Handles).__mathemagicum_making;
         return handle ? handle.step() : "";
       }),
     );
@@ -706,8 +861,7 @@ export class Game {
     await this.ask(`the ${step} screen`, (page) =>
       page.waitForFunction(
         (wanted) => {
-          const handle = (globalThis as never as Record<string, { step: () => string } | undefined>)
-            .__mathemagicum_making;
+          const handle = (globalThis as never as Handles).__mathemagicum_making;
           return handle?.step() === wanted;
         },
         step,
@@ -740,16 +894,24 @@ export class Game {
     return bounded(`the page to answer: ${what}`, work, ANSWER_MS);
   }
 
-  /** Whatever a dev seam reports. See `devHooks.ts` for what there is. */
-  seam<T>(name: string, ...args: unknown[]): Promise<T> {
+  /**
+   * Whatever a dev seam reports. See `devHooks.ts` for what there is.
+   *
+   * The name is a key of `DevHandle` and not a string, so a seam that is
+   * renamed or removed fails every scenario that asks for it at `tsc` rather
+   * than thirty seconds into a browser. The *answer* is still whatever the
+   * caller says it is — the seams return shapes a scenario reads two fields
+   * of, and forty files declaring the full shape would be forty copies of
+   * `devHooks.ts` to keep in step.
+   */
+  seam<T>(name: keyof DevHandle, ...args: unknown[]): Promise<T> {
     return this.within(
       `seam ${name}`,
       this.page.evaluate(
         ([which, given]) => {
-          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-            .__mathemagicum;
+          const handle = (globalThis as never as Handles).__mathemagicum;
           if (!handle) throw new Error("the game has not put its handle out");
-          const found = handle[which as string];
+          const found: unknown = handle[which];
           // `session` is the object itself rather than a getter, so a script
           // asking for it by name should get it rather than a type error.
           if (typeof found !== "function") return found as T;
@@ -777,11 +939,10 @@ export class Game {
   where(): Promise<{ col: number; row: number }> {
     return this.ask("where she is standing", (page) =>
       page.evaluate(() => {
-        const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-          .__mathemagicum;
+        const handle = (globalThis as never as Handles).__mathemagicum;
         if (!handle) throw new Error("the game has not put its handle out");
-        const session = handle.session as { tile: { col: number; row: number } };
-        return { col: session.tile.col, row: session.tile.row };
+        const { col, row } = handle.session.tile;
+        return { col, row };
       }),
     );
   }
@@ -806,15 +967,10 @@ export class Game {
     const at = await this.ask(`where ${col},${row} is on screen`, (page) =>
       page.evaluate(
         ([c, r]) => {
-          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-            .__mathemagicum;
+          const handle = (globalThis as never as Handles).__mathemagicum;
           if (!handle) throw new Error("the game has not put its handle out");
-          const screenOf = handle.screenOf as (
-            col: number,
-            row: number,
-          ) => { x: number; y: number };
-          const feet = screenOf(c as number, r as number);
-          const above = screenOf(c as number, (r as number) - 1);
+          const feet = handle.screenOf(c, r);
+          const above = handle.screenOf(c, r - 1);
           return { x: feet.x, y: (feet.y + above.y) / 2 };
         },
         [col, row] as const,
@@ -867,15 +1023,10 @@ export class Game {
     const at = await this.ask(`where the square ${dCol},${dRow} away is`, (page) =>
       page.evaluate(
         ([dc, dr]) => {
-          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-            .__mathemagicum;
+          const handle = (globalThis as never as Handles).__mathemagicum;
           if (!handle) throw new Error("the game has not put its handle out");
-          const me = (handle.session as { tile: { col: number; row: number } }).tile;
-          const screenOf = handle.screenOf as (
-            col: number,
-            row: number,
-          ) => { x: number; y: number };
-          return screenOf(me.col + (dc as number), me.row + (dr as number));
+          const me = handle.session.tile;
+          return handle.screenOf(me.col + dc, me.row + dr);
         },
         [dCol, dRow] as const,
       ),
@@ -956,18 +1107,14 @@ export class Game {
   }
 
   /** Put her somewhere, facing something, without walking her there. */
-  async standAt(col: number, row: number, facing: string): Promise<void> {
+  async standAt(col: number, row: number, facing: Facing): Promise<void> {
     await this.ask(`standing her at ${col},${row}`, (page) =>
       page.evaluate(
         ([c, r, f]) => {
-          const session = (
-            globalThis as never as Record<string, { session: Record<string, unknown> }>
-          ).__mathemagicum?.session as unknown as {
-            setPosition: (col: number, row: number) => void;
-            face: (which: string) => void;
-          };
-          session.setPosition(c as number, r as number);
-          session.face(f as string);
+          const handle = (globalThis as never as Handles).__mathemagicum;
+          if (!handle) throw new Error("the game has not put its handle out");
+          handle.session.setPosition(c, r);
+          handle.session.face(f);
         },
         [col, row, facing] as const,
       ),
@@ -980,13 +1127,38 @@ export class Game {
     return this.ask(`how many ${item} she holds`, (page) =>
       page.evaluate(
         (which) =>
-          (
-            globalThis as never as Record<
-              string,
-              { session: { inventory: { count: (item: string) => number } } }
-            >
-          ).__mathemagicum?.session.inventory.count(which as string) ?? 0,
+          (globalThis as never as Handles).__mathemagicum?.session.inventory.count(
+            which as ItemType,
+          ) ?? 0,
         item,
+      ),
+    );
+  }
+
+  /**
+   * Put some of a thing in her basket, without walking her to a shop for it.
+   *
+   * For the scenarios where a full basket is the precondition and not the
+   * subject — a fence to put down, carrots to feed a machine. `?crops=` and
+   * `?materials=` cover the common cases from the address bar; this is for
+   * a particular thing in a particular amount, and for the *relative* sizes
+   * of heaps, which the machines care about: one that takes the biggest heap
+   * she is carrying has to be given more of the right thing than of anything
+   * else. Six scenarios had written this body out for themselves.
+   *
+   * A string rather than an `ItemType`, because what a scenario hands over
+   * is a `FixtureType`, a `decorItem(...)`, or a crop's name, and the game's
+   * union of those is its business to keep.
+   */
+  async give(item: string, count: number): Promise<void> {
+    await this.ask(`giving her ${count} ${item}`, (page) =>
+      page.evaluate(
+        ([of, many]) => {
+          const handle = (globalThis as never as Handles).__mathemagicum;
+          if (!handle) throw new Error("the game has not put its handle out");
+          handle.session.inventory.add(of as ItemType, many);
+        },
+        [item, count] as const,
       ),
     );
   }
@@ -995,11 +1167,81 @@ export class Game {
   coins(): Promise<number> {
     return this.ask("what is in her purse", (page) =>
       page.evaluate(
-        () =>
-          (globalThis as never as Record<string, { session: { purse: { coins: number } } }>)
-            .__mathemagicum?.session.purse.coins ?? 0,
+        () => (globalThis as never as Handles).__mathemagicum?.session.purse.coins ?? 0,
       ),
     );
+  }
+
+  /** What is standing on a square, by the world's own name for it. */
+  objectOn(col: number, row: number): Promise<string | null> {
+    return this.ask(`what stands on ${col},${row}`, (page) =>
+      page.evaluate(
+        ([c, r]) => {
+          const handle = (globalThis as never as Handles).__mathemagicum;
+          if (!handle) throw new Error("the game has not put its handle out");
+          return handle.session.grid.getObjectAt(c, r)?.type ?? null;
+        },
+        [col, row] as const,
+      ),
+    );
+  }
+
+  /**
+   * A square beside her with nothing standing on it.
+   *
+   * Where a machine goes when a scenario builds one: the four squares round
+   * her, in a fixed order so the same world gives the same square twice, and
+   * the first that is empty. Four files had this, each with its own copy of
+   * the grid read, and each would have gone on finding the same square until
+   * the day one of them was fixed and the other three were not.
+   *
+   * Empty of *objects*, not necessarily buildable — a crop or water is not an
+   * object — which is what the machine scenarios have always asked and what
+   * their gardens have always answered. `crate.e2e.ts` asks a stricter
+   * question of its own.
+   */
+  async squareBeside(): Promise<{ col: number; row: number }> {
+    const here = await this.where();
+    for (const [dCol, dRow] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const at = { col: here.col + dCol, row: here.row + dRow };
+      if ((await this.objectOn(at.col, at.row)) === null) return at;
+    }
+    throw new Error("she is boxed in on all four sides");
+  }
+
+  /**
+   * In through her own front door, and say what room she is in.
+   *
+   * Put down on the doorstep rather than walked there from the spawn: a child
+   * starts in the middle of their own garden beds, eight rows off, and walking
+   * that on a held arrow key is eight seconds of nothing being tested that
+   * gets stuck the first time a fence moves.
+   *
+   * Walked until she is *in*, rather than walked once and hoped. `stopped()`
+   * waits for her to stop moving, which she also does when she has stopped
+   * short of the door — and `hearth.e2e.ts` failed exactly that way on a
+   * loaded machine, reporting a room with no fire in it when the truth was a
+   * child standing on the doorstep. Two more goes cost nothing on the runs
+   * where the first was enough. Ten files had walked her home, five with
+   * their own copy of this and one of them with the repair.
+   */
+  async goHome(): Promise<House> {
+    const doors = await this.seam<Record<string, { col: number; row: number }>>("doors");
+    const door = doors["player-house"];
+    if (!door) throw new Error("the village has no house for the player");
+    await this.standAt(door.col, door.row + 2, "up");
+    for (let go = 0; go < 3; go++) {
+      await this.walk("ArrowUp", 900);
+      await this.stopped();
+      const house = await this.seam<House | null>("house");
+      if (house) return house;
+    }
+    throw new Error("walking through the front door did not go indoors");
   }
 
   /**
@@ -1083,7 +1325,45 @@ export class Game {
       await this.type(wall.answer);
       await this.press("Enter");
     }
-    await this.settle(800);
+    await this.closed("bricks");
+  }
+
+  /**
+   * Wait for a parchment to be put away, which is when its spell has landed.
+   *
+   * Every parchment holds a finished sum on screen for a beat — six hundred
+   * and fifty milliseconds, in the popups — and only then dismisses itself
+   * and tells the scene. The solvers below used to cover that with a fixed
+   * `settle(800)` or `settle(900)`: the beat plus a margin, sized on an idle
+   * machine. That is the shape of wait `stopped()` was written to replace,
+   * and for the same reason — a margin that holds at noon and not at two in
+   * the morning under somebody else's build.
+   *
+   * The seam answers `null` once the parchment is gone, so that is what is
+   * waited on, bounded like any other question to the page. A parchment that
+   * *stays* — a wrong answer, a box left unfilled — fails here with its name
+   * on it, instead of thirty lines later in an assertion about a machine
+   * that never woke.
+   *
+   * The tail is what is left of the old fixed wait and it stays small, as in
+   * `stopped()`: once the parchment is down, the scene has already been told.
+   */
+  private async closed(
+    parchment: "bricks" | "spell" | "array" | "share" | "logic",
+    tail = 150,
+  ): Promise<void> {
+    await this.ask(`the ${parchment} parchment to close`, (page) =>
+      page.waitForFunction(
+        (which) => {
+          const handle = (globalThis as never as Handles).__mathemagicum;
+          if (!handle) throw new Error("the game has not put its handle out");
+          return handle[which]() === null;
+        },
+        parchment,
+        { timeout: ANSWER_MS },
+      ),
+    );
+    await this.settle(tail);
   }
 
   /**
@@ -1101,7 +1381,7 @@ export class Game {
       await this.type(wanted);
       await this.press("Enter");
     }
-    await this.settle(800);
+    await this.closed("spell");
   }
 
   /** Answer whatever rectangle the times spell has drawn. */
@@ -1110,7 +1390,7 @@ export class Game {
     if (!array) return;
     await this.type(array.answer);
     await this.press("Enter");
-    await this.settle(900);
+    await this.closed("array");
   }
 
   /**
@@ -1132,7 +1412,62 @@ export class Game {
       await this.type(box === "left" ? asked.left : asked.each);
       await this.press("Enter");
     }
-    await this.settle(900);
+    await this.closed("share");
+  }
+
+  /**
+   * Answer whatever the logic parchment is asking.
+   *
+   * A tray is answered by tapping every thing the rule lets through — the
+   * seam says which, and where each is drawn. A circuit is answered by
+   * flipping switches: the seam publishes the lamp's own tree and which
+   * switches are on, so this evaluates it the way the spell does and flips
+   * towards the nearest setting that lights it, one switch at a time.
+   */
+  async solveLogic(): Promise<void> {
+    interface Seen {
+      puzzle: string;
+      wanted: string[];
+      picked: string[];
+      switches: number;
+      lamp: LogicNode;
+      on: boolean[];
+      board: {
+        tokens: { id: string; x: number; y: number }[];
+        switches: { index: number; x: number; y: number }[];
+      } | null;
+      done: boolean;
+    }
+    const seen = await this.seam<Seen | null>("logic");
+    if (!seen || !seen.board) return;
+    if (seen.puzzle === "sort") {
+      for (const id of seen.wanted) {
+        if (seen.picked.includes(id)) continue;
+        const at = seen.board.tokens.find((token) => token.id === id);
+        if (!at) throw new Error(`the tray has no ${id} on it`);
+        await this.tab.mouse.click(at.x, at.y);
+        await this.settle(120);
+      }
+    } else {
+      // Every setting of at most three switches, nearest first.
+      const settings: boolean[][] = [];
+      for (let bits = 0; bits < 1 << seen.switches; bits++) {
+        settings.push(Array.from({ length: seen.switches }, (_, i) => ((bits >> i) & 1) === 1));
+      }
+      const apart = (a: boolean[], b: boolean[]) => a.filter((x, i) => x !== b[i]).length;
+      const lit = settings
+        .filter((setting) => lightsLamp(seen.lamp, setting))
+        .sort((a, b) => apart(a, seen.on) - apart(b, seen.on))[0];
+      if (!lit) throw new Error("no setting of the switches lights this lamp");
+      for (let i = 0; i < seen.switches; i++) {
+        if (seen.on[i] === lit[i]) continue;
+        const at = seen.board.switches.find((one) => one.index === i);
+        if (!at) throw new Error(`the circuit has no switch ${i}`);
+        await this.tab.mouse.click(at.x, at.y);
+        await this.settle(120);
+      }
+    }
+    await this.closed("logic");
   }
 
   /**
@@ -1179,7 +1514,10 @@ export class Game {
       // this is what was written down, which is the same thing `reload`
       // with no argument is for.
       const url = new URL(this.page.url());
-      await this.page.goto(`${url.origin}/?skipTitle${seams}`, {
+      // The guides stay where the opening put them: a scenario that met
+      // them goes on meeting them, and one spared them is spared again.
+      const first = !new URLSearchParams(url.search).has("guided");
+      await this.page.goto(`${url.origin}/?skipTitle${seams}${guidedSeam({ firstTime: first })}`, {
         waitUntil: "domcontentloaded",
         timeout: SETUP_MS,
       });
@@ -1249,10 +1587,9 @@ export class Game {
   zoomNow(): Promise<number> {
     return this.ask("the camera's zoom", (page) =>
       page.evaluate(() => {
-        const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-          .__mathemagicum;
+        const handle = (globalThis as never as Handles).__mathemagicum;
         if (!handle) throw new Error("the game has not put its handle out");
-        return (handle.zoom as () => number)();
+        return handle.zoom();
       }),
     );
   }
@@ -1269,24 +1606,34 @@ export class Game {
    * move, and following the fingers is the whole of what a pinch does.
    */
   async pinch(centre: { x: number; y: number }, from: number, to: number): Promise<void> {
-    const session = await this.page.context().newCDPSession(this.page);
+    const session = await this.ask("a line to the debugger", (page) =>
+      page.context().newCDPSession(page),
+    );
     const fingers = (apart: number) => [
       { x: centre.x - apart / 2, y: centre.y, id: 1 },
       { x: centre.x + apart / 2, y: centre.y, id: 2 },
     ];
-    await session.send("Input.dispatchTouchEvent", {
-      type: "touchStart",
-      touchPoints: fingers(from),
-    });
-    const STEPS = 8;
-    for (let step = 1; step <= STEPS; step++) {
+    // Detached whatever happens in between. A session left open on a
+    // gesture that threw halfway is a session the browser keeps until the
+    // context closes, and a context that has several of those to unwind is
+    // one that takes its time about closing — which reads, from out here, as
+    // "the window to close" giving up.
+    try {
       await session.send("Input.dispatchTouchEvent", {
-        type: "touchMove",
-        touchPoints: fingers(from + ((to - from) * step) / STEPS),
+        type: "touchStart",
+        touchPoints: fingers(from),
       });
+      const STEPS = 8;
+      for (let step = 1; step <= STEPS; step++) {
+        await session.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: fingers(from + ((to - from) * step) / STEPS),
+        });
+      }
+      await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    } finally {
+      await session.detach().catch(() => {});
     }
-    await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await session.detach();
     await this.settle(300);
   }
 

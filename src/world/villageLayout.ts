@@ -43,7 +43,14 @@ export interface Direction {
   dRow: number;
 }
 
-export const DIRECTIONS: Record<string, Direction> = {
+/**
+ * The compass points a plot may face. Seven, not eight: nothing has ever
+ * stood to the north-west of the green, and a direction nothing uses would
+ * be a key a typo could reach.
+ */
+export type CompassPoint = "N" | "NE" | "E" | "SE" | "S" | "SW" | "W";
+
+export const DIRECTIONS: Readonly<Record<CompassPoint, Direction>> = {
   N: { dCol: 0, dRow: -1 },
   NE: { dCol: 1, dRow: -1 },
   E: { dCol: 1, dRow: 0 },
@@ -120,14 +127,14 @@ const BUILDINGS: readonly BuildingSpec[] = [
   {
     id: "player-house",
     type: "house",
-    direction: DIRECTIONS.N as Direction,
+    direction: DIRECTIONS.N,
     npcId: null,
     garden: true,
   },
   {
     id: "school",
     type: "school",
-    direction: DIRECTIONS.NE as Direction,
+    direction: DIRECTIONS.NE,
     npcId: "teacher",
     garden: false,
     // Like the shopkeeper, and for the same reason: a teacher you have to
@@ -138,7 +145,7 @@ const BUILDINGS: readonly BuildingSpec[] = [
   {
     id: "villager-house-1",
     type: "house",
-    direction: DIRECTIONS.E as Direction,
+    direction: DIRECTIONS.E,
     // Nobody's but a child's. The villagers used to live in these three and
     // moved out when it became clear four children share a tablet and three
     // of them were being housed in somebody else's cottage. See
@@ -149,7 +156,7 @@ const BUILDINGS: readonly BuildingSpec[] = [
   {
     id: "post-office",
     type: "post-office",
-    direction: DIRECTIONS.SE as Direction,
+    direction: DIRECTIONS.SE,
     npcId: "postal-worker",
     garden: false,
     // The tower is a study as well as a post office, and the geometry
@@ -160,14 +167,14 @@ const BUILDINGS: readonly BuildingSpec[] = [
   {
     id: "villager-house-2",
     type: "house",
-    direction: DIRECTIONS.S as Direction,
+    direction: DIRECTIONS.S,
     npcId: null,
     garden: true,
   },
   {
     id: "store",
     type: "store",
-    direction: DIRECTIONS.SW as Direction,
+    direction: DIRECTIONS.SW,
     npcId: "shopkeeper",
     garden: false,
     npcIndoors: true,
@@ -176,7 +183,7 @@ const BUILDINGS: readonly BuildingSpec[] = [
   {
     id: "villager-house-3",
     type: "house",
-    direction: DIRECTIONS.W as Direction,
+    direction: DIRECTIONS.W,
     npcId: null,
     garden: true,
   },

@@ -59,36 +59,10 @@ const machines = (game: Game) => game.seam<Machine[]>("machines");
  */
 const WITH_TIMBER = "&materials=40&hour=12&freezeNpcs&learned=all";
 
-async function squareBeside(game: Game): Promise<{ col: number; row: number }> {
-  const here = await game.where();
-  for (const step of [
-    { col: 1, row: 0 },
-    { col: -1, row: 0 },
-    { col: 0, row: 1 },
-    { col: 0, row: -1 },
-  ]) {
-    const at = { col: here.col + step.col, row: here.row + step.row };
-    const taken = await game.tab.evaluate(
-      ([c, r]) => {
-        const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-          .__mathemagicum;
-        if (!handle) throw new Error("the game has not put its handle out");
-        const session = handle.session as {
-          grid: { getObjectAt: (col: number, row: number) => unknown };
-        };
-        return session.grid.getObjectAt(c as number, r as number) !== null;
-      },
-      [at.col, at.row] as const,
-    );
-    if (!taken) return at;
-  }
-  throw new Error("she is boxed in on all four sides");
-}
-
 async function aPressBeside(game: Game): Promise<{ col: number; row: number }> {
   expect(await takeFromCrate(game, FixtureType.Press)).toBe(true);
   await game.settle(400);
-  const at = await squareBeside(game);
+  const at = await game.squareBeside();
   await game.tapCell(at.col, at.row);
   await game.settle(500);
   return at;
@@ -108,7 +82,9 @@ describe("the machine that takes two things at once", () => {
         expect(await machines(game)).toEqual([]);
         await game.tapCell(at.col, at.row);
         await game.settle(400);
-        await game.solveShare();
+        // Woken by the logic spell now — both is AND — where it used to be
+        // the sharing spell's. See `SPARK`.
+        await game.solveLogic();
         await game.settle(400);
         expect((await machines(game))[0]?.awake).toBe(true);
 
@@ -178,7 +154,7 @@ describe("the machine that takes two things at once", () => {
         const at = await aPressBeside(game);
         await game.tapCell(at.col, at.row);
         await game.settle(400);
-        await game.solveShare();
+        await game.solveLogic();
         await game.settle(400);
         await game.tapCell(at.col, at.row);
         await game.settle(400);

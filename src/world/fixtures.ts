@@ -154,6 +154,31 @@ export const FixtureType = {
    */
   Press: "press",
   /**
+   * Two mouths and one spout: whatever arrives at either goes on down.
+   *
+   * The sixth machine, and the press's opposite. A press waits for both;
+   * this never waits. That is *either*, and the first machine that decides
+   * without counting.
+   */
+  Funnel: "funnel",
+  /**
+   * A bell in a gallows that rings for each thing that passes through it,
+   * and passes the thing on.
+   *
+   * The seventh, and the one that says something rather than making
+   * anything: a line with a bell at the end of it is a line a child can
+   * hear working, and what the mechanic's jobs are checked by.
+   */
+  Bell: "bell",
+  /** The sieve inside out: shown one thing, it drops that in its bin and passes the rest. */
+  Inverter: "inverter",
+  /** A plank on a post that tips one way and then the other: odd this way, even that. */
+  Seesaw: "seesaw",
+  /** A strongbox that holds what it is given until night, and then lets it all out. */
+  Latch: "latch",
+  /** A drawing of the machines round it, to build again wherever it is stamped down. */
+  Blueprint: "blueprint",
+  /**
    * Brass and greenery, for the places that are not the village square.
    *
    * A playtest liked the fairytale look and asked for somewhere with a bit
@@ -208,6 +233,12 @@ export const PLACEABLE_FIXTURES: readonly FixtureType[] = [
   FixtureType.Sieve,
   FixtureType.Tally,
   FixtureType.Press,
+  FixtureType.Funnel,
+  FixtureType.Bell,
+  FixtureType.Inverter,
+  FixtureType.Seesaw,
+  FixtureType.Latch,
+  FixtureType.Blueprint,
 ];
 
 export function isPlaceable(fixture: FixtureType): boolean {
@@ -259,6 +290,12 @@ export const FIXTURE_TURNS: Partial<Record<FixtureType, number>> = {
   [FixtureType.Sieve]: TURNS_DRAWN,
   [FixtureType.Tally]: TURNS_DRAWN,
   [FixtureType.Press]: TURNS_DRAWN,
+  [FixtureType.Funnel]: TURNS_DRAWN,
+  [FixtureType.Bell]: TURNS_DRAWN,
+  [FixtureType.Inverter]: TURNS_DRAWN,
+  [FixtureType.Seesaw]: TURNS_DRAWN,
+  [FixtureType.Latch]: TURNS_DRAWN,
+  [FixtureType.Blueprint]: TURNS_DRAWN,
 };
 
 /** How many drawings this fixture has: three if it turns, one if it does not. */

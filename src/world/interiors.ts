@@ -36,6 +36,7 @@ export const INTERIOR_ROOMS: readonly string[] = [
   "tower",
   "schoolhouse",
   "observatory",
+  "garage",
 ];
 
 /**

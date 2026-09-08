@@ -14,7 +14,7 @@ import { type GroveProgress, GroveTask } from "../world/enchantedForest";
 import { PagedPanel } from "./PagedPanel";
 import type { PanelRect } from "./ParchmentPanel";
 import { UiAsset, type UiIndex } from "./assets";
-import { INK, RULE_HEX } from "./parchment";
+import { INK, RULE_HEX, TYPE } from "./parchment";
 
 /**
  * What the great tree shows you: the array spell, in four pictures.
@@ -42,7 +42,7 @@ const BED_GAP = 3;
 /** Between one bed and the next, where the trellis runs on the ground. */
 const BED_PLOT_GAP = 12;
 
-const SMALL_SIZE = 12;
+const SMALL_SIZE = TYPE.small;
 // The biggest patch the ladder can set is ten rows deep, so ten labels are
 // enough for the running totals down the side.
 const ROW_LABELS = 10;

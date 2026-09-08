@@ -3,6 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { SPELLS, Spell } from "../spells/spellbook";
+import type { ItemType } from "./inventory";
 import {
   BIN_HOLDS,
   MACHINE_TYPES,
@@ -35,7 +36,7 @@ const WOOD = "wood";
 const SORTER = MachineType.Sorter;
 
 /** A woken sorter with a heap in its mouth. */
-function loaded(count: number, item = WOOD) {
+function loaded(count: number, item: ItemType = WOOD) {
   const fed = feed(wake(newMachine()), item, count, SORTER);
   if (!fed) throw new Error("a woken machine refused a heap");
   return fed;
@@ -336,6 +337,7 @@ describe("a hothouse turning one thing into another", () => {
       otherHeap: 0,
       otherMark: 0,
       worked: 5,
+      rung: 0,
     });
     expect(takeShare(old.get("1,1") as never, 0).item).toBe("wood");
   });
@@ -360,7 +362,8 @@ describe("a hothouse turning one thing into another", () => {
 
   /** Where a sorter takes anything, because dealing cannot mint. */
   test("and a sorter takes whatever it is given", () => {
-    for (const item of ["wood", "stone", CARROT]) {
+    const anything: readonly ItemType[] = [MaterialType.Wood, MaterialType.Stone, CARROT];
+    for (const item of anything) {
       expect({ item, ok: accepts(MachineType.Sorter, item) }).toEqual({ item, ok: true });
     }
   });
@@ -378,7 +381,7 @@ describe("a sieve deciding which way things go", () => {
   const CARROT = "carrot";
 
   /** A woken sieve with a heap in its mouth. */
-  function sifting(item: string, count: number, from = wake(newMachine())) {
+  function sifting(item: ItemType, count: number, from = wake(newMachine())) {
     const fed = feed(from, item, count, SIEVE);
     if (!fed) throw new Error("a woken sieve refused a heap");
     return fed;
@@ -593,10 +596,12 @@ describe("a tally counting up to its mark", () => {
     for (const machine of MACHINE_TYPES) {
       expect({ machine, spark: SPELLS.includes(SPARK[machine]) }).toEqual({ machine, spark: true });
     }
-    // And between them they still cover all four operations, which is the
-    // thing the old assertion was really guarding.
+    // And between them they still cover all four operations — and now the
+    // logic that the machines which *decide* are woken by, which is the
+    // thing the old assertion was really guarding: no machine is sparked by
+    // a spell that has nothing to do with what it does.
     expect(new Set(MACHINE_TYPES.map((machine) => SPARK[machine]))).toEqual(
-      new Set([Spell.Growth, Spell.Clearing, Spell.Array, Spell.Share]),
+      new Set([Spell.Growth, Spell.Clearing, Spell.Array, Spell.Share, Spell.Logic]),
     );
   });
 });
@@ -810,5 +815,65 @@ describe("a press taking so many of one for every so many of the other", () => {
   /** A press asleep is a sculpture, the same as every other machine. */
   test("takes nothing at all before it has been woken", () => {
     expect(feed(newMachine(), WOOD, 2, PRESS)).toBeNull();
+  });
+});
+
+describe("the machines that decide", () => {
+  const woken = wake(newMachine());
+  const ROUND = MINUTES_PER_ROUND;
+
+  test("a trapdoor drops the thing it was shown and passes everything else", () => {
+    const shown = feed(woken, WOOD, 3, MachineType.Inverter);
+    if (!shown) throw new Error("a trapdoor refused wood");
+    const dropped = advance(shown, ROUND * 3, MachineType.Inverter);
+    // The first kind goes in the bin, and is learned as the one that does.
+    expect(dropped.bin).toBe(3);
+    expect(dropped.binned).toBe(WOOD);
+    expect(dropped.passes).toBe(WOOD);
+    expect(dropped.crates).toEqual([0, 0, 0]);
+    // Anything else goes through.
+    const other = feed(dropped, "stone", 3, MachineType.Inverter);
+    if (!other) throw new Error("a trapdoor refused stone");
+    const passed = advance(other, ROUND * 3, MachineType.Inverter);
+    expect(passed.crates.reduce((a, b) => a + b, 0)).toBe(3);
+    expect(passed.made).toBe("stone");
+    expect(passed.bin).toBe(3);
+  });
+
+  test("a seesaw deals one this way and one that way", () => {
+    const loaded = feed(woken, WOOD, 6, MachineType.Seesaw);
+    if (!loaded) throw new Error("a seesaw refused wood");
+    const dealt = advance(loaded, ROUND * 6, MachineType.Seesaw);
+    expect(dealt.crates.reduce((a, b) => a + b, 0)).toBe(3);
+    expect(dealt.bin).toBe(3);
+    expect(dealt.binned).toBe(WOOD);
+    expect(dealt.made).toBe(WOOD);
+    // Odd many, and the plank is left where it stopped.
+    const five = advance(
+      feed(woken, WOOD, 5, MachineType.Seesaw) ?? woken,
+      ROUND * 5,
+      MachineType.Seesaw,
+    );
+    expect([five.crates.reduce((a, b) => a + b, 0), five.bin]).toEqual([3, 2]);
+    expect(five.mark).toBe(1);
+  });
+
+  test("a strongbox holds by day and lets out by night", () => {
+    const filled = feed(woken, WOOD, 4, MachineType.Latch);
+    if (!filled) throw new Error("a strongbox refused wood");
+    const day = advance(filled, ROUND * 10, MachineType.Latch, false);
+    expect(day.heap).toBe(4);
+    expect(day.crates).toEqual([0, 0, 0]);
+    // And banks nothing while shut: the hour is what opens it.
+    expect(day.worked).toBe(0);
+    const night = advance(filled, ROUND * 4, MachineType.Latch, true);
+    expect(night.heap).toBe(0);
+    expect(night.crates.reduce((a, b) => a + b, 0)).toBe(4);
+    expect(night.made).toBe(WOOD);
+  });
+
+  test("a blueprint takes nothing and does nothing", () => {
+    expect(feed(woken, WOOD, 1, MachineType.Blueprint)).toBeNull();
+    expect(advance(woken, ROUND * 10, MachineType.Blueprint)).toBe(woken);
   });
 });

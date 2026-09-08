@@ -4,9 +4,10 @@
 import { describe, expect, test } from "bun:test";
 import { LANGUAGES, Language } from "../settings";
 import { INTRO_BEATS, IntroBeat } from "../ui/intro";
-import { AnimalKind } from "../world/animals";
+import { NEWS_BEATS } from "../ui/news";
 import { FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import { INTERIOR_ROOMS } from "../world/interiors";
+import { JOBS } from "../world/jobs";
 import { NAMED_PEOPLE } from "../world/names";
 import { PLANT_STAGES, PLANT_TYPES, PlantStage, PlantType } from "../world/plants";
 import { TERRAIN_TYPES } from "../world/terrain";
@@ -102,6 +103,21 @@ function sample(p: Phrases): Record<string, string> {
     mirrorWrong: p.mirrorWrong,
     mirrorDone: p.mirrorDone,
     mirrorHint: p.mirrorHint,
+    logicTitle: p.logicTitle,
+    logicAskTray: p.logicAskTray,
+    logicAskCircuit: p.logicAskCircuit,
+    logicWrong: p.logicWrong,
+    logicWasted: p.logicWasted,
+    logicDoneTray: p.logicDoneTray,
+    logicDoneCircuit: p.logicDoneCircuit,
+    logicHintTray: p.logicHintTray,
+    logicHintCircuit: p.logicHintCircuit,
+    jobsTitle: p.jobsTitle,
+    // Every job under the one key, for the reason the news is.
+    jobAsk: JOBS.map((job) => `${p.jobAsk(job, 1)} ${p.jobAsk(job, 3)}`).join(" "),
+    jobBargain: JOBS.map((job) => p.jobBargain(job)).join(" "),
+    jobEarned: p.jobEarned,
+    jobsAllDone: p.jobsAllDone,
     arrayHintRows: p.arrayHintRows(6, 2),
 
     titleTagline: p.titleTagline,
@@ -127,6 +143,10 @@ function sample(p: Phrases): Record<string, string> {
     optionsButton: p.optionsButton,
     optionsTitle: p.optionsTitle,
     languageHeading: p.languageHeading,
+    // One machine's sentence stands for all five: they come out of one
+    // table, so a language that has the table has all of them.
+    thingDoes: p.thingDoes(FixtureType.Press),
+    thingCosts: p.thingCosts,
     soundHeading: p.soundHeading,
     soundOn: p.soundOn,
     soundOff: p.soundOff,
@@ -171,6 +191,12 @@ function sample(p: Phrases): Record<string, string> {
 
     introTitle: p.introTitle,
     intro: p.intro(IntroBeat.Seeds),
+    newsTitle: p.newsTitle,
+    // Every beat under the one key, unlike the welcome's, because the news
+    // is a list that grows: a beat appended without a translation is the
+    // failure mode this whole file exists to catch, and sampling only the
+    // first one would let every later beat through unchecked.
+    news: NEWS_BEATS.map((beat) => p.news(beat)).join(" "),
     lessonTitle: p.lessonTitle,
     lessonRune: p.lessonRune,
     // All three lengths under the one key: a one-digit sum has one jump and

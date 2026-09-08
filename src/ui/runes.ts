@@ -26,4 +26,5 @@ export const RUNE_OF: Record<Spell, string> = {
   share: UiAsset.RuneDivide,
   hourglass: UiAsset.RuneHourglass,
   mirror: UiAsset.RuneMirror,
+  logic: UiAsset.RuneLogic,
 };

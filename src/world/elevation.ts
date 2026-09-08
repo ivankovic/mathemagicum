@@ -3,8 +3,6 @@
 
 import { Habitat } from "./habitat";
 import { smoothNoise } from "./noise";
-import type { Rng } from "./rng";
-import { pick } from "./rng";
 import { TerrainType } from "./terrain";
 
 /**

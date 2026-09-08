@@ -21,18 +21,19 @@ import {
   submit,
   typeDigit,
 } from "../spells/addition";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type CloseChip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
 import {
   ACTIVE_HEX,
   DONE_HEX,
   DONE_INK,
-  FACE,
   INK,
   INK_DIM,
   INK_HEX,
   PAPER_HEX,
   PAPER_PALE_HEX,
+  TYPE,
   WRONG_HEX,
   WRONG_INK,
 } from "./parchment";
@@ -62,10 +63,10 @@ const PANEL_MAX_H = 430;
 const PANEL_MIN_W = 280;
 const PANEL_MIN_H = 300;
 
-const TITLE_SIZE = 20;
-const LABEL_SIZE = 13;
+const TITLE_SIZE = TYPE.spellTitle;
+const LABEL_SIZE = TYPE.body;
 const BOX_SIZE = 17;
-const HINT_SIZE = 12;
+const HINT_SIZE = TYPE.small;
 
 // How tall each arc rises, by place. The line is schematic, so this is the
 // only thing left that can say a hundreds jump is bigger than a ones jump —
@@ -115,11 +116,6 @@ const KEY_MIN = 26;
 // them regardless of what they are. Naming the components rather than the
 // classes keeps `own` honest: an object that cannot be hidden or pinned to
 // the screen has no business in a popup.
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
-
 interface PadKey {
   readonly rect: Phaser.GameObjects.Rectangle;
   readonly text: Phaser.GameObjects.Text;
@@ -128,7 +124,7 @@ interface PadKey {
   readonly span: number;
 }
 
-export class SpellPopup {
+export class SpellPopup extends Panel {
   /**
    * The sum being asked, when the rung asks for one without a number line.
    *
@@ -158,8 +154,6 @@ export class SpellPopup {
     return this.hint.text;
   }
 
-  private readonly parts: PanelPart[] = [];
-  private readonly paper: ParchmentPanel;
   private readonly ink: Phaser.GameObjects.Graphics;
   private readonly title: Phaser.GameObjects.Text;
   private readonly hint: Phaser.GameObjects.Text;
@@ -168,59 +162,47 @@ export class SpellPopup {
   private readonly boxes: Phaser.GameObjects.Rectangle[] = [];
   private readonly boxTexts: Phaser.GameObjects.Text[] = [];
   private readonly keys: PadKey[] = [];
-  private readonly closeRect: Phaser.GameObjects.Rectangle;
-  private readonly closeText: Phaser.GameObjects.Text;
+  private readonly closeButton: CloseChip;
 
   private state: CastState | null = null;
   private finish: ((result: CastResult) => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
+  /** The beat on a finished parchment before it goes, so a close can cancel it. */
+  private beat: Phaser.Time.TimerEvent | null = null;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     private words: Phrases,
-    private readonly register: (object: Phaser.GameObjects.GameObject) => void,
+    register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
     const add = scene.add;
 
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
+      lift: 0,
     });
 
     this.ink = this.own(add.graphics());
-    this.title = this.own(this.label("", TITLE_SIZE, INK).setOrigin(0.5, 0));
-    this.hint = this.own(this.label("", HINT_SIZE, INK_DIM).setOrigin(0.5, 0));
-    this.startLabel = this.own(this.label("", LABEL_SIZE, INK).setOrigin(0.5, 0));
+    this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
+    this.hint = this.own(this.text("", HINT_SIZE, INK_DIM).setOrigin(0.5, 0));
+    this.startLabel = this.own(this.text("", LABEL_SIZE, INK).setOrigin(0.5, 0));
 
     for (let i = 0; i < PLACES; i++) {
-      this.jumpLabels.push(this.own(this.label("", LABEL_SIZE, INK).setOrigin(0.5, 1)));
+      this.jumpLabels.push(this.own(this.text("", LABEL_SIZE, INK).setOrigin(0.5, 1)));
       this.boxes.push(
         this.own(add.rectangle(0, 0, BOX_W, BOX_H, PAPER_PALE_HEX).setStrokeStyle(2, INK_HEX)),
       );
-      this.boxTexts.push(this.own(this.label("", BOX_SIZE, INK).setOrigin(0.5)));
+      this.boxTexts.push(this.own(this.text("", BOX_SIZE, INK).setOrigin(0.5)));
     }
 
     this.buildKeypad();
 
-    this.closeRect = this.own(
-      add
-        .rectangle(0, 0, 26, 26, PAPER_HEX)
-        .setStrokeStyle(2, INK_HEX)
-        .setInteractive({ useHandCursor: true }),
-    );
-    this.closeText = this.own(this.label("x", LABEL_SIZE, INK).setOrigin(0.5));
-    this.closeRect.on("pointerdown", () => this.dismiss(false));
+    this.closeButton = this.closeChip(LABEL_SIZE, () => this.dismiss(false), "key");
 
-    for (const part of this.parts) {
-      part.setDepth(depth).setScrollFactor(0).setVisible(false);
-      register(part);
-    }
     // The ink sits above the paper but below the boxes and the keypad, which
     // are drawn on top of the lines they mark.
     this.ink.setDepth(depth + 1);
@@ -232,8 +214,6 @@ export class SpellPopup {
       key.rect.setDepth(depth + 2);
       key.text.setDepth(depth + 3);
     }
-    this.closeRect.setDepth(depth + 2);
-    this.closeText.setDepth(depth + 3);
   }
 
   /** Say everything from here on in another language. */
@@ -253,7 +233,7 @@ export class SpellPopup {
     return this.state;
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.state !== null;
   }
 
@@ -291,22 +271,18 @@ export class SpellPopup {
     this.finish = onDone;
     this.paper.setVisible(true);
     for (const part of this.parts) part.setVisible(true);
-    this.keyHandler = (event: KeyboardEvent) => this.onKeyDown(event);
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    this.watchKeys((event) => this.onKeyDown(event));
     this.layout();
   }
 
   /** Closes without reporting anything — for a scene shutting down. */
-  close(): void {
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+  override close(): void {
+    this.beat?.remove();
+    this.beat = null;
+    super.close();
     this.state = null;
     this.bare = null;
     this.finish = null;
-    this.paper.setVisible(false);
-    for (const part of this.parts) part.setVisible(false);
   }
 
   private dismiss(solved: boolean): void {
@@ -336,7 +312,8 @@ export class SpellPopup {
       this.render();
       // A beat on the finished parchment before it clears, so the last
       // answer is readable as an answer rather than as a flash.
-      this.scene.time.delayedCall(650, () => this.dismiss(true));
+      this.beat?.remove();
+      this.beat = this.scene.time.delayedCall(650, () => this.dismiss(true));
       return;
     }
     this.render();
@@ -381,7 +358,7 @@ export class SpellPopup {
             .setStrokeStyle(2, INK_HEX)
             .setInteractive({ useHandCursor: true }),
         );
-        const text = this.own(this.label(label, BOX_SIZE, INK).setOrigin(0.5));
+        const text = this.own(this.text(label, BOX_SIZE, INK).setOrigin(0.5));
         rect.on("pointerdown", press(label));
         this.keys.push({ rect, text, col, row, span });
         col += span;
@@ -389,26 +366,7 @@ export class SpellPopup {
     }
   }
 
-  private label(text: string, size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, text, {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-    });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
-  }
-
-  /** Re-place everything for the current viewport. Safe to call when shut. */
-  layout(): void {
-    if (!this.state) return;
-    this.render();
-  }
-
-  private render(): void {
+  protected render(): void {
     const state = this.state;
     if (!state) return;
     const { width, height } = this.scene.scale;
@@ -416,12 +374,10 @@ export class SpellPopup {
     const panelW = rect.width;
     const panelH = rect.height;
     const cx = rect.centreX;
-    const cy = rect.centreY;
     const left = rect.left;
     const top = rect.top;
 
-    this.closeRect.setPosition(left + panelW - PAD - 2, top + PAD + 2);
-    this.closeText.setPosition(this.closeRect.x, this.closeRect.y);
+    this.closeButton.place(rect);
 
     const innerW = panelW - PAD * 2;
     const innerH = panelH - PAD * 2;
@@ -702,11 +658,5 @@ export class SpellPopup {
   private drawArcHead(at: number, baseY: number, color: number): void {
     this.ink.fillStyle(color, 1);
     this.ink.fillTriangle(at, baseY - 2, at - 6, baseY - 13, at + 6, baseY - 13);
-  }
-
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
   }
 }

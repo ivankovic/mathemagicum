@@ -14,7 +14,6 @@ import {
   terrainForElevation,
 } from "./elevation";
 import { Habitat } from "./habitat";
-import { createRng } from "./rng";
 import { TERRAIN_TYPES, TerrainType } from "./terrain";
 
 const W = 200;

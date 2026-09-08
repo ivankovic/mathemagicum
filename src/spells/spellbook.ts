@@ -40,6 +40,11 @@ export const Spell = {
   Hourglass: "hourglass",
   /** Folding a shape in half: the first geometry about a whole figure. */
   Mirror: "mirror",
+  /**
+   * Which things get through, and whether the lamp lights: Boolean logic,
+   * in swatches and switches. Wakes the machines that decide.
+   */
+  Logic: "logic",
 } as const;
 
 export type Spell = (typeof Spell)[keyof typeof Spell];
@@ -52,6 +57,7 @@ export const SPELLS: readonly Spell[] = [
   Spell.Share,
   Spell.Hourglass,
   Spell.Mirror,
+  Spell.Logic,
 ];
 
 /**
@@ -88,6 +94,11 @@ export const TAUGHT_BY: Partial<Record<Spell, string>> = {
   // is the teacher furthest from the village by construction — so what she
   // teaches ought to be the thing least like the arithmetic below.
   [Spell.Mirror]: "astronomer",
+  // In the garage in the city. She mends the machines, and the spell she
+  // teaches is the one that wakes the ones that decide — the press, the
+  // funnel and the bell — which is the first spell here that is not
+  // arithmetic at all.
+  [Spell.Logic]: "mechanic",
 };
 
 /**
@@ -122,6 +133,7 @@ export const TAUGHT_BESIDE: Partial<Record<Spell, string>> = {
   [Spell.Share]: "lighthouse",
   [Spell.Hourglass]: "clock-tower",
   [Spell.Mirror]: "observatory",
+  [Spell.Logic]: "garage",
 };
 
 export function knowsSpell(learned: Iterable<string>, spell: Spell): boolean {

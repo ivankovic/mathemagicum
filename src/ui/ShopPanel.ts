@@ -29,7 +29,6 @@ import {
   tenderedCoins,
 } from "../shop/tender";
 import { DECOR_LOOKS, DecorType, pieceArt, takesAColour } from "../world/decor";
-import { type FixtureType, PLACEABLE_FIXTURES } from "../world/fixtures";
 import { GROWABLE_ROOM, growablePieceKey } from "../world/interiors";
 import type { Inventory, ItemType } from "../world/inventory";
 import { MATERIAL_TYPES } from "../world/materials";
@@ -53,20 +52,28 @@ import type { Rng } from "../world/rng";
 import {
   type Buyable,
   CROP_PRICE,
-  FURNITURE_STOCK,
   MOST_PER_SHELF,
   type Purse,
   SHELVES,
-  SHOP_STOCK,
   isFurniture,
   mostBuyable,
   mostSellable,
   priceOf,
   sellPriceOf,
 } from "../world/shop";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type Chip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import { type UiIndex, coinIcon, cropIcon, itemIcon, materialIcon, uiTextureKey } from "./assets";
-import { FACE, INK, INK_DIM, INK_HEX, PAPER_HEX, PAPER_PALE_HEX } from "./parchment";
+import {
+  DONE_HEX,
+  DONE_INK,
+  INK,
+  INK_DIM,
+  INK_HEX,
+  PAPER_PALE_HEX,
+  TYPE,
+  WRONG_INK,
+} from "./parchment";
 
 /**
  * The village store, and the two things it teaches.
@@ -90,13 +97,9 @@ const PANEL_MAX_H = 470;
 const PANEL_MIN_W = 280;
 const PANEL_MIN_H = 320;
 
-const INK_GOOD = "#3d6b2a";
-const INK_BAD = "#a8321e";
-const GOOD_HEX = 0x3d6b2a;
-
-const TITLE_SIZE = 17;
-const ROW_SIZE = 13;
-const SMALL_SIZE = 12;
+const TITLE_SIZE = TYPE.title;
+const ROW_SIZE = TYPE.body;
+const SMALL_SIZE = TYPE.small;
 
 const ROW_H = 38;
 /** And the shortest, before an icon and two lines stop being readable. */
@@ -136,33 +139,11 @@ const TAP_SLOP = 6;
 
 type Mode = "menu" | "buy" | "sell";
 
-/**
- * Everything the store sells, in the order it is listed.
- *
- * The garden's things first, because they are what a child meets first and
- * what the game asks them to build with; the house's after, because a room
- * to furnish is something you have before you have anything to put in it.
- *
- * Kept, though nothing draws it as one column any more — it is what the
- * shelves are checked against, so that a thing which exists, has a price and
- * has a noun in three languages cannot end up on no shelf at all.
- */
-const STOCK: readonly Buyable[] = [...SHOP_STOCK, ...FURNITURE_STOCK];
-
-interface Button {
-  readonly box: Phaser.GameObjects.Rectangle;
-  readonly label: Phaser.GameObjects.Text;
+interface Button extends Chip {
   readonly icon?: Phaser.GameObjects.Image;
 }
 
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
-
-export class ShopPanel {
-  private readonly parts: PanelPart[] = [];
-  private readonly paper: ParchmentPanel;
+export class ShopPanel extends Panel {
   private readonly title: Phaser.GameObjects.Text;
   private readonly hint: Phaser.GameObjects.Text;
   private readonly closeButton: Button;
@@ -244,25 +225,23 @@ export class ShopPanel {
   private keeper = "";
   private onClose: (() => void) | null = null;
   private onTrade: (() => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
-    private readonly depth: number,
+    depth: number,
     private readonly inventory: Inventory,
     private readonly purse: Purse,
     private words: Phrases,
     private readonly rng: Rng,
     register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
+      lineSpacing: 2,
     });
 
     this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
@@ -385,14 +364,6 @@ export class ShopPanel {
     this.deny = this.button(null, () => this.onDeny());
     this.back = this.button(null, () => this.toMenu());
     this.closeButton = this.button(null, () => this.close());
-
-    for (const part of this.parts) {
-      part
-        .setDepth(depth + 1)
-        .setScrollFactor(0)
-        .setVisible(false);
-      register(part);
-    }
     for (const button of this.allButtons()) {
       button.icon?.setDepth(depth + 2);
       button.label.setDepth(depth + 2);
@@ -522,7 +493,7 @@ export class ShopPanel {
     ];
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.open;
   }
 
@@ -579,31 +550,19 @@ export class ShopPanel {
     this.onTrade = onTrade ?? null;
     this.paper.setVisible(true);
     this.toMenu();
-    this.keyHandler = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
+    this.escapeCloses(() => {
       if (this.mode === "menu") this.close();
       else this.toMenu();
-    };
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    });
   }
 
-  close(): void {
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+  override close(): void {
+    super.close();
     this.open = false;
-    this.paper.setVisible(false);
-    for (const part of this.parts) part.setVisible(false);
     const done = this.onClose;
     this.onClose = null;
     this.onTrade = null;
     done?.();
-  }
-
-  layout(): void {
-    if (this.open) this.render();
   }
 
   // --- what the player is doing --------------------------------------------
@@ -687,7 +646,7 @@ export class ShopPanel {
    */
   private mostTradeable(): number {
     if (this.mode === "sell" && this.chosenCrop) {
-      return mostSellable(this.chosenCrop, this.inventory.count(this.chosenCrop), this.cropPrice);
+      return mostSellable(this.inventory.count(this.chosenCrop));
     }
     if (this.mode === "buy" && this.chosenBuy) {
       return mostBuyable(this.chosenBuy, this.purse.coins, this.cropPrice);
@@ -958,7 +917,7 @@ export class ShopPanel {
 
   // --- drawing --------------------------------------------------------------
 
-  private render(): void {
+  protected render(): void {
     const { width, height } = this.scene.scale;
     const rect = this.paper.layout(width, height);
     for (const part of this.parts) part.setVisible(false);
@@ -1162,7 +1121,7 @@ export class ShopPanel {
       .setVisible(true)
       .setPosition(rect.centreX, pickerY + 34 + shift)
       .setText(this.words.onTheCounter(CURRENCY.format(tenderTotal(tender))))
-      .setColor(off === 0 ? INK_GOOD : INK);
+      .setColor(off === 0 ? DONE_INK : INK);
 
     // Which colour, when what she is buying comes in colours. Above the
     // table, because it is part of choosing the thing rather than part of
@@ -1183,7 +1142,7 @@ export class ShopPanel {
       // centred on `pickerY`.
       const y = pickerY + 20 + SWATCH / 2;
       row.box.setSize(SWATCH, SWATCH).setPosition(x, y);
-      row.box.setStrokeStyle(3, look === this.chosenLook ? GOOD_HEX : INK_HEX);
+      row.box.setStrokeStyle(3, look === this.chosenLook ? DONE_HEX : INK_HEX);
       row.label.setText("").setPosition(x, y);
       row.icon
         ?.setTexture(
@@ -1272,7 +1231,7 @@ export class ShopPanel {
     const actionY = top + height + 20;
     this.place(this.confirm, rect.centreX + 60, actionY, 110, 30);
     this.confirm.label.setText(this.settled ? this.words.done : this.words.pay);
-    this.confirm.box.setStrokeStyle(2, isExact(tender) ? GOOD_HEX : INK_HEX);
+    this.confirm.box.setStrokeStyle(2, isExact(tender) ? DONE_HEX : INK_HEX);
     this.show(this.confirm);
     if (!this.settled) {
       this.place(this.deny, rect.centreX - 60, actionY, 110, 30);
@@ -1283,15 +1242,15 @@ export class ShopPanel {
     if (this.settled) {
       this.hint
         .setText(this.words.paidFor(this.chosenBuy as Buyable, this.quantity))
-        .setColor(INK_GOOD);
+        .setColor(DONE_INK);
     } else if (tender.owed > tender.purse) {
-      this.hint.setText(this.words.tooExpensive).setColor(INK_BAD);
+      this.hint.setText(this.words.tooExpensive).setColor(WRONG_INK);
     } else if (off === 0) {
-      this.hint.setText(this.words.exactlyRight).setColor(INK_GOOD);
+      this.hint.setText(this.words.exactlyRight).setColor(DONE_INK);
     } else if (off < 0) {
       this.hint.setText(this.words.moreToGo(CURRENCY.format(-off))).setColor(INK);
     } else {
-      this.hint.setText(this.words.tooMuch(CURRENCY.format(off))).setColor(INK_BAD);
+      this.hint.setText(this.words.tooMuch(CURRENCY.format(off))).setColor(WRONG_INK);
     }
   }
 
@@ -1344,7 +1303,7 @@ export class ShopPanel {
     }
 
     if (this.settled && this.verdict) {
-      this.hint.setText(this.verdict.message).setColor(this.verdict.right ? INK_GOOD : INK_BAD);
+      this.hint.setText(this.verdict.message).setColor(this.verdict.right ? DONE_INK : WRONG_INK);
     } else {
       const piles = offer.coins.length > MOST_COUNTER_COINS;
       this.hint
@@ -1466,26 +1425,6 @@ export class ShopPanel {
     button.box.setVisible(false);
     button.label.setVisible(false);
     button.icon?.setVisible(false);
-  }
-
-  private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, value, {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-      lineSpacing: 2,
-    });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
-  }
-
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
   }
 }
 

@@ -3,7 +3,7 @@
 
 import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
-import { FACE } from "./parchment";
+import { ACTIVE_HEX, FACE } from "./parchment";
 
 /**
  * The first thing on screen: the game's name, and how far the loading has
@@ -27,7 +27,6 @@ const INK_DIM = "#a8916a";
 /** The one red in the game, and the same one a refused action is marked in. */
 const FAILED = "#d8342a";
 const BAR_TRACK = 0x3a2f22;
-const BAR_FILL = 0xc8901c;
 const BAR_EDGE = 0x6a5334;
 
 const TITLE_SIZE = 44;
@@ -140,7 +139,8 @@ export class TitleCard {
     if (this.done) return;
     this.bar.fillStyle(BAR_TRACK, 1);
     this.bar.fillRect(left, top, barWidth, BAR_HEIGHT);
-    this.bar.fillStyle(BAR_FILL, 1);
+    // The bar fills in the parchments' gold, on the one screen that is not paper.
+    this.bar.fillStyle(ACTIVE_HEX, 1);
     this.bar.fillRect(left, top, barWidth * this.progress, BAR_HEIGHT);
     this.bar.lineStyle(2, BAR_EDGE, 1);
     this.bar.strokeRect(left, top, barWidth, BAR_HEIGHT);

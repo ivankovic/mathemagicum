@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, test } from "bun:test";
+import type { ItemType } from "./inventory";
 import {
   MINUTES_PER_ROUND,
   MachineType,
@@ -24,7 +25,7 @@ const SORTER = MachineType.Sorter;
 const HOUSE = MachineType.Hothouse;
 
 /** A sorter with its crates full of something. */
-function fullOf(item: string, heap: number) {
+function fullOf(item: ItemType, heap: number) {
   const fed = feed(wake(newMachine()), item, heap, SORTER);
   if (!fed) throw new Error("a woken sorter refused a heap");
   return advance(fed, MINUTES_PER_ROUND * 100, SORTER);

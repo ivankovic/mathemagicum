@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { DEFAULT_FACING, Facing } from "../world/characters";
+import { FixtureType } from "../world/fixtures";
+import { flowerParts } from "../world/flowers";
 import type { WorldGrid } from "../world/grid";
 import { ITEM_TYPES, type ItemType } from "../world/inventory";
 import type { PlacedObject } from "../world/objects";
@@ -71,8 +73,14 @@ import type { GridPoint } from "../world/topdown";
  * `restoreWorld` as `refused` and is handed to her in her basket rather than
  * lost. Her house, her garden and everything indoors are untouched — those
  * are keyed by building, not by cell.
+ *
+ * **5** — the city has a garage in it. The mechanic's workshop takes the
+ * first block that is not a shop and is three tiles wide, and every block
+ * laid out after it moved along by one. What a child put down inside the
+ * city comes back through the same door as it did at four; the village,
+ * the garden and everything indoors are untouched.
  */
-export const GENERATOR_VERSION = 4;
+export const GENERATOR_VERSION = 5;
 
 /**
  * Bumped when the shape below changes, which is a different thing.
@@ -181,6 +189,14 @@ export interface WorldSnapshot {
    * of them strung is carrying for the other.
    */
   readonly wires?: readonly string[];
+  /**
+   * Every blueprint's drawing, by the square the blueprint stands on.
+   *
+   * What a blueprint recorded when it was woken — see `world/blueprint.ts`
+   * — and a fact about the world for the reason the machines are. Read
+   * back through `plansFromSave`, which drops anything mangled.
+   */
+  readonly blueprints?: Readonly<Record<string, string>>;
   /**
    * The floor plan of every house somebody has added a room to, by building.
    *
@@ -315,6 +331,7 @@ export function snapshotWorld(
   painted: PaintedTiles = [],
   machines: Readonly<Record<string, string>> = {},
   wires: readonly string[] = [],
+  blueprints: Readonly<Record<string, string>> = {},
 ): WorldSnapshot {
   const placed: PlacedObject[] = [];
   const standing = new Map<string, string>();
@@ -339,6 +356,7 @@ export function snapshotWorld(
     ...(painted.length > 0 ? { painted } : {}),
     ...(Object.keys(machines).length > 0 ? { machines } : {}),
     ...(wires.length > 0 ? { wires } : {}),
+    ...(Object.keys(blueprints).length > 0 ? { blueprints } : {}),
   };
 }
 
@@ -373,12 +391,13 @@ export function snapshotGame(
   painted: PaintedTiles = [],
   machines: Readonly<Record<string, string>> = {},
   wires: readonly string[] = [],
+  blueprints: Readonly<Record<string, string>> = {},
 ): GameSnapshot {
   return {
     snapshotVersion: SNAPSHOT_VERSION,
     generatorVersion: GENERATOR_VERSION,
     seed,
-    world: snapshotWorld(grid, baseline, plans, decor, painted, machines, wires),
+    world: snapshotWorld(grid, baseline, plans, decor, painted, machines, wires, blueprints),
     savedAt,
   };
 }
@@ -508,10 +527,10 @@ export function restoreWorld(
 ): Restored {
   const refused: PlacedObject[] = [];
   if (!world) return { refused };
-  for (const [col, row] of world.cleared ?? []) {
+  for (const [col, row] of readCleared(world.cleared)) {
     if (grid.inBounds(col, row)) grid.removeObjectAt(col, row);
   }
-  for (const object of world.placed ?? []) {
+  for (const object of asList(world.placed)) {
     if (!isPlacedObject(object) || !grid.inBounds(object.col, object.row)) continue;
     // **Refused rather than forced.** A save is a handful of differences
     // against a world the generator builds, and the generator is still being
@@ -540,10 +559,8 @@ export function restoreWorld(
   for (const [col, row, terrain] of readPainted(world.painted)) {
     if (grid.inBounds(col, row)) grid.setTerrain(col, row, terrain);
   }
-  for (const entry of world.crops ?? []) {
-    const [col, row, plant, stage] = entry;
+  for (const [col, row, plant, stage] of readCrops(world.crops)) {
     if (!grid.inBounds(col, row)) continue;
-    if (!PLANT_TYPES.includes(plant) || !PLANT_STAGES.includes(stage)) continue;
     // A crop on ground that has become sea or rock is simply not there any
     // more. Nothing is handed back for it, and that is not meanness: nothing
     // was spent on it either — planting costs no seed, and what a child paid
@@ -584,12 +601,63 @@ export function restorePlayer(
   }
   if (keepPlace) session.face(isFacing(player.facing) ? player.facing : DEFAULT_FACING);
   if (Number.isInteger(player.coins) && player.coins > 0) session.purse.earn(player.coins);
-  for (const entry of player.items ?? []) {
-    const [item, count] = entry;
-    if (ITEM_TYPES.includes(item) && Number.isInteger(count) && count > 0) {
-      session.inventory.add(item, count);
-    }
+  for (const [item, count] of readItems(player.items)) session.inventory.add(item, count);
+}
+
+/**
+ * A list from a save, or nothing.
+ *
+ * Every list below is walked with `for…of`, and `for…of` over a number is a
+ * thrown TypeError rather than an empty loop — so a save whose `crops` had
+ * been mangled into `5` used to take the whole load down with it. Nothing
+ * else in a save is allowed to do that: one bad field is one bad field.
+ */
+function asList(value: unknown): readonly unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+/** The cleared tiles read back, dropping any entry that is not a tile. */
+function readCleared(value: unknown): readonly (readonly [number, number])[] {
+  const out: (readonly [number, number])[] = [];
+  for (const entry of asList(value)) {
+    if (!Array.isArray(entry) || entry.length < 2) continue;
+    const [col, row] = entry as [unknown, unknown];
+    if (Number.isInteger(col) && Number.isInteger(row)) out.push([col as number, row as number]);
   }
+  return out;
+}
+
+/**
+ * The crops read back, dropping any entry that is not a crop.
+ *
+ * Entry by entry, the way `readPainted` does it: a save is checked on the
+ * way in and what does not pass is dropped, never repaired and never
+ * allowed to throw.
+ */
+function readCrops(value: unknown): WorldSnapshot["crops"] {
+  const out: (readonly [number, number, PlantType, PlantStage])[] = [];
+  for (const entry of asList(value)) {
+    if (!Array.isArray(entry) || entry.length < 4) continue;
+    const [col, row, plant, stage] = entry as [unknown, unknown, unknown, unknown];
+    if (!Number.isInteger(col) || !Number.isInteger(row)) continue;
+    if (!(PLANT_TYPES as readonly unknown[]).includes(plant)) continue;
+    if (!(PLANT_STAGES as readonly unknown[]).includes(stage)) continue;
+    out.push([col as number, row as number, plant as PlantType, stage as PlantStage]);
+  }
+  return out;
+}
+
+/** What she was carrying, read back, dropping anything that is not a thing. */
+function readItems(value: unknown): PlayerSnapshot["items"] {
+  const out: (readonly [ItemType, number])[] = [];
+  for (const entry of asList(value)) {
+    if (!Array.isArray(entry) || entry.length < 2) continue;
+    const [item, count] = entry as [unknown, unknown];
+    if (!(ITEM_TYPES as readonly unknown[]).includes(item)) continue;
+    if (!Number.isInteger(count) || (count as number) <= 0) continue;
+    out.push([item as ItemType, count as number]);
+  }
+  return out;
 }
 
 function isFacing(value: unknown): value is Facing {
@@ -602,6 +670,7 @@ function isPlacedObject(value: unknown): value is PlacedObject {
   return (
     typeof object.id === "string" &&
     typeof object.type === "string" &&
+    isPlayerPlaced(object.type) &&
     Number.isInteger(object.col) &&
     Number.isInteger(object.row) &&
     Number.isInteger(object.width) &&
@@ -610,4 +679,33 @@ function isPlacedObject(value: unknown): value is PlacedObject {
     Number.isInteger(object.anchorRow) &&
     typeof object.blocksMovement === "boolean"
   );
+}
+
+const FIXTURE_NAMES: readonly FixtureType[] = Object.values(FixtureType);
+
+/**
+ * Whether this is a kind of thing a child can put on a square themselves.
+ *
+ * The guard on the way *in*: `placed` is read back out of a file, so a type
+ * nobody could have made is a save that has been mangled, and a mangled
+ * square is dropped rather than stood up as a mystery.
+ *
+ * It used to ask only whether the type was a fixture, on the argument that
+ * everything reaching `placed` was put down out of a crate or turned where
+ * the village left it. That was true when it was written and stopped being
+ * true when flowers were planted: a planted one is named `daisy~2` — its
+ * *colour rides in its type*, which is precisely what `PlantedFlower` says
+ * makes it survive being saved — and no such name is a `FixtureType`. So
+ * every flower a child planted was written to the file correctly and thrown
+ * away on the way back in, and a whole bed vanished overnight.
+ *
+ * The saves themselves were never wrong, so this fixes the beds already in
+ * them rather than only the ones planted from here on.
+ *
+ * Wild flowers are deliberately not here. They are the generator's, so they
+ * live in the baseline; the only thing that ever happens to one is being
+ * picked, and a picked square leaves through `cleared`.
+ */
+function isPlayerPlaced(type: string): boolean {
+  return (FIXTURE_NAMES as readonly string[]).includes(type) || flowerParts(type) !== null;
 }

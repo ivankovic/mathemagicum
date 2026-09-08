@@ -3,9 +3,10 @@
 
 import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type Chip, type CloseChip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
-import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
+import { INK, INK_DIM, INK_HEX, PAPER_PALE_HEX, TYPE } from "./parchment";
 
 /**
  * Who made this, what it costs, and what is asked of anybody minded to pay —
@@ -76,9 +77,9 @@ const PANEL_MIN_W = 300;
 // where the text is five lines, and put the buttons a hand's width below it.
 const PANEL_MIN_H = 200;
 
-const TITLE_SIZE = 17;
-const BODY_SIZE = 13;
-const SMALL_SIZE = 11;
+const TITLE_SIZE = TYPE.title;
+const BODY_SIZE = TYPE.body;
+const SMALL_SIZE = TYPE.tiny;
 const BUTTON_H = 34;
 const BUTTON_GAP = 10;
 /** How many rows the debug face draws. See renderDebug. */
@@ -88,35 +89,22 @@ const DEBUG_ROWS = 7;
 export const SOURCE_URL = "https://github.com/ivankovic/mathemagicum";
 export const SPONSOR_URL = "https://github.com/sponsors/ivankovic";
 
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
-
-interface Button {
-  readonly box: Phaser.GameObjects.Rectangle;
-  readonly label: Phaser.GameObjects.Text;
-}
-
-export class AboutPanel {
-  private readonly paper: ParchmentPanel;
-  private readonly parts: PanelPart[] = [];
+export class AboutPanel extends Panel {
   private readonly title: Phaser.GameObjects.Text;
   private readonly madeBy: Phaser.GameObjects.Text;
   private readonly copyright: Phaser.GameObjects.Text;
   private readonly licence: Phaser.GameObjects.Text;
   private readonly note: Phaser.GameObjects.Text;
-  private readonly sourceButton: Button;
-  private readonly sponsorButton: Button;
-  private readonly closeButton: Button;
+  private readonly sourceButton: Chip;
+  private readonly sponsorButton: Chip;
+  private readonly closeButton: CloseChip;
 
   private open = false;
   /** Whether the sheet is showing its debug face. Owned by the caller. */
   private debug = false;
-  private readonly rows: Button[] = [];
+  private readonly rows: Chip[] = [];
   private readonly hint: Phaser.GameObjects.Text;
   private onClose: (() => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
 
   /**
    * How a link is followed.
@@ -139,19 +127,17 @@ export class AboutPanel {
   controls: DebugControls | null = null;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     private words: Phrases,
     register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
     });
 
     this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
@@ -179,18 +165,10 @@ export class AboutPanel {
 
     this.sourceButton = this.button(() => this.openLink(SOURCE_URL));
     this.sponsorButton = this.button(() => this.openLink(SPONSOR_URL));
-    this.closeButton = this.button(() => this.close(), "x");
-
-    for (const part of this.parts) {
-      part
-        .setDepth(depth + 1)
-        .setScrollFactor(0)
-        .setVisible(false);
-      register(part);
-    }
+    this.closeButton = this.closeChip(BODY_SIZE, () => this.close());
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.open;
   }
 
@@ -201,22 +179,12 @@ export class AboutPanel {
     this.onClose = onClose;
     this.paper.setVisible(true);
     this.render();
-    this.keyHandler = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      this.close();
-    };
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    this.escapeCloses();
   }
 
-  close(): void {
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+  override close(): void {
+    super.close();
     this.open = false;
-    this.paper.setVisible(false);
-    for (const part of this.parts) part.setVisible(false);
     const done = this.onClose;
     this.onClose = null;
     done?.();
@@ -224,10 +192,6 @@ export class AboutPanel {
 
   setPhrases(words: Phrases): void {
     this.words = words;
-    if (this.open) this.render();
-  }
-
-  layout(): void {
     if (this.open) this.render();
   }
 
@@ -255,13 +219,7 @@ export class AboutPanel {
     return named;
   }
 
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
-  }
-
-  private render(): void {
+  protected render(): void {
     const { width, height } = this.scene.scale;
     for (const part of this.parts) part.setVisible(true);
     for (const row of this.rows) this.hide(row);
@@ -323,14 +281,7 @@ export class AboutPanel {
       BUTTON_H,
       this.words.sponsorLink,
     );
-    this.place(
-      this.closeButton,
-      rect.left + rect.width - PAD - 14,
-      rect.top + PAD + 10,
-      28,
-      24,
-      "x",
-    );
+    this.closeButton.place(rect);
   }
 
   /**
@@ -415,14 +366,7 @@ export class AboutPanel {
       y += BUTTON_H + 8;
     }
 
-    this.place(
-      this.closeButton,
-      rect.left + rect.width - PAD - 14,
-      rect.top + PAD + 10,
-      28,
-      24,
-      "x",
-    );
+    this.closeButton.place(rect);
   }
 
   /** What each hand-over row says: its own name, until it has been used. */
@@ -437,13 +381,13 @@ export class AboutPanel {
     this.given = { ...this.given, [which]: this.words.debugDone };
   }
 
-  private hide(button: Button): void {
+  private hide(button: Chip): void {
     button.box.setVisible(false);
     button.label.setVisible(false);
   }
 
   private place(
-    button: Button,
+    button: Chip,
     x: number,
     y: number,
     width: number,
@@ -459,28 +403,15 @@ export class AboutPanel {
     button.label.setText(label).setPosition(x, y).setVisible(true);
   }
 
-  private button(onTap: () => void, label = ""): Button {
+  private button(onTap: () => void): Chip {
     const box = this.own(
       this.scene.add
         .rectangle(0, 0, 10, 10, PAPER_PALE_HEX)
         .setStrokeStyle(2, INK_HEX)
         .setInteractive({ useHandCursor: true }),
     );
-    const text = this.own(this.text(label, BODY_SIZE, INK).setOrigin(0.5).setAlign("center"));
+    const text = this.own(this.text("", BODY_SIZE, INK).setOrigin(0.5).setAlign("center"));
     box.on("pointerdown", onTap);
     return { box, label: text };
-  }
-
-  private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, value, {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-    });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
   }
 }

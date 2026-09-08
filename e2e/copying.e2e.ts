@@ -4,7 +4,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
 import { PatchAction } from "../src/world/selection";
-import { type Game, patchButton, play, runeButton, shutDown } from "./harness";
+import { type Game, type Handles, patchButton, play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -44,11 +44,9 @@ const OPEN_GROUND = "&learned=all&hour=12&freezeNpcs&symmetryRung=0";
 /** What the world says is under each of these squares, right now. */
 function groundUnder(game: Game, cells: readonly Spot[]): Promise<string[]> {
   return game.tab.evaluate((list) => {
-    const handle = (globalThis as never as Record<string, Record<string, unknown>>).__mathemagicum;
+    const handle = (globalThis as never as Handles).__mathemagicum;
     if (!handle) throw new Error("the game has not put its handle out");
-    const session = handle.session as {
-      grid: { getTerrain: (col: number, row: number) => string };
-    };
+    const session = handle.session;
     return (list as Spot[]).map((one) => session.grid.getTerrain(one.col, one.row));
   }, cells as Spot[]);
 }
@@ -68,12 +66,9 @@ async function standAtABoundary(game: Game): Promise<{ source: Spot; dest: Spot 
   const start = await game.where();
   const wide = await game.tab.evaluate(
     ([col, row]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
+      const handle = (globalThis as never as Handles).__mathemagicum;
       if (!handle) throw new Error("the game has not put its handle out");
-      const session = handle.session as {
-        grid: { getTerrain: (col: number, row: number) => string };
-      };
+      const session = handle.session;
       const out: { col: number; row: number; terrain: string }[] = [];
       for (let down = -25; down <= 25; down++) {
         for (let across = -25; across <= 25; across++) {

@@ -13,7 +13,7 @@ import { type PortalJourney, type PortalRung, portalRungAt } from "../spells/por
 import { PagedPanel } from "./PagedPanel";
 import type { PanelRect } from "./ParchmentPanel";
 import { UiAsset, type UiIndex } from "./assets";
-import { INK, INK_HEX, RULE_HEX } from "./parchment";
+import { INK, INK_HEX, RULE_HEX, TYPE, WRONG_HEX } from "./parchment";
 
 /**
  * What the geometer shows you: the portal spell, in four pictures.
@@ -30,11 +30,9 @@ import { INK, INK_HEX, RULE_HEX } from "./parchment";
  */
 
 const PATH_HEX = 0x2f6f9e;
-const CROW_HEX = 0xa8321e;
-const MARK_HEX = 0xa8321e;
 const HERE_HEX = 0xffffff;
 
-const SMALL_SIZE = 12;
+const SMALL_SIZE = TYPE.small;
 const TICK = 4;
 const MARK_SIZE = 7;
 /** How big a stepping stone is drawn, in radius. See `drawStones`. */
@@ -283,7 +281,7 @@ export class GeometryLessonPanel extends PagedPanel<GeometryBeat> {
 
     // And the crow's flight on the last page, drawn over them.
     if (beat === GeometryBeat.Crow) {
-      this.ink.lineStyle(3, CROW_HEX, 1);
+      this.ink.lineStyle(3, WRONG_HEX, 1);
       this.ink.lineBetween(left, foot, left + width, head);
       this.sides[2]
         ?.setText(String(Math.round(Math.hypot(across, down))))
@@ -302,7 +300,7 @@ export class GeometryLessonPanel extends PagedPanel<GeometryBeat> {
     );
     this.ink.fillStyle(HERE_HEX, 1);
     this.ink.fillRect(left - MARK_SIZE / 2, foot - MARK_SIZE / 2, MARK_SIZE, MARK_SIZE);
-    this.ink.fillStyle(MARK_HEX, 1);
+    this.ink.fillStyle(WRONG_HEX, 1);
     this.ink.fillRect(left + width - MARK_SIZE / 2, head - MARK_SIZE / 2, MARK_SIZE, MARK_SIZE);
 
     // No scale caption under the drawing: the ruler page says what a mark is

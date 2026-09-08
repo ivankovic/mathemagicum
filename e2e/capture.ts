@@ -26,43 +26,20 @@ import { Spell } from "../src/spells/spellbook";
 import { CRATE_WIRE } from "../src/world/crate";
 import { DecorType, decorItem } from "../src/world/decor";
 import { FixtureType } from "../src/world/fixtures";
-import { type Game, play, runeButton, shutDown, takeFromCrate } from "./harness";
+import { type Game, type Handles, play, runeButton, shutDown, takeFromCrate } from "./harness";
 
 /** Where the frozen saves live. Named for the day and the shape they are. */
 const OUT = "src/save/fixtures";
 
 const SEAMS = "&hour=12&freezeNpcs&learned=all&materials=99&coins=999";
 
-/** Put something in her basket without walking her to a shop for it. */
-function give(game: Game, item: string, count: number): Promise<void> {
-  return game.tab.evaluate(
-    ([of, many]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
-      if (!handle) throw new Error("the game has not put its handle out");
-      (handle.session as { inventory: { add: (of: string, n: number) => void } }).inventory.add(
-        of as string,
-        many as number,
-      );
-    },
-    [item, count] as const,
-  );
-}
-
 /** Squares beside her that will take something put down on them. */
 function freeBeside(game: Game, at: { col: number; row: number }) {
   return game.tab.evaluate(
     ([c, r]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
+      const handle = (globalThis as never as Handles).__mathemagicum;
       if (!handle) throw new Error("the game has not put its handle out");
-      const session = handle.session as {
-        grid: {
-          isPassable: (col: number, row: number) => boolean;
-          getCrop: (col: number, row: number) => unknown;
-          getObjectAt: (col: number, row: number) => unknown;
-        };
-      };
+      const session = handle.session;
       const out: { col: number; row: number }[] = [];
       for (const [dc, dr] of [
         [1, 0],
@@ -105,7 +82,7 @@ await play({ seams: SEAMS }, async (game) => {
 
   // A fence she owns, turned before it went down — so the fixture carries
   // both `mine` and a `turn` on a placed object.
-  await give(game, FixtureType.Fence, 3);
+  await game.give(FixtureType.Fence, 3);
   await takeFromCrate(game, FixtureType.Fence);
   await game.settle(300);
   await turnOnce(game);
@@ -131,7 +108,7 @@ await play({ seams: SEAMS }, async (game) => {
   await game.settle(400);
   // More carrots than she has of anything else, or the sorter — which takes
   // whatever it is given — eats the stone the next machine is built from.
-  await give(game, "carrot", 250);
+  await game.give("carrot", 250);
   await game.tapCell(sorterAt.col, sorterAt.row);
   await game.settle(400);
 
@@ -153,22 +130,12 @@ await play({ seams: SEAMS }, async (game) => {
   await game.settle(400);
 
   // Indoors: a room built out, and a chair moved and turned.
-  const doors = await game.seam<Record<string, { col: number; row: number }>>("doors");
-  const door = doors["player-house"];
-  if (!door) throw new Error("this world has no house for the player");
-  await game.standAt(door.col, door.row + 2, "up");
-  await game.walk("ArrowUp", 900);
-  await game.stopped();
-  const house = await game.seam<{
-    origin: { col: number; row: number };
-    buildable: { col: number; row: number }[];
-  } | null>("house");
-  if (!house) throw new Error("walking through the front door did not go indoors");
+  const house = await game.goHome();
 
   // Building costs materials, and she has just fed a machine — so she is
   // given them again here rather than being assumed to have any left.
-  await give(game, "wood", 40);
-  await give(game, "stone", 40);
+  await game.give("wood", 40);
+  await game.give("stone", 40);
   const grow = house.buildable[0];
   if (grow) {
     await game.tap("spellbook");
@@ -184,7 +151,7 @@ await play({ seams: SEAMS }, async (game) => {
     await game.settle(600);
   }
 
-  await give(game, decorItem(DecorType.Chair, 2), 2);
+  await game.give(decorItem(DecorType.Chair, 2), 2);
   await game.standAt(2 - house.origin.col, 1 - house.origin.row, "down");
   await takeFromCrate(game, DecorType.Chair);
   await game.settle(300);

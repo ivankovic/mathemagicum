@@ -66,6 +66,11 @@ const NAMED_ROLES: Record<string, string> = {
   // horizontal bar. Broad and cropped, which is the one build no other
   // teacher has, and bare-headed, because all three hats are spoken for.
   clockmaker: "clockmaker",
+  // In the garage in the city. The seventh teacher, told apart by the sixth
+  // held thing in the cast: a hammer, which is the one outline wider at
+  // the top than at the bottom. Long hair on an ordinary build, which no
+  // other teacher has.
+  mechanic: "mechanic",
 };
 
 /**

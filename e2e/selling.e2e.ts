@@ -7,7 +7,6 @@ import { afterAll, describe, expect, test } from "bun:test";
 // scenario holding its own copy of that would be checking the copy.
 import { CURRENCY, coinsFor } from "../src/shop/currency";
 import { MOST_COUNTER_COINS } from "../src/shop/tender";
-import { MAX_TRADE } from "../src/world/shop";
 import { play, shutDown } from "./harness";
 
 const MINUTES = 60_000;

@@ -18,19 +18,20 @@ import {
   submitShare,
   typeShareDigit,
 } from "../spells/division";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type CloseChip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
 import {
   ACTIVE_HEX,
   DONE_HEX,
   DONE_INK,
-  FACE,
   INK,
   INK_DIM,
   INK_HEX,
   PAPER_HEX,
   PAPER_PALE_HEX,
   RULE_HEX,
+  TYPE,
   WRONG_HEX,
   WRONG_INK,
 } from "./parchment";
@@ -75,10 +76,10 @@ const BARE_MAX_H = 330;
 const CROP_HEX = 0x5f8f3a;
 const CROP_DEALT_HEX = 0x2f5c1c;
 
-const TITLE_SIZE = 20;
-const ASK_SIZE = 12;
+const TITLE_SIZE = TYPE.spellTitle;
+const ASK_SIZE = TYPE.small;
 const BOX_SIZE = 17;
-const HINT_SIZE = 12;
+const HINT_SIZE = TYPE.small;
 
 const BOX_W = 62;
 const BOX_H = 28;
@@ -98,11 +99,6 @@ const CROP_MAX = 11;
 const CROP_MIN = 4;
 const CROP_GAP = 3;
 
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
-
 interface PadKey {
   readonly rect: Phaser.GameObjects.Rectangle;
   readonly text: Phaser.GameObjects.Text;
@@ -116,43 +112,40 @@ interface Slot {
   readonly text: Phaser.GameObjects.Text;
 }
 
-export class SharePopup {
-  private readonly parts: PanelPart[] = [];
-  private readonly paper: ParchmentPanel;
+export class SharePopup extends Panel {
   private readonly ink: Phaser.GameObjects.Graphics;
   private readonly title: Phaser.GameObjects.Text;
   private readonly ask: Phaser.GameObjects.Text;
   private readonly hint: Phaser.GameObjects.Text;
   private readonly slots = new Map<ShareBox, Slot>();
   private readonly keys: PadKey[] = [];
-  private readonly closeRect: Phaser.GameObjects.Rectangle;
-  private readonly closeText: Phaser.GameObjects.Text;
+  private readonly closeButton: CloseChip;
 
   private state: ShareCast | null = null;
   private finish: ((result: CastResult) => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
+  /** The beat on a finished parchment before it goes, so a close can cancel it. */
+  private beat: Phaser.Time.TimerEvent | null = null;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     private words: Phrases,
     register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
     const add = scene.add;
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
+      lift: 0,
     });
 
     this.ink = this.own(add.graphics());
-    this.title = this.own(this.label("", TITLE_SIZE, INK).setOrigin(0.5, 0));
-    this.ask = this.own(this.label("", ASK_SIZE, INK_DIM).setOrigin(0.5, 0));
-    this.hint = this.own(this.label("", HINT_SIZE, INK_DIM).setOrigin(0.5, 0));
+    this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
+    this.ask = this.own(this.text("", ASK_SIZE, INK_DIM).setOrigin(0.5, 0));
+    this.hint = this.own(this.text("", HINT_SIZE, INK_DIM).setOrigin(0.5, 0));
 
     for (const which of ["each", "left"] as const) {
       const rect = this.own(
@@ -167,24 +160,13 @@ export class SharePopup {
       rect.on("pointerdown", () => {
         if (this.state) this.apply(focusShareBox(this.state, which));
       });
-      this.slots.set(which, { rect, text: this.own(this.label("", BOX_SIZE, INK).setOrigin(0.5)) });
+      this.slots.set(which, { rect, text: this.own(this.text("", BOX_SIZE, INK).setOrigin(0.5)) });
     }
 
     this.buildKeypad();
 
-    this.closeRect = this.own(
-      add
-        .rectangle(0, 0, 26, 26, PAPER_HEX)
-        .setStrokeStyle(2, INK_HEX)
-        .setInteractive({ useHandCursor: true }),
-    );
-    this.closeText = this.own(this.label("x", BOX_SIZE - 4, INK).setOrigin(0.5));
-    this.closeRect.on("pointerdown", () => this.dismiss(false));
+    this.closeButton = this.closeChip(BOX_SIZE - 4, () => this.dismiss(false), "key");
 
-    for (const part of this.parts) {
-      part.setDepth(depth).setScrollFactor(0).setVisible(false);
-      register(part);
-    }
     this.ink.setDepth(depth + 1);
     for (const slot of this.slots.values()) {
       slot.rect.setDepth(depth + 2);
@@ -194,8 +176,6 @@ export class SharePopup {
       key.rect.setDepth(depth + 2);
       key.text.setDepth(depth + 3);
     }
-    this.closeRect.setDepth(depth + 2);
-    this.closeText.setDepth(depth + 3);
   }
 
   setPhrases(words: Phrases): void {
@@ -208,7 +188,7 @@ export class SharePopup {
     return this.state;
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.state !== null;
   }
 
@@ -217,31 +197,17 @@ export class SharePopup {
     this.finish = onDone;
     this.paper.setVisible(true);
     for (const part of this.parts) part.setVisible(true);
-    this.keyHandler = (event: KeyboardEvent) => this.onKeyDown(event);
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    this.watchKeys((event) => this.onKeyDown(event));
     this.layout();
   }
 
-  close(): void {
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+  override close(): void {
+    this.beat?.remove();
+    this.beat = null;
+    super.close();
     this.state = null;
     this.finish = null;
-    this.paper.setVisible(false);
     this.ink.clear();
-    for (const part of this.parts) part.setVisible(false);
-  }
-
-  layout(): void {
-    if (this.state) this.render();
-  }
-
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
   }
 
   private dismiss(solved: boolean): void {
@@ -267,7 +233,10 @@ export class SharePopup {
     this.render();
     // A beat on the finished parchment, with every basket filled and the
     // answer in the box, before the harvest happens in the world.
-    if (next.done) this.scene.time.delayedCall(650, () => this.dismiss(true));
+    if (next.done) {
+      this.beat?.remove();
+      this.beat = this.scene.time.delayedCall(650, () => this.dismiss(true));
+    }
   }
 
   private buildKeypad(): void {
@@ -306,7 +275,7 @@ export class SharePopup {
             .setStrokeStyle(2, INK_HEX)
             .setInteractive({ useHandCursor: true }),
         );
-        const text = this.own(this.label(label, BOX_SIZE, INK).setOrigin(0.5));
+        const text = this.own(this.text(label, BOX_SIZE, INK).setOrigin(0.5));
         rect.on("pointerdown", press(label));
         this.keys.push({ rect, text, col, row, span });
         col += span;
@@ -314,20 +283,7 @@ export class SharePopup {
     }
   }
 
-  private label(text: string, size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, text, {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-    });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
-  }
-
-  private render(): void {
+  protected render(): void {
     const state = this.state;
     if (!state) return;
     const problem = state.problem;
@@ -342,8 +298,7 @@ export class SharePopup {
     const innerW = rect.width - PAD * 2;
     const innerH = rect.height - PAD * 2;
 
-    this.closeRect.setPosition(rect.left + rect.width - PAD - 2, rect.top + PAD + 2);
-    this.closeText.setPosition(this.closeRect.x, this.closeRect.y);
+    this.closeButton.place(rect);
 
     // --- the keypad, off the bottom -----------------------------------------
     const spare = innerH - TITLE_SIZE - ASK_SIZE - 16 - HINT_SIZE - 8 - BOX_H - 90;

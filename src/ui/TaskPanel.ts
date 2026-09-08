@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type Phaser from "phaser";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type CloseChip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, uiTextureKey } from "./assets";
-import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX, RULE_HEX } from "./parchment";
+import { INK, INK_DIM, RULE_HEX, TYPE } from "./parchment";
 
 /**
  * Somebody's errand: a row of things to do, what you get for it, and both
@@ -42,10 +43,10 @@ const PANEL_MIN_W = 280;
 const PANEL_MIN_H = 300;
 
 const SOCKET_HEX = 0x2b2620;
-const CLOSE_SIZE = 13;
+const CLOSE_SIZE = TYPE.body;
 
-const TITLE_SIZE = 17;
-const BODY_SIZE = 13;
+const TITLE_SIZE = TYPE.title;
+const BODY_SIZE = TYPE.body;
 
 /** How big a token in the row is drawn. */
 const TOKEN = 34;
@@ -75,11 +76,6 @@ const ASK_GAP = 14;
 const ARROW_GAP = 26;
 const REWARD_GAP = 12;
 
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
-
 export interface Task {
   /** Whose errand it is. */
   readonly title: string;
@@ -96,72 +92,47 @@ export interface Task {
   readonly reward: string;
 }
 
-export class TaskPanel {
-  private readonly paper: ParchmentPanel;
-  private readonly parts: PanelPart[] = [];
+export class TaskPanel extends Panel {
   private readonly ink: Phaser.GameObjects.Graphics;
   private readonly heading: Phaser.GameObjects.Text;
   private readonly ask: Phaser.GameObjects.Text;
   private readonly bargain: Phaser.GameObjects.Text;
   private readonly tokens: Phaser.GameObjects.Image[] = [];
   private readonly reward: Phaser.GameObjects.Image;
-  private readonly closeBox: Phaser.GameObjects.Rectangle;
-  private readonly closeLabel: Phaser.GameObjects.Text;
+  private readonly closeButton: CloseChip;
 
   private open = false;
   private task: Task | null = null;
   private onClose: (() => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     register: (object: Phaser.GameObjects.GameObject) => void,
     /** The most tokens any task will ever show, so the pool is made once. */
     most: number,
   ) {
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
+      lineSpacing: 3,
     });
     this.ink = this.own(scene.add.graphics());
-    this.heading = this.own(this.text(TITLE_SIZE, INK).setOrigin(0.5, 0));
-    this.ask = this.own(this.text(BODY_SIZE, INK).setOrigin(0.5, 0).setAlign("center"));
-    this.bargain = this.own(this.text(BODY_SIZE, INK_DIM).setOrigin(0.5, 0).setAlign("center"));
+    this.heading = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
+    this.ask = this.own(this.text("", BODY_SIZE, INK).setOrigin(0.5, 0).setAlign("center"));
+    this.bargain = this.own(this.text("", BODY_SIZE, INK_DIM).setOrigin(0.5, 0).setAlign("center"));
     for (let n = 0; n < most; n++) {
       this.tokens.push(this.own(scene.add.image(0, 0, uiTextureKey(UiAsset.Spellbook))));
     }
     this.reward = this.own(scene.add.image(0, 0, uiTextureKey(UiAsset.Spellbook)));
-    this.closeBox = this.own(
-      scene.add
-        .rectangle(0, 0, 28, 24, PAPER_PALE_HEX)
-        .setStrokeStyle(2, INK_HEX)
-        .setInteractive({ useHandCursor: true }),
-    );
-    this.closeLabel = this.own(
-      scene.add
-        .text(0, 0, "x", { fontFamily: FACE, fontSize: `${CLOSE_SIZE}px`, color: INK })
-        .setOrigin(0.5),
-    );
-    this.closeBox.on("pointerdown", () => this.close());
-
-    for (const part of this.parts) {
-      part
-        .setDepth(depth + 1)
-        .setScrollFactor(0)
-        .setVisible(false);
-      register(part);
-    }
-    this.ink.setDepth(depth + 2);
-    this.closeLabel.setDepth(depth + 3);
+    this.closeButton = this.closeChip(CLOSE_SIZE, () => this.close());
+    this.raise(this.ink);
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.open;
   }
 
@@ -171,39 +142,19 @@ export class TaskPanel {
     this.onClose = onClose;
     this.paper.setVisible(true);
     this.render();
-    this.keyHandler = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      this.close();
-    };
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    this.escapeCloses();
   }
 
-  close(): void {
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+  override close(): void {
+    super.close();
     this.open = false;
-    this.paper.setVisible(false);
     this.ink.clear();
-    for (const part of this.parts) part.setVisible(false);
     const done = this.onClose;
     this.onClose = null;
     done?.();
   }
 
-  layout(): void {
-    if (this.open) this.render();
-  }
-
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
-  }
-
-  private render(): void {
+  protected render(): void {
     const task = this.task;
     if (!task) return;
     const { width, height } = this.scene.scale;
@@ -287,21 +238,6 @@ export class TaskPanel {
 
     this.bargain.setPosition(rect.centreX, y).setVisible(true);
 
-    this.closeBox.setPosition(rect.left + rect.width - PAD - 14, rect.top + PAD + 10);
-    this.closeLabel.setPosition(this.closeBox.x, this.closeBox.y);
-  }
-
-  private text(size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, "", {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-      lineSpacing: 3,
-    });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
+    this.closeButton.place(rect);
   }
 }

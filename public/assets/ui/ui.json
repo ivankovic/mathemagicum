@@ -57,6 +57,11 @@
       "width": 32,
       "height": 32
     },
+    "rune-logic": {
+      "file": "rune_logic.png",
+      "width": 32,
+      "height": 32
+    },
     "seed-pouch": {
       "file": "seed_pouch.png",
       "width": 32,
@@ -209,6 +214,36 @@
     },
     "item-press": {
       "file": "item_press.png",
+      "width": 32,
+      "height": 32
+    },
+    "item-funnel": {
+      "file": "item_funnel.png",
+      "width": 32,
+      "height": 32
+    },
+    "item-bell": {
+      "file": "item_bell.png",
+      "width": 32,
+      "height": 32
+    },
+    "item-inverter": {
+      "file": "item_inverter.png",
+      "width": 32,
+      "height": 32
+    },
+    "item-seesaw": {
+      "file": "item_seesaw.png",
+      "width": 32,
+      "height": 32
+    },
+    "item-latch": {
+      "file": "item_latch.png",
+      "width": 32,
+      "height": 32
+    },
+    "item-blueprint": {
+      "file": "item_blueprint.png",
       "width": 32,
       "height": 32
     },

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { SPELLS } from "../spells/spellbook";
+import { GUIDES } from "../ui/guide";
 import { FLOWER_TYPES } from "../world/flowers";
+import { JOBS } from "../world/jobs";
 import type { GameSession } from "../world/session";
 
 /**
@@ -92,6 +94,18 @@ export interface DevOptions {
    */
   readonly intro: boolean;
   /**
+   * Ask for the letter again.
+   *
+   * `?intro`'s argument, one delivery along: the news is remembered as read
+   * the moment it is handed over, so without this the only way to see it
+   * twice would be to wind `newsSeen` back in local storage from outside.
+   *
+   * It also asks for the *arrival*, which is the half that is hard to reach
+   * by playing: the door only opens outside the village, so this plus a walk
+   * to the harbour is the whole of what a script needs to see it.
+   */
+  readonly news: boolean;
+  /**
    * Put a wall on the parchment as soon as the world is up.
    *
    * The bricklaying spell is cast on a square of a house that is not built
@@ -118,6 +132,17 @@ export interface DevOptions {
    * beams nobody had pressed. See `GATHERED_MATERIALS`.
    */
   readonly materials: number;
+  /**
+   * And this many of every **made** material: beams and cord.
+   *
+   * The opt-in `?materials=` refuses to be, and for the reason it gives —
+   * a seam that quietly hands out what only a press makes is one that
+   * conjures. This one is not quiet: it is asked for by name, by a
+   * scenario about the machines that are *built from* beams and cord, and
+   * would otherwise begin every run by pressing for ten minutes to prove
+   * something `press.e2e.ts` already proves.
+   */
+  readonly made: number;
   /**
    * How many of every piece of furniture, in every colour, to start with.
    *
@@ -174,6 +199,8 @@ export interface DevOptions {
    * arrowhead without folding twenty shapes to climb to it.
    */
   readonly symmetryRung: number | null;
+  /** `?logicRung=` — which tray or circuit the logic spell puts on the parchment. */
+  readonly logicRung: number | null;
   /**
    * Spells to count as already taught.
    *
@@ -192,6 +219,27 @@ export interface DevOptions {
    * already has its own tests for.
    */
   readonly flowers: readonly string[];
+  /**
+   * Guides to count as already given.
+   *
+   * `?guided=all`, or a comma-separated list of them — see `ui/guide.ts`.
+   * A guide lights the next button and points at the next square from the
+   * moment its action is worth doing, and stays until she has done it. It
+   * touches nothing a script taps, but the harness sends `all` anyway: a
+   * screenshot with a glowing pouch in it is a screenshot that changed
+   * because a guide did, and the one scenario about the guides asks not to
+   * be spared them.
+   */
+  readonly guided: readonly string[];
+  /**
+   * The mechanic's jobs to count as done.
+   *
+   * `?jobs=all`, or a comma-separated list. A job done is what makes the
+   * crate offer the next machine, so a scenario about the bell would
+   * otherwise have to build and wire a funnel first — which is a test of
+   * the first job, not of the bell.
+   */
+  readonly jobs: readonly string[];
   /**
    * Pin the clock, in hours.
    *
@@ -323,8 +371,10 @@ export function parseDevOptions(search: string): DevOptions {
     hungry: params.has("hungry"),
     language: params.get("lang")?.trim() || null,
     intro: params.has("intro"),
+    news: params.has("news"),
     wall: params.has("wall"),
     materials: Math.max(0, number("materials") ?? 0),
+    made: Math.max(0, number("made") ?? 0),
     furniture: Math.max(0, number("furniture") ?? 0),
     reached: places(params.get("reached")),
     portalRung: number("portalRung"),
@@ -334,8 +384,11 @@ export function parseDevOptions(search: string): DevOptions {
     rung: number("rung"),
     clockRung: number("clockRung"),
     symmetryRung: number("symmetryRung"),
+    logicRung: number("logicRung"),
     learned: names(params.get("learned"), ALL_SPELLS),
     flowers: names(params.get("flowers"), FLOWER_TYPES),
+    guided: names(params.get("guided"), GUIDES),
+    jobs: names(params.get("jobs"), JOBS),
     hour: number("hour", false),
     drown: tile(params.get("drown")),
     skipTitle: params.has("skipTitle"),
@@ -684,6 +737,24 @@ export interface DevHandle {
    * and until now the only way to see it from a script was to notice that
    * the camera had moved.
    */
+  /**
+   * Which thing the little cloud's page is explaining, or nothing.
+   *
+   * A page that opened and a cloud whose tap went nowhere are the same
+   * picture from outside — and the second is the failure most likely here,
+   * since the cloud is a small mark in the corner of a button that already
+   * takes taps for something else.
+   */
+  readonly telling: () => string | null;
+  /**
+   * The move she is making at a thing she tapped, while she makes it.
+   *
+   * It changes nothing in the world, so nothing else can see it — a use
+   * that never played looks exactly like one that did.
+   */
+  readonly using: () => string | null;
+  /** Whether she is settled on something and waiting for a tap to get up. */
+  readonly resting: () => boolean;
   readonly marking: () => string | null;
   /**
    * Who currently has a rune hanging over them, waiting to be asked.
@@ -823,6 +894,58 @@ export interface DevHandle {
    */
   readonly geometry: () => { title: string; body: string; page: string; pages: number } | null;
   /**
+   * The postal worker's round, as far as a script can see it.
+   *
+   * `owed` is what he still has for this child, `arriving` is whether a door
+   * is open in front of them with him coming out of it, and `sheet` is
+   * whichever of his two parchments is up.
+   *
+   * All three are needed together, because from outside they are the same
+   * picture in three different failure modes: he is owed nothing (the gate
+   * said the wrong thing), he is arriving forever (a tween that never
+   * completed), or the door opened and no letter came out of it.
+   */
+  readonly post: () => {
+    readonly owed: string | null;
+    readonly arriving: boolean;
+    readonly here: boolean;
+    readonly sheet: { title: string; body: string; page: string; pages: number } | null;
+  };
+  /**
+   * Where the guide has got to: which guide, which step, what it is
+   * pointing at, and where the marks are on the screen.
+   *
+   * `cue` is what the guide asked for and `marks` is what was drawn, which
+   * are two different promises: a cue for a crop with no crop on screen is
+   * a cue the scene could not draw, and a scenario should be able to tell
+   * "nothing to point at" from "pointed at the wrong thing". `done` is read
+   * off the child, because a guide is remembered when it finishes and the
+   * promise worth checking is that it stays remembered across a reload.
+   */
+  /**
+   * The mechanic's sheet: which job is next, how far along the garden is
+   * with it, and which are done — read off the child rather than the
+   * panel, because a job is remembered when it finishes.
+   */
+  /** Every blueprint's drawing, by the square it stands on: machines and wires as offsets. */
+  readonly blueprints: () => Readonly<Record<string, unknown>>;
+  readonly jobs: () => {
+    readonly next: string | null;
+    readonly progress: number;
+    readonly wanted: number;
+    readonly done: readonly string[];
+  };
+  readonly guide: () => {
+    readonly running: string | null;
+    readonly step: number | null;
+    readonly cue: unknown;
+    readonly marks: {
+      readonly ring: { x: number; y: number } | null;
+      readonly arrow: { x: number; y: number } | null;
+    };
+    readonly done: readonly string[];
+  };
+  /**
    * The city's ramparts: where its gateways are, and how many stones it has.
    *
    * The wall is round the *core* of the town now rather than round the box
@@ -872,6 +995,29 @@ export interface DevHandle {
     readonly missteps: number;
     readonly wrong: string | null;
     /** Whether the grid has started giving a square away. */
+    readonly hinting: boolean;
+  } | null;
+  /**
+   * The logic parchment: the tray and its rule, or the switches and the
+   * lamp, and where each thing is drawn so a script can tap it.
+   *
+   * `rule` and `lamp` are the spell's own trees, published whole: a script
+   * that wants to answer a tray has to be able to read the rule, and one
+   * that wants to light a lamp has to be able to evaluate the circuit.
+   */
+  readonly logic: () => {
+    readonly puzzle: string;
+    readonly tokens: readonly { id: string; hue: string; shape: string }[];
+    readonly rule: unknown;
+    readonly wanted: readonly string[];
+    readonly picked: readonly string[];
+    readonly switches: number;
+    readonly lamp: unknown;
+    readonly on: readonly boolean[];
+    readonly board: unknown;
+    readonly done: boolean;
+    readonly missteps: number;
+    readonly wrong: string | null;
     readonly hinting: boolean;
   } | null;
   /**

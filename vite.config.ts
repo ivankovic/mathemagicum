@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Marko Ivankovic
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
@@ -52,17 +55,26 @@ export default defineConfig({
         // `png` covers the terrain atlas page and the building sheets;
         // `json` covers the atlas index and the sprite sidecars, which are
         // fetched at runtime exactly like the images and are just as fatal
-        // to miss. Extend this list again for whatever else actually lands
-        // under public/assets (audio, ...) rather than guessing ahead of it.
+        // to miss. `json` also covers the music and the sound effects: there
+        // is no audio *file* in this game — `public/assets/music/*.json` and
+        // `assets/sfx/sfx.json` are scores (`"format": "mathemagicum-score"`)
+        // that `src/audio/` synthesises at play time — so there is no .ogg
+        // or .mp3 to add here, and `sound.ts` relies on this glob to keep
+        // the music playing on a train. Extend this list again for whatever
+        // else actually lands under public/assets rather than guessing
+        // ahead of it.
         //
         // `woff2` is the lettering, which is fetched by the stylesheet
         // rather than by Phaser and would otherwise be the one thing in the
         // game that needed the network. It is twenty kilobytes and the whole
         // interface is written in it.
         globPatterns: ["**/*.{js,wasm,css,html,png,json,woff2}"],
-        // The largest asset is the terrain atlas page (~850KB), comfortably
-        // under maximumFileSizeToCacheInBytes' 2MB default. Raise it if a
-        // future atlas needs a second page.
+        // The largest assets are the terrain atlas index (terrain.json,
+        // ~1.0MB) and its page (terrain-0.png, ~950KB), both under
+        // maximumFileSizeToCacheInBytes' 2MB default — anything over it is
+        // silently left out of the precache, so check `find public -type f
+        // -printf '%s %p\n' | sort -n | tail` when an atlas grows, and raise
+        // the limit here before the first one crosses it.
         // Workbox's SW bundler unconditionally `require`s terser, whose
         // serialize-javascript dependency calls crypto.getRandomValues() at
         // module load — that throws under the host's system Node if it's

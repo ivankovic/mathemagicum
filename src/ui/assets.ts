@@ -51,6 +51,8 @@ export const UiAsset = {
   RuneHourglass: "rune-hourglass",
   /** The mirror spell: a shape and the fold down the middle of it. */
   RuneMirror: "rune-mirror",
+  /** The logic spell: a knife switch, thrown on. */
+  RuneLogic: "rune-logic",
   SeedPouch: "seed-pouch",
   Basket: "basket",
   Crate: "crate",

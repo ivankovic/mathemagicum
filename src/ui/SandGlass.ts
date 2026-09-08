@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { ACTIVE_HEX } from "./parchment";
+
 /**
  * The glass turning: sand running from the top bulb into the bottom one.
  *
@@ -39,7 +41,6 @@ const WOOD_LIGHT_HEX = 0x93683a;
 // The bands. Brass because it is the one metal in this game's palette that
 // is not a coin, and because a wooden hourglass with no metal on it has
 // nothing holding it together.
-const BRASS_HEX = 0xc8901c;
 const BRASS_LIGHT_HEX = 0xeec469;
 // Cool and thin, not cream: the parchment behind this is warm and pale, and
 // glass drawn in the same family disappeared into it — what a child saw was
@@ -241,7 +242,8 @@ export class SandGlass {
     // upper cap and the top of the lower one — one light, not two.
     g.fillStyle(WOOD_LIGHT_HEX, 1);
     g.fillRect(cx - half + 3, y - CAP_H / 2 + 1, half * 2 - 6, 1);
-    g.fillStyle(BRASS_HEX, 1);
+    // Brass: the same gold the sheets mark what is in play with.
+    g.fillStyle(ACTIVE_HEX, 1);
     g.fillRect(cx - half + 2, y + (lip * CAP_H) / 2 - (downward ? 2 : 0), half * 2 - 4, 2);
   }
 
@@ -359,7 +361,7 @@ export class SandGlass {
     // covered both ends of both posts and the stand read as two bare bars.
     for (const side of [-1, 1]) {
       for (const end of [top - CAP_H / 2, bottom + CAP_H / 2]) {
-        g.fillStyle(BRASS_HEX, 1);
+        g.fillStyle(ACTIVE_HEX, 1);
         g.fillCircle(cx + side * postX, end, 4);
         g.fillStyle(BRASS_LIGHT_HEX, 1);
         g.fillCircle(cx + side * postX - 1, end - 1, 2);
@@ -373,7 +375,7 @@ export class SandGlass {
     const collar = NECK + 3;
     g.fillStyle(WOOD_DARK_HEX, 1);
     g.fillRect(cx - collar, waist - 5, collar * 2, 10);
-    g.fillStyle(BRASS_HEX, 1);
+    g.fillStyle(ACTIVE_HEX, 1);
     g.fillRect(cx - collar + 1, waist - 4, collar * 2 - 2, 8);
     g.fillStyle(BRASS_LIGHT_HEX, 1);
     g.fillRect(cx - collar + 1, waist - 4, collar * 2 - 2, 1);

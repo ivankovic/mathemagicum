@@ -19,18 +19,18 @@ import {
   typeBrickDigit,
 } from "../spells/bricks";
 import { type CastResult, castResult } from "../spells/cast";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type CloseChip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
 import {
   ACTIVE_HEX,
   DONE_HEX,
   DONE_INK,
-  FACE,
   INK,
   INK_DIM,
   INK_HEX,
   PAPER_HEX,
-  PAPER_PALE_HEX,
+  TYPE,
   WRONG_HEX,
   WRONG_INK,
 } from "./parchment";
@@ -78,9 +78,9 @@ const LAID_HEX = 0xc98c4e;
 // rather than as a hole in the parchment.
 const GAP_HEX = 0xe7d3ab;
 
-const TITLE_SIZE = 20;
-const ASK_SIZE = 12;
-const HINT_SIZE = 12;
+const TITLE_SIZE = TYPE.spellTitle;
+const ASK_SIZE = TYPE.small;
+const HINT_SIZE = TYPE.small;
 const FACE_SIZE = 16;
 
 const BRICK_MAX_W = 96;
@@ -100,11 +100,6 @@ const KEY_MIN = 24;
 /** Three rows, and the bottom one is the widest: what the wall costs in width. */
 const WIDEST_ROW = 3;
 
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
-
 interface PadKey {
   readonly rect: Phaser.GameObjects.Rectangle;
   readonly text: Phaser.GameObjects.Text;
@@ -113,9 +108,7 @@ interface PadKey {
   readonly span: number;
 }
 
-export class BrickPopup {
-  private readonly parts: PanelPart[] = [];
-  private readonly paper: ParchmentPanel;
+export class BrickPopup extends Panel {
   private readonly ink: Phaser.GameObjects.Graphics;
   private readonly title: Phaser.GameObjects.Text;
   private readonly ask: Phaser.GameObjects.Text;
@@ -123,53 +116,41 @@ export class BrickPopup {
   /** One label per brick, laid out with the wall. */
   private readonly faces: Phaser.GameObjects.Text[] = [];
   private readonly keys: PadKey[] = [];
-  private readonly closeRect: Phaser.GameObjects.Rectangle;
-  private readonly closeText: Phaser.GameObjects.Text;
+  private readonly closeButton: CloseChip;
 
   private state: BrickCast | null = null;
   private rung: BrickRung | null = null;
   private finish: ((result: CastResult) => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
+  /** The beat on a finished parchment before it goes, so a close can cancel it. */
+  private beat: Phaser.Time.TimerEvent | null = null;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     private words: Phrases,
     register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
+      lift: 0,
     });
 
     this.ink = this.own(scene.add.graphics());
-    this.title = this.own(this.label("", TITLE_SIZE, INK).setOrigin(0.5, 0));
-    this.ask = this.own(this.label("", ASK_SIZE, INK_DIM).setOrigin(0.5, 0));
-    this.hint = this.own(this.label("", HINT_SIZE, INK_DIM).setOrigin(0.5, 0));
+    this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
+    this.ask = this.own(this.text("", ASK_SIZE, INK_DIM).setOrigin(0.5, 0));
+    this.hint = this.own(this.text("", HINT_SIZE, INK_DIM).setOrigin(0.5, 0));
     for (const brick of BRICK_ROWS.flat()) {
-      this.faces[brick] = this.own(this.label("", FACE_SIZE, BRICK_INK).setOrigin(0.5));
+      this.faces[brick] = this.own(this.text("", FACE_SIZE, BRICK_INK).setOrigin(0.5));
     }
 
     this.buildKeypad();
 
-    this.closeRect = this.own(
-      scene.add
-        .rectangle(0, 0, 26, 26, PAPER_HEX)
-        .setStrokeStyle(2, INK_HEX)
-        .setInteractive({ useHandCursor: true }),
-    );
-    this.closeText = this.own(this.label("x", HINT_SIZE, INK).setOrigin(0.5));
-    this.closeRect.on("pointerdown", () => this.dismiss(false));
+    this.closeButton = this.closeChip(HINT_SIZE, () => this.dismiss(false), "key");
 
-    for (const part of this.parts) {
-      part.setDepth(depth).setScrollFactor(0).setVisible(false);
-      register(part);
-    }
     // The wall is drawn into one Graphics under everything, and the numbers
     // sit on top of it: six rectangles is one draw call and no objects.
     this.ink.setDepth(depth + 1);
@@ -178,8 +159,6 @@ export class BrickPopup {
       key.rect.setDepth(depth + 2);
       key.text.setDepth(depth + 3);
     }
-    this.closeRect.setDepth(depth + 2);
-    this.closeText.setDepth(depth + 3);
   }
 
   setPhrases(words: Phrases): void {
@@ -198,7 +177,7 @@ export class BrickPopup {
     return this.state;
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.state !== null;
   }
 
@@ -215,33 +194,19 @@ export class BrickPopup {
     this.finish = onDone;
     this.paper.setVisible(true);
     for (const part of this.parts) part.setVisible(true);
-    this.keyHandler = (event: KeyboardEvent) => this.onKeyDown(event);
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    this.watchKeys((event) => this.onKeyDown(event));
     this.render();
   }
 
   /** Closes without reporting anything — for a scene shutting down. */
-  close(): void {
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+  override close(): void {
+    this.beat?.remove();
+    this.beat = null;
+    super.close();
     this.state = null;
     this.rung = null;
     this.finish = null;
-    this.paper.setVisible(false);
     this.ink.clear();
-    for (const part of this.parts) part.setVisible(false);
-  }
-
-  layout(): void {
-    if (this.isOpen) this.render();
-  }
-
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
   }
 
   private dismiss(solved: boolean): void {
@@ -270,7 +235,8 @@ export class BrickPopup {
     if (next.done) {
       // A beat on the finished wall, every brick laid, before the floor
       // appears under her feet.
-      this.scene.time.delayedCall(650, () => this.dismiss(true));
+      this.beat?.remove();
+      this.beat = this.scene.time.delayedCall(650, () => this.dismiss(true));
     }
   }
 
@@ -310,7 +276,7 @@ export class BrickPopup {
             .setStrokeStyle(2, INK_HEX)
             .setInteractive({ useHandCursor: true }),
         );
-        const text = this.own(this.label(key, HINT_SIZE + 2, INK).setOrigin(0.5));
+        const text = this.own(this.text(key, HINT_SIZE + 2, INK).setOrigin(0.5));
         rect.on("pointerdown", press(key));
         this.keys.push({ rect, text, col, row, span });
         col += span;
@@ -318,19 +284,18 @@ export class BrickPopup {
     }
   }
 
-  private render(): void {
+  protected render(): void {
     const state = this.state;
     const rung = this.rung;
     if (!state || !rung) return;
     const { width, height } = this.scene.scale;
     const rect = this.paper.layout(width, height);
-    const { left, top } = rect;
+    const { top } = rect;
     const cx = rect.centreX;
     const innerW = rect.width - PAD * 2;
     const innerH = rect.height - PAD * 2;
 
-    this.closeRect.setPosition(left + rect.width - PAD - 2, top + PAD + 2);
-    this.closeText.setPosition(this.closeRect.x, this.closeRect.y);
+    this.closeButton.place(rect);
 
     // --- the keypad, off the bottom ----------------------------------------
 
@@ -459,18 +424,5 @@ export class BrickPopup {
     // brick with two bricks under it is added up to; anything else is a gap
     // under a brick that is already known, and has to be come back to.
     return BRICK_PARENTS[asked] ? this.words.brickHintAdd : this.words.brickHintTakeAway;
-  }
-
-  private label(text: string, size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, text, {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-    });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
   }
 }

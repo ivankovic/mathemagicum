@@ -6,7 +6,15 @@ import { Spell } from "../src/spells/spellbook";
 import { ANIMAL_GLAD_MS } from "../src/world/animals";
 import { FixtureType } from "../src/world/fixtures";
 import { PatchAction } from "../src/world/selection";
-import { type Game, patchButton, play, runeButton, shutDown, takeFromCrate } from "./harness";
+import {
+  type Game,
+  type Handles,
+  patchButton,
+  play,
+  runeButton,
+  shutDown,
+  takeFromCrate,
+} from "./harness";
 
 const MINUTES = 60_000;
 
@@ -36,15 +44,9 @@ const WITH_TIMBER = `${FROZEN}&materials=40&learned=all`;
 function isFree(game: Game, col: number, row: number): Promise<boolean> {
   return game.tab.evaluate(
     ([c, r]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
+      const handle = (globalThis as never as Handles).__mathemagicum;
       if (!handle) throw new Error("the game has not put its handle out");
-      const session = handle.session as {
-        grid: {
-          isPassable: (col: number, row: number) => boolean;
-          getObjectAt: (col: number, row: number) => unknown;
-        };
-      };
+      const session = handle.session;
       return (
         session.grid.isPassable(c as number, r as number) &&
         !session.grid.getObjectAt(c as number, r as number)
@@ -69,12 +71,9 @@ interface Beast {
 function standable(game: Game, col: number, row: number): Promise<boolean> {
   return game.tab.evaluate(
     ([c, r]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
+      const handle = (globalThis as never as Handles).__mathemagicum;
       if (!handle) throw new Error("the game has not put its handle out");
-      const session = handle.session as {
-        grid: { isPassable: (col: number, row: number) => boolean };
-      };
+      const session = handle.session;
       return session.grid.isPassable(c as number, r as number);
     },
     [col, row] as const,

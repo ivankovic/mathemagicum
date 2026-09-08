@@ -1,7 +1,3 @@
-// SPDX-FileCopyrightText: 2026 Marko Ivankovic
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-
-import { AnimalKind } from "../world/animals";
 import { DecorType } from "../world/decor";
 import { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
@@ -63,13 +59,6 @@ const PLANTS: Record<PlantType, Noun> = {
   [PlantType.Wheat]: noun({ bare: "Weizen", gender: "m", plural: "Weizen" }),
 };
 
-const ANIMALS: Record<AnimalKind, Noun> = {
-  [AnimalKind.Chicken]: noun({ bare: "Huhn", gender: "n", plural: "Hühner" }),
-  [AnimalKind.Duck]: noun({ bare: "Ente", gender: "f", plural: "Enten" }),
-  [AnimalKind.Cat]: noun({ bare: "Katze", gender: "f", plural: "Katzen" }),
-  [AnimalKind.Rabbit]: noun({ bare: "Kaninchen", gender: "n", plural: "Kaninchen" }),
-};
-
 const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Well]: noun({ bare: "Brunnen", gender: "m", plural: "Brunnen" }),
   [FixtureType.Fence]: noun({ bare: "Zaun", gender: "m", plural: "Zäune" }),
@@ -85,6 +74,12 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Sieve]: noun({ bare: "Sieb", gender: "n", plural: "Siebe" }),
   [FixtureType.Tally]: noun({ bare: "Zählwerk", gender: "n", plural: "Zählwerke" }),
   [FixtureType.Press]: noun({ bare: "Presse", gender: "f", plural: "Pressen" }),
+  [FixtureType.Funnel]: noun({ bare: "Trichter", gender: "m", plural: "Trichter" }),
+  [FixtureType.Bell]: noun({ bare: "Glocke", gender: "f", plural: "Glocken" }),
+  [FixtureType.Inverter]: noun({ bare: "Falltür", gender: "f", plural: "Falltüren" }),
+  [FixtureType.Seesaw]: noun({ bare: "Wippe", gender: "f", plural: "Wippen" }),
+  [FixtureType.Latch]: noun({ bare: "Truhe", gender: "f", plural: "Truhen" }),
+  [FixtureType.Blueprint]: noun({ bare: "Bauplan", gender: "m", plural: "Baupläne" }),
   [FixtureType.Windpump]: noun({ bare: "Windpumpe", gender: "f", plural: "Windpumpen" }),
   [FixtureType.Planter]: noun({ bare: "Pflanzkasten", gender: "m", plural: "Pflanzkästen" }),
   [FixtureType.Gate]: noun({ bare: "Tor", gender: "n", plural: "Tore" }),
@@ -125,18 +120,7 @@ const ROOMS: Record<string, string> = {
   barn: "Scheune",
   tower: "Turm",
   schoolhouse: "Schulhaus",
-};
-
-// "In der Scheune", "im Turm": the room names again, in the one case the
-// entering message needs them in.
-const IN_ROOM: Record<string, string> = {
-  cottage: "in der Hütte",
-  townhouse: "im Stadthaus",
-  ship: "im Schiffsbauch",
-  observatory: "in der Sternwarte",
-  barn: "in der Scheune",
-  tower: "im Turm",
-  schoolhouse: "im Schulhaus",
+  garage: "Werkstatt",
 };
 
 const PLACES = ["Einer", "Zehner", "Hunderter"];
@@ -159,6 +143,11 @@ const PLACE_NAMES: Record<string, string> = {
 
 // Der Rundgang, Seite für Seite. Nach IntroBeat geschlüsselt, damit eine neue
 // Seite in jeder Sprache auffällt und nicht leer bleibt.
+const NEWS_DE: Record<string, string> = {
+  press:
+    "Es gibt eine neue Maschine für deinen Garten: die Presse. Bau sie aus Holz und Stein, nimm sie aus deiner Kiste, und sie nimmt zwei Dinge auf einmal und presst etwas Neues daraus.",
+};
+
 const INTRO_DE: Record<string, string> = {
   seeds: `Ich bin ${NAMED_PEOPLE["postal-worker"]}, der Postbote. Das da ist dein Garten. Nimm ein Saatkorn aus dem Beutel und tipp auf das Feld, auf das es soll.`,
   spell: `Von allein wächst hier nichts. Öffne das Zauberbuch, sprich die +-Rune darauf und löse die Aufgabe. Zweimal, dann ist die Pflanze reif. ${NAMED_PEOPLE.teacher} in der Schule zeigt es dir, wenn du sie fragst.`,
@@ -166,17 +155,6 @@ const INTRO_DE: Record<string, string> = {
   store: `${NAMED_PEOPLE.shopkeeper} in der Scheune kauft deine Ernte und verkauft Zäune, Tische und Laternen für den Garten. Das Geld zählst du selbst ab — und sie verzählt sich auch mal.`,
   map: `Im Turm hängt an der Wand eine Karte der ganzen Welt. Tipp jederzeit darauf, um zu sehen, wo du bist — und ${NAMED_PEOPLE.geometer} darunter bringt dir einen Zauber fürs Reisen bei.`,
 };
-
-/**
- * A sentence that starts with a noun form starts with a capital.
- *
- * The forms are stored lowercase because most of them appear mid-sentence
- * ("du hast keinen Zaun"); the handful that open a line are capitalised here
- * rather than stored twice.
- */
-function cap(line: string): string {
-  return line.charAt(0).toUpperCase() + line.slice(1);
-}
 
 const FALLBACK = { gender: "f", plural: "" } as const;
 
@@ -357,6 +335,40 @@ export const DE: Phrases = {
   mirrorDone: "Beide Seiten sind gleich. Das ist ein Spiegel.",
   mirrorHint: "Dieses Feld ist eines davon.",
 
+  logicTitle: "Der Schalter",
+  logicAskTray: "Tipp auf alles, was die Regel durchlässt.",
+  logicAskCircuit: "Leg die Schalter um, bis die Lampe leuchtet.",
+  logicWrong: "Das nicht. Lies die Regel noch einmal.",
+  logicWasted: "Das hat nichts gebracht. Schau, was jede Maschine braucht.",
+  logicDoneTray: "Das sind sie. Die Regel hat sie durchgelassen.",
+  logicDoneCircuit: "Die Lampe leuchtet. Das ist der Stromkreis.",
+  logicHintTray: "Dieses hier kommt durch.",
+  logicHintCircuit: "Versuch diesen Schalter.",
+
+  jobsTitle: `${NAMED_PEOPLE.mechanic}s Werkbank`,
+  jobAsk: (job, left) =>
+    ({
+      either: `Verbinde zwei Leitungen mit einem Trichter und den Trichter mit einem Zählwerk. ${left === 1 ? "Noch eine Leitung" : `Noch ${left} Leitungen`}.`,
+      ring: `Häng eine Glocke an eine Leitung und schick zehn Dinge hindurch. ${left === 1 ? "Noch ein Läuten" : `Noch ${left} Läuten`}.`,
+      else: `Zeig einer Falltür ein Ding und schick sechs andere hindurch. ${left === 1 ? "Noch eins" : `Noch ${left}`} muss durch.`,
+      parity: `Häng eine Wippe an eine Leitung und lass sie sechs Dinge verteilen, drei auf jede Seite. ${left === 1 ? "Noch eins" : `Noch ${left}`} muss kippen.`,
+      hold: `Füll eine Truhe am Tag und lass sie nachts heraus. ${left === 1 ? "Noch ein Ding" : `Noch ${left} Dinge`} müssen heraus.`,
+      twice: `Weck einen Bauplan neben einer Reihe, nimm ihn hoch und tipp ihn woanders hin. ${left === 1 ? "Noch ein Stempel" : `Noch ${left} Stempel`}.`,
+    })[job] ?? "",
+  jobBargain: (job) =>
+    ({
+      either: "Tu das, und die Kiste bietet dir eine Glocke an.",
+      ring: "Tu das, und die Kiste bietet dir eine Falltür an.",
+      else: "Tu das, und die Kiste bietet dir eine Wippe an.",
+      parity: "Tu das, und die Kiste bietet dir eine Truhe an.",
+      hold: "Tu das, und die Kiste bietet dir einen Bauplan an.",
+      twice:
+        "Tu das, und du hast dieselbe Reihe zweimal gebaut — das Letzte, was sie dir beibringen kann.",
+    })[job] ?? "",
+  jobEarned: "Erledigt. Frag sie noch einmal nach dem nächsten.",
+  jobsAllDone:
+    "Alle Aufträge sind erledigt. Komm wieder, wenn es mehr Maschinen zu reparieren gibt.",
+
   hourglassTitle: "Das Stundenglas",
   hourglassAsk: "Wie weit stellst du die Uhr?",
   hourglassTurnIt: "Wisch im Kreis, um die Uhr zu drehen.",
@@ -366,6 +378,32 @@ export const DE: Phrases = {
   hourglassNow: "jetzt ist es",
   hourglassCountOn: (hours) => `Zähl im Kreis weiter: ${hours}, und weiter…`,
   hourglassSolved: (hours) => `${hours} Stunden. Das Glas dreht sich.`,
+
+  thingDoes: (fixture: FixtureType) =>
+    ({
+      [FixtureType.Sorter]:
+        "Er teilt einen Haufen in drei gleiche Stapel; was nicht aufgeht, bleibt im Trichter.",
+      [FixtureType.Hothouse]: "Eine Pflanze kommt hinein, drei Bretter kommen heraus.",
+      [FixtureType.Sieve]:
+        "Zeig ihm eine Sache. Die lässt es durch, alles andere fällt in den Kasten.",
+      [FixtureType.Tally]:
+        "Es füllt sich und füllt sich und kippt alles, sobald es die Marke erreicht.",
+      [FixtureType.Press]:
+        "Sie nimmt zwei Sachen auf einmal — so viele von der einen für je so viele von der anderen — und presst daraus etwas Neues.",
+      [FixtureType.Funnel]:
+        "Zwei Öffnungen, ein Ausguss. Was oben in eine von beiden kommt, läuft unten heraus — und er wartet nie auf die andere.",
+      [FixtureType.Bell]:
+        "Sie läutet einmal für jedes Ding, das durch sie hindurchgeht, und schickt es weiter. Eine Reihe mit einer Glocke am Ende kannst du arbeiten hören.",
+      [FixtureType.Inverter]:
+        "Zeig ihr ein Ding. Das lässt sie durch die Klappe in ihren Eimer fallen, und alles andere lässt sie durch — das Sieb, umgedreht.",
+      [FixtureType.Seesaw]:
+        "Sie kippt. Das erste Ding rutscht auf der einen Seite hinunter, das nächste auf der anderen, und so weiter: eins hierhin, eins dorthin, nie beide.",
+      [FixtureType.Latch]:
+        "Sie behält, was man ihr gibt, den ganzen Tag — und lässt alles heraus, wenn es Nacht wird.",
+      [FixtureType.Blueprint]:
+        "Weck ihn, und er zeichnet die Maschinen um sich herum, samt Drähten. Nimm ihn hoch und tipp ihn woanders hin, dann baut er dort dieselbe Reihe — bezahlt aus deinem Korb.",
+    })[fixture as string] ?? "",
+  thingCosts: "Gebaut aus",
 
   optionsButton: "Optionen",
   optionsTitle: "Optionen",
@@ -454,6 +492,9 @@ export const DE: Phrases = {
 
   introTitle: "Willkommen im Dorf",
   intro: (beat) => INTRO_DE[beat] ?? "",
+
+  newsTitle: "Post für dich",
+  news: (beat) => NEWS_DE[beat] ?? "",
 
   lessonTitle: "Der Additionszauber",
   lessonRune:

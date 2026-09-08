@@ -1697,11 +1697,69 @@ It stopped being fine the moment a child could build the room out — a house
 twice the size with its bed still in the original corner is a house nobody
 arranged.
 
-So the shipped placements are a *starting* arrangement. Tap a thing to pick
-it up and it goes in the basket; put it back down from the crate, the same
+So the shipped placements are a *starting* arrangement. Tap a thing and it
+asks what to do with it — see *what a thing is for*, below — and one of the
+two answers puts it in the basket; put it back down from the crate, the same
 verb and the same place as a fence taken out of the garden. What the
 generator ships is the room somebody left; what a child does with it is
 theirs, and it is written down per house alongside the floor plan.
+
+**What a thing is for.** A tap on a chair used to *be* the answer: it went
+into the basket. That made every piece of furniture a kind of luggage — a
+bench was a thing to have and never a thing to sit on — and the question a
+playtest asked, more or less, was *what is it for*. So the tap asks now. Two
+round buttons bloom out over the thing, a glad face and a basket, and the
+next tap says which: the basket takes it, exactly as the tap alone used to,
+and the glad face **uses** it. Using is her doing the thing the thing is
+for — she hops onto a bench and sits, lies on the bed while a moon drifts
+up now and then, bobs about in the bath, bends to the sink twice, wriggles
+happily at the stove, twirls in front of the dresser, leans on a table,
+reaches into the bookshelf and comes up glad — with nothing in the world
+changed. It is the answer to *what is it for* in the only language this
+game speaks.
+
+**Two kinds of use, because there are two kinds of thing.** A sink is used
+and walked away from, so bending to it is a gesture: a second or so, and
+then she is standing where she was, facing it. A chair is *sat on*, and a
+child who sat her down did not ask for her to get up a second later — so
+sitting, lying and bathing **last**. She settles and stays settled,
+breathing, bobbing, a moon now and then, until the next tap anywhere on the
+screen or a direction key gets her up, with a hop, back to where she was.
+That tap is only that: whatever it landed on is not walked to, planted or
+picked, because getting her off a chair is one thing to ask and the next
+thing is the next tap. The rule under the split is *on or beside*: what she
+has got onto she stays on, and what she does standing beside a thing is a
+gesture. The gate is the one thing she gets onto that does not last, because
+going through a gate is not a place to be.
+
+Every use is built out of the frames the sheet already has — a hop is a
+tween, sitting is a sink, a twirl is the four facings in a ring — because a
+sitting frame would have to be drawn for six bodies, and none of these read
+any worse for not having one.
+
+**Every thing, not most things.** A fence is leaned on and a gate is hopped
+through, which is a stretch, and a deliberate one: the alternative was a
+bench that asked *sit or take?* beside a fence that was simply taken, and a
+child who has learned that tapping a thing asks what to do with it should not
+find that some things skip the question. Machines are the one exception that
+is not one — a tap on a machine wakes it, which has always been its use, so
+they never reach the ring. Nothing the village put down itself can be tapped
+at all, which is as it was.
+
+**A use is done from beside the thing.** One step, diagonals included, like
+talking to somebody; from further off she is shown the trail of dots that
+says *walk there*, the same as for a villager. Taking keeps the reach it
+always had. Nothing else can be pressed while a gesture plays, or while she
+is in the air getting on or off something — which is why the gestures are
+short and the hops shorter.
+
+**The ring is not a confirmation.** The design's rule that nothing
+selects-then-confirms stands: a confirmation asks the same question twice,
+and this asks a question with two different answers that only the child
+knows. It follows the patch menu's manners rather than a parchment's — a tap
+anywhere else closes it and does nothing more, and a step away from where
+she stood closes it too, because a child who tapped away from a question has
+answered *neither*.
 
 **And they come in five colours.** Wood and cloth together, so somebody
 picking green gets a green chair *and* a green blanket rather than a table
@@ -2404,8 +2462,9 @@ the work to go, not a gate.
 bought into a crate and set on the tile the player faces. They block the
 way, which is a state she can corner herself with — so rather than
 checking connectivity before every placement, **anything she puts down she
-can pick back up** by tapping it. A fence that boxed her in is adjacent by
-definition, so it is always within reach. Tables are stocked as outdoor
+can pick back up** — tap it, then the basket on the ring that opens over it
+(see *what a thing is for*, under *The house grows*). A fence that boxed her
+in is adjacent by definition, so it is always within reach. Tables are stocked as outdoor
 furniture, which is a stretch; interior furniture is a separate thing that
 `interiors.py` draws and the player does not place.
 
@@ -2799,6 +2858,124 @@ explanation a child meets should not also have to be learned as a piece of
 interface. What differs is the picture on each page: icons here, diagrams in
 the school.
 
+### The letter
+
+**The same man brings the news.** When the game has changed under a child who
+was already playing it, he brings a letter: the same parchment, cut to what
+they have not been told yet. A second messenger would be a second thing to
+learn, and he is already the one person in the world whose job is bringing
+you something.
+
+**It is a list, not a version.** Each entry is a beat appended to
+`NEWS_BEATS`, and a child's save holds how many of them they have had.
+There is no build number to bump — a stamp with a step in it is a stamp that
+gets skipped, and a version the release forgot to raise is a game that
+quietly stops telling anybody anything. Adding a beat is the whole of
+shipping news, and not adding one is the whole of shipping quietly.
+
+**A beat is two icons and a sentence about a thing they can go and touch.**
+A changelog is an adult genre. "There is a new machine for the garden" is
+news to a five-year-old; the file it was moved out of is not, and neither is
+anything whose picture would have to be drawn specially to explain it — the
+icons are the ones already in the corner of the screen, for the reason the
+welcome's are.
+
+**A child being welcomed is caught up, not written to twice.** Everything on
+the list is already true of the game somebody is meeting for the first time,
+so giving the welcome marks the whole list read. A letter about what changed,
+handed to somebody who has seen none of what came before, is a sentence with
+nothing behind it.
+
+**The door is the letter's arrival, and only the letter's.** The walk is the
+right one and the only one the welcome ever needed — a new game starts in the
+garden, twenty tiles from his own door, so the welcome is always given inside
+his round. A child owed one anywhere else has skipped it and walked off, and
+a portal tearing open in front of somebody who has been avoiding him is the
+game insisting; she can tap him, or come home.
+
+The letter is the other case. It is owed to a child who may be anywhere in a
+five-hundred-cell world, and "he sets off and arrives in four minutes" is not
+a delivery. So the post office opens a doorway beside them and he steps out
+of it with the letter, and steps back through when it has been read.
+
+That is **not him casting the geometer's spell.** The spell is something a
+child earns by climbing the tower, and a postman who could do it would be
+teaching them otherwise. It is how the post gets about; he is the man who
+comes out of it. The far end of the hole shows the post office, painted from
+the world's own grid like every other portal in the game, which is what makes
+it a door from somewhere rather than a special effect.
+
+**The rule that picks between them is the village box, and it is a cheap
+test on purpose.** Asking whether he *could* walk there means a search of
+the whole grid, several times a second, for a route four hundred tiles long.
+That was reachable before the letter existed: the welcome is owed on every
+load until it is given, so a child who skipped it, walked to the harbour and
+closed the tab came back to him routing at them from the post office. His
+round is the village; inside it he walks, outside it he does not try.
+
+### The guide
+
+**Every action is taught by pointing at it.** A glow on the button to press
+and an arrow over the square to press it on, from the moment the action is
+worth doing until she has done it — and then never again. Planting is the
+pouch, a seed, the square in front of her, so the guide for planting lights
+the pouch until it opens, lights a seed until one is in her hand, and hangs
+an arrow over the square until a seed is in it. Growing is the spellbook,
+the + rune and the crop, twice, until something ripens. Picking is the ripe
+crop. Selling is an arrow towards the store, and then over the person behind
+the counter. Placing is the crate, a group, a thing, the square. Waking is
+the machine that is asleep.
+
+**Nothing is said.** A page of words about the pouch, given at the pouch,
+was built first and thrown away the same afternoon: half of this game's
+players cannot read a word of either language it speaks, and the other half
+do not want to. What both halves can follow is a light on a button. The
+glow and the arrow are in the gold that already means *this one is active*
+— the lit rune, the aimed square — so the colour is one a child has met.
+
+**It starts when the action is worth doing.** Growing is pointed out when
+there is something planted; picking when something is ripe; selling when
+the basket has something in it; placing when the crate does; waking when a
+machine is asleep. A guide for selling given to an empty basket would be an
+arrow to a shop with nothing to sell there. One guide runs at a time, and a
+step she has already done — the pouch already open, a seed already lit — is
+skipped, because a light on a button that is already pressed is a light
+that lies.
+
+**A trail for a thing off the screen.** The store is thirty squares from her
+garden. The first version put an arrow at the edge of the screen, turned
+towards the door, and it was read as pointing at the enchanted forest — a
+bearing is a line, and a line goes on past the door to whatever lies
+beyond it. So the guide walks the path it wants her to walk, found the way
+the postman finds his, and lays the trail of dots the game already draws
+for *too far* from her feet along it, with the arrow over the last square
+still on the screen. It turns where the path turns — down the garden, out
+of the gate, round the house — and it moves as she moves. Once the door is
+in view the arrow hangs over the door. It is the one cue for a *place*,
+because it is the first time the game asks her to go somewhere she has not
+been.
+
+**Remembered per child, once finished.** The set of guides a child has been
+walked through lives in their progress, like the spells they have been
+taught. A guide that came back every load would be a game that never stops
+pointing; a sibling on the same tablet has not been shown any of it. Asking
+the postal worker for the welcome again forgets every guide, so each is
+given again when its moment comes: he is the one who explains this game,
+and "show me again" means all of it.
+
+**What has no guide.** The spells with a teacher — the portal, the
+hourglass, the mirror, the array and the share — are shown by the person who
+gives them. The wheel over a bench is two pictures and nothing else, and an
+arrow at one of them would be the game choosing for her. A door needs no
+arrow; she can see the door.
+
+**Scripts are spared it.** A glow on the pouch is a difference in every
+screenshot, and a guide finishing writes to the child's progress, which is a
+save changing under a scenario about saves. `?guided=all` counts every guide
+as given; the harness sends it unless a scenario says it wants to meet the
+game as a child does, and the one scenario that does is the one about the
+guide.
+
 ### The map in the tower
 
 **There is a map of the world on the post office wall.** Tapping it opens the
@@ -3036,6 +3213,119 @@ that already existed.
 a shelf. A machine is placeable and is not for sale, so the two lists have
 come apart — left alone, the first machine landed on the village shelf
 priced at infinity, which is a button that can only refuse.
+
+### Machines that decide, and the mechanic who wakes them
+
+**Every machine is an operation, and the gates are the operations that are
+not arithmetic.** The first five machines were the four operations and a
+proportion: the sorter divides, the hothouse multiplies, the sieve takes
+away, the tally counts up to a mark, the press takes so many of one for
+every so many of the other. Read logically, three of them were already
+gates — the press waits for *both*, the sieve passes what *is* and bins
+what is *not*, the tally is a threshold — and the machines that came next
+are the gates that were missing, built to the same rule as the first five:
+each does its logic where a child can watch it, and none of them ever poses
+a question.
+
+- **The funnel** is OR. Two mouths, one spout, and it never waits: whatever
+  arrives at either goes on down. It is the press's opposite, and drawn so
+  — the press's two hoppers stand apart with the beam between them, the
+  funnel's two cups *meet*. Copper, because at button size a child tells
+  the two machines with two mouths apart by colour before shape.
+- **The bell** is output. It rings once for each thing that passes through
+  it and passes the thing on. It makes nothing; it *says* something, and it
+  is the first machine that does — a line with a bell at the end is a line
+  a child can hear working, which is what a program's output is.
+
+**They are woken by a new class of minigame: Boolean logic, in pictures.**
+The logic spell's parchment has two shapes on one ladder. On a **tray**, a
+rule is drawn as swatches and the machines' own icons — a red swatch, the
+press's picture, a round swatch is *red and round*; the funnel's picture
+between them is *red or round*; a bar across a swatch is *not*, the mark
+the game already uses for "none of this" — and under it a row of coloured
+shapes, and she taps the ones the rule lets through. On a **circuit**,
+switches down the left feed the same machines as gates, with a bar on a
+wire for an inverter, and a lamp on the right; she flips switches until it
+lights. Six rungs of tray, from one swatch to *red and not square*, then
+four of circuit, to three switches and two gates with an inverter. A
+stumble on a tray is a tap on a thing the rule keeps out; a stumble on a
+circuit is a flip that brought the lamp no nearer, counted against the
+fewest flips that would have lit it, so exploring a circuit is not
+punished and thrashing one is. No numerals anywhere: a shape is red or it
+is not, which is the whole of what a five-year-old has to read.
+
+The press moved onto this spell. It was the sharing spell's, on the
+argument that a ratio is a division made permanent — true of the
+proportion it learns and not of what it *does*, which is wait for both.
+Both is AND, and the parchment that asks it is this one.
+
+**The mechanic teaches it, in the garage in the city.** A new building —
+iron-grey walls, a slate-green roof nothing else wears, wide doors and a
+cog on the wall where a shop hangs its sign — with a workshop behind it:
+two benches along the back wall with a machine on each being mended, the
+sparks flying off them, and her standing between them with a hammer in her
+hand, bent over the work. She is the seventh teacher and is told apart the
+way the others are, by what she holds — a hammer is the only outline in the
+cast wider at the top than at the bottom. Talking to her teaches the spell
+and opens the parchment, the way the clockmaker's does: what the spell
+costs a child is the walk to the city and finding the one building with a
+cog on it.
+
+**Connecting the machines is the puzzle, and it teaches programming.** A
+machine on its own is a thing; two wired together are a program, and the
+mechanic's jobs are where the game says so. Each job is a small line —
+these machines, wired this way, doing this — checked by the garden rather
+than by a parchment: the tally tips, the bell rings, the sheet on her bench
+fills in. Nothing is typed and nothing is marked; the line works or it
+does not, which is what a program is. The first two jobs are *merging*
+(two lines into one funnel, and the funnel into a tally that tips) and
+*output* (a bell rung ten times); the ones after them — everything but
+wood to the bin, odd and even dealt apart, timber kept until night, the
+same line built twice — are the rest of the tree, and each comes with the
+machine that makes it possible: an inverter, a seesaw, a latch, a
+blueprint. What is counted is always something she can see in the garden:
+wires into the funnel, rings of the bell.
+
+**A job earns the next machine, and recipes chain.** The bell is not in the
+crate until a funnel has been made to work, and a funnel is beams and cord
+— the first machine made of what a *machine* made, so a child who wants
+the gate that takes either has built and fed the gate that takes both. That
+is the whole of the gating, and it gates on *having done*, never on
+arithmetic. Feedback wires — a line that runs back into an earlier
+machine — are allowed, because loops need cycles and a tally on a cycle is
+a counter.
+
+**The rest of the tree, each a programming idea with a machine at the end
+of it.** Four more machines, each woken by the logic spell, each earned by
+the job before it, and each two materials of which one a press made:
+
+- **The trapdoor** is NOT. A box on tall legs with a red door in its top —
+  the refusal's own red — that drops the one thing it was shown into the
+  bin under it and lets everything else slide off the side. The sieve
+  inside out, and the first *else* a child meets: the job is a trapdoor
+  shown one thing that has passed six of everything else.
+- **The seesaw** is XOR. A plank on a post with a copper pan at each end;
+  the first thing goes down one end, the plank tips, the next goes down
+  the other. Odd to the crates and even to the bin, which is *parity*, and
+  the seesaw is also the third gate on the logic parchment — either but
+  never both. The job is three dealt each way.
+- **The strongbox** is memory. A chest that holds whatever it is given all
+  day and lets it all out when the village shuts for the night — the one
+  machine whose work depends on the hour rather than the minutes, because
+  a variable is a thing that waits for a signal. The job is six let out.
+- **The blueprint** is a function. An easel with a drawing on it, made the
+  moment it is woken, of every machine within a wire's reach and the wires
+  between them. Tapped, it is picked up like a coil; tapped down somewhere
+  else it builds the same line there and strings the same wires — and
+  pays every machine's recipe out of the basket, because a drawing that
+  built for free would be conjuring. What it saves is the wiring, which is
+  what a function saves. The job is one stamping: the same line built
+  twice. It is the last thing the mechanic has to teach.
+
+**The generator is at version five** for this: the city has a garage in
+it, in the first block that is not a shop and is wide enough, and every
+block after it moved. A child's things inside the old city come back
+through the same door as they did at four.
 
 ### The top of the addition ladder, where the line comes off
 

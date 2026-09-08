@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { Spell } from "../src/spells/spellbook";
 import { CRATE_WIRE } from "../src/world/crate";
 import { FixtureType } from "../src/world/fixtures";
-import { MINUTES_PER_ROUND, SHARES } from "../src/world/machines";
-import { type Game, play, runeButton, shutDown, takeFromCrate } from "./harness";
+import type { ItemType } from "../src/world/inventory";
+import { SHARES } from "../src/world/machines";
+import { type Game, type Handles, play, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -64,33 +64,6 @@ interface Machine {
 
 const machines = (game: Game) => game.seam<Machine[]>("machines");
 
-/** An empty square next to her, to stand a machine on. */
-async function squareBeside(game: Game): Promise<{ col: number; row: number }> {
-  const here = await game.where();
-  for (const step of [
-    { col: 1, row: 0 },
-    { col: -1, row: 0 },
-    { col: 0, row: 1 },
-    { col: 0, row: -1 },
-  ]) {
-    const at = { col: here.col + step.col, row: here.row + step.row };
-    const on = await game.tab.evaluate(
-      ([c, r]) => {
-        const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-          .__mathemagicum;
-        if (!handle) throw new Error("the game has not put its handle out");
-        const session = handle.session as {
-          grid: { getObjectAt: (col: number, row: number) => unknown };
-        };
-        return session.grid.getObjectAt(c as number, r as number) !== null;
-      },
-      [at.col, at.row] as const,
-    );
-    if (!on) return at;
-  }
-  throw new Error("she is boxed in on all four sides");
-}
-
 /** Build one, put it down beside her, and give back the square it is on. */
 async function aMachineBeside(
   game: Game,
@@ -98,7 +71,7 @@ async function aMachineBeside(
 ): Promise<{ col: number; row: number }> {
   expect(await takeFromCrate(game, machine)).toBe(true);
   await game.settle(400);
-  const at = await squareBeside(game);
+  const at = await game.squareBeside();
   await game.tapCell(at.col, at.row);
   await game.settle(500);
   return at;
@@ -123,15 +96,7 @@ describe("machines joined into a line", () => {
         // A basket of carrots, and more wood than carrots on purpose: the
         // machine takes the biggest heap it *wants*, and a hothouse that
         // took timber would turn one wood into three and never stop.
-        await game.tab.evaluate((crop) => {
-          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-            .__mathemagicum;
-          if (!handle) throw new Error("the game has not put its handle out");
-          (handle.session as { inventory: { add: (of: string, n: number) => void } }).inventory.add(
-            crop as string,
-            9,
-          );
-        }, "carrot");
+        await game.give("carrot", 9);
         await game.settle(200);
         expect(await game.held("wood")).toBeGreaterThan(9);
 
@@ -189,15 +154,7 @@ describe("machines joined into a line", () => {
         // has no reason to be fussy — and it tips in the biggest heap she is
         // carrying. Given fewer carrots than stone it eats the stone, and
         // then there is none left to build the second machine out of.
-        await game.tab.evaluate((crop) => {
-          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-            .__mathemagicum;
-          if (!handle) throw new Error("the game has not put its handle out");
-          (handle.session as { inventory: { add: (of: string, n: number) => void } }).inventory.add(
-            crop as string,
-            99,
-          );
-        }, "carrot");
+        await game.give("carrot", 99);
         await game.settle(200);
         await game.tapCell(from.col, from.row);
         await game.settle(400);
@@ -324,15 +281,7 @@ describe("machines joined into a line", () => {
 
         // Now something else. It goes in the bin rather than the crates,
         // which is the whole of what a sieve is.
-        await game.tab.evaluate((crop) => {
-          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-            .__mathemagicum;
-          if (!handle) throw new Error("the game has not put its handle out");
-          (handle.session as { inventory: { add: (of: string, n: number) => void } }).inventory.add(
-            crop as string,
-            99,
-          );
-        }, "carrot");
+        await game.give("carrot", 99);
         await game.settle(200);
         // Empty its crates first, or a tap hands her a share instead of
         // filling it — the good ones come out before the rejects. Which
@@ -417,22 +366,15 @@ describe("machines joined into a line", () => {
         }
         await game.tab.evaluate(
           ([item, few]) => {
-            const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-              .__mathemagicum;
+            const handle = (globalThis as never as Handles).__mathemagicum;
             if (!handle) throw new Error("the game has not put its handle out");
-            const purse = handle.session as {
-              inventory: {
-                add: (of: string, n: number) => void;
-                remove: (of: string, n: number) => boolean;
-                count: (of: string) => number;
-              };
-            };
+            const purse = handle.session;
             // Leave her holding a few and nothing else, so the machine takes
             // the short heap rather than some bigger pile of something.
             for (const of of ["wood", "stone", "carrot"]) {
-              purse.inventory.remove(of as string, purse.inventory.count(of as string));
+              purse.inventory.remove(of as ItemType, purse.inventory.count(of as ItemType));
             }
-            purse.inventory.add(item as string, few as number);
+            purse.inventory.add(item as ItemType, few);
           },
           [shown.holding, 2] as const,
         );
@@ -489,13 +431,7 @@ describe("machines joined into a line", () => {
         expect(await game.seam<Strung[]>("wires")).toHaveLength(1);
 
         // In through her own front door, a moment inside, and out again.
-        const doors = await game.seam<Record<string, { col: number; row: number }>>("doors");
-        const door = doors["player-house"];
-        if (!door) throw new Error("the village has no house for the player");
-        await game.standAt(door.col, door.row + 2, "up");
-        await game.walk("ArrowUp", 900);
-        await game.stopped();
-        expect(await game.seam<unknown>("house")).not.toBeNull();
+        await game.goHome();
         await game.settle(800);
 
         // Still strung. And still strung tomorrow, which is the half that

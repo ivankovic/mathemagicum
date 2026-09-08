@@ -8,7 +8,7 @@ import { RUNE_OF } from "../src/ui/runes";
 import { FLOWER_LOOKS, FLOWER_TYPES, type FlowerType } from "../src/world/flowers";
 import { PlantType, groundFor } from "../src/world/plants";
 import { TerrainType } from "../src/world/terrain";
-import { type Game, play, runeButton, seedButton, shutDown } from "./harness";
+import { type Game, type Handles, play, runeButton, seedButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -203,12 +203,9 @@ describe("planting one", () => {
 /** What is growing on the square she just aimed at, if anything. */
 function plantedBeside(game: Game): Promise<string | null> {
   return game.tab.evaluate(() => {
-    const handle = (globalThis as never as Record<string, Record<string, unknown>>).__mathemagicum;
+    const handle = (globalThis as never as Handles).__mathemagicum;
     if (!handle) throw new Error("the game has not put its handle out");
-    const session = handle.session as {
-      tile: { col: number; row: number };
-      grid: { getPlant: (col: number, row: number) => string | null };
-    };
+    const session = handle.session;
     return session.grid.getPlant(session.tile.col, session.tile.row + 1);
   });
 }

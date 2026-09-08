@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type Phaser from "phaser";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type CloseChip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import { type UiIndex, uiTextureKey } from "./assets";
-import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
+import { INK, INK_DIM, TYPE } from "./parchment";
 
 /**
  * One picture, held up close, named and captioned.
@@ -33,10 +34,10 @@ const PANEL_MAX_H = 460;
 const PANEL_MIN_W = 260;
 const PANEL_MIN_H = 260;
 
-const CLOSE_SIZE = 13;
+const CLOSE_SIZE = TYPE.body;
 
-const TITLE_SIZE = 17;
-const BODY_SIZE = 13;
+const TITLE_SIZE = TYPE.title;
+const BODY_SIZE = TYPE.body;
 /** Under the heading, and over the caption. */
 const TITLE_GAP = 10;
 const CAPTION_GAP = 12;
@@ -49,68 +50,38 @@ const CAPTION_GAP = 12;
  */
 const CORNER_ROOM = 36;
 
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
-
-export class PicturePanel {
-  private readonly paper: ParchmentPanel;
-  private readonly parts: PanelPart[] = [];
+export class PicturePanel extends Panel {
   private readonly sheet: Phaser.GameObjects.Image;
   private readonly heading: Phaser.GameObjects.Text;
   private readonly caption: Phaser.GameObjects.Text;
-  private readonly closeBox: Phaser.GameObjects.Rectangle;
-  private readonly closeLabel: Phaser.GameObjects.Text;
+  private readonly closeButton: CloseChip;
 
   private open = false;
   private onClose: (() => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
+      lineSpacing: 3,
     });
     // Pointed at a real texture from the start rather than at nothing: an
     // image made against a texture that does not exist yet gets Phaser's
     // missing-texture placeholder, and this one is the size of a panel.
     this.sheet = this.own(scene.add.image(0, 0, uiTextureKey("parchment-fill")).setOrigin(0.5));
-    this.heading = this.own(this.text(TITLE_SIZE, INK).setOrigin(0.5, 0));
-    this.caption = this.own(this.text(BODY_SIZE, INK_DIM).setOrigin(0.5, 1).setAlign("center"));
-    this.closeBox = this.own(
-      scene.add
-        .rectangle(0, 0, 28, 24, PAPER_PALE_HEX)
-        .setStrokeStyle(2, INK_HEX)
-        .setInteractive({ useHandCursor: true }),
-    );
-    this.closeLabel = this.own(
-      scene.add
-        .text(0, 0, "x", { fontFamily: FACE, fontSize: `${CLOSE_SIZE}px`, color: INK })
-        .setOrigin(0.5),
-    );
-    this.closeBox.on("pointerdown", () => this.close());
-
-    for (const part of this.parts) {
-      part
-        .setDepth(depth + 1)
-        .setScrollFactor(0)
-        .setVisible(false);
-      register(part);
-    }
-    this.closeLabel.setDepth(depth + 3);
+    this.heading = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
+    this.caption = this.own(this.text("", BODY_SIZE, INK_DIM).setOrigin(0.5, 1).setAlign("center"));
+    this.closeButton = this.closeChip(CLOSE_SIZE, () => this.close());
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.open;
   }
 
@@ -123,38 +94,18 @@ export class PicturePanel {
     this.onClose = onClose;
     this.paper.setVisible(true);
     this.render();
-    this.keyHandler = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      this.close();
-    };
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    this.escapeCloses();
   }
 
-  close(): void {
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+  override close(): void {
+    super.close();
     this.open = false;
-    this.paper.setVisible(false);
-    for (const part of this.parts) part.setVisible(false);
     const done = this.onClose;
     this.onClose = null;
     done?.();
   }
 
-  layout(): void {
-    if (this.open) this.render();
-  }
-
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
-  }
-
-  private render(): void {
+  protected render(): void {
     const { width, height } = this.scene.scale;
     const rect = this.paper.layout(width, height);
     for (const part of this.parts) part.setVisible(true);
@@ -175,21 +126,6 @@ export class PicturePanel {
     const times = Math.max(1, Math.floor(room / source));
     this.sheet.setScale(times).setPosition(rect.centreX, (top + bottom) / 2);
 
-    this.closeBox.setPosition(rect.left + rect.width - PAD - 14, rect.top + PAD + 10);
-    this.closeLabel.setPosition(this.closeBox.x, this.closeBox.y);
-  }
-
-  private text(size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, "", {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-      lineSpacing: 3,
-    });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
+    this.closeButton.place(rect);
   }
 }

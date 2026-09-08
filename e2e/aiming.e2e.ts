@@ -4,7 +4,15 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
 import { FixtureType } from "../src/world/fixtures";
-import { type Game, PHONE, play, runeButton, shutDown, takeFromCrate } from "./harness";
+import {
+  type Game,
+  type Handles,
+  PHONE,
+  play,
+  runeButton,
+  shutDown,
+  takeFromCrate,
+} from "./harness";
 
 const MINUTES = 60_000;
 
@@ -25,35 +33,13 @@ afterAll(shutDown);
  */
 const WITH_TIMBER = "&materials=20&hour=12&freezeNpcs&learned=all";
 
-/** What is standing on a square, by the world's own name for it. */
-function objectOn(game: Game, col: number, row: number): Promise<string | null> {
-  return game.tab.evaluate(
-    ([c, r]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
-      if (!handle) throw new Error("the game has not put its handle out");
-      const session = handle.session as {
-        grid: { getObjectAt: (col: number, row: number) => { type: string } | null };
-      };
-      return session.grid.getObjectAt(c as number, r as number)?.type ?? null;
-    },
-    [col, row] as const,
-  );
-}
-
 /** Whether a square is clear enough to stand a machine on. */
 function isFree(game: Game, col: number, row: number): Promise<boolean> {
   return game.tab.evaluate(
     ([c, r]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
+      const handle = (globalThis as never as Handles).__mathemagicum;
       if (!handle) throw new Error("the game has not put its handle out");
-      const session = handle.session as {
-        grid: {
-          isPassable: (col: number, row: number) => boolean;
-          getCrop: (col: number, row: number) => unknown;
-        };
-      };
+      const session = handle.session;
       return (
         session.grid.isPassable(c as number, r as number) &&
         !session.grid.getCrop(c as number, r as number)
@@ -114,7 +100,7 @@ describe("the square she is pointing at", () => {
         await game.settle(400);
         await game.tapCell(at.col, at.row);
         await game.settle(500);
-        expect(await objectOn(game, at.col, at.row)).toBe(FixtureType.Sorter);
+        expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Sorter);
         expect(await game.held(FixtureType.Sorter)).toBe(0);
 
         // And now the rune that undoes things, aimed at the same square she
@@ -130,7 +116,7 @@ describe("the square she is pointing at", () => {
         // is empty. This is what failed: the parchment closed on a correct
         // answer and the sorter was still standing there.
         expect({
-          standing: await objectOn(game, at.col, at.row),
+          standing: await game.objectOn(at.col, at.row),
           held: await game.held(FixtureType.Sorter),
         }).toEqual({ standing: null, held: 1 });
       });
@@ -170,7 +156,7 @@ describe("the square she is pointing at", () => {
         // the square was the answer to *this* placement and not a mode she
         // has been put into and cannot leave.
         expect({
-          standing: await objectOn(game, at.col, at.row),
+          standing: await game.objectOn(at.col, at.row),
           aimed: await game.seam<unknown>("aimed"),
         }).toEqual({ standing: FixtureType.Sorter, aimed: null });
       });

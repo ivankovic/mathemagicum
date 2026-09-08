@@ -3,6 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { SPELLS } from "../spells/spellbook";
+import { GUIDES } from "../ui/guide";
 import { ALL_PLACES, ALL_SPELLS, parseDevOptions, places } from "./devHooks";
 
 describe("parseDevOptions", () => {
@@ -15,8 +16,10 @@ describe("parseDevOptions", () => {
       hungry: false,
       language: null,
       intro: false,
+      news: false,
       wall: false,
       materials: 0,
+      made: 0,
       furniture: 0,
       reached: [],
       portalRung: null,
@@ -25,9 +28,12 @@ describe("parseDevOptions", () => {
       rung: null,
       clockRung: null,
       symmetryRung: null,
+      logicRung: null,
       brickRung: null,
       learned: [],
       flowers: [],
+      guided: [],
+      jobs: [],
       hour: null,
       drown: null,
       skipTitle: false,
@@ -80,6 +86,15 @@ describe("parseDevOptions", () => {
     // silently could not reach the two newest ones.
     expect([...ALL_SPELLS].sort()).toEqual([...SPELLS].sort());
     expect(parseDevOptions("").learned).toEqual([]);
+  });
+
+  // The harness sends `all` so no scenario's screen has a glowing pouch in
+  // it; the scenario about the guides sends nothing.
+  test("reads the guides to count as already given", () => {
+    expect(parseDevOptions("?guided=plant").guided).toEqual(["plant"]);
+    expect(parseDevOptions("?guided=plant,grow").guided).toEqual(["plant", "grow"]);
+    expect(parseDevOptions("?guided=all").guided).toEqual(GUIDES as string[]);
+    expect(parseDevOptions("").guided).toEqual([]);
   });
 
   // The one spell with four visibly different parchments, and which one a
@@ -143,8 +158,10 @@ describe("parseDevOptions", () => {
       hungry: false,
       language: "de",
       intro: false,
+      news: false,
       wall: false,
       materials: 0,
+      made: 0,
       furniture: 0,
       reached: [],
       portalRung: null,
@@ -153,9 +170,12 @@ describe("parseDevOptions", () => {
       rung: null,
       clockRung: null,
       symmetryRung: null,
+      logicRung: null,
       brickRung: null,
       learned: [],
       flowers: [],
+      guided: [],
+      jobs: [],
       hour: null,
       drown: null,
       skipTitle: false,

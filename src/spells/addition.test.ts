@@ -4,7 +4,6 @@
 import { describe, expect, test } from "bun:test";
 import { createRng } from "../world/rng";
 import {
-  PLACES,
   UNKNOWNS,
   Unknown,
   additionPairCount,

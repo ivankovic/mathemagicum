@@ -5,7 +5,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { DecorType, decorItem } from "../src/world/decor";
 import { TURNS, Turn } from "../src/world/facing";
 import { FixtureType, PLACEABLE_FIXTURES } from "../src/world/fixtures";
-import { type Game, play, shutDown, takeFromCrate } from "./harness";
+import { type Game, type Handles, play, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -26,37 +26,22 @@ afterAll(shutDown);
  * destroy the picture and raise another, which meant the scene compared the
  * tap against a different object from the one the pointer had hit.
  */
-const GARDEN = "&hour=12&freezeNpcs&learned=all";
-
-/** A few of something to put down, without walking her to the shop for them. */
-async function withSome(game: Game, item: string, count = 8): Promise<void> {
-  await game.tab.evaluate(
-    ([name, many]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
-      if (!handle) throw new Error("the game has not put its handle out");
-      (handle.session as { inventory: { add: (item: string, n: number) => void } }).inventory.add(
-        name as string,
-        many as number,
-      );
-    },
-    [item, count] as const,
-  );
-}
+// `jobs=all` because the crate holds the bell back until the mechanic's first
+// job is done — see `world/jobs.ts` — and this file is about turning, not
+// about what the crate offers.
+const GARDEN = "&hour=12&freezeNpcs&learned=all&jobs=all";
 
 /** A few benches to put down, without walking her to the shop for them. */
 function withBenches(game: Game): Promise<void> {
-  return withSome(game, FixtureType.Bench);
+  return game.give(FixtureType.Bench, 8);
 }
 
 /** Every bench standing in the world, and which way round each went down. */
 function benches(game: Game): Promise<{ col: number; turn: number }[]> {
   return game.tab.evaluate(() => {
-    const handle = (globalThis as never as Record<string, Record<string, unknown>>).__mathemagicum;
+    const handle = (globalThis as never as Handles).__mathemagicum;
     if (!handle) throw new Error("the game has not put its handle out");
-    const session = handle.session as {
-      grid: { listObjects: () => { type: string; col: number; turn?: number }[] };
-    };
+    const session = handle.session;
     return session.grid
       .listObjects()
       .filter((one) => one.type === "bench")
@@ -78,26 +63,6 @@ interface Furnishing {
 /** The room she lives in, in the coordinates its own sidecar uses. */
 interface House {
   origin: { col: number; row: number };
-}
-
-/**
- * In through her own front door, which is where the furniture is.
- *
- * Put down on the doorstep rather than walked from the spawn, for the reason
- * `house.e2e.ts` gives: a child starts eight rows off in their own garden,
- * and walking that is eight seconds of nothing being tested.
- */
-async function goHome(game: Game): Promise<House> {
-  const door = (await game.seam<Record<string, { col: number; row: number }>>("doors"))[
-    "player-house"
-  ];
-  if (!door) throw new Error("the village has no house for the player");
-  await game.standAt(door.col, door.row + 2, "up");
-  await game.walk("ArrowUp", 900);
-  await game.stopped();
-  const house = await game.seam<House | null>("house");
-  if (!house) throw new Error("walking through the front door did not go indoors");
-  return house;
 }
 
 /** A square named the way the room's own sidecar names it. */
@@ -167,7 +132,7 @@ describe("turning a thing before putting it down", () => {
     async () => {
       await play({ seams: GARDEN }, async (game) => {
         for (const fixture of PLACEABLE_FIXTURES) {
-          await withSome(game, fixture, 1);
+          await game.give(fixture, 1);
           expect(await takeFromCrate(game, fixture)).toBe(true);
           await game.settle(250);
           expect(await game.seam<number>("armedTurn")).toBe(Turn.Toward);
@@ -209,8 +174,8 @@ describe("turning a thing before putting it down", () => {
     "and a chair indoors turns by the same tap, and stays turned",
     async () => {
       await play({ seams: GARDEN }, async (game) => {
-        const house = await goHome(game);
-        await withSome(game, decorItem(DecorType.Chair, 0), 2);
+        const house = await game.goHome();
+        await game.give(decorItem(DecorType.Chair, 0), 2);
 
         // Clear floor, facing clear floor, the way `house.e2e.ts` does it.
         await game.standAt(2 - house.origin.col, 2 - house.origin.row, "down");
@@ -237,7 +202,7 @@ describe("turning a thing before putting it down", () => {
         // rather than like a broken save.
         await game.reload(GARDEN);
         await game.settle(600);
-        await goHome(game);
+        await game.goHome();
         expect(
           ((await game.seam<Furnishing[]>("decor")) ?? []).find(
             (one) => one.piece === DecorType.Chair && one.col === 2 && one.row === 3,
@@ -263,8 +228,8 @@ describe("turning a thing before putting it down", () => {
     "and a bed turned across the room takes the squares it is lying on",
     async () => {
       await play({ seams: GARDEN }, async (game) => {
-        const house = await goHome(game);
-        await withSome(game, decorItem(DecorType.Bed, 0), 2);
+        const house = await game.goHome();
+        await game.give(decorItem(DecorType.Bed, 0), 2);
 
         // The clear strip along the top of the cottage: the stove is in one
         // corner and the bookshelf in the other, and the middle of that row
@@ -292,7 +257,7 @@ describe("turning a thing before putting it down", () => {
         // A piece goes down on the square she is *facing* rather than the
         // one that was tapped, so where she stands is the question being
         // asked here and the tap is only how it is asked.
-        await withSome(game, decorItem(DecorType.Chair, 0), 1);
+        await game.give(decorItem(DecorType.Chair, 0), 1);
         await game.standAt(3 - house.origin.col, 1 - house.origin.row, "down");
         expect(await takeFromCrate(game, DecorType.Chair)).toBe(true);
         await game.settle(300);

@@ -5,7 +5,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { CRATE_GROUPS, CRATE_WIRE, thingsIn } from "../src/world/crate";
 import { DECOR_TYPES } from "../src/world/decor";
 import { FixtureType, PLACEABLE_FIXTURES } from "../src/world/fixtures";
-import { type Game, play, shutDown, takeFromCrate } from "./harness";
+import { type Game, type Handles, play, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -30,35 +30,13 @@ afterAll(shutDown);
  * a child who opened the wrong one. `crate.test.ts` proves the first against
  * the lists; this proves both against the buttons that exist.
  */
-/** What is standing on a square, by the world's own name for it. */
-function objectOn(game: Game, col: number, row: number): Promise<string | null> {
-  return game.tab.evaluate(
-    ([c, r]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
-      if (!handle) throw new Error("the game has not put its handle out");
-      const session = handle.session as {
-        grid: { getObjectAt: (col: number, row: number) => { type: string } | null };
-      };
-      return session.grid.getObjectAt(c as number, r as number)?.type ?? null;
-    },
-    [col, row] as const,
-  );
-}
-
 /** Whether a square will take something put down on it. */
 function willTake(game: Game, col: number, row: number): Promise<boolean> {
   return game.tab.evaluate(
     ([c, r]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
+      const handle = (globalThis as never as Handles).__mathemagicum;
       if (!handle) throw new Error("the game has not put its handle out");
-      const session = handle.session as {
-        grid: {
-          isPassable: (col: number, row: number) => boolean;
-          getCrop: (col: number, row: number) => unknown;
-        };
-      };
+      const session = handle.session;
       const col2 = c as number;
       const row2 = r as number;
       return session.grid.isPassable(col2, row2) && !session.grid.getCrop(col2, row2);
@@ -96,10 +74,17 @@ describe("the crate's two levels", () => {
   test(
     "offers groups, then one group's things, and steps back out",
     async () => {
-      await play({ seams: "&hour=12&materials=40&freezeNpcs" }, async (game) => {
+      // `jobs=all`: the bell is held back until the mechanic's first job is
+      // done — see `world/jobs.ts` — and a thing held back on purpose is not
+      // the invisible, unreachable thing this scenario guards against.
+      await play({ seams: "&hour=12&materials=40&freezeNpcs&jobs=all" }, async (game) => {
+        // The things, not their clouds: a machine's button has a `.tell`
+        // beside it that says what the machine is, and that is a second
+        // button in the tray rather than a second thing in the crate — see
+        // telling.e2e.ts for the clouds themselves.
         const named = async (): Promise<string[]> =>
           Object.keys(await game.ui())
-            .filter((name) => name.startsWith("crate."))
+            .filter((name) => name.startsWith("crate.") && !name.endsWith(".tell"))
             .map((name) => name.slice("crate.".length));
 
         await game.tap("crate");
@@ -166,15 +151,7 @@ describe("the crate's two levels", () => {
         // which is what a machine is built from and not what the crate holds
         // — and `takeFromCrate` answers for the *tap* rather than for what
         // came of it, so a crate she owns nothing in still says yes.
-        await game.tab.evaluate((item) => {
-          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-            .__mathemagicum;
-          if (!handle) throw new Error("the game has not put its handle out");
-          (handle.session as { inventory: { add: (of: string, n: number) => void } }).inventory.add(
-            item as string,
-            2,
-          );
-        }, FixtureType.Fence);
+        await game.give(FixtureType.Fence, 2);
         await game.settle(200);
 
         expect(await takeFromCrate(game, FixtureType.Fence)).toBe(true);
@@ -184,16 +161,19 @@ describe("the crate's two levels", () => {
         const had = await game.held(FixtureType.Fence);
         // Down before anything else is asked, so a failure below is about
         // the reload rather than about the placing.
-        expect(await objectOn(game, at.col, at.row)).toBe(FixtureType.Fence);
+        expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Fence);
 
         await game.reload(seams);
         await game.settle(800);
 
-        // Standing where she left it, and still hers: one tap and it is back
-        // in the basket. Before this it was scenery she happened to own.
-        expect(await objectOn(game, at.col, at.row)).toBe(FixtureType.Fence);
+        // Standing where she left it, and still hers: a tap asks what to do
+        // with it, and the basket puts it back. Before this it was scenery
+        // she happened to own and nothing could be asked of it at all.
+        expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Fence);
 
         await game.tapCell(at.col, at.row);
+        await game.settle(250);
+        expect(await game.tap("wheel.take")).toBe(true);
         await game.settle(600);
         expect(await game.held(FixtureType.Fence)).toBe(had + 1);
       });

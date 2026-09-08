@@ -1,7 +1,3 @@
-// SPDX-FileCopyrightText: 2026 Marko Ivankovic
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-
-import type { AnimalKind } from "../world/animals";
 import type { FixtureType } from "../world/fixtures";
 import type { ItemType } from "../world/inventory";
 import type { PlantStage, PlantType } from "../world/plants";
@@ -336,6 +332,43 @@ export interface Phrases {
   /** The help, when it comes: one square, outlined, and named as one. */
   mirrorHint: string;
 
+  // --- the logic spell -----------------------------------------------------
+  //
+  // Two shapes of parchment under one rune: a tray of things and a rule,
+  // and switches and a lamp. Each has its own asking and its own finish,
+  // because "the ones that get through" and "the lamp is lit" are different
+  // sentences; the title and the refusal are shared.
+
+  logicTitle: string;
+  /** Under the title on a tray: what to do with the things. */
+  logicAskTray: string;
+  /** And on a circuit: what to do with the switches. */
+  logicAskCircuit: string;
+  /** A tap on a thing the rule keeps out. Never a scolding. */
+  logicWrong: string;
+  /** A flip that brought the lamp no nearer. */
+  logicWasted: string;
+  logicDoneTray: string;
+  logicDoneCircuit: string;
+  /** The help: one thing outlined, or one switch. */
+  logicHintTray: string;
+  logicHintCircuit: string;
+
+  // --- the mechanic's jobs -------------------------------------------------
+  //
+  // The sheet on her bench: the astronomer's errand panel with a line of
+  // machines on it. The number is the row's to give; the sentence says what
+  // the row is a row of, and what doing it earns.
+
+  jobsTitle: string;
+  /** One job, and how much of it is still to do. The job names are Job's. */
+  jobAsk: (job: string, left: number) => string;
+  /** What finishing it earns. */
+  jobBargain: (job: string) => string;
+  /** Under a finished job, and when there is nothing left to ask. */
+  jobEarned: string;
+  jobsAllDone: string;
+
   // --- the hourglass spell -------------------------------------------------
 
   hourglassTitle: string;
@@ -358,6 +391,19 @@ export interface Phrases {
   // --- the purse -----------------------------------------------------------
 
   // --- options -------------------------------------------------------------
+
+  /**
+   * What a thing is for, one sentence, opened from the cloud on its button.
+   *
+   * A sentence rather than a rule: a child is being told what the machine
+   * *does*, not how the arithmetic works. What wakes it is shown as a rune
+   * beside the picture rather than named here, because this game names its
+   * spells by their runes — a child who cannot read still knows the one with
+   * the dots in it.
+   */
+  thingDoes(fixture: FixtureType): string;
+  /** The heading over the two numbers on the second page. */
+  thingCosts: string;
 
   optionsButton: string;
   optionsTitle: string;
@@ -562,6 +608,18 @@ export interface Phrases {
   introTitle: string;
   /** One page of the welcome. The beat names are IntroBeat's. */
   intro: (beat: string) => string;
+
+  // --- the postal worker's news --------------------------------------------
+
+  /**
+   * The heading on the letter he brings when the game has changed.
+   *
+   * A letter and not a notice: he is a postman, and what makes the second
+   * visit legible is that it is the same man doing the same job.
+   */
+  newsTitle: string;
+  /** One page of the news. The beat names are NewsBeat's. */
+  news: (beat: string) => string;
 
   // --- the teacher's lesson ------------------------------------------------
 

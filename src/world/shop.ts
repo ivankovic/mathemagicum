@@ -7,7 +7,7 @@ import { DECOR_TYPES, DecorType, decorItem } from "./decor";
 import { FixtureType, PLACEABLE_FIXTURES } from "./fixtures";
 import type { Inventory, ItemType } from "./inventory";
 import { isMachine } from "./machines";
-import { MATERIAL_TYPES, type MaterialType, isGathered } from "./materials";
+import { type MaterialType, isGathered } from "./materials";
 import { PLANT_TYPES, type PlantType } from "./plants";
 
 /**
@@ -103,6 +103,12 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
   sieve: Number.POSITIVE_INFINITY,
   tally: Number.POSITIVE_INFINITY,
   press: Number.POSITIVE_INFINITY,
+  funnel: Number.POSITIVE_INFINITY,
+  bell: Number.POSITIVE_INFINITY,
+  inverter: Number.POSITIVE_INFINITY,
+  seesaw: Number.POSITIVE_INFINITY,
+  latch: Number.POSITIVE_INFINITY,
+  blueprint: Number.POSITIVE_INFINITY,
   // The quay's and the city's dressing, not for sale for the reason the
   // market stall is not: it is a piece of a place rather than a thing
   // somebody owns.
@@ -431,10 +437,6 @@ export function mostBuyable(
  * a multiplication, and a multiplication does not get harder as the number
  * grows the way counting forty discs does.
  */
-export function mostSellable(
-  item: ItemType,
-  held: number,
-  cropPrice: CropPrice = CROP_PRICE,
-): number {
+export function mostSellable(held: number): number {
   return Math.max(1, held);
 }

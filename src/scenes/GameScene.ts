@@ -16,7 +16,6 @@ import { phrasesFor } from "../i18n";
 import { EN } from "../i18n/en";
 import type { Phrases } from "../i18n/phrases";
 import { VirtualJoystick } from "../input/VirtualJoystick";
-import { pinchedZoom, settledZoom, spread, zoomSteps } from "../input/pinch";
 import { type Rgb, rampPlan } from "../render/recolour";
 import { repaintedSheet } from "../render/sheetTexture";
 import { exportSaves } from "../save/backupFile";
@@ -32,7 +31,7 @@ import {
   withProgress,
   writeGame,
 } from "../save/games";
-import { type Profile, createProfile, freshStart } from "../save/profiles";
+import { type Profile, createProfile } from "../save/profiles";
 import {
   HEARTH_IS_FURNITURE,
   type WorldBaseline,
@@ -54,7 +53,7 @@ import {
   settingsWithOverrides,
   writeSettings,
 } from "../settings";
-import { CURRENCY, totalOf as coinTotal, largestCoin } from "../shop/currency";
+import { CURRENCY, largestCoin } from "../shop/currency";
 import { type AdditionCast, additionCastFor, movedBy } from "../spells/addition";
 import {
   HARDEST_BRICK_RUNG,
@@ -66,15 +65,13 @@ import type { CastResult } from "../spells/cast";
 import {
   DEFAULT_BAND,
   HARDEST_RUNG,
-  type Recent,
+  type Rung,
   bandAt,
   bandOn,
-  nextRung,
-  recordCast,
   rungAt,
   rungInBand,
 } from "../spells/difficulty";
-import { HARDEST_SHARE_RUNG, boxesOf, shareProblemFor, shareRungAt } from "../spells/division";
+import { boxesOf, shareProblemFor, shareRungAt } from "../spells/division";
 import {
   type ClockTime,
   FULL_CIRCLE,
@@ -82,10 +79,10 @@ import {
   askedOf,
   asksMinutes,
   clockRungAt,
-  forwardMinutes,
   readClock,
   sandFor,
 } from "../spells/hourglass";
+import { logicHint, logicRungAt } from "../spells/logic";
 import { HARDEST_ARRAY_RUNG, arrayProblemFor, arrayRungAt } from "../spells/multiplication";
 import {
   HARDEST_PORTAL_RUNG,
@@ -115,20 +112,23 @@ import {
   TAUGHT_BESIDE,
   knowsSpell,
   learnSpell,
-  spellTaughtBy,
 } from "../spells/spellbook";
 import { makeSubtractionProblem } from "../spells/subtraction";
-import { nextSymmetryRung, symmetryHint, symmetryRungAt } from "../spells/symmetry";
+import { symmetryHint, symmetryRungAt } from "../spells/symmetry";
 import { AboutPanel, type DebugControls } from "../ui/AboutPanel";
+import { ActionWheel } from "../ui/ActionWheel";
 import { ArrayPopup } from "../ui/ArrayPopup";
 import { BrickPopup } from "../ui/BrickPopup";
 import { ClockPopup } from "../ui/ClockPopup";
 import { GeometryLessonPanel } from "../ui/GeometryLessonPanel";
 import { GroveLessonPanel } from "../ui/GroveLessonPanel";
+import { GuideMarks } from "../ui/GuideMarks";
 import { IconTray, type IconTrayOptions } from "../ui/IconTray";
 import { IntroPanel } from "../ui/IntroPanel";
 import { LessonPanel } from "../ui/LessonPanel";
+import { LogicPopup } from "../ui/LogicPopup";
 import { MapPanel } from "../ui/MapPanel";
+import { NewsPanel } from "../ui/NewsPanel";
 import { OptionsPanel } from "../ui/OptionsPanel";
 import { PatchMenu } from "../ui/PatchMenu";
 import { PicturePanel } from "../ui/PicturePanel";
@@ -141,6 +141,7 @@ import { ShopPanel } from "../ui/ShopPanel";
 import { SpellPopup } from "../ui/SpellPopup";
 import { SymmetryPopup } from "../ui/SymmetryPopup";
 import { TaskPanel } from "../ui/TaskPanel";
+import { ThingPanel } from "../ui/ThingPanel";
 import {
   UI_SIDECAR_KEY,
   UiAsset,
@@ -153,40 +154,43 @@ import {
   materialIcon,
   uiTextureKey,
 } from "../ui/assets";
+import { type Cue, Deed, type Guide, GuideRun, type GuideView, type GuideWorld } from "../ui/guide";
+import { NEWS_BEATS } from "../ui/news";
 import { FACE, INK, INK_DIM } from "../ui/parchment";
 import { RUNE_OF } from "../ui/runes";
 import type { AreaPlacement } from "../world/anchors";
 import type { AnchorPlacements } from "../world/anchors";
 import {
-  ANIMAL_ASK_MAX_MS,
-  ANIMAL_ASK_MIN_MS,
-  ANIMAL_FED_QUIET_MS,
   ANIMAL_GLAD_MS,
-  ANIMAL_KINDS,
-  ANIMAL_QUIET_MAX_MS,
-  ANIMAL_QUIET_MIN_MS,
   ANIMAL_RANGE,
   type AnimalKind,
   AnimalMood,
   AnimalThought,
   type Mood,
   animalSheetKey,
-  animalSidecarKey,
   animalSpots,
   firstMood,
   moodAfter,
   thoughtFor,
 } from "../world/animals";
 import {
-  BUILDING_FOOTPRINTS,
-  BUILDING_SPRITES,
+  type Plan,
+  canStamp,
+  drawPlan,
+  payForStamp,
+  plansFromSave,
+  plansToSave,
+  shortFor,
+  stampedAt,
+  stampedWires,
+} from "../world/blueprint";
+import {
   type BuildingRole,
   BuildingSprite,
   DoorState,
   type Entrance,
   ROLE_SPRITES,
   buildingAnimKey,
-  buildingRowKey,
   doorStateForDistance,
   entranceFor,
   isEntrance,
@@ -194,33 +198,21 @@ import {
 } from "../world/buildings";
 import {
   ALL_CHARACTERS,
-  CHARACTER_ANIMATIONS,
   DEFAULT_FACING,
   Facing,
   IDLE,
-  IDLE_FPS,
-  ONE_SHOT_ANIMATIONS,
   PLANT,
-  PLANT_FPS,
   WALK,
-  WALK_FPS,
   characterAnimKey,
   characterFor,
   characterSheetKey,
   characterSidecarKey,
   facingFor,
+  facingForVector,
   oppositeFacing,
+  stepForFacing,
 } from "../world/characters";
-import {
-  type ChunkCoord,
-  chunkKey,
-  chunksCoveringTileRange,
-  dualChunkScreenBounds,
-  dualTileRange,
-  dualTileToChunk,
-} from "../world/chunks";
 import type { CityLayout } from "../world/city";
-import { CLIFF_ATLAS_KEY, cliffFrameFor, cornerLevelsFor } from "../world/cliffAtlas";
 import {
   CRATE_GROUPS,
   CRATE_WIRE,
@@ -230,20 +222,18 @@ import {
   groupOf,
   thingsIn,
 } from "../world/crate";
-import { DECK_SHEET_KEY, DECK_SIDECAR_KEY, type DeckSidecar } from "../world/decking";
 import {
   DECOR_ITEMS,
   DECOR_LOOKS,
   DECOR_TYPES,
   type DecorItem,
-  type DecorType,
+  DecorType,
   type Footprints,
   type Placed,
   ROOM_COST,
   anchorFor,
   arrangementIn,
   blockersFor,
-  cellsUnder,
   colourPlanFor,
   fits as decorFits,
   decorFromSave,
@@ -256,35 +246,21 @@ import {
   hearthRestored,
   inTheWayOf,
   itemParts,
-  occupiedCells,
   pieceArt,
-  pieceOn,
   protectedCells,
   roomsAfforded,
   sizeOf,
-  startingDecor,
   turnsOfPiece,
 } from "../world/decor";
-import {
-  EFFECT_FPS,
-  EFFECT_TYPES,
-  EffectType,
-  effectAnimKey,
-  effectSheetKey,
-  effectSidecarKey,
-} from "../world/effects";
+import { EffectType, effectAnimKey, effectSheetKey } from "../world/effects";
 import { type Grove, GroveTask, duskOver, groveProgress } from "../world/enchantedForest";
 import { Turn, drawnFlip, drawnLook, nextTurn, turnFrom } from "../world/facing";
 import {
-  FIXTURE_TYPES,
   FixtureType,
   PLACEABLE_FIXTURES,
-  canTurn,
   fixtureAnimKey,
   fixtureFor,
   fixtureSheetKey,
-  fixtureSidecarKey,
-  isPlaceable,
   turnsOf,
 } from "../world/fixtures";
 import {
@@ -299,7 +275,6 @@ import {
   flowerObject,
   flowerParts,
   flowerSheetKey,
-  flowerSidecarKey,
   hasFound,
   wildFlowerFor,
   wildLook,
@@ -321,13 +296,10 @@ import {
   removableIn,
   unbuildFrom,
   wallMasks,
-  whyNotBuild,
   windowCells,
 } from "../world/growableRoom";
 import type { HarbourLayout } from "../world/harbour";
 import {
-  FABRIC_SLOTS,
-  ROOF_SLOTS,
   type Ramp,
   houseLook,
   lightingDelay,
@@ -336,21 +308,17 @@ import {
   slotsFor,
   varies,
   whoLivesIn,
-  windowBrightness,
 } from "../world/houses";
 import {
   GROWABLE_ROOM,
-  INTERIOR_ROOMS,
   LightKind,
   type RoomBlocker,
-  type RoomLight,
   buildInteriorGrid,
   buildPlanGrid,
   growableDoor,
   growablePieceAnimKey,
   growablePieceKey,
   growableSheetKey,
-  growableSidecarKey,
   hearthCell,
   interiorAnimKey,
   interiorAttendantCell,
@@ -358,30 +326,19 @@ import {
   interiorFor,
   interiorOriginY,
   interiorSheetKey,
-  interiorSidecarKey,
-  lightBreath,
   roomCameraBounds,
-  roomLights,
   startingPlan,
   wallHangingCell,
 } from "../world/interiors";
 import type { Inventory, ItemType } from "../world/inventory";
-import {
-  LANDMARK_TYPES,
-  LandmarkType,
-  landmarkAnimKey,
-  landmarkFor,
-  landmarkSheetKey,
-  landmarkSidecarKey,
-} from "../world/landmarks";
-import { hasStep } from "../world/levels";
+import { JOB_SPECS, type LineView, RINGS_WANTED, nextJob, offered } from "../world/jobs";
+import { LandmarkType, landmarkAnimKey, landmarkFor, landmarkSheetKey } from "../world/landmarks";
 import {
   MINUTES_PER_ROUND,
   type MachineState,
   type MachineType,
   SHARES,
   SPARK,
-  accepts,
   advance as advanceMachine,
   build,
   feed,
@@ -396,7 +353,7 @@ import {
   wake,
   wouldTake,
 } from "../world/machines";
-import { GATHERED_MATERIALS, MATERIAL_TYPES, MaterialType, yieldOf } from "../world/materials";
+import { GATHERED_MATERIALS, MADE_MATERIALS, MATERIAL_TYPES, yieldOf } from "../world/materials";
 import { markedPlaces } from "../world/minimap";
 import { NAMED_PEOPLE, nameCast } from "../world/names";
 import type { PlacedObject } from "../world/objects";
@@ -404,24 +361,16 @@ import { LAMP_POSTS, type Observatory, lampsLit, postsFree } from "../world/obse
 import { findPath } from "../world/pathfinding";
 import {
   type Crop,
-  HARVEST_YIELD,
+  HARVEST_STAGE,
   PLANTED_STAGE,
   PLANT_TYPES,
-  PlantStage,
   type PlantType,
   groundFor,
   plantAnimKey,
   plantSheetKey,
-  plantSidecarKey,
 } from "../world/plants";
 import { type Rng, createRng } from "../world/rng";
-import {
-  SCENERY_KINDS,
-  sceneryAnimKey,
-  sceneryKind,
-  scenerySheetKey,
-  scenerySidecarKey,
-} from "../world/scenery";
+import { sceneryAnimKey, sceneryKind, scenerySheetKey } from "../world/scenery";
 import {
   type Patch,
   PatchAction,
@@ -441,25 +390,16 @@ import {
   withinReach,
   withinSpeaking,
 } from "../world/session";
-import { VISIT, alongLane, shipsAt } from "../world/shipping";
 import type { Purse } from "../world/shop";
-import {
-  CITY_HOUSE_ID,
-  SKY_THINGS,
-  skyAnimKey,
-  skySheetKey,
-  skySidecarKey,
-} from "../world/skyline";
+import { CITY_HOUSE_ID } from "../world/skyline";
 import {
   type BuildingSidecar,
   type CharacterSidecar,
-  type EffectSidecar,
   type FixtureSidecar,
   type GrowableSidecar,
   type InteriorSidecar,
   type LandmarkSidecar,
   type ObjectSidecar,
-  type PlantSidecar,
   type SheetSprite,
   type SpriteSidecar,
   doorCell,
@@ -467,20 +407,7 @@ import {
   spriteOrigin,
 } from "../world/spriteSidecar";
 import { TerrainType } from "../world/terrain";
-import {
-  DUAL_OFFSET,
-  DUAL_ORIGIN,
-  TERRAIN_ATLAS_KEY,
-  type WaterFrames,
-  buildVariationIndex,
-  cornerTerrainsFor,
-  frameFor,
-  frameName,
-  touchesWater,
-  variationFor,
-  waterFrames,
-  waveFrameFor,
-} from "../world/terrainAtlas";
+import { DUAL_ORIGIN, TERRAIN_ATLAS_KEY, frameName, variationFor } from "../world/terrainAtlas";
 import {
   CopyRefusal,
   type PaintedTiles,
@@ -490,8 +417,6 @@ import {
 } from "../world/terrainCopy";
 import {
   ALL_HOURS,
-  MAX_NIGHT_ALPHA,
-  NIGHT_TINT_COLOR,
   type OpeningHours,
   STARGAZING_HOURS,
   VILLAGE_HOURS,
@@ -511,6 +436,15 @@ import {
   gridToScreen,
   screenToGrid,
 } from "../world/topdown";
+import {
+  USE_MS,
+  type UsableThing,
+  Use,
+  isLasting,
+  isOnTheThing,
+  pillowOf,
+  useOf,
+} from "../world/uses";
 import { type VillageNpcSpec, houseIdFor } from "../world/villageLayout";
 import { type Direction, STEP_DIRECTIONS, insideWander, stepsToward } from "../world/wander";
 import {
@@ -524,9 +458,18 @@ import {
   wiresToSave,
 } from "../world/wires";
 import { type GeneratedWorld, generateWorld } from "../world/worldGenerator";
-import { sidecarKey } from "./BootScene";
 import { CityBlimps } from "./cityBlimps";
-import { type DevOptions, devOptions, exposeForTests } from "./devHooks";
+import { type DevHandle, type DevOptions, devOptions, exposeForTests } from "./devHooks";
+import {
+  BUILDING_ANIM_FPS,
+  loadAssetMetadata,
+  registerBuildingAnimsFor,
+  registerCharacterAnimsFor,
+} from "./game/anims";
+import { CHUNK_DEPTH, ChunkStreamer } from "./game/chunkStreamer";
+import { Ladders } from "./game/ladders";
+import { Lighting, WINDOW_GLOW_COLOR } from "./game/lighting";
+import { Pinch } from "./game/pinch";
 import { FROZEN_TIDE, HarbourTraffic } from "./harbourTraffic";
 import { type Standing, TeacherMarks } from "./teacherMarks";
 
@@ -602,6 +545,35 @@ const ARMED_PULSE_MS = 520;
 /** How long a newly earned rune hangs in the air. Longer: it is a moment. */
 const EARNED_MS = 1400;
 const MOVE_DURATION_MS = 160;
+/**
+ * A hop onto or off a thing she is using, and how high it goes.
+ *
+ * Longer than a step, because it is not a step: she is not going anywhere,
+ * she is getting up onto something, and a jump that took a step's time
+ * would read as a glitch in the walk rather than as a jump.
+ */
+const HOP_MS = 260;
+const HOP_RISE = 14;
+/**
+ * How far past a thing's near edge she lands on it.
+ *
+ * Depth is her feet, and a thing's depth is its foot, so landing exactly on
+ * the edge is a tie — and a tie is drawn in whichever order the two were
+ * made, which put her behind the bench she was sitting on. Two pixels in
+ * front is invisible as a position and decisive as a depth.
+ */
+const ON_THING_NUDGE = 2;
+/** Sitting down, and lying down, are shorter than standing. */
+const SETTLE_MS = 140;
+const SIT_SQUASH = 0.86;
+const NAP_SQUASH = 0.84;
+/** How often a moon drifts up off a sleeper. */
+const NAP_MOON_MS = 1500;
+/** One facing of a twirl. Eight of these is two full turns. */
+const TWIRL_STEP_MS = 110;
+/** How far she tilts toward a thing she leans on, and how she leans over one. */
+const LEAN_DEGREES = 12;
+const LEAN_FORWARD = 0.94;
 // Depth is a pixel y now (see topdown.ts's depthFor), not the tile-unit
 // col + row the isometric projection sorted on — so it runs to the world's
 // pixel height rather than topping out around 1000. Anything that has to
@@ -610,82 +582,6 @@ const MOVE_DURATION_MS = 160;
 const WORLD_DEPTH_CEILING = WORLD_SIZE * TILE_SIZE;
 const NIGHT_TINT_DEPTH = WORLD_DEPTH_CEILING + 1000;
 
-// --- lights --------------------------------------------------------------
-//
-// Night used to be one flat sheet of navy over everything, and playtesting
-// said the obvious: you cannot see. The fix is not a paler sheet — a night
-// you can read at a glance is not night — but holes in it. What the player
-// carries, and what is burning nearby, is cut back out of the dark.
-//
-// The mask is built here rather than drawn by the asset generator, and that
-// is deliberate: a soft radial falloff is not pixel art and cannot be, since
-// the generator's canvas is indexed and has no partial alpha. It is the same
-// kind of thing as the tint itself — a colour with an alpha ramp — so it is
-// made the same way, in code.
-const LIGHT_TEXTURE = "light-mask";
-const LIGHT_TEXTURE_RADIUS = 128;
-const LIGHT_RINGS = 32;
-/** How far each kind of light reaches, in screen pixels at the world zoom. */
-const PLAYER_LIGHT_RADIUS = 120;
-const LAMP_LIGHT_RADIUS = 150;
-/** The warm halo a flame throws. */
-const LAMP_GLOW_COLOR = 0xffb347;
-const LAMP_GLOW_ALPHA = 0.62;
-/**
- * The fire in a cottage, once it is dark enough to matter.
- *
- * Smaller than a lamp and redder. A lamp is hung to light a path and throws
- * its light evenly for some way; a fire is in a box against a wall, so it
- * reaches the hearthrug and not the far corner.
- */
-const HEARTH_LIGHT_RADIUS = 118;
-const HEARTH_GLOW_COLOR = 0xff8a3c;
-const HEARTH_GLOW_ALPHA = 0.72;
-/**
- * How much the light moves as the flame does.
- *
- * Taken from the room's own animation frame rather than from the clock. The
- * fire is eight frames at `BUILDING_ANIM_FPS`, and a glow pulsing at any
- * other rate beats against it — two flickers out of step, which reads as a
- * fault rather than as firelight.
- */
-const HEARTH_FLICKER = 0.18;
-/**
- * The great tree, while it is still asking for something.
- *
- * Wide and faint: it is a canopy catching light rather than a lamp under
- * one, so it is nearly the size of the crown and never bright enough to
- * flatten the leaves under it. Four seconds to a breath, slower than
- * anything else here — a fire flickers and an orb breathes, and this is a
- * tree, and it is asking rather than burning.
- */
-const TREE_LIGHT_RADIUS = 92;
-const TREE_GLOW_COLOR = 0xbfffdd;
-const TREE_GLOW_ALPHA = 0.34;
-const TREE_BREATH_MS = 4000;
-const TREE_BREATH = 0.55;
-/** How far above the anchor the crown is, in screen pixels. */
-const TREE_GLOW_RISE = 96;
-/**
- * The other three lights a room can have, and how each behaves.
- *
- * Radius, colour and how much it moves. A shop's lantern is a flame behind
- * glass, so it is warm and it wavers a little; the school's tube is cold and
- * does not move at all, because nothing electric does; the tower's orbs are
- * the coldest thing in the game and breathe slowly, which is the only thing
- * here that says *magic* without a word.
- */
-const ROOM_LIGHTS: Record<
-  string,
-  { radius: number; color: number; alpha: number; move: number; period: number }
-> = {
-  [LightKind.Lamp]: { radius: 96, color: 0xffb257, alpha: 0.66, move: 0.08, period: 900 },
-  [LightKind.Electric]: { radius: 132, color: 0xdfe8ff, alpha: 0.6, move: 0, period: 0 },
-  [LightKind.Orb]: { radius: 104, color: 0x9fd0ff, alpha: 0.7, move: 0.3, period: 2600 },
-};
-/** What the player carries: paler and smaller, so a lamp is still worth having. */
-const PLAYER_GLOW_COLOR = 0xffe6b0;
-const PLAYER_GLOW_ALPHA = 0.5;
 const HUD_DEPTH = WORLD_DEPTH_CEILING + 2000;
 const TOUCH_UI_DEPTH = WORLD_DEPTH_CEILING + 3000;
 // Above the touch controls: a spell popup covers everything, including the
@@ -700,25 +596,6 @@ const DEBUG_COINS = 5_000;
 const DEBUG_EACH = 20;
 
 const MODAL_DEPTH = WORLD_DEPTH_CEILING + 4000;
-const CHUNK_DEPTH = -1000;
-/**
- * The sea, under the ground.
- *
- * Not a typo. A tile that touches water is baked into its chunk with the
- * open water cut out of it and left transparent, so what shows through the
- * hole is whatever is behind the chunk — and what is behind the chunk is the
- * water, moving. See `stillCombo`.
- */
-const WATER_DEPTH = CHUNK_DEPTH - 1;
-/**
- * How long the sea holds each step of its cycle.
- *
- * Eight steps at this rate is a two-second swell, which is about the pace of
- * water in a harbour and slow enough that a screen full of it reads as calm
- * rather than as something demanding attention. The whole point of the world
- * is the arithmetic on top of it.
- */
-const WAVE_STEP_MS = 250;
 /**
  * How long after the world is drawn before it says what came back.
  *
@@ -752,24 +629,6 @@ const PORTAL_SPARKS = 6;
 // while doubling how big a character reads on a phone.
 const CAMERA_ZOOM = 2;
 
-/**
- * A lit window, seen from the road.
- *
- * Sized off the pane rather than picked: a window is nine pixels square, and
- * this is a halo about as wide again around it. The first try was half again
- * as big, which is fine on a cottage — two windows either side of a door,
- * far apart — and wrong on a townhouse, where four of them go up the front
- * fifteen pixels apart and the glows ran together into one white column. A
- * house should read as *windows*, not as a lit shaft.
- *
- * The colour is the hearth's, because it is the same fire: a house lights up
- * from the inside, which is why only the houses with a fireplace light at
- * all.
- */
-const WINDOW_PANE_PX = 9;
-const WINDOW_LIGHT_RADIUS = WINDOW_PANE_PX * CAMERA_ZOOM;
-const WINDOW_GLOW_COLOR = 0xffb257;
-const WINDOW_GLOW_ALPHA = 0.78;
 const HUD_MARGIN = 8;
 /**
  * The clock's box, and the sun or moon in it.
@@ -803,68 +662,6 @@ const OPTIONS_H = 28;
  * then on would be hiding the one count it exists to show.
  */
 const MOST_DUCATS_SHOWN = 999;
-/**
- * How far past the screen the *ground* is kept drawn.
- *
- * A ring of chunks in every direction, so walking to the edge of the view
- * finds terrain already there rather than a chunk being redrawn under the
- * player's feet.
- */
-const CHUNK_VIEW_MARGIN = 1;
-/**
- * And how far past it the *trees* are, which is not at all.
- *
- * These were one number for a long time and it was the wrong shape. A
- * chunk's ground is a single texture — cheap to hold, expensive to redraw —
- * so a ring of them is worth having. A chunk's trees are hundreds of live
- * sprites, and a ring of chunks at a desktop's screen size is several times
- * more of them than are on screen: eight and a half thousand standing in a
- * village where a couple of thousand can be seen. Nothing is gained by
- * having a tree ready off screen; a tree costs nothing to make.
- */
-const SCENERY_VIEW_MARGIN = 0;
-/**
- * How far outside the view a tree is still drawn, in world pixels.
- *
- * Two tiles. A conifer is drawn several tiles taller than the square it
- * stands on, and what is tested is the square — so a tree whose feet are
- * just off the top of the screen still has its head on it.
- */
-const SCENERY_CULL_MARGIN = TILE_SIZE * 2;
-// Generous cache so panning back and forth doesn't constantly re-render —
-// well above what's ever simultaneously visible on screen.
-const CHUNK_CACHE_LIMIT = 60;
-
-// Slow idle loop: the 8 frames are drifting chimney smoke, not motion.
-const BUILDING_ANIM_FPS = 6;
-/** The hull the harbour's traffic is drawn with — the great ship's own. */
-const SHIP_SPRITE = BuildingSprite.Ship;
-// Slow enough to read as a breeze rather than a shiver.
-const PLANT_SWAY_FPS = 4;
-// The well bucket drifts rather than swings.
-const FIXTURE_ANIM_FPS = 5;
-// Trees and spires sway slowly, and there are hundreds of them.
-const SCENERY_ANIM_FPS = 4;
-// Slower still. A crown five people tall does not move at a sapling's rate,
-// and the lights in it breathe rather than blink.
-/**
- * Twice what it was, because the sheets have twice the frames.
- *
- * The cycle stays the length it was — a couple of seconds of sway — and each
- * step is half the size, which is the whole of what "smoother" means here.
- * Leaving this at three would have doubled the cycle instead and given a
- * tree that moves like something underwater.
- */
-const LANDMARK_ANIM_FPS = 6;
-
-/**
- * How dark the enchanted forest is at its darkest hour of the day: noon.
- *
- * Below the night's own maximum, so night in the wood is still visibly
- * darker than day in it — a place with no day and no night would read as a
- * rendering fault rather than as somewhere strange.
- */
-const GROVE_DUSK_ALPHA = 0.3;
 /**
  * What the array spell can do to a patch it has been drawn round.
  *
@@ -930,31 +727,6 @@ const AROUND_LANDING: readonly (readonly [number, number])[] = [
   [1, 0],
 ];
 
-/** The tint the wood's own shade leans toward: a deep, cold green. */
-const GROVE_TINT_COLOR = 0x0d2418;
-/**
- * How long the dusk takes to settle when it changes, in milliseconds.
- *
- * A real duration, because the step below is linear and signed. It was an
- * exponential approach first — `dusk += (wanted - dusk) * delta / MS` — which
- * is the shape a tween usually wants and the wrong one for a constant with
- * this name: it reaches 95% at about three times the number written here, so
- * the comment would have been out by a factor of three and the crossfade a
- * slow creep rather than a transition.
- */
-const DUSK_FADE_MS = 900;
-
-/** The tint colour at a given depth of grove-dusk: night, leaning green. */
-function mixTint(dusk: number): number {
-  const t = Math.max(0, Math.min(1, dusk));
-  const lerp = (from: number, to: number, shift: number) =>
-    Math.round(((from >> shift) & 0xff) * (1 - t) + ((to >> shift) & 0xff) * t);
-  return (
-    (lerp(NIGHT_TINT_COLOR, GROVE_TINT_COLOR, 16) << 16) |
-    (lerp(NIGHT_TINT_COLOR, GROVE_TINT_COLOR, 8) << 8) |
-    lerp(NIGHT_TINT_COLOR, GROVE_TINT_COLOR, 0)
-  );
-}
 // How many distinct starting points an idle animation can be scattered
 // across. Enough that a stand of trees looks unsynchronised, few enough
 // that it stays a cheap integer hash of the tile.
@@ -1032,6 +804,19 @@ const NPC_STEP_MAX_MS = 4000;
 // attached to them: a person who answers a tap with silence is worse than one
 // who does not answer at all.
 const SHOPKEEPER_ID = "shopkeeper";
+/** The village store, as the layout names it: where the guide sends a full basket. */
+const STORE_ID = "store";
+/** How far in from the screen's edge the guide's trail stops, so its arrow is whole. */
+const GUIDE_TRAIL_INSET = 60;
+/**
+ * How far off a sleeping machine may be for the guide to point at it.
+ *
+ * The machine the guide means is the one she has just put down beside
+ * her. Without a limit it found a sieve at the far end of the world — in
+ * a saved game, where it had been left — and sent a child who had just
+ * picked her first carrot on a walk across the map to it.
+ */
+const GUIDE_MACHINE_REACH = 10;
 // The other villager with something to say: she explains the addition spell,
 // and she is in the school for the same reason the shopkeeper is in the
 // store — a teacher you have to find in the square is one you meet by
@@ -1050,6 +835,8 @@ const GEOMETER_ID = "geometer";
  * at all.
  */
 const ASTRONOMER_ID = "astronomer";
+/** The mechanic, behind her bench in the garage: the seventh teacher. */
+const MECHANIC_ID = "mechanic";
 /** The fisherman on the quay, who teaches the sharing spell. */
 const FISHER_ID = "fisher";
 /** The one teacher who is a thing rather than a person. See `TAUGHT_BY`. */
@@ -1143,18 +930,32 @@ const INTRO_MOVE_MS = 220;
 // If the player is running circles round him, he gives up and gets on with
 // his round. Tapping him still asks for the welcome.
 const INTRO_PATIENCE_STEPS = 60;
+// How long after the world is up before a door may open in front of a child
+// who is nowhere near the village. Long enough that the game has settled and
+// they have had a moment to see where they are — a portal that tore itself
+// open in the first frame would read as part of the loading.
+const POST_ARRIVAL_MS = 2500;
+// How long he takes to come out of it and to go back in. The player's own
+// crossing is a different pair of numbers because it is a different thing:
+// theirs is being pulled through, his is stepping out of a doorway.
+const POST_STEP_MS = 320;
+
+/**
+ * What the postal worker still has for this child, if anything.
+ *
+ * Two things and one man, which is the whole point of it — see `ui/news.ts`.
+ * The welcome says what the game is, once; the news says what has changed in
+ * it since they last played. They are never both owed: a child who has not
+ * had the welcome is caught up on the news by being given it.
+ */
+const Delivery = {
+  Welcome: "welcome",
+  News: "news",
+} as const;
+
+type Delivery = (typeof Delivery)[keyof typeof Delivery];
 const LOCAL_WANDER_RADIUS = 5;
 const PATROL_WANDER_RADIUS = 16;
-
-// How fast each character animation runs. Walk is tied to the step duration,
-// idle is a slow breath, and the planting gesture sits between them: six
-// frames at 12 is about half a second, long enough to read as deliberate and
-// short enough that it never feels like the game stopped listening.
-const FPS_FOR_ANIMATION: Record<string, number> = {
-  [WALK]: WALK_FPS,
-  [IDLE]: IDLE_FPS,
-  [PLANT]: PLANT_FPS,
-};
 
 // Crops and placed fixtures are sparse and looked up by tile, so their
 // sprites are keyed by position rather than held in a grid-sized array.
@@ -1315,18 +1116,6 @@ interface InteriorRuntime {
   decor: Phaser.GameObjects.Image[];
 }
 
-/** One tile of sea, and where it is — which is what decides its ripples. */
-interface WaterTile {
-  image: Phaser.GameObjects.Image;
-  col: number;
-  row: number;
-}
-
-interface ActiveChunk {
-  texture: Phaser.GameObjects.RenderTexture;
-  lastUsedAt: number;
-}
-
 // Renders the world and lets the player walk it and plant on it. No
 // gameplay/entity/isometric-projection design lives here beyond that — the
 // actual gardening spells (math minigames) come later, one at a time.
@@ -1357,6 +1146,8 @@ type Armed =
    * state at all — everything else in this union is answered by one square.
    */
   | { kind: "wire"; from: GridPoint | null }
+  /** A blueprint's drawing, picked up to be stamped down: `from` is the blueprint's square. */
+  | { kind: "plan"; from: string }
   | { kind: "flower"; flower: FlowerType; look: number };
 
 /**
@@ -1416,10 +1207,17 @@ function armedTag(what: Armed | null): string | null {
       // asking what is in her hands wants "a coil", and the end it has hold
       // of so far is its own question — see the `wiring` seam.
       return CRATE_WIRE;
+    case "plan":
+      return FixtureType.Blueprint;
     default:
       return flowerObject(what.flower, what.look);
   }
 }
+
+/**
+ * The two answers to a tap on a thing she put down. See `offerActions`.
+ */
+type ThingAction = "use" | "take";
 
 export class GameScene extends Phaser.Scene {
   private grid!: WorldGrid;
@@ -1455,6 +1253,8 @@ export class GameScene extends Phaser.Scene {
   private spellTray?: IconTray;
   private basketTray?: IconTray;
   private crateTray?: IconTray;
+  /** What a thing is and what it costs, opened from a button's own cloud. */
+  private thingPanel?: ThingPanel;
   /**
    * Which group of the crate is open, or null for the groups themselves.
    *
@@ -1495,14 +1295,6 @@ export class GameScene extends Phaser.Scene {
    */
   private leavingGame = false;
   /**
-   * How the last few casts went, for the difficulty to read.
-   *
-   * Kept for this sitting only rather than saved with the child. A window
-   * that survived a reload would have a child judged on yesterday, and
-   * losing it costs at most one extra cast before the next nudge.
-   */
-  private recentCasts: Recent = [];
-  /**
    * The character name the player's sprite is drawn and animated under.
    *
    * Their body's name when nothing was recoloured, and a per-style name when
@@ -1528,6 +1320,30 @@ export class GameScene extends Phaser.Scene {
   private aboutPanel?: AboutPanel;
   private lessonPanel?: LessonPanel;
   private introPanel?: IntroPanel;
+  /**
+   * The guide: which action is being pointed at, and the marks that point.
+   *
+   * See `ui/guide.ts`. The run is the child's — it starts from what their
+   * progress says they have been walked through — and the marks are the
+   * scene's, drawn every frame from whatever the run asks for.
+   */
+  private guide?: GuideRun;
+  private guideMarks?: GuideMarks;
+  /** What the guide last saw of the world, and when; it is not cheap to look. */
+  private guideWorldSeen: { at: number; world: GuideWorld } | null = null;
+  /** The building she walked into, for the guide that points at a door. */
+  private enteredBuilding: string | null = null;
+  /**
+   * The way from where she stood to where the guide is sending her, found
+   * once per square she moves rather than once per frame.
+   *
+   * A breadth-first search over the village is cheap; sixty of them a
+   * second is not. Keyed by both ends so a target that changes finds a new
+   * way, and a way that could not be found is remembered as none, or the
+   * search for it would run every frame for as long as she stood still.
+   */
+  private guideRoute: { from: string; to: string; path: GridPoint[] | null } | null = null;
+  private newsPanel?: NewsPanel;
   private mapPanel?: MapPanel;
   /** One picture, held up close, for the things that are only pictures. */
   private picturePanel?: PicturePanel;
@@ -1549,7 +1365,7 @@ export class GameScene extends Phaser.Scene {
   private sharePanel?: ShareLessonPanel;
   private brickPopup?: BrickPopup;
   private clockPopup?: ClockPopup;
-  private readonly flowerSidecars = new Map<FlowerType, FixtureSidecar>();
+  private flowerSidecars = new Map<FlowerType, FixtureSidecar>();
   /** Every flower on screen, by the cell it stands on. */
   private readonly flowerSprites = new Map<string, Phaser.GameObjects.Sprite>();
   /**
@@ -1580,6 +1396,8 @@ export class GameScene extends Phaser.Scene {
   /** Which colour the seed pouch will plant next, per flower. */
   private flowerLook: Partial<Record<FlowerType, number>> = {};
   private symmetryPopup?: SymmetryPopup;
+  /** The logic spell's: a tray and a rule, or switches and a lamp. */
+  private logicPopup?: LogicPopup;
   /**
    * The little menu over her head, which asks two questions in turn.
    *
@@ -1593,6 +1411,51 @@ export class GameScene extends Phaser.Scene {
   private decorMenu?: PatchMenu<DecorItem>;
   private flowerMenu?: PatchMenu<PlantedFlower>;
   /**
+   * The ring of choices over a thing she has tapped: use it, or take it.
+   *
+   * A tap on a bench used to put it straight in the basket. See
+   * `offerActions` for why it asks now, and `ActionWheel` for the asking.
+   */
+  private wheel?: ActionWheel<ThingAction>;
+  /**
+   * Set by the tap that opened the ring, and cleared by the scene's own
+   * handler for that same tap.
+   *
+   * Phaser runs a sprite's handlers before the scene's, so the tap that
+   * opens the ring arrives at the handler that closes rings a moment later
+   * — and without this it closed the one it had just opened.
+   */
+  private wheelFresh = false;
+  /** Where she stood when the ring opened. A step off it is a change of mind. */
+  private wheelOpenedAt: GridPoint | null = null;
+  /**
+   * The move she is in the middle of, or null.
+   *
+   * Folded into `modalOpen`, like a portal crossing: nothing she presses
+   * reaches the world while she is halfway onto a bench.
+   */
+  private using: Use | null = null;
+  /**
+   * Where to get back to, once she is settled on something and staying.
+   *
+   * Set only for a lasting use and only once the hop is over: while it is
+   * set, the next tap anywhere — or a direction key — gets her up. See
+   * `standUp`.
+   */
+  private rest: { home: ScreenPoint; toward: Facing } | null = null;
+  /** The moon now and then while she naps; anything on a clock while she rests. */
+  private restLoop: Phaser.Time.TimerEvent | null = null;
+  /**
+   * Her depth while she is on something, instead of her feet.
+   *
+   * Her feet are her depth, and that is right everywhere but here: a bed
+   * facing the camera has its pillow at the far end, and feet on the far
+   * square sort *behind* the bed, which draws the blanket over the whole of
+   * her. So while she is on a thing she is drawn just in front of it,
+   * wherever on it she is.
+   */
+  private perchDepth: number | null = null;
+  /**
    * The array spell, part way through being aimed.
    *
    * Null when the spell is not armed at all; `from` null when it is armed
@@ -1605,40 +1468,11 @@ export class GameScene extends Phaser.Scene {
     /** Chosen before any ground is marked — see `castArraySpell`. */
     action: PatchAction;
   } | null = null;
-  /**
-   * How far out the child has pulled the camera, and the pinch doing it now.
-   *
-   * Two fields because they are two different facts. `restingZoom` is a
-   * *choice* — it outlives the fingers that made it and is what the camera
-   * goes back to when a spell that pulled the view out is done with it.
-   * `pinching` exists only between the second finger landing and the first
-   * one lifting, and while it does, the live value it carries is what the
-   * camera shows. See `zoomWanted`, which is the one place they meet.
-   *
-   * Not written down anywhere. A view is where you are looking rather than
-   * something you own, and a game that reopened zoomed out because of a
-   * pinch three days ago would be a game that had rearranged itself.
-   */
-  private restingZoom = CAMERA_ZOOM;
-  private pinching: { a: number; b: number; from: number; held: number; live: number } | null =
-    null;
-  /**
-   * Every finger currently on the glass, by pointer id.
-   *
-   * Phaser hands out one pointer per touch and reuses the ids, and the
-   * scene's own handlers see them one at a time — so "are two fingers down"
-   * is a question nothing else here could answer.
-   */
-  private readonly touching = new Map<number, { x: number; y: number }>();
-  /**
-   * Whether this touch has been a pinch, until the last finger lifts.
-   *
-   * A pinch ends when one of the two fingers goes, and the other is usually
-   * still down. Without this, that leftover finger becomes a joystick the
-   * moment its partner leaves and the child walks off across the world at
-   * the end of every zoom.
-   */
-  private pinched = false;
+  /** Two fingers on the glass and the zoom they ask for — see `Pinch`. */
+  private readonly pinch = new Pinch(CAMERA_ZOOM, {
+    release: () => this.joystick?.release(),
+    applyZoom: () => this.applyZoom(),
+  });
   /**
    * Whether a finished rectangle is being looked at before its sum opens.
    *
@@ -1678,19 +1512,6 @@ export class GameScene extends Phaser.Scene {
   private readonly uiObjects = new WeakSet<Phaser.GameObjects.GameObject>();
   private portalPanel?: PortalPanel;
   /**
-   * The last few *portal* casts, kept apart from the growth spell's.
-   *
-   * Two ladders means two windows: a run of clean sums says nothing about
-   * whether a child can read a ruler, and mixing them would move both dials
-   * on evidence about one.
-   */
-  private recentPortalCasts: Recent = [];
-  private recentArrayCasts: Recent = [];
-  private recentShareCasts: Recent = [];
-  private recentBrickCasts: Recent = [];
-  private recentClockCasts: Recent = [];
-  private recentSymmetryCasts: Recent = [];
-  /**
    * When the world was last written down before this session started.
    *
    * Read once, at load, and then held: the save is rewritten every few
@@ -1717,10 +1538,6 @@ export class GameScene extends Phaser.Scene {
    */
   private pouring = 0;
   private sandGlass?: SandGlass;
-  /** How deep the old wood's dusk is right now, eased toward where she is. */
-  private dusk = 0;
-  /** The timestamp the dusk was last stepped at, for a real-time crossfade. */
-  private duskAt: number | null = null;
   /**
    * The doorway, while somebody is going through it.
    *
@@ -1744,9 +1561,35 @@ export class GameScene extends Phaser.Scene {
   private travelling = false;
   /** The failsafe's timer, cancelled the moment a crossing lands properly. */
   private portalGuard: Phaser.Time.TimerEvent | null = null;
-  /** Whether the postal worker still has the welcome to deliver, and his patience. */
-  private introToGive = false;
+  /** What the postal worker still has to deliver, and his patience. */
+  private delivery: Delivery | null = null;
   private introStepsLeft = INTRO_PATIENCE_STEPS;
+  /**
+   * Set while a door is open in front of the player and he is coming out of
+   * it or going back into it.
+   *
+   * Folded into `modalOpen` for the reason `travelling` is: the player must
+   * not walk off the tile a portal is standing on the far side of. It is
+   * *cleared* for the moment the panel is up — the panel is modal itself,
+   * and leaving both set would have `openDelivery` refuse to open the very
+   * sheet the arrival exists to show.
+   */
+  private postArriving = false;
+  /** His sprite, while he is out here. Not one of `npcs`: see `postmanIn`. */
+  private postman: Phaser.GameObjects.Sprite | null = null;
+  /**
+   * Whether the world has been up long enough for a door to open in it.
+   *
+   * A timer rather than a timestamp compared against `time.now`. That was
+   * the first version and it did not hold: `this.time.now` read inside
+   * `create` is not the clock `update` goes on to read, so the pause came
+   * out a fraction of its length and the doorway tore itself open while the
+   * first chunks were still being painted — which is the one thing
+   * `POST_ARRIVAL_MS` exists to prevent, and it read as part of the loading.
+   */
+  private postReady = false;
+  /** The arrival's failsafe, cancelled the moment he is away again. */
+  private postGuard: Phaser.Time.TimerEvent | null = null;
   /**
    * His route to the player, and who it was computed for.
    *
@@ -1816,6 +1659,15 @@ export class GameScene extends Phaser.Scene {
   /** Every length of wire in the world. See `wires.ts`. */
   private wires: Wire[] = [];
   /**
+   * Every blueprint's drawing, by the square it stands on.
+   *
+   * Made when a blueprint is woken and kept until it is taken up — see
+   * `world/blueprint.ts` — and saved with the machines and the wires, for
+   * the reason they are: a drawing on an easel in a shared garden is there
+   * for whichever child walks up to it.
+   */
+  private drawings = new Map<string, Plan>();
+  /**
    * How much each wire has carried altogether, by its own key.
    *
    * Nothing else can see this, and it is a running total rather than a rate
@@ -1837,6 +1689,16 @@ export class GameScene extends Phaser.Scene {
   // honest version of what tests used to do by monkeypatching Date.now — and
   // which does not also stall every tween in the game. See devHooks.
   private dev: DevOptions = devOptions();
+  /**
+   * The difficulty ladders and their windows of recent casts. Read the
+   * profile and seams through closures: `saveProfileChange` replaces the
+   * profile object, so a captured one would judge the child on stale rungs.
+   */
+  private readonly ladders = new Ladders({
+    profile: () => this.profile,
+    dev: () => this.dev,
+    save: (change) => this.saveProfileChange(change),
+  });
   private spellRng: Rng = createRng(0);
   /**
    * The shop draws from its own stream. Sharing the spell's would mean a
@@ -1853,12 +1715,6 @@ export class GameScene extends Phaser.Scene {
   private seedPouchKey!: Phaser.Input.Keyboard.Key;
   private harvestKey!: Phaser.Input.Keyboard.Key;
 
-  /**
-   * Whether the world has been thrown away and the page is on its way out.
-   *
-   * Read by `autosave`, which is the one thing that could undo a reset.
-   */
-  private worldForgotten = false;
   /** The room the camera is framing, in pixels, so a rotation can re-frame it. */
   private framedRoom: {
     width: number;
@@ -1870,53 +1726,23 @@ export class GameScene extends Phaser.Scene {
   private joystick?: VirtualJoystick;
   private path: GridPoint[] = [];
 
-  private activeChunks = new Map<string, ActiveChunk>();
   /**
-   * The scenery of each chunk, spawned when its ground is drawn and thrown
-   * away with it.
-   *
-   * Every tree used to be a live sprite from the moment the world was made:
-   * thirteen thousand of them in a five-hundred-cell world, each with a sway
-   * animation running, almost none of them on screen. That was survivable
-   * while an object covered four tiles; it stopped being survivable when
-   * they came down to one and a wood needed three times as many of them to
-   * still look like a wood — measured at half the frame rate.
-   *
-   * Bucketed once at load, because the answer never changes: scenery is
-   * placed by world generation and nothing moves it afterwards.
+   * The ground, its trees and its sea, streamed in under the camera and
+   * thrown away behind it — see `ChunkStreamer`. Reads the grid and origin
+   * through closures because both are swapped at every door.
    */
-  private readonly sceneryByChunk = new Map<string, PlacedObject[]>();
-  private readonly liveScenery = new Map<string, Phaser.GameObjects.Sprite[]>();
-  /**
-   * The moving water under each on-screen chunk.
-   *
-   * Kept on the same short lease as the scenery rather than the long one the
-   * chunk textures get, and for the same reason: this is hundreds of sprites,
-   * cheap to remake and expensive to hold. A chunk's ground is one texture.
-   */
-  private readonly liveWater = new Map<string, WaterTile[]>();
-  /** Which step of the swell the whole sea is on. */
-  private wavePhase = 0;
-  private frameCounter = 0;
-
-  // How many variants the atlas ships per corner combination, read from the
-  // loaded texture rather than hardcoded — see terrainAtlas.ts.
-  private cliffVariations: ReadonlyMap<string, number> = new Map();
-  private terrainVariations = new Map<string, number>();
-  private waterFrames: WaterFrames = { variations: 0, phases: 0 };
+  private readonly chunks = new ChunkStreamer(this, {
+    grid: () => this.grid,
+    originX: () => this.originX,
+    originY: () => this.originY,
+    world: (object) => this.world(object),
+    spawnScenery: (object) => this.spawnScenery(object),
+    toFeet: (col, row) => this.toFeet(col, row),
+  });
   private buildingSidecars = new Map<BuildingSprite, BuildingSidecar>();
   private fixtureSidecars = new Map<string, FixtureSidecar>();
   private scenerySidecars = new Map<string, ObjectSidecar>();
   private landmarkSidecars = new Map<string, LandmarkSidecar>();
-  /**
-   * How many distinct planks the decking sheet ships.
-   *
-   * Read from the sidecar rather than written down here, for the reason
-   * every other count is: the generator is the only thing that knows how
-   * many it drew, and a number typed in on this side goes on being right
-   * only until somebody adds a fifth.
-   */
-  private deckVariations = 1;
   private buildings: BuildingRuntime[] = [];
   /**
    * Every child on this device, for the nameplates on the four houses.
@@ -1960,19 +1786,6 @@ export class GameScene extends Phaser.Scene {
   private worldGrid!: WorldGrid;
   private anchors!: AnchorPlacements;
   private grove!: Grove;
-  /**
-   * The light over the great tree while it is still asking for something.
-   *
-   * The one thing in the world that says a quest is open, and it says it
-   * without a word or a mark — the tree simply breathes. It goes out the
-   * moment the last bed is filled, which is the only announcement the game
-   * makes about having finished it besides the rune.
-   *
-   * Additive over everything, unlike the night lights, because a tree that
-   * only glowed after dark would be a tree that asked for nothing all
-   * morning.
-   */
-  private treeGlow?: Phaser.GameObjects.Image;
   private city!: CityLayout;
   private observatory: Observatory | null = null;
   private harbourFront: HarbourLayout | null = null;
@@ -2024,43 +1837,29 @@ export class GameScene extends Phaser.Scene {
   private worldLayer!: Phaser.GameObjects.Layer;
   private interiorLayer!: Phaser.GameObjects.Layer;
 
-  private nightOverlay!: Phaser.GameObjects.Rectangle;
-  private playerGlow!: Phaser.GameObjects.Image;
-  /** Every lamp burning in the world, so the dark can be cut back around them. */
-  private readonly lamps = new Map<string, GridPoint>();
   /**
-   * A halo per lamp, keyed by its tile.
-   *
-   * Keyed rather than kept in a list beside `lamps`: the first version pushed
-   * and popped, so picking up one lamp of two put out the *last* one placed
-   * instead of the one in your hand.
+   * The night and every hole in it — see `Lighting`. The scene answers its
+   * questions through closures because all of them change: where she is,
+   * whether she is indoors, which flame the hearths flicker to.
    */
-  private readonly lampGlows = new Map<string, Phaser.GameObjects.Image>();
-  /**
-   * A halo over every fireplace in the room she is standing in.
-   *
-   * Kept apart from `lampGlows` rather than filed as a lamp at a tile. The
-   * lamps are a fact about the world — the astronomer counts them, the
-   * player carries them about — and a hearth is a fact about a picture that
-   * is on screen for as long as somebody is standing in it.
-   *
-   * **A list, because a stove is furniture and a child may own several.**
-   * It was one cell and one halo, which was right while a fireplace was
-   * built into the wall and there was exactly one. Reported from a
-   * playtest: only one stove per house lights up. Only one could — the
-   * routine that lit a stove put out the last one first, so a room with
-   * three of them drew three stoves and one fire.
-   */
-  private hearths: { cell: GridPoint; glow: Phaser.GameObjects.Image }[] = [];
-  /**
-   * The lamps, tubes and orbs in whatever room is on screen.
-   *
-   * Beside the hearth rather than in with it, because the hearth's flicker
-   * comes from the room's own animation frame and these have no frames to
-   * read — the generator draws them still and the movement is here. Made
-   * with the room and destroyed with it, like the hearth.
-   */
-  private roomGlows: { light: RoomLight; glow: Phaser.GameObjects.Image }[] = [];
+  private readonly lighting = new Lighting(
+    this,
+    { tintDepth: NIGHT_TINT_DEPTH, worldZoom: CAMERA_ZOOM },
+    {
+      ui: (object) => this.ui(object),
+      screenOf: (col, row) => this.screenOf(col, row),
+      screenOfPoint: (x, y) => this.screenOfPoint(x, y),
+      originX: () => this.originX,
+      originY: () => this.originY,
+      player: () => this.player,
+      indoors: () => this.interior !== null,
+      flame: () => this.interior?.fires[0] ?? (this.interior?.canvas ? null : this.interior?.image),
+      duskWanted: () =>
+        this.interior ? 0 : duskOver(this.anchors.enchantedForest, this.session.tile),
+      tree: () => (this.interior || this.groveDone ? null : this.grove.tree),
+      buildings: () => this.buildings,
+    },
+  );
   private npcs: NpcRuntime[] = [];
   /**
    * The village's chickens, ducks, cats and rabbits.
@@ -2126,7 +1925,16 @@ export class GameScene extends Phaser.Scene {
     this.mobileControls = !this.sys.game.device.os.desktop;
     this.worldLayer = this.add.layer();
     this.interiorLayer = this.add.layer().setVisible(false);
-    this.loadAssetMetadata();
+    const art = loadAssetMetadata(this);
+    this.chunks.learnTerrain(art.terrainVariations, art.cliffVariations, art.waterFrames);
+    this.chunks.learnDecking(art.deckVariations);
+    this.buildingSidecars = art.buildingSidecars;
+    this.scenerySidecars = art.scenerySidecars;
+    this.landmarkSidecars = art.landmarkSidecars;
+    this.flowerSidecars = art.flowerSidecars;
+    this.fixtureSidecars = art.fixtureSidecars;
+    this.interiorSidecars = art.interiorSidecars;
+    this.growable = art.growable;
 
     // The game that is open, which is a seed and a difference and everybody's
     // progress in it. One of several kept side by side — see save/games.ts.
@@ -2191,6 +1999,9 @@ export class GameScene extends Phaser.Scene {
         this.inventory.add(material, this.dev.materials);
       }
     }
+    if (this.dev.made > 0) {
+      for (const material of MADE_MATERIALS) this.inventory.add(material, this.dev.made);
+    }
     if (this.dev.furniture > 0) {
       for (const item of DECOR_ITEMS) this.inventory.add(item, this.dev.furniture);
     }
@@ -2235,7 +2046,7 @@ export class GameScene extends Phaser.Scene {
     // things within it.
     this.uiCamera.setScroll(0, 0);
     this.world(this.player);
-    this.refreshVisibleChunks();
+    this.chunks.refreshVisibleChunks();
 
     // Every static thing the generator placed: the village's buildings and
     // well, and the hundreds of trees and boulders walling the world's two
@@ -2244,10 +2055,10 @@ export class GameScene extends Phaser.Scene {
     // halo as they appear, and an image made against a texture that does not
     // exist yet gets Phaser's missing-texture placeholder — a lime green box,
     // drawn additively, several tiles across.
-    this.makeLightMask();
+    this.lighting.makeLightMask();
     // Everything except the scenery, which comes and goes with the chunk it
     // stands on — see `sceneryByChunk`.
-    this.bucketScenery(this.grid.listObjects());
+    this.chunks.bucketScenery(this.grid.listObjects());
     this.spawnPlacedObjects(
       this.grid.listObjects().filter((object) => sceneryKind(object.type) === null),
     );
@@ -2314,25 +2125,7 @@ export class GameScene extends Phaser.Scene {
     this.socketInk = this.world(this.add.graphics().setDepth(0));
     this.paintSockets();
 
-    this.nightOverlay = this.ui(
-      this.add
-        .rectangle(0, 0, this.scale.width, this.scale.height, NIGHT_TINT_COLOR, 0)
-        .setOrigin(0, 0)
-        .setScrollFactor(0)
-        .setDepth(NIGHT_TINT_DEPTH),
-    );
-    // The light the player carries, over the tint rather than cut out of it.
-    this.playerGlow = this.ui(
-      this.add
-        .image(0, 0, LIGHT_TEXTURE)
-        .setOrigin(0.5)
-        .setScrollFactor(0)
-        .setDepth(NIGHT_TINT_DEPTH + 1)
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setTint(PLAYER_GLOW_COLOR)
-        .setVisible(false),
-    );
-
+    this.lighting.layNight();
     const uiIndex = this.cache.json.get(UI_SIDECAR_KEY) as UiIndex | undefined;
     if (!uiIndex) throw new Error("ui.json did not load — the spell parchment has no art");
     // ?lang= is for scripts: it overrides the language for this run without
@@ -2395,7 +2188,9 @@ export class GameScene extends Phaser.Scene {
       uiIndex,
       MODAL_DEPTH,
       (object) => this.ui(object),
-      LAMP_POSTS,
+      // As many tokens as the longest row any sheet shows: the observatory's
+      // posts, or the bell's rings.
+      Math.max(LAMP_POSTS, RINGS_WANTED),
     );
     this.geometryPanel = new GeometryLessonPanel(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
@@ -2421,6 +2216,9 @@ export class GameScene extends Phaser.Scene {
     this.symmetryPopup = new SymmetryPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
+    this.logicPopup = new LogicPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
+      this.ui(object),
+    );
     // Above the parchment, because the parchment has closed by the time the
     // sand runs and what is underneath is the world changing colour.
     this.sandGlass = new SandGlass(this, MODAL_DEPTH + 10, (object) => this.ui(object));
@@ -2428,6 +2226,7 @@ export class GameScene extends Phaser.Scene {
       this.ui(object),
     );
     this.decorMenu = new PatchMenu<DecorItem>(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
+    this.wheel = new ActionWheel<ThingAction>(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
     this.flowerMenu = new PatchMenu<PlantedFlower>(this, TOUCH_UI_DEPTH, (object) =>
       this.ui(object),
     );
@@ -2443,9 +2242,34 @@ export class GameScene extends Phaser.Scene {
     this.introPanel = new IntroPanel(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
+    this.newsPanel = new NewsPanel(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
+      this.ui(object),
+    );
+    // Over the trays and under the parchments: the marks point at buttons
+    // and squares, and a panel over the top of them is a moment they are
+    // not pointing at anything.
+    this.guideMarks?.destroy();
+    this.guideMarks = new GuideMarks(this, TOUCH_UI_DEPTH + 100, (object) => this.ui(object));
+    this.guideWorldSeen = null;
+    this.guide = new GuideRun([...this.profile.guided, ...this.dev.guided], (guide) =>
+      this.rememberGuided(guide),
+    );
     // He walks it over the first time, and after that only if asked. ?intro
     // asks for it again without clearing the saved settings.
-    this.introToGive = !this.profile.introSeen || this.dev.intro;
+    //
+    // The welcome outranks the news, and a child owed the welcome is never
+    // also owed the news: giving it catches them up on the list — see
+    // `rememberIntroSeen`. Somebody being told what the game *is* does not
+    // also need to be told what changed in it.
+    this.delivery = this.deliveryOwed();
+    this.armPostArrival();
+    // Cleared rather than assumed. Phaser reuses the scene *instance* across
+    // a `scene.start`, so these fields survive a child being swapped for
+    // their sibling on the players screen — and `postArriving` surviving is
+    // a game that comes back up permanently modal.
+    this.postman = null;
+    this.postGuard = null;
+    this.postArriving = false;
     // `?wall`: the bricklaying parchment, on its own, before anything else.
     // A beat first, so it opens over a world that has finished drawing
     // itself rather than over a grey screen.
@@ -2469,8 +2293,13 @@ export class GameScene extends Phaser.Scene {
     this.optionsPanel.onChange = (next) => this.applySettings(next);
     this.optionsPanel.onOpenGame = (id) => this.openAnotherGame(id);
     this.optionsPanel.onDeleteGame = (id) => this.throwGameAway(id);
-    this.treeGlow = this.newGlow(TREE_GLOW_COLOR);
+    this.lighting.lightTree();
     this.checkGrove();
+    // Over the crate rather than beside it: the cloud is tapped while the
+    // tray is open, and the tray closes itself before acting.
+    this.thingPanel = new ThingPanel(this, uiIndex, MODAL_DEPTH + 2, this.words, (object) =>
+      this.ui(object),
+    );
     this.aboutPanel = new AboutPanel(this, uiIndex, MODAL_DEPTH + 2, this.words, (object) =>
       this.ui(object),
     );
@@ -2498,448 +2327,7 @@ export class GameScene extends Phaser.Scene {
     this.setupInput();
     this.createActionBar();
     this.teacherMarks = new TeacherMarks(this, (object) => this.world(object));
-    exposeForTests({
-      session: this.session,
-      ui: () => this.uiPositions(),
-      // Whether the world map is up. There is exactly one way to open it —
-      // tapping the picture on the post office wall — and no other sign on
-      // screen that it worked: the panel is a picture of a world that is
-      // also on screen behind it.
-      mapOpen: () => this.mapPanel?.isOpen === true,
-      armed: () => armedTag(this.armed),
-      // And the square it will land on, which is not the same question: the
-      // rune says a spell is waiting, this says where it is pointed.
-      aimed: () => this.session.aimed,
-      // Which way round the thing in her hands is. Its own seam rather than
-      // part of `armed`, which is a name several scenarios compare against
-      // and which should go on meaning what it has always meant.
-      armedTurn: () => this.armedTurn,
-      marking: () => this.marking?.action ?? null,
-      teaching: () => this.teacherMarks?.showing() ?? [],
-      grove: () => ({
-        col: this.grove.doorstep.col,
-        row: this.grove.doorstep.row,
-        tree: { col: this.grove.tree.col, row: this.grove.tree.row },
-        thicket: this.grove.thicket.map((at) => ({ col: at.col, row: at.row })),
-      }),
-      /**
-       * Which spells this child has been taught.
-       *
-       * The profile's own list rather than the seam that seeds it, so a
-       * scenario can watch one being *earned* — which is the only way to
-       * check that a teacher pays at the moment it is supposed to.
-       */
-      spells: () => [...this.profile.learned],
-      /**
-       * Every machine in the world and what it is holding.
-       *
-       * Nothing else can see this. A machine's state is not an object on the
-       * grid, not in the basket and not on screen beyond three little heaps
-       * of pixels in three crates — so a sorter that had quietly stopped
-       * dealing, or one that dealt without ever being woken, would look
-       * exactly like one that was working.
-       */
-      machines: () =>
-        [...this.machines].map(([where, state]) => ({
-          where,
-          awake: state.awake,
-          holding: state.holding,
-          heap: state.heap,
-          crates: [...state.crates],
-          // What a sieve lets through and what it has caught. Nothing else
-          // can see either: a jammed sieve and an idle one look the same
-          // from outside, which is exactly the failure worth catching.
-          passes: state.passes,
-          binned: state.binned,
-          bin: state.bin,
-          /** What a tally waits for. Nought until it has been shown. */
-          mark: state.mark,
-          // What the crates hold, which for a machine that turns is not what
-          // the mouth holds — and is the difference a scenario cannot see any
-          // other way. See `MachineState.made`.
-          made: state.made,
-          // A press's second funnel and the proportion it was shown. Both
-          // are invisible from outside — a press waiting for its other half
-          // and a press that has been fed the wrong pair look identical on
-          // the ground, and the proportion is a number nothing draws.
-          other: state.other,
-          otherHeap: state.otherHeap,
-          otherMark: state.otherMark,
-        })),
-      /**
-       * Every length of wire, and whether it is actually carrying.
-       *
-       * The `moved` is the half nothing else can see. A wire that is backed
-       * up — the machine at the far end is full of something else — and a
-       * wire that was never joined to anything both sit there carrying
-       * nothing, and from outside they are the same picture. Without this a
-       * scenario cannot tell a line that is correctly stopped from one that
-       * never worked at all.
-       */
-      wires: () =>
-        this.wires.map((wire) => ({
-          from: wire.from,
-          to: wire.to,
-          moved: this.wireCarried.get(wireKey(wire.from, wire.to)) ?? 0,
-        })),
-      /** Which end of a wire she has hold of, part way through stringing one. */
-      wiring: () => {
-        const held = this.armed;
-        if (held?.kind !== "wire" || !held.from) return null;
-        return { col: held.from.col, row: held.from.row };
-      },
-      sea: () => {
-        const tiles = [...this.liveWater.values()].flat();
-        return {
-          tiles: tiles.length,
-          phase: this.wavePhase,
-          showing: [...new Set(tiles.map((tile) => tile.image.frame.name))],
-          // A handful of named tiles rather than a count, because with sixty
-          // frames of sea on screen the *set* of them saturates: every frame
-          // there is is showing somewhere, before and after, and a sea that
-          // had frozen solid would look identical by that measure. What moves
-          // is which tile shows which.
-          //
-          // Sorted before it is cut down, so the same tiles come back each
-          // time. Unsorted this is Map insertion order — which chunk came on
-          // screen first — and a script comparing two readings would see the
-          // names change whenever a chunk did, which is a green test on a
-          // frozen sea.
-          sample: tiles
-            .sort((a, b) => a.col - b.col || a.row - b.row)
-            .slice(0, SEA_SAMPLE)
-            .map((tile) => `${tile.col},${tile.row}=${tile.image.frame.name}`),
-        };
-      },
-      stats: () => ({
-        fps: Math.round(this.game.loop.actualFps),
-        frames: this.frameCounter,
-        renderer: this.game.renderer.type === Phaser.WEBGL ? "webgl" : "canvas",
-        objects: this.children.list.length,
-        // Everything Phaser calls preUpdate on every frame, which is where a
-        // wood of animating trees is actually paid for.
-        updating: this.sys.updateList.length,
-        view: { width: this.scale.width, height: this.scale.height },
-      }),
-      // Every fire alight in the room she is in. Was one or none, which is
-      // the shape the bug had: a scenario could not have told a room with
-      // three stoves from a room with one.
-      hearths: () =>
-        this.hearths
-          .filter(({ glow }) => glow.visible)
-          .map(({ cell, glow }) => ({ col: cell.col, row: cell.row, alpha: glow.alpha })),
-      doors: () =>
-        Object.fromEntries(this.buildings.map((b) => [b.id, { col: b.doorCol, row: b.doorRow }])),
-      screenOf: (col, row) => this.screenOf(col, row),
-      spell: () => {
-        const cast = this.spellPopup?.cast;
-        if (!cast) return null;
-        return {
-          start: cast.problem.start,
-          addend: movedBy(cast.problem),
-          stops: cast.problem.stops,
-          index: cast.index,
-          // The three numbers and which of them is the box, when the rung
-          // asks for a sum with no line under it. Null otherwise, so a
-          // scenario can tell the two forms apart — which it otherwise
-          // could not: a bare cast runs on a one-jump line, and a one-jump
-          // line is also what the gentlest rung in the game sets.
-          bare: this.spellPopup?.bareSum ?? null,
-        };
-      },
-      spellHint: () => this.spellPopup?.hintText ?? "",
-      thought: () => this.lastThought,
-      share: () => {
-        const cast = this.sharePopup?.cast;
-        if (!cast) return null;
-        const { problem } = cast;
-        return {
-          total: problem.total,
-          parts: problem.parts,
-          each: problem.each,
-          left: problem.left,
-          tier: problem.tier,
-          box: cast.box,
-          boxes: [...boxesOf(problem)],
-          typed: { each: cast.each, left: cast.left },
-          done: cast.done,
-          missteps: cast.missteps,
-        };
-      },
-      mapMark: () => this.whereOnTheMap(),
-      sound: () => sound().report(),
-      ships: () => this.traffic?.positions() ?? [],
-      blimps: () => this.blimps?.positions() ?? [],
-      scenery: () => [...this.liveScenery.values()].reduce((n, list) => n + list.length, 0),
-      sceneryOnScreen: () => {
-        const view = this.cameras.main.worldView;
-        const inside = (object: PlacedObject) => {
-          const feet = this.toFeet(object.col, object.row);
-          return (
-            feet.x >= view.x &&
-            feet.x <= view.x + view.width &&
-            feet.y >= view.y &&
-            feet.y <= view.y + view.height
-          );
-        };
-        let inView = 0;
-        for (const bucket of this.sceneryByChunk.values()) {
-          for (const object of bucket) if (inside(object)) inView++;
-        }
-        let live = 0;
-        for (const [key, sprites] of this.liveScenery) {
-          const bucket = this.sceneryByChunk.get(key) ?? [];
-          void sprites;
-          for (const object of bucket) if (inside(object)) live++;
-        }
-        return { inView, live };
-      },
-      /**
-       * The wall on the parchment: which brick is being asked for, what the
-       * answer to it is, and what has been typed.
-       *
-       * The answer is handed over deliberately. A script cannot work a wall
-       * out for itself without reimplementing the solver, and a test that
-       * reimplements the thing it is testing checks nothing.
-       */
-      house: () => {
-        const inside = this.interior;
-        const parts = this.growable;
-        if (!inside?.plan || !parts) return null;
-        const door = growableDoor(parts);
-        return {
-          room: inside.room,
-          id: inside.house ?? null,
-          floor: [...inside.plan.floor],
-          origin: { ...inside.origin },
-          buildable: buildableCells(inside.plan, door).map(({ col, row }) => ({
-            col: col - inside.origin.col,
-            row: row - inside.origin.row,
-          })),
-        };
-      },
-      shop: () => this.shopPanel?.counter ?? null,
-      decor: () => {
-        const inside = this.interior;
-        if (!inside?.plan || !inside.house) return null;
-        return this.decorIn(inside.house).map((placed) => ({
-          piece: placed.piece,
-          col: placed.col,
-          row: placed.row,
-          look: placed.look,
-          // Normalised rather than passed through, so a script reads the
-          // same number for a chair from an old save as for one just put
-          // down. See `turnOf`.
-          turn: decorTurnOf(placed),
-        }));
-      },
-      bricks: () => {
-        const cast = this.brickPopup?.cast;
-        if (!cast) return null;
-        const asked = brickBeingAsked(cast);
-        return {
-          values: [...cast.problem.values],
-          hidden: [...cast.problem.hidden],
-          asked,
-          answer: asked === null ? null : (cast.problem.values[asked] ?? null),
-          entry: cast.entry,
-          missteps: cast.missteps,
-          done: cast.done,
-        };
-      },
-      array: () => {
-        const cast = this.arrayPopup?.cast;
-        if (!cast) return null;
-        return {
-          rows: cast.problem.rows,
-          columns: cast.problem.columns,
-          answer: cast.problem.rows * cast.problem.columns,
-          entry: cast.entry,
-          done: cast.done,
-        };
-      },
-      /**
-       * The tint over the world right now: the time of day, the wood's own
-       * dusk, and what the two come to.
-       *
-       * A seam rather than an API, and the one the dusk needs: the only
-       * other way to check it is to sample a screenshot, and every glow in
-       * the grove lightens the very pixels a sample would land on.
-       */
-      shade: () => ({
-        dusk: this.dusk,
-        night: nightTintAlpha(this.hourNow()),
-        alpha: this.nightOverlay?.fillAlpha ?? 0,
-      }),
-      clock: () => {
-        const cast = this.clockPopup?.cast;
-        if (!cast) return null;
-        const asked = askedOf(cast);
-        return {
-          from: cast.from,
-          to: cast.to,
-          hours: asked.hours,
-          minutes: asked.minutes,
-          entry: cast.hours,
-          entryMinutes: cast.minutes,
-          box: cast.box,
-          asksMinutes: asksMinutes(cast),
-          done: cast.done,
-          // Where the face she drags is, so a script can take hold of a hand.
-          grip: this.clockPopup?.face ?? null,
-        };
-      },
-      /**
-       * The grid on the mirror parchment, and where it is on the screen.
-       *
-       * The only spell whose answer is a *tap on a picture*: there is no box
-       * to type into and no button with a name. So the grid is published —
-       * where it is drawn, which squares came with it, and which ones are
-       * still wanted — and a script taps the squares the game itself worked
-       * out rather than ones it guessed.
-       */
-      symmetry: () => {
-        const cast = this.symmetryPopup?.cast;
-        if (!cast) return null;
-        return {
-          size: cast.size,
-          axis: cast.axis,
-          given: [...cast.given],
-          wanted: [...cast.wanted],
-          filled: [...cast.filled],
-          board: this.symmetryPopup?.where ?? null,
-          done: cast.done,
-          missteps: cast.missteps,
-          wrong: cast.wrong,
-          hinting: symmetryHint(cast) !== null,
-        };
-      },
-      /**
-       * The three wild flowers, and which of them this child has found.
-       *
-       * Where they grow is chosen from the world's seed out of every cell
-       * the connectivity pass proved walkable, so it is a different answer
-       * in every world and there is nothing a script could hard-code. This
-       * is how a scenario walks to one.
-       */
-      flowers: () => ({
-        wild: this.wildFlowers,
-        found: [...this.foundFlowers],
-        planted: this.worldGrid.listObjects().flatMap((object) => {
-          const parts = flowerParts(object.type);
-          return parts ? [{ ...parts, col: object.col, row: object.row }] : [];
-        }),
-      }),
-      inside: () => {
-        const room = this.interior;
-        return room ? { room: room.room, building: room.house ?? null } : null;
-      },
-      /**
-       * Where the camera is pulled to.
-       *
-       * The one number in the game that depends on how big the screen is, so
-       * it is also the one a scenario cannot work out for itself — see
-       * `markingZoom`. Reported live rather than as the constant, because
-       * what is worth checking is that it *moved* and came back.
-       */
-      zoom: () => this.cameras.main.zoom,
-      openHours: () => ({
-        open: this.villageIsOpen,
-        hour: this.hourNow(),
-        opensIn: opensIn(this.hourNow()),
-      }),
-      /**
-       * How many pictures are rising over her head at this moment.
-       *
-       * Counted off the layer rather than reported from the field that holds
-       * the one, so it is a count of what is on screen and not of what the
-       * scene believes it put there. A moon and a sun are the only two
-       * drawn this way — the runes a spell is earned with are their own
-       * picture, and an animal's cloud is a container rather than an image.
-       */
-      floatingMarks: () =>
-        this.sceneryLayer()
-          .getChildren()
-          .filter(
-            (object) =>
-              object instanceof Phaser.GameObjects.Image &&
-              (object.texture.key === uiTextureKey(UiAsset.MarkNight) ||
-                object.texture.key === uiTextureKey(UiAsset.MarkDay)),
-          ).length,
-      /**
-       * What the clock in the corner is showing, as a child sees it.
-       *
-       * Read off the text objects rather than worked out again, which is the
-       * point: `worldClock` already says what hour the world is at, and this
-       * says what the screen is telling somebody about it.
-       */
-      hudClock: () => ({
-        time: this.clockHud?.time.text ?? "",
-        date: this.clockHud?.date.text ?? "",
-        sky: this.clockHud?.sky.texture.key ?? "",
-        shown: this.clockHud?.time.visible ?? false,
-      }),
-      geometry: () => (this.geometryPanel?.isOpen ? (this.geometryPanel.readout() ?? null) : null),
-      city: () => ({
-        gates: this.city.gates.map(({ col, row }) => ({ col, row })),
-        wall: this.city.wall.length,
-      }),
-      hiding: () =>
-        this.tallThings
-          .filter(({ sprite }) => sprite.active)
-          .map(({ id, at, sprite }) => ({ id, col: at.col, row: at.row, alpha: sprite.alpha })),
-      // Where the world's clock stands, and how far it has been wound from
-      // the real one. The spell's whole effect, and nothing on screen states
-      // it as a number — the light does, which a script cannot read.
-      worldClock: () => ({
-        hour: this.hourNow(),
-        offset: this.clockOffset,
-      }),
-      lamps: () => {
-        const observatory = this.observatory;
-        if (!observatory) return null;
-        return {
-          posts: observatory.posts.map((at) => ({ col: at.col, row: at.row })),
-          lit: lampsLit(this.worldGrid, observatory),
-        };
-      },
-      animals: () =>
-        this.animals.map((animal) => ({
-          id: animal.id,
-          kind: animal.kind,
-          col: animal.col,
-          row: animal.row,
-          craves: animal.craves,
-          mood: animal.mood,
-          bubble: animal.bubble !== undefined,
-          // What is in the cloud over it, which is not the same question as
-          // whether it has one: a tap on a quiet animal puts up a cloud that
-          // is nobody's bubble and lasts a beat.
-          thinking: [...animal.thinking],
-        })),
-      portalMarks: () => this.portalPanel?.marks() ?? {},
-      portal: () => {
-        const journey = this.portalPanel?.journey;
-        if (!journey) return null;
-        return {
-          place: journey.place,
-          league: journey.league,
-          tier: journey.rung.tier,
-          across: journey.across.marks,
-          down: journey.down.marks,
-          answer: journey.answer,
-          reached: this.profile.reached,
-        };
-      },
-      npcs: () => {
-        const where: Record<string, { col: number; row: number }> = {};
-        for (const npc of this.npcs) where[npc.id] = { col: npc.col, row: npc.row };
-        if (this.attendantCell && this.attendantId) {
-          where[this.attendantId] = { ...this.attendantCell };
-        }
-        return where;
-      },
-    });
+    exposeForTests(this.devHandle());
     if (this.mobileControls) this.createTouchControls();
     this.layoutForViewport();
 
@@ -2968,16 +2356,17 @@ export class GameScene extends Phaser.Scene {
       document.removeEventListener("visibilitychange", flush);
       globalThis.removeEventListener("pagehide", flush);
       this.scale.off(Phaser.Scale.Events.RESIZE, this.layoutForViewport, this);
-      // The popup listens on the keyboard while it is open, and a listener
-      // outliving its scene fires into a destroyed display list.
-      this.spellPopup.destroy();
-      this.portalPanel?.destroy();
-      this.shopPanel.destroy();
-      this.optionsPanel?.destroy();
-      this.aboutPanel?.destroy();
-      this.lessonPanel?.destroy();
-      this.introPanel?.destroy();
-      this.mapPanel?.destroy();
+      // Every panel and popup, not the eight that happened to be listed. A
+      // popup listens on the keyboard while it is open, and a listener
+      // outliving its scene fires into a destroyed display list — and the
+      // list of things that listen grows with every panel added, so it is
+      // built once here from everything that can be destroyed.
+      for (const panel of this.panels()) panel?.destroy();
+      // And him, if the world is going down while a door is open. His sprite
+      // and the doorway are the scene's and go with it either way; what does
+      // not is `postArriving`, which is a field on an instance that gets
+      // used again.
+      this.postmanAway();
     });
 
     // The shop's coin pad takes a coin back on right-click, so the browser's
@@ -2989,13 +2378,39 @@ export class GameScene extends Phaser.Scene {
       // is already non-empty while it is open. Checking anyway: a modal that
       // is only modal because of depth ordering stops being one the first
       // time something is drawn above it.
+      // Sitting, lying or bathing, and a tap anywhere is how she gets up.
+      // Before the modal check, because a lasting use is one — nothing else
+      // may happen while she is on the chair — and this is the one tap it
+      // takes. The tap is only that: whatever it landed on is not walked
+      // to, planted or picked, because a child getting her off a chair has
+      // not asked for anything else yet.
+      if (this.rest) {
+        this.standUp();
+        return;
+      }
       if (this.modalOpen) return;
-      this.touching.set(pointer.id, { x: pointer.x, y: pointer.y });
+      this.pinch.touch(pointer.id, pointer.x, pointer.y);
       // A second finger is a pinch, and a pinch is not a tap. Checked before
       // everything below it, because everything below it would answer this
       // finger with the thing it was aimed at — and a second finger landing
       // on a tree while the times rune is lit would cast the spell there.
-      if (this.beginPinch()) return;
+      if (this.pinch.begin()) return;
+      // A ring of choices is open over something. This very tap may be the
+      // one that opened it — the thing's own handler runs before this one —
+      // and that tap is let through once. Any later tap that is not on one
+      // of the ring's buttons closes it and does nothing else, deliberately:
+      // a child who tapped away from a question has answered *neither*, and
+      // a step taken on the same tap would be an answer.
+      if (this.wheel?.isOpen) {
+        if (this.wheelFresh) {
+          this.wheelFresh = false;
+          return;
+        }
+        if (!this.tappedTheInterface(over)) {
+          this.closeWheel();
+          return;
+        }
+      }
       // The array spell owns the pointer while it is armed: a tap marks a
       // corner instead of steering, walking, or being answered by whatever
       // happens to be standing on the tile.
@@ -3029,7 +2444,7 @@ export class GameScene extends Phaser.Scene {
       if (over.length > 0) return; // a UI button handles its own pointerdown
       // Nor does the finger left over from a pinch: it is halfway through a
       // gesture that was never about walking anywhere.
-      if (this.pinched) return;
+      if (this.pinch.leftOver) return;
       // Touch steers with the floating joystick; a mouse walks to the tile it
       // clicked. Deliberately not both on touch: a press cannot be a stick
       // and a destination at once, and the stick is the one you can hold.
@@ -3037,30 +2452,36 @@ export class GameScene extends Phaser.Scene {
       else this.handleTileClick(pointer.worldX, pointer.worldY);
     });
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-      if (this.touching.has(pointer.id)) {
-        this.touching.set(pointer.id, { x: pointer.x, y: pointer.y });
-      }
-      if (this.dragPinch()) return;
+      this.pinch.moved(pointer.id, pointer.x, pointer.y);
+      if (this.pinch.drag()) return;
       this.joystick?.move(pointer);
     });
     // pointerupoutside fires when the finger leaves the canvas still held —
     // without it the stick would stay stuck on and the player walk forever.
     for (const event of ["pointerup", "pointerupoutside"]) {
       this.input.on(event, (pointer: Phaser.Input.Pointer) => {
-        this.touching.delete(pointer.id);
-        this.endPinch(pointer.id);
+        this.pinch.lifted(pointer.id);
+        // However the press that opened a ring ended, it has ended: a
+        // second finger that turned it into a pinch never reached the
+        // handler above, and the flag must not outlive the tap it is about.
+        this.wheelFresh = false;
+        this.pinch.end(pointer.id);
         this.joystick?.end(pointer);
       });
     }
   }
 
   override update(time: number): void {
-    this.frameCounter++;
+    this.chunks.tick();
     const hour = this.hourNow();
     if (!this.interior) {
-      this.refreshVisibleChunks();
-      this.driftWater(time);
+      this.chunks.refreshVisibleChunks();
+      this.chunks.driftWater(time);
       this.updateNpcs(isOpenHours(hour));
+      // The other half of the postman's round: `updateNpcs` walks him over
+      // when the player is in the village, and this opens a door when they
+      // are not. See `updatePost`.
+      this.updatePost();
       // Called from here rather than from inside `updateNpcs`, which returns
       // early on `?freezeNpcs` — and did so before it ever reached the
       // animals, so with that seam set their hunger clocks stopped as well as
@@ -3071,7 +2492,7 @@ export class GameScene extends Phaser.Scene {
       // hold still. See `FROZEN_TIDE`.
       this.traffic?.sail(this.frozen ? FROZEN_TIDE : this.worldNow() / 60_000);
       this.teacherMarks?.show(this.teachersOnScreen(), (spell) => !this.knows(spell));
-      this.cullScenery();
+      this.chunks.cullScenery();
     }
     // Indoors as well as out: she is present either way, and a sorter in the
     // garden goes on dealing while she is upstairs.
@@ -3098,7 +2519,7 @@ export class GameScene extends Phaser.Scene {
     this.checkAim();
     // The tint still applies indoors: it is the time of day, not the weather
     // outside a window.
-    this.paintNight(nightTintAlpha(hour), this.settleDusk(time));
+    this.lighting.paintNight(nightTintAlpha(hour), this.lighting.settleDusk(time));
     // Every frame, now that there is no status line whose repaint used to
     // carry it: two setVisible calls, and it cannot fall out of step with
     // whether a panel is open.
@@ -3118,7 +2539,7 @@ export class GameScene extends Phaser.Scene {
     // Not while going through a portal: the traveller is held just in front
     // of the doorway's mouth for the crossing, and recomputing it from their
     // y would drop them behind it the moment they were lifted into it.
-    if (!this.travelling) this.player.setDepth(this.player.y);
+    if (!this.travelling) this.player.setDepth(this.perchDepth ?? this.player.y);
     this.showThroughWhatHidesHer();
     this.playCharacterAnim(
       this.player,
@@ -3127,17 +2548,32 @@ export class GameScene extends Phaser.Scene {
       this.isMoving,
       this.playerGesture,
     );
-    for (const npc of [...this.npcs, ...this.animals]) {
-      npc.sprite.setDepth(npc.sprite.y);
-      this.playCharacterAnim(npc.sprite, npc.character, npc.facing, npc.isMoving);
-    }
+    // Two loops rather than one over a spread of both: this runs every
+    // frame, and the array it made to walk was thrown away every frame.
+    for (const npc of this.npcs) this.animateWalker(npc);
+    for (const animal of this.animals) this.animateWalker(animal);
     if (!this.interior) this.updateDoors();
 
     // The world keeps running behind the parchment — smoke drifts, villagers
     // wander — but nothing the player presses reaches it. Every key below is
     // one the popup wants for itself (digits, Enter, Escape) or one that
     // would walk the player out from under an open spell.
+    // A direction key gets her up from a chair the way a tap does, and for
+    // the same reason a tap does: pressing to walk is asking to be
+    // somewhere else. She stands first; the step is hers to press again.
+    if (this.rest && this.pressedDirection()) this.standUp();
+    // Before the modal return, because a parchment over the screen is a
+    // moment the marks have to be *put away*, not merely left where they
+    // were: a glow under a sheet is a glow on the sheet.
+    this.driveGuide();
     if (this.modalOpen) return;
+
+    // The ring over a thing was opened from where she was standing, and a
+    // step away from it is a change of mind.
+    const opened = this.wheelOpenedAt;
+    if (opened && (opened.col !== this.playerCol || opened.row !== this.playerRow)) {
+      this.closeWheel();
+    }
 
     if (!this.isMoving) {
       const dir = this.pressedDirection();
@@ -3263,6 +2699,21 @@ export class GameScene extends Phaser.Scene {
     return this.marking !== null || this.armed !== null;
   }
 
+  /**
+   * Answer a tap on a sprite — unless a spell is waiting for the next tap
+   * on the world, in which case the sprite stands aside. One place rather
+   * than nine, for the reason `pointerIsSpokenFor` is one place.
+   */
+  private onTap(
+    sprite: Phaser.GameObjects.GameObject,
+    handler: (pointer: Phaser.Input.Pointer) => void,
+  ): void {
+    sprite.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (this.pointerIsSpokenFor) return;
+      handler(pointer);
+    });
+  }
+
   private tappedTheInterface(over: readonly unknown[]): boolean {
     return over.some((object) => this.uiObjects.has(object as Phaser.GameObjects.GameObject));
   }
@@ -3303,7 +2754,7 @@ export class GameScene extends Phaser.Scene {
     // framed for a portrait screen is framed wrong the moment it is not one.
     if (this.interior) this.reframeInterior();
     this.uiCamera?.setSize(width, height);
-    this.nightOverlay?.setSize(width, height);
+    this.lighting.resize(width, height);
     for (const button of this.edgeAnchored) button.place(width, height);
     // The popup can be open across a phone rotation, and every one of its
     // pieces is placed from the viewport's size.
@@ -3311,6 +2762,7 @@ export class GameScene extends Phaser.Scene {
     this.brickPopup?.layout();
     this.sharePopup?.layout();
     this.symmetryPopup?.layout();
+    this.logicPopup?.layout();
     this.portalPanel?.layout();
     this.geometryPanel?.layout();
     this.shopPanel?.layout();
@@ -3318,176 +2770,11 @@ export class GameScene extends Phaser.Scene {
     this.aboutPanel?.layout();
     this.lessonPanel?.layout();
     this.introPanel?.layout();
+    this.newsPanel?.layout();
     this.mapPanel?.layout();
     this.picturePanel?.layout();
     this.taskPanel?.layout();
     this.layoutHud();
-  }
-
-  /**
-   * A soft disc, built once and used as the shape of every light.
-   *
-   * Concentric circles rather than a gradient fill, because Phaser's shapes
-   * have no radial gradient and this is the cheapest thing that reads as
-   * one: thirty-two rings is smooth enough that nothing bands at this size.
-   */
-  private makeLightMask(): void {
-    if (this.textures.exists(LIGHT_TEXTURE)) return;
-    const size = LIGHT_TEXTURE_RADIUS * 2;
-    const paint = this.make.graphics({ x: 0, y: 0 }, false);
-    for (let ring = LIGHT_RINGS; ring > 0; ring--) {
-      const t = ring / LIGHT_RINGS;
-      // Squared falloff: light thins out fast at the edge, which is what
-      // stops the hole reading as a spotlight with a hard rim.
-      paint.fillStyle(0xffffff, (1 - t) ** 2 * 0.14 + 0.02);
-      paint.fillCircle(LIGHT_TEXTURE_RADIUS, LIGHT_TEXTURE_RADIUS, LIGHT_TEXTURE_RADIUS * t);
-    }
-    paint.generateTexture(LIGHT_TEXTURE, size, size);
-    paint.destroy();
-  }
-
-  /**
-   * Lay the night over the world, and the lights over the night.
-   *
-   * The lights are drawn *additively on top of* the tint rather than erased
-   * out of it. Erasing is what this wants to mean — a lamp should take the
-   * dark away — and a render texture can do exactly that, which is how it
-   * was written first. That also went wrong in a way worth recording: with
-   * `fill` and `erase` both running every frame, the sheet came out blank
-   * within a few seconds and night simply stopped happening as the player
-   * walked. Adding warm light to a cold sheet reads the same to the eye,
-   * costs one sprite per source, and cannot get out of step with itself.
-   */
-  /**
-   * How much of the old wood's own dusk is over the player, eased.
-   *
-   * The wood is never fully light. `duskOver` already softens the boundary
-   * across the ground, and this softens it across *time* — which is the one
-   * case the spatial ramp cannot cover, because a portal sets you down in
-   * the middle of the wood with no walk in. Without it, arriving would snap
-   * the whole screen a third darker in a single frame.
-   */
-  private settleDusk(time: number): number {
-    // Measured off the frame's own timestamp rather than off Phaser's
-    // `delta`, which is smoothed toward the target frame time and clamped:
-    // in the wood, where the frame rate is a third of the target, `delta`
-    // still reports about sixteen milliseconds, and the crossfade took the
-    // best part of three seconds instead of the nine-tenths written above.
-    // Measured in the browser: 2,888 ms before, 880 ms after.
-    const since = this.duskAt === null ? 0 : Math.min(200, time - this.duskAt);
-    this.duskAt = time;
-    const wanted = this.interior ? 0 : duskOver(this.anchors.enchantedForest, this.session.tile);
-    const step = since / DUSK_FADE_MS;
-    // Signed and clamped to the target rather than eased toward it: a linear
-    // step takes exactly DUSK_FADE_MS to cross the whole range whatever the
-    // frame rate, which is what the constant claims and what a crossfade
-    // has to be to be worth writing down.
-    if (wanted > this.dusk) this.dusk = Math.min(wanted, this.dusk + step);
-    else this.dusk = Math.max(wanted, this.dusk - step);
-    return this.dusk;
-  }
-
-  /**
-   * Lay the time of day over the world, and the old wood's dusk under it.
-   *
-   * A floor rather than a second overlay: two tinted rectangles multiply
-   * into a colour neither of them is, and at noon in the grove that came out
-   * as a blue wash rather than as shade. One tint, taking whichever of the
-   * two is deeper, and its *colour* leaning green as the dusk rises — night
-   * in a wood is not the same colour as night over a field.
-   *
-   * Everything that glows reads its strength off the result, so the grove's
-   * mushrooms are lit at noon. That is the whole point of them.
-   */
-  /**
-   * How much of a light's reach to draw, given where the camera is.
-   *
-   * Every radius in this file is quoted "in screen pixels at the world
-   * zoom", and until the array spell started pulling the camera out that was
-   * a distinction without a difference — the zoom never moved. It moves now,
-   * and a radius left in raw screen pixels would light twice the floor at
-   * half the zoom: a lamp in a cottage at night would visibly swell the
-   * moment a child armed the times rune.
-   *
-   * So the radii mean what they always said they meant, and this is the
-   * factor that keeps them meaning it: a light covers the same *ground*
-   * whatever the camera is doing.
-   */
-  private get lightScale(): number {
-    return this.cameras.main.zoom / CAMERA_ZOOM;
-  }
-
-  private paintNight(nightAlpha: number, dusk: number): void {
-    const alpha = Math.max(nightAlpha, GROVE_DUSK_ALPHA * dusk);
-    // Hidden rather than merely transparent. A rectangle at alpha zero is
-    // still a screen-sized quad handed to the renderer every frame, and by
-    // day there are two thirds of a day's worth of them.
-    this.nightOverlay?.setFillStyle(mixTint(dusk), alpha).setVisible(alpha > 0);
-    const strength = alpha / MAX_NIGHT_ALPHA;
-    const player = this.playerGlow;
-    player?.setVisible(alpha > 0);
-    if (player && alpha > 0) {
-      // From the sprite, not from the tile she is booked as standing on. A
-      // step takes a couple of hundred milliseconds and the light was being
-      // placed on whole tiles, so it jumped a tile at a time while she walked
-      // smoothly underneath it. Same reasoning as the depth sort just below
-      // the clock: follow the sprite's own position and it stays right
-      // part-way through a step.
-      const at = this.screenOfPoint(this.player.x, this.player.y - TILE_SIZE / 2);
-      player
-        .setPosition(at.x, at.y)
-        .setDisplaySize(
-          PLAYER_LIGHT_RADIUS * 2 * this.lightScale,
-          PLAYER_LIGHT_RADIUS * 2 * this.lightScale,
-        )
-        .setAlpha(strength * PLAYER_GLOW_ALPHA);
-    }
-    for (const [key, glow] of this.lampGlows) {
-      const cell = this.lamps.get(key);
-      glow.setVisible(cell !== undefined && alpha > 0);
-      if (!cell || alpha <= 0) continue;
-      const at = this.screenOf(cell.col, cell.row);
-      glow
-        .setPosition(at.x, at.y - TILE_SIZE)
-        .setDisplaySize(
-          LAMP_LIGHT_RADIUS * 2 * this.lightScale,
-          LAMP_LIGHT_RADIUS * 2 * this.lightScale,
-        )
-        .setAlpha(strength * LAMP_GLOW_ALPHA);
-    }
-    this.paintTree();
-    this.paintHearth(strength);
-    this.paintRoomLights(strength);
-    this.paintWindows(strength);
-  }
-
-  /**
-   * The great tree, breathing while it still wants something.
-   *
-   * Slower than anything else that pulses here — a fire flickers, an orb
-   * breathes at two and a half seconds, and this takes four. It is a tree,
-   * and it is asking rather than burning.
-   *
-   * Drawn over the crown rather than the trunk: the crown is the part of it
-   * anybody looks at, and a glow at the foot would light the grass instead
-   * of the tree.
-   */
-  private paintTree(): void {
-    const glow = this.treeGlow;
-    if (!glow) return;
-    if (this.interior || this.groveDone) {
-      glow.setVisible(false);
-      return;
-    }
-    const at = this.screenOf(this.grove.tree.col + 1, this.grove.tree.row);
-    glow
-      .setVisible(true)
-      .setPosition(at.x, at.y - TREE_GLOW_RISE)
-      .setDisplaySize(
-        TREE_LIGHT_RADIUS * 2 * this.lightScale,
-        TREE_LIGHT_RADIUS * 2 * this.lightScale,
-      )
-      .setAlpha(TREE_GLOW_ALPHA * lightBreath(this.time.now, TREE_BREATH_MS, TREE_BREATH));
   }
 
   /**
@@ -3502,51 +2789,6 @@ export class GameScene extends Phaser.Scene {
 
   private checkGrove(): void {
     this.groveDone = groveProgress(this.worldGrid, this.grove).task === GroveTask.Done;
-  }
-
-  /**
-   * The fire in a cottage, throwing light once the room goes dark.
-   *
-   * The room already had a fire — eight frames of it, burning at every hour
-   * of the day — and at night it was the darkest thing in the room, while a
-   * lamp on the plaza outside lit the ground round it. A fire that gives no
-   * light is a picture of a fire.
-   *
-   * Half a tile up from the cell's feet, which puts it on the flame: the
-   * hearth is set into the north wall, so the fire sits above the floor line
-   * rather than on it. Measured off the room on screen rather than reasoned
-   * about — it is the one number in here no test can check.
-   *
-   * The flicker comes from the room sprite's own frame, so the light moves
-   * when the flame does. See `HEARTH_FLICKER`.
-   */
-  private paintHearth(strength: number): void {
-    // The flame that drives the flicker. In a room that is one animated
-    // picture it is the picture; in a room assembled from parts it is the
-    // fireplace, which is the only piece that moves — and a RenderTexture
-    // has no `anims` at all, which is what asking the wrong one cost.
-    const flame = this.interior?.fires[0] ?? (this.interior?.canvas ? null : this.interior?.image);
-    const frames = flame?.anims?.currentAnim?.frames.length ?? 1;
-    const index = flame?.anims?.currentFrame?.index ?? 1;
-    const phase = frames > 1 ? ((index - 1) % frames) / frames : 0;
-    for (const [at, { cell, glow }] of this.hearths.entries()) {
-      glow.setVisible(strength > 0);
-      if (strength <= 0) continue;
-      const where = this.screenOf(cell.col, cell.row);
-      // Each fire a third of a beat behind the one before it. They are all
-      // driven by the same animation, so left alone a room of stoves would
-      // pulse in unison — which reads as the *room* dimming rather than as
-      // several fires burning.
-      const own = phase + (at % 3) / 3;
-      const flicker = 1 - (HEARTH_FLICKER * (1 - Math.cos(own * Math.PI * 2))) / 2;
-      glow
-        .setPosition(where.x, where.y - TILE_SIZE)
-        .setDisplaySize(
-          HEARTH_LIGHT_RADIUS * 2 * this.lightScale,
-          HEARTH_LIGHT_RADIUS * 2 * this.lightScale,
-        )
-        .setAlpha(strength * HEARTH_GLOW_ALPHA * flicker);
-    }
   }
 
   /**
@@ -3580,184 +2822,8 @@ export class GameScene extends Phaser.Scene {
         x: this.originX + origin.x + x + width / 2,
         y: this.originY + origin.y + y + height / 2,
       },
-      glow: this.ui(
-        this.add
-          .image(0, 0, LIGHT_TEXTURE)
-          .setOrigin(0.5)
-          .setScrollFactor(0)
-          .setDepth(NIGHT_TINT_DEPTH + 1)
-          .setBlendMode(Phaser.BlendModes.ADD)
-          .setTint(WINDOW_GLOW_COLOR)
-          .setVisible(false),
-      ),
+      glow: this.lighting.newGlow(WINDOW_GLOW_COLOR),
     }));
-  }
-
-  /**
-   * Light the village's windows as the evening comes on.
-   *
-   * Not all at once. Each house has its own moment in the dusk, stable per
-   * world — a square of windows coming on together reads as a switch being
-   * thrown rather than as evening — and every one of them is burning by the
-   * time the night is fully down.
-   *
-   * Off-screen ones are hidden rather than placed: the glow does not scroll,
-   * so a house behind the camera would otherwise put its light wherever its
-   * world position happened to project to.
-   */
-  private paintWindows(darkness: number): void {
-    const { width, height } = this.scale;
-    const indoors = this.interior !== null;
-    for (const building of this.buildings) {
-      if (building.windows.length === 0) continue;
-      const lit = indoors ? 0 : windowBrightness(darkness, building.lightsAt);
-      for (const { at, glow } of building.windows) {
-        if (lit <= 0) {
-          glow.setVisible(false);
-          continue;
-        }
-        const on = this.screenOfPoint(at.x, at.y);
-        const near =
-          on.x > -WINDOW_LIGHT_RADIUS &&
-          on.y > -WINDOW_LIGHT_RADIUS &&
-          on.x < width + WINDOW_LIGHT_RADIUS &&
-          on.y < height + WINDOW_LIGHT_RADIUS;
-        glow.setVisible(near);
-        if (!near) continue;
-        glow
-          .setPosition(on.x, on.y)
-          .setDisplaySize(
-            WINDOW_LIGHT_RADIUS * 2 * this.lightScale,
-            WINDOW_LIGHT_RADIUS * 2 * this.lightScale,
-          )
-          .setAlpha(lit * WINDOW_GLOW_ALPHA);
-      }
-    }
-  }
-
-  /**
-   * The lamps, tubes and orbs, once it is dark enough for them to matter.
-   *
-   * Same machinery as the hearth and the lamp posts — an additive halo over
-   * the tint, growing with the darkness — and the differences between them
-   * are the whole point: how big, how cold, and how much they move.
-   *
-   * The movement runs off the clock rather than off an animation frame,
-   * because the generator draws all three still. That is deliberate: a lamp
-   * that is on is a lamp that is on, and moving the *light* over an orb
-   * instead of the orb costs nothing and keeps three of the seven rooms at a
-   * single frame rather than eight nearly identical ones.
-   *
-   * Half a tile up from the cell's feet, as the hearth is: a lantern and a
-   * tube are mounted on the north wall, and an orb floats.
-   */
-  private paintRoomLights(strength: number): void {
-    if (this.roomGlows.length === 0) return;
-    const now = this.time.now;
-    for (const { light, glow } of this.roomGlows) {
-      glow.setVisible(strength > 0);
-      if (strength <= 0) continue;
-      const how = ROOM_LIGHTS[light.kind];
-      if (!how) continue;
-      const breath = lightBreath(now, how.period, how.move);
-      const at = this.screenOf(light.cell.col, light.cell.row);
-      glow
-        .setPosition(at.x, at.y - TILE_SIZE)
-        .setDisplaySize(how.radius * 2, how.radius * 2)
-        .setAlpha(strength * how.alpha * breath);
-    }
-  }
-
-  /**
-   * Light whatever the room is lit by: a fire, lanterns, tubes, or orbs.
-   *
-   * Read off the room's furniture, so a room the generator relights needs
-   * nothing here — and a kind this game has not learned yet is dropped by
-   * `roomLights` rather than drawn in some default colour.
-   */
-  /**
-   * One more fire, at a cell the caller has worked out.
-   *
-   * **Adds rather than replaces**, which is the whole of the stove fix. It
-   * used to snuff the room first, on the argument that `paintPlan` runs once
-   * per square built and nine squares would otherwise leave nine orphaned
-   * glows. That argument is sound and the snuff was in the wrong place for
-   * it: the routine that redraws the furniture already clears the room once
-   * before its loop, so putting the last fire out on the way to lighting the
-   * next only ever meant a room could have one.
-   */
-  private lightHearthAt(cell: GridPoint): void {
-    this.hearths.push({ cell, glow: this.newGlow(HEARTH_GLOW_COLOR) });
-  }
-
-  private lightHearth(sidecar: InteriorSidecar): void {
-    this.snuffHearth();
-    for (const light of roomLights(sidecar)) {
-      if (light.kind === LightKind.Fire) {
-        this.lightHearthAt(light.cell);
-        continue;
-      }
-      const how = ROOM_LIGHTS[light.kind];
-      if (!how) continue;
-      this.roomGlows.push({ light, glow: this.newGlow(how.color) });
-    }
-  }
-
-  /** One halo, additive over the night tint and hidden until there is one. */
-  private newGlow(color: number): Phaser.GameObjects.Image {
-    return this.ui(
-      this.add
-        .image(0, 0, LIGHT_TEXTURE)
-        .setOrigin(0.5)
-        .setScrollFactor(0)
-        .setDepth(NIGHT_TINT_DEPTH + 1)
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setTint(color)
-        .setVisible(false),
-    );
-  }
-
-  /**
-   * And put it out on the way out of the door.
-   *
-   * Called wherever the room sprite is torn down rather than from a handler
-   * of its own: the glow does not scroll and is placed from `screenOf`, so
-   * one left behind would be a patch of firelight hanging in the middle of
-   * the screen over open country.
-   */
-  private snuffHearth(): void {
-    for (const { glow } of this.hearths) glow.destroy();
-    this.hearths = [];
-    for (const { glow } of this.roomGlows) glow.destroy();
-    this.roomGlows = [];
-  }
-
-  /** Remember a lamp, and give it the halo that says it is lit. */
-  private lightLamp(col: number, row: number): void {
-    const key = tileKey(col, row);
-    if (this.lampGlows.has(key)) return;
-    this.lamps.set(key, { col, row });
-    this.lampGlows.set(
-      key,
-      this.ui(
-        this.add
-          .image(0, 0, LIGHT_TEXTURE)
-          .setOrigin(0.5)
-          .setScrollFactor(0)
-          .setDepth(NIGHT_TINT_DEPTH + 1)
-          .setBlendMode(Phaser.BlendModes.ADD)
-          .setTint(LAMP_GLOW_COLOR)
-          .setVisible(false),
-      ),
-    );
-  }
-
-  /** A lamp picked back up stops burning, and its halo goes with it. */
-  private snuffLamp(col: number, row: number): void {
-    const key = tileKey(col, row);
-    if (!this.lamps.delete(key)) return;
-    this.lampGlows.get(key)?.destroy();
-    this.lampGlows.delete(key);
   }
 
   /**
@@ -3780,287 +2846,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   // --- Asset metadata ----------------------------------------------------
-
-  // Everything the renderer needs to know about the art is read from the art
-  // itself: variation counts from the atlas's frame names, footprints and
-  // draw offsets from each building's sidecar. Nothing about the generator's
-  // output is restated as a constant here.
-  private loadAssetMetadata(): void {
-    const texture = this.textures.get(TERRAIN_ATLAS_KEY);
-    this.terrainVariations = buildVariationIndex(texture.getFrameNames());
-    this.waterFrames = waterFrames(texture.getFrameNames());
-    if (this.terrainVariations.size === 0) {
-      throw new Error(`terrain atlas "${TERRAIN_ATLAS_KEY}" loaded no frames`);
-    }
-    const cliffs = this.textures.get(CLIFF_ATLAS_KEY);
-    this.cliffVariations = buildVariationIndex(cliffs.getFrameNames());
-    if (this.cliffVariations.size === 0) {
-      throw new Error(`cliff atlas "${CLIFF_ATLAS_KEY}" loaded no frames`);
-    }
-
-    for (const sprite of BUILDING_SPRITES) {
-      const sidecar = this.cache.json.get(sidecarKey(sprite)) as BuildingSidecar | undefined;
-      if (!sidecar) throw new Error(`missing sidecar for building "${sprite}"`);
-      this.buildingSidecars.set(sprite, sidecar);
-      // One looping smoke animation per door position, built from the ranges
-      // the sidecar names — so the door opens by switching animation, and
-      // the smoke keeps drifting either way.
-      this.registerBuildingAnimsFor(sprite, sprite, sidecar);
-    }
-
-    this.registerCharacterAnims();
-    this.registerInteriorAnims();
-    this.registerPlantAnims();
-    this.registerFixtureAnims();
-    this.registerFlowerAnims();
-    this.registerSceneryAnims();
-    this.registerLandmarkAnims();
-    this.readDecking();
-    this.registerEffectAnims();
-  }
-
-  // Spell effects. Unlike every other animation registered here these do not
-  // repeat: `loops` comes from the sidecar rather than being decided in this
-  // file, because whether something is a loop or a gesture is a property of
-  // how it was drawn.
-  private registerEffectAnims(): void {
-    for (const effect of EFFECT_TYPES) {
-      const sidecar = this.cache.json.get(effectSidecarKey(effect)) as EffectSidecar | undefined;
-      if (!sidecar) throw new Error(`missing sidecar for effect "${effect}"`);
-      for (const [name, range] of Object.entries(sidecar.animations)) {
-        const key = `effect-${effect}-${name}`;
-        if (this.anims.exists(key)) continue;
-        this.anims.create({
-          key,
-          frames: this.anims.generateFrameNumbers(effectSheetKey(effect), {
-            start: range.start,
-            end: range.end,
-          }),
-          frameRate: EFFECT_FPS,
-          repeat: sidecar.loops ? -1 : 0,
-        });
-      }
-    }
-  }
-
-  private registerSceneryAnims(): void {
-    for (const kind of SCENERY_KINDS) {
-      const sidecar = this.cache.json.get(scenerySidecarKey(kind)) as ObjectSidecar | undefined;
-      if (!sidecar) throw new Error(`missing sidecar for scenery "${kind}"`);
-      this.scenerySidecars.set(kind, sidecar);
-      // One animation per individual, from the ranges the sidecar names.
-      for (const [name, range] of Object.entries(sidecar.animations)) {
-        const instance = Number(name.replace(/^instance_/, ""));
-        if (!Number.isInteger(instance)) continue;
-        const key = sceneryAnimKey(kind, instance);
-        if (this.anims.exists(key)) continue;
-        this.anims.create({
-          key,
-          frames: this.anims.generateFrameNumbers(scenerySheetKey(kind), {
-            start: range.start,
-            end: range.end,
-          }),
-          frameRate: SCENERY_ANIM_FPS,
-          repeat: -1,
-        });
-      }
-    }
-  }
-
-  /**
-   * The sway of the one big thing in a place.
-   *
-   * Slower than the wood around it — a crown that size does not move at a
-   * sapling's rate, and matching them would make the grove read as one
-   * animation played at every scale at once.
-   */
-  /** How many planks there are to choose between. No animation: wood. */
-  private readDecking(): void {
-    const sidecar = this.cache.json.get(DECK_SIDECAR_KEY) as DeckSidecar | undefined;
-    if (!sidecar) throw new Error("missing sidecar for the harbour's decking");
-    this.deckVariations = Math.max(1, sidecar.variations);
-  }
-
-  private registerLandmarkAnims(): void {
-    for (const landmark of LANDMARK_TYPES) {
-      const sidecar = this.cache.json.get(landmarkSidecarKey(landmark)) as
-        | LandmarkSidecar
-        | undefined;
-      if (!sidecar) throw new Error(`missing sidecar for landmark "${landmark}"`);
-      this.landmarkSidecars.set(landmark, sidecar);
-      const key = landmarkAnimKey(landmark);
-      if (this.anims.exists(key)) continue;
-      this.anims.create({
-        key,
-        frames: this.anims.generateFrameNumbers(landmarkSheetKey(landmark), {
-          start: 0,
-          end: sidecar.frame_count - 1,
-        }),
-        frameRate: LANDMARK_ANIM_FPS,
-        repeat: -1,
-      });
-    }
-    // And the skyline, which is drawn by the same generator module and is
-    // not a landmark. Registered here rather than in a routine of its own
-    // because it is the same three lines and the same sidecar shape — what
-    // differs about a blimp is that nothing ever places one.
-    for (const thing of SKY_THINGS) {
-      const sidecar = this.cache.json.get(skySidecarKey(thing)) as LandmarkSidecar | undefined;
-      if (!sidecar) throw new Error(`missing sidecar for the skyline's "${thing}"`);
-      const key = skyAnimKey(thing);
-      if (this.anims.exists(key)) continue;
-      this.anims.create({
-        key,
-        frames: this.anims.generateFrameNumbers(skySheetKey(thing), {
-          start: 0,
-          end: sidecar.frame_count - 1,
-        }),
-        frameRate: LANDMARK_ANIM_FPS,
-        repeat: -1,
-      });
-    }
-  }
-
-  /**
-   * One looping sway per flower per colour.
-   *
-   * Five animations each rather than one, because the sheet holds five
-   * colourways end to end and a look is a *slice* of it. Registered up front
-   * for every colour whether or not this child has found the flower: an
-   * animation is a table entry, and building one the moment a child taps a
-   * colour would be building it during the tap.
-   */
-  private registerFlowerAnims(): void {
-    for (const flower of FLOWER_TYPES) {
-      const sidecar = this.cache.json.get(flowerSidecarKey(flower)) as FixtureSidecar | undefined;
-      if (!sidecar) throw new Error(`missing sidecar for flower "${flower}"`);
-      this.flowerSidecars.set(flower, sidecar);
-      for (let look = 0; look < FLOWER_LOOKS; look++) {
-        const key = flowerAnimKey(flower, look);
-        if (this.anims.exists(key)) continue;
-        this.anims.create({
-          key,
-          frames: this.anims.generateFrameNumbers(flowerSheetKey(flower), {
-            frames: flowerFrames(look, sidecar.frames_per_look),
-          }),
-          frameRate: FIXTURE_ANIM_FPS,
-          repeat: -1,
-        });
-      }
-    }
-  }
-
-  private registerFixtureAnims(): void {
-    for (const fixture of FIXTURE_TYPES) {
-      const sidecar = this.cache.json.get(fixtureSidecarKey(fixture)) as FixtureSidecar | undefined;
-      if (!sidecar) throw new Error(`missing sidecar for fixture "${fixture}"`);
-      this.fixtureSidecars.set(fixture, sidecar);
-      // One animation per drawing, the way the flowers have one per colour.
-      // A sheet with three ways round played end to end is a bench turning
-      // itself round twice a second — which is what a single animation over
-      // `frame_count` does the moment a fixture gains a second look.
-      for (let look = 0; look < Math.max(1, sidecar.looks); look++) {
-        const key = fixtureAnimKey(fixture, look);
-        if (this.anims.exists(key)) continue;
-        this.anims.create({
-          key,
-          frames: this.anims.generateFrameNumbers(fixtureSheetKey(fixture), {
-            frames: flowerFrames(look, sidecar.frames_per_look),
-          }),
-          frameRate: FIXTURE_ANIM_FPS,
-          repeat: -1,
-        });
-      }
-    }
-  }
-
-  // One looping sway per growth stage, from the ranges the sidecar names.
-  // Only the planted stage is reachable today (see PLANTED_STAGE), but the
-  // others cost nothing to register and are what tending will switch to.
-  private registerPlantAnims(): void {
-    for (const plant of PLANT_TYPES) {
-      const sidecar = this.cache.json.get(plantSidecarKey(plant)) as PlantSidecar | undefined;
-      if (!sidecar) throw new Error(`missing sidecar for plant "${plant}"`);
-      for (const [name, range] of Object.entries(sidecar.animations)) {
-        const key = `plant-${plant}-${name}`;
-        if (this.anims.exists(key)) continue;
-        this.anims.create({
-          key,
-          frames: this.anims.generateFrameNumbers(plantSheetKey(plant), {
-            start: range.start,
-            end: range.end,
-          }),
-          frameRate: PLANT_SWAY_FPS,
-          repeat: -1,
-        });
-      }
-    }
-  }
-
-  private registerInteriorAnims(): void {
-    // The parts the cottage can be rebuilt from, if this build shipped them.
-    this.growable =
-      (this.cache.json.get(growableSidecarKey(GROWABLE_ROOM)) as GrowableSidecar | undefined) ??
-      null;
-    for (const room of INTERIOR_ROOMS) {
-      const sidecar = this.cache.json.get(interiorSidecarKey(room)) as InteriorSidecar | undefined;
-      if (!sidecar) throw new Error(`missing sidecar for interior "${room}"`);
-      this.interiorSidecars.set(room, sidecar);
-      const frames = sidecar.sheet?.frame_count ?? 1;
-      // Most rooms are a single still frame; only the ones with something
-      // moving in them (a fire) ship more, so there is nothing to loop.
-      if (frames < 2) continue;
-      const key = interiorAnimKey(room);
-      if (this.anims.exists(key)) continue;
-      this.anims.create({
-        key,
-        frames: this.anims.generateFrameNumbers(interiorSheetKey(room), {
-          start: 0,
-          end: frames - 1,
-        }),
-        frameRate: BUILDING_ANIM_FPS,
-        repeat: -1,
-      });
-    }
-  }
-
-  /**
-   * A building's door animations, for one name against one sheet.
-   *
-   * The two come apart for a repainted house and only for one: its sheet is
-   * a recoloured copy registered under a name of its own, and the frames
-   * inside are the cottage's in the cottage's order. Repainting cannot move
-   * a frame, so reading the ranges from the sidecar it was copied from is
-   * not an approximation — it is the same sheet.
-   */
-  private registerBuildingAnimsFor(
-    name: string,
-    sprite: BuildingSprite,
-    sidecar: BuildingSidecar,
-  ): void {
-    // One looping smoke animation per door position, built from the ranges
-    // the sidecar names — so the door opens by switching animation, and the
-    // smoke keeps drifting either way.
-    // Keyed by the row's own name, whatever it is. This took the name apart
-    // and put it back together — `door_half` stripped to `half` and rebuilt
-    // as `door_half` — which is the same string right up until a row is not
-    // a door. The ship's `sail_furled` came back as `door_sail_furled`,
-    // nothing asked for that, and the harbour drew no ships.
-    for (const [animation, range] of Object.entries(sidecar.animations)) {
-      const key = buildingRowKey(name, animation);
-      if (this.anims.exists(key)) continue;
-      this.anims.create({
-        key,
-        frames: this.anims.generateFrameNumbers(spriteSheetKey(name), {
-          start: range.start,
-          end: range.end,
-        }),
-        frameRate: BUILDING_ANIM_FPS,
-        repeat: -1,
-      });
-    }
-    void sprite;
-  }
 
   /**
    * The sheet one particular house is drawn from.
@@ -4097,22 +2882,8 @@ export class GameScene extends Phaser.Scene {
       sidecar.sheet,
     );
     if (painted !== spriteSheetKey(name)) return sprite;
-    this.registerBuildingAnimsFor(name, sprite, sidecar);
+    registerBuildingAnimsFor(this, name, sprite, sidecar);
     return name;
-  }
-
-  // One Phaser animation per (character, animation, facing), built straight
-  // from the frame ranges the sidecar names. Nothing here knows how many
-  // frames a walk cycle has or which row it sits on — that is the sheet's
-  // business, and reading it back is what keeps the two in step.
-  private registerCharacterAnims(): void {
-    for (const character of ALL_CHARACTERS) this.registerAnimsFor(character, character);
-    // Animals go through exactly the same machinery: their sheets are laid
-    // out the way a villager's is, so nothing about walking, facing or
-    // depth-sorting has to learn that a chicken is not a person.
-    for (const kind of ANIMAL_KINDS) {
-      this.registerAnimsFor(animalSheetKey(kind), animalSidecarKey(kind), animalSheetKey(kind));
-    }
   }
 
   /**
@@ -4135,49 +2906,15 @@ export class GameScene extends Phaser.Scene {
     const character = avatarTexture(this, this.catalogue, avatar, sidecar.sheet);
     // Skipped when the recolour fell back to the plain body sheet, whose
     // animations the cast loop has already built.
-    if (!ALL_CHARACTERS.includes(character)) this.registerAnimsFor(character, avatar.body);
+    if (!ALL_CHARACTERS.includes(character))
+      registerCharacterAnimsFor(this, character, avatar.body);
     return character;
   }
 
-  /**
-   * Build one character's animations from one sidecar's frame ranges.
-   *
-   * The two names come apart for the player and only for the player: their
-   * sheet is a recoloured copy registered under a name of its own (see
-   * src/avatar/texture.ts), but the frames inside it are the body's, in the
-   * body's order. Recolouring cannot move a frame — it repaints pixels — so
-   * reading the ranges from the body it was copied from is not an
-   * approximation, it is the same sheet.
-   */
-  private registerAnimsFor(character: string, sidecarFrom: string, sheetKey?: string): void {
-    const sidecar = this.cache.json.get(
-      sheetKey ? sidecarFrom : characterSidecarKey(sidecarFrom),
-    ) as CharacterSidecar | undefined;
-    if (!sidecar) throw new Error(`missing sidecar for character "${sidecarFrom}"`);
-    for (const [name, range] of Object.entries(sidecar.animations)) {
-      const [animation, facing] = name.split("_");
-      if (!animation || !facing) throw new Error(`${sidecarFrom}: odd animation name "${name}"`);
-      if (!CHARACTER_ANIMATIONS.includes(animation)) continue;
-      const key = characterAnimKey(character, animation, facing as Facing);
-      if (this.anims.exists(key)) continue;
-      this.anims.create({
-        key,
-        frames: this.anims.generateFrameNumbers(sheetKey ?? characterSheetKey(character), {
-          start: range.start,
-          end: range.end,
-        }),
-        frameRate: FPS_FOR_ANIMATION[animation] ?? IDLE_FPS,
-        // A gesture plays once; idle and walk loop. Registering a one-shot
-        // with repeat -1 does not merely make it repeat: ANIMATION_COMPLETE
-        // never fires, so the flag that says "a gesture is running" is never
-        // cleared and the character bows for the rest of the session,
-        // walking included. Nothing on screen says so either — a plant
-        // animation that loops passes through the standing pose twice a
-        // cycle, so it reads as a character with a twitch rather than as a
-        // stuck state.
-        repeat: ONE_SHOT_ANIMATIONS.includes(animation) ? 0 : -1,
-      });
-    }
+  /** Sort a villager or animal by its feet and keep its animation in step with its state. */
+  private animateWalker(npc: NpcRuntime): void {
+    npc.sprite.setDepth(npc.sprite.y);
+    this.playCharacterAnim(npc.sprite, npc.character, npc.facing, npc.isMoving);
   }
 
   // Idle or walk, in whichever direction they last moved. Called every frame
@@ -4237,379 +2974,6 @@ export class GameScene extends Phaser.Scene {
         .play(effectAnimKey(effect)),
     );
     sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => sprite.destroy());
-  }
-
-  // --- Chunked terrain rendering ------------------------------------
-
-  /**
-   * Make sure the chunks under the camera exist.
-   *
-   * `around` overrides where it looks, and the portal is why: the camera
-   * follows the player, so the frame in which somebody is set down two
-   * hundred cells away still has the *old* view on it — and asking that view
-   * for chunks paints the ground they just left while the screen shows where
-   * they arrived. The one frame of black that came out of it was the most
-   * expensive-looking bug in the game.
-   */
-  private refreshVisibleChunks(around?: ScreenPoint): void {
-    const camera = this.cameras.main;
-    const seen = { width: camera.width / camera.zoom, height: camera.height / camera.zoom };
-    const view = around
-      ? {
-          x: around.x - seen.width / 2,
-          y: around.y - seen.height / 2,
-          width: seen.width,
-          height: seen.height,
-        }
-      : camera.worldView;
-    const minLocal = { x: view.x - this.originX, y: view.y - this.originY };
-    const maxLocal = {
-      x: view.x + view.width - this.originX,
-      y: view.y + view.height - this.originY,
-    };
-    const corners = [
-      screenToGrid(minLocal.x, minLocal.y),
-      screenToGrid(maxLocal.x, minLocal.y),
-      screenToGrid(minLocal.x, maxLocal.y),
-      screenToGrid(maxLocal.x, maxLocal.y),
-    ];
-    const cols = corners.map((c) => c.col);
-    const rows = corners.map((c) => c.row);
-    const tiles = {
-      minCol: Math.min(...cols),
-      maxCol: Math.max(...cols),
-      minRow: Math.min(...rows),
-      maxRow: Math.max(...rows),
-    };
-    const visible = chunksCoveringTileRange(
-      tiles,
-      this.grid.width,
-      this.grid.height,
-      CHUNK_VIEW_MARGIN,
-    );
-    const visibleKeys = new Set(visible.map(chunkKey));
-    // The same sum again with no ring round it: what the screen actually
-    // covers. See SCENERY_VIEW_MARGIN.
-    const onScreen = new Set(
-      chunksCoveringTileRange(tiles, this.grid.width, this.grid.height, SCENERY_VIEW_MARGIN).map(
-        chunkKey,
-      ),
-    );
-
-    for (const chunk of visible) {
-      const key = chunkKey(chunk);
-      const entry = this.activeChunks.get(key);
-      if (entry) {
-        entry.texture.setVisible(true);
-        entry.lastUsedAt = this.frameCounter;
-      } else {
-        this.activateChunk(chunk);
-      }
-      if (onScreen.has(key)) {
-        this.spawnSceneryIn(key);
-        this.spawnWaterIn(key, chunk);
-      }
-    }
-
-    for (const [key, entry] of this.activeChunks) {
-      if (!visibleKeys.has(key)) entry.texture.setVisible(false);
-    }
-
-    // Scenery lives only while its chunk is on screen, and the terrain cache
-    // outlives it by a long way. They are cached apart because they cost
-    // different things: a chunk's ground is one texture, cheap to keep and
-    // expensive to redraw, so sixty of them are held against panning back and
-    // forth. Its trees are hundreds of animating sprites, cheap to remake and
-    // expensive to keep — sixty chunks of *those* came to ten thousand
-    // sprites after a few portal jumps, none of them on screen.
-    for (const key of [...this.liveScenery.keys()]) {
-      if (!onScreen.has(key)) this.despawnSceneryIn(key);
-    }
-    for (const key of [...this.liveWater.keys()]) {
-      if (!onScreen.has(key)) this.despawnWaterIn(key);
-    }
-    this.evictColdChunks(visibleKeys);
-  }
-
-  private activateChunk(chunk: ChunkCoord): void {
-    const bounds = dualChunkScreenBounds(chunk);
-    const minX = bounds.minX;
-    const minY = bounds.minY;
-
-    const texture = this.add.renderTexture(
-      this.originX + minX,
-      this.originY + minY,
-      bounds.maxX - minX,
-      bounds.maxY - minY,
-    );
-    texture.setOrigin(0, 0);
-    texture.setDepth(CHUNK_DEPTH);
-    this.world(texture);
-
-    // Buildings are standalone animated Sprites with their own depth sort
-    // (see spawnBuildings), not baked into this RenderTexture — a building
-    // rises above and overhangs its own footprint, which a flat tile stamped
-    // into a chunk can't express, and has to sort against the player and
-    // NPCs walking around it, which a static baked texture can't either.
-    //
-    // Terrain is now one draw per dual tile, full stop. The atlas ships a
-    // finished tile for every corner-terrain combination, so there is no
-    // base layer, no priority pass and no per-terrain mask — what used to be
-    // a stack of up to 8 semi-transparent draws per tile (with the
-    // compositing subtleties that came with it) is a single opaque one.
-    //
-    // beginDraw/batchDrawFrame/endDraw wraps the whole chunk in one GPU
-    // flush (not stamp(), which is draw() under the hood — a full flush per
-    // call). Even at one draw per tile that is CHUNK_SIZE^2 of them, and
-    // stamp()-per-tile previously measured as an effectively unrecoverable
-    // hang under software-rendered WebGL; Phaser's own docs call this batch
-    // API out for exactly "large numbers of objects."
-    const range = dualTileRange(chunk);
-    // The dual grid is only defined from DUAL_ORIGIN to one short of the
-    // data grid's extent; a chunk at the world edge covers tiles past that,
-    // which would draw a duplicate of the clamped edge outside the world.
-    const minCol = Math.max(range.minCol, DUAL_ORIGIN);
-    const minRow = Math.max(range.minRow, DUAL_ORIGIN);
-    const maxCol = Math.min(range.maxCol, this.grid.width - 1);
-    const maxRow = Math.min(range.maxRow, this.grid.height - 1);
-
-    this.paintTiles(texture, { minCol, minRow, maxCol, maxRow }, minX, minY);
-
-    this.activeChunks.set(chunkKey(chunk), { texture, lastUsedAt: this.frameCounter });
-  }
-
-  /**
-   * Stamp a range of dual tiles into a texture.
-   *
-   * Pulled out of the chunk renderer because the portal wants the same
-   * picture: a hole that showed anything other than what the ground actually
-   * looks like there would be a lie about the place it is a hole into. One
-   * loop, so the two can never disagree.
-   *
-   * `offsetX`/`offsetY` are the world pixel the texture's top-left sits at.
-   */
-  private paintTiles(
-    texture: Phaser.GameObjects.RenderTexture,
-    range: { minCol: number; minRow: number; maxCol: number; maxRow: number },
-    offsetX: number,
-    offsetY: number,
-  ): void {
-    texture.beginDraw();
-    for (let dualRow = range.minRow; dualRow <= range.maxRow; dualRow++) {
-      for (let dualCol = range.minCol; dualCol <= range.maxCol; dualCol++) {
-        const corners = cornerTerrainsFor(this.grid, dualCol, dualRow);
-        const p = gridToScreen(dualCol, dualRow);
-        // A tile with a step in it is drawn from the cliff atlas instead of
-        // the terrain one — the cliff tile *is* a complete tile, ground on
-        // both sides included, so this is a choice of atlas rather than a
-        // second layer over the first. Asked first and answered null for
-        // almost every tile, since almost every tile is flat.
-        const levels = cornerLevelsFor(this.grid, dualCol, dualRow);
-        if (hasStep(levels)) {
-          const cliff = cliffFrameFor(
-            this.grid,
-            corners,
-            levels,
-            dualCol,
-            dualRow,
-            this.cliffVariations,
-          );
-          if (cliff) {
-            texture.batchDrawFrame(
-              CLIFF_ATLAS_KEY,
-              cliff,
-              p.x + DUAL_OFFSET - offsetX,
-              p.y + DUAL_OFFSET - offsetY,
-            );
-            continue;
-          }
-        }
-        const frame = frameFor(corners, dualCol, dualRow, this.terrainVariations);
-        if (!frame) continue;
-        texture.batchDrawFrame(
-          TERRAIN_ATLAS_KEY,
-          frame,
-          p.x + DUAL_OFFSET - offsetX,
-          p.y + DUAL_OFFSET - offsetY,
-        );
-      }
-    }
-    // The planking, over the ground rather than blended into it — see
-    // decking.ts for why it is not a terrain. Drawn on the *tile* grid
-    // rather than the dual grid the terrain uses, because a plank covers one
-    // whole cell rather than sitting on the corner between four of them, so
-    // it takes no DUAL_OFFSET.
-    //
-    // The whole range is walked rather than a list of the harbour's planks:
-    // `isBridged` is a set lookup and false for every cell in the world but
-    // a few dozen, and a per-chunk plank list would be one more thing to
-    // keep in step with a grid that is regenerated from its seed anyway.
-    for (let row = range.minRow; row <= range.maxRow; row++) {
-      for (let col = range.minCol; col <= range.maxCol; col++) {
-        if (!this.grid.isBridged(col, row)) continue;
-        const p = gridToScreen(col, row);
-        texture.batchDrawFrame(
-          DECK_SHEET_KEY,
-          variationFor(col, row, this.deckVariations),
-          p.x - offsetX,
-          p.y - offsetY,
-        );
-      }
-    }
-    texture.endDraw();
-  }
-
-  /** Sort the world's scenery into the chunk each piece stands in, once. */
-  private bucketScenery(objects: readonly PlacedObject[]): void {
-    this.sceneryByChunk.clear();
-    for (const object of objects) {
-      if (sceneryKind(object.type) === null) continue;
-      const key = chunkKey(dualTileToChunk(object.col, object.row));
-      const bucket = this.sceneryByChunk.get(key);
-      if (bucket) bucket.push(object);
-      else this.sceneryByChunk.set(key, [object]);
-    }
-  }
-
-  /** Put a chunk's trees and rocks on screen, if they are not already. */
-  /**
-   * Show the trees that are on screen and hide the rest.
-   *
-   * Phaser does not cull a plain display list. `willRender` asks whether an
-   * object is visible and whether this camera is allowed to see it, and
-   * nothing asks whether it is *anywhere near* the camera — so every sprite
-   * on the list is transformed and written into the vertex buffer whether it
-   * lands on the screen or a chunk away from it.
-   *
-   * Scenery is spawned a chunk at a time and a chunk is thirty-two tiles
-   * square, so a screen forty tiles wide overlaps six of them: on a desktop
-   * this was submitting the better part of two thousand quads to draw a few
-   * dozen trees. A comparison against the view costs a subtraction each; the
-   * quad it saves costs a great deal more.
-   *
-   * Generous by a tile on every side, because a tree is drawn taller than
-   * the square it stands on and its feet are what is being tested.
-   */
-  private cullScenery(): void {
-    const view = this.cameras.main.worldView;
-    const left = view.x - SCENERY_CULL_MARGIN;
-    const top = view.y - SCENERY_CULL_MARGIN;
-    const right = view.x + view.width + SCENERY_CULL_MARGIN;
-    const bottom = view.y + view.height + SCENERY_CULL_MARGIN;
-    for (const [key, sprites] of this.liveScenery) {
-      const bucket = this.sceneryByChunk.get(key);
-      if (!bucket) continue;
-      for (let at = 0; at < sprites.length; at++) {
-        const sprite = sprites[at];
-        const object = bucket[at];
-        if (!sprite || !object) continue;
-        const feet = this.toFeet(object.col, object.row);
-        const seen = feet.x >= left && feet.x <= right && feet.y >= top && feet.y <= bottom;
-        if (seen === sprite.visible) continue;
-        sprite.setVisible(seen);
-        // And stop it swaying while nobody is looking. A hidden sprite is
-        // still on the update list and still runs its animation forward every
-        // frame; paused, that call turns round at the door. Only on the
-        // change, because pausing something already paused is the same work
-        // this is trying to avoid.
-        if (seen) sprite.anims.resume();
-        else sprite.anims.pause();
-      }
-    }
-  }
-
-  private spawnSceneryIn(key: string): void {
-    if (this.liveScenery.has(key)) return;
-    const objects = this.sceneryByChunk.get(key);
-    if (!objects) return;
-    this.liveScenery.set(
-      key,
-      objects.map((object) => this.spawnScenery(object)),
-    );
-  }
-
-  private despawnSceneryIn(key: string): void {
-    for (const sprite of this.liveScenery.get(key) ?? []) sprite.destroy();
-    this.liveScenery.delete(key);
-  }
-
-  /**
-   * Lay the moving sea under one chunk.
-   *
-   * One image per tile that touches water, which for a chunk out at sea is
-   * every tile in it. Images rather than Sprites because the cycle is driven
-   * from `update` for the whole sea at once: a Sprite each would put an
-   * animation component on every tile of the ocean to tell them all the same
-   * thing.
-   */
-  private spawnWaterIn(key: string, chunk: ChunkCoord): void {
-    if (this.liveWater.has(key) || this.waterFrames.phases <= 0) return;
-    const range = dualTileRange(chunk);
-    const minCol = Math.max(range.minCol, DUAL_ORIGIN);
-    const minRow = Math.max(range.minRow, DUAL_ORIGIN);
-    const maxCol = Math.min(range.maxCol, this.grid.width - 1);
-    const maxRow = Math.min(range.maxRow, this.grid.height - 1);
-
-    const tiles: WaterTile[] = [];
-    for (let row = minRow; row <= maxRow; row++) {
-      for (let col = minCol; col <= maxCol; col++) {
-        if (!touchesWater(cornerTerrainsFor(this.grid, col, row))) continue;
-        const at = gridToScreen(col, row);
-        const image = this.add.image(
-          this.originX + at.x + DUAL_OFFSET,
-          this.originY + at.y + DUAL_OFFSET,
-          TERRAIN_ATLAS_KEY,
-          waveFrameFor(col, row, this.wavePhase, this.waterFrames),
-        );
-        image.setOrigin(0, 0);
-        image.setDepth(WATER_DEPTH);
-        this.world(image);
-        tiles.push({ image, col, row });
-      }
-    }
-    this.liveWater.set(key, tiles);
-  }
-
-  private despawnWaterIn(key: string): void {
-    for (const tile of this.liveWater.get(key) ?? []) tile.image.destroy();
-    this.liveWater.delete(key);
-  }
-
-  /**
-   * Step the whole sea together.
-   *
-   * Together, but not in unison — each tile's phase is offset by a hash of
-   * where it is, so what steps at the same moment is a set of ripples at
-   * different points in the same swell. A sea that all showed the same frame
-   * would read as the screen flickering rather than as water.
-   */
-  private driftWater(time: number): void {
-    if (this.waterFrames.phases <= 0) return;
-    const phase = Math.floor(time / WAVE_STEP_MS) % this.waterFrames.phases;
-    if (phase === this.wavePhase) return;
-    this.wavePhase = phase;
-    for (const tiles of this.liveWater.values()) {
-      for (const tile of tiles) {
-        tile.image.setFrame(waveFrameFor(tile.col, tile.row, phase, this.waterFrames));
-      }
-    }
-  }
-
-  private evictColdChunks(protectedKeys: ReadonlySet<string>): void {
-    if (this.activeChunks.size <= CHUNK_CACHE_LIMIT) return;
-    const evictable = [...this.activeChunks.entries()]
-      .filter(([key]) => !protectedKeys.has(key))
-      .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt);
-    const overBy = this.activeChunks.size - CHUNK_CACHE_LIMIT;
-    for (let i = 0; i < overBy && i < evictable.length; i++) {
-      const item = evictable[i];
-      if (!item) continue;
-      const [key, entry] = item;
-      entry.texture.destroy();
-      this.activeChunks.delete(key);
-      this.despawnSceneryIn(key);
-      this.despawnWaterIn(key);
-    }
   }
 
   // Swing each door according to how close the player is. Chebyshev
@@ -4910,6 +3274,7 @@ export class GameScene extends Phaser.Scene {
     // rebuilding those on every tap.
     this.crateTray = new IconTray(this, {
       texture: uiTextureKey(UiAsset.Crate),
+      cloud: uiTextureKey(UiAsset.ThoughtBubble),
       items: [
         ...CRATE_GROUPS.map((group) => ({
           texture: this.crateFace(group),
@@ -4923,9 +3288,17 @@ export class GameScene extends Phaser.Scene {
         ...PLACEABLE_FIXTURES.map((fixture) => ({
           texture: uiTextureKey(itemIcon(fixture)),
           name: fixture,
-          shown: () => this.crateGroup === groupOf(fixture),
+          // In its group, and — for a machine — only once the mechanic's
+          // job before it is done. See `world/jobs.ts`.
+          shown: () => this.crateGroup === groupOf(fixture) && this.crateOffers(fixture),
           count: () => this.inventory.count(fixture),
           act: () => this.armFixture(fixture),
+          // A cloud on the machines, and only on the machines. They are the
+          // things in here a child cannot guess by looking — a fence is a
+          // fence, and a bench is for sitting on — and they are the only
+          // ones with a price, since everything else in this crate was
+          // bought and is simply *had*. See `TrayItem.tell`.
+          tell: isMachine(fixture) ? () => this.tellAbout(fixture) : undefined,
         })),
         // Furniture goes in the crate with everything else a player puts
         // down: it is the same verb and it should live in the same place.
@@ -5052,7 +3425,7 @@ export class GameScene extends Phaser.Scene {
     // A stick still held when the parchment opens never sends its release,
     // and the player walks off the moment the popup closes.
     this.joystick?.release();
-    const rung = rungAt(this.dev.rung ?? this.profile.rung);
+    const rung = this.additionRung;
     const cast = additionCastFor(this.spellRng, rung);
     this.spellPopup.open(
       cast.problem,
@@ -5128,7 +3501,7 @@ export class GameScene extends Phaser.Scene {
     if (!canUnbuild(inside.plan, cell, growableDoor(parts), this.spokenFor())) return false;
 
     this.joystick?.release();
-    const rung = rungAt(this.dev.rung ?? this.profile.rung);
+    const rung = this.additionRung;
     this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, (result) => {
       if (result.solved) this.takeFloorUp([cell]);
       this.noteCast(result);
@@ -5285,13 +3658,25 @@ export class GameScene extends Phaser.Scene {
    * Tapping the rune only *arms* it. Nothing is cast until a patch has been
    * drawn and an action chosen, and either can be walked away from.
    */
-  private castArraySpell(): void {
-    if (this.modalOpen) return;
+  /**
+   * The gate every rune opens with: nothing while a parchment is up, the
+   * tray put away, and a spell she has not been taught answered with where
+   * to learn it rather than cast.
+   *
+   * Refused with a reason, and the reason really does say where to go now
+   * — it used to cross the rune out, which says no and stops. A rune that
+   * did nothing at all would read as a broken button.
+   */
+  private spellRefused(spell: Spell, known: boolean): boolean {
+    if (this.modalOpen) return true;
     this.spellTray?.setOpen(false);
-    if (!this.knowsArray) {
-      this.showWhereToLearn(Spell.Array);
-      return;
-    }
+    if (known) return false;
+    this.showWhereToLearn(spell);
+    return true;
+  }
+
+  private castArraySpell(): void {
+    if (this.spellRefused(Spell.Array, this.knowsArray)) return;
     // Indoors it marks out floor to build rather than ground to plant, and
     // only in a room that can be added to: a patch drawn on the schoolhouse
     // is a rectangle nothing could happen to.
@@ -5330,12 +3715,7 @@ export class GameScene extends Phaser.Scene {
    * looked.
    */
   private castShareSpell(): void {
-    if (this.modalOpen) return;
-    this.spellTray?.setOpen(false);
-    if (!this.knowsShare) {
-      this.showWhereToLearn(Spell.Share);
-      return;
-    }
+    if (this.spellRefused(Spell.Share, this.knowsShare)) return;
     if (this.interior) {
       this.showRefusalOnPlayer(UiAsset.RuneDivide);
       return;
@@ -5546,6 +3926,7 @@ export class GameScene extends Phaser.Scene {
     this.disarm();
     if (same) return;
     this.armed = what;
+    this.noteArmed(what);
     // Lifted. Its answer is in `placeFixture`, and the two sounds are each
     // other reversed for the same reason planting and picking are.
     sound().effect(Sfx.PickUp);
@@ -5585,6 +3966,7 @@ export class GameScene extends Phaser.Scene {
     if (held.kind === "spell") {
       if (held.spell === Spell.Growth) this.growthCastAt(at);
       else if (held.spell === Spell.Mirror) this.mirrorTapAt(at);
+      else if (held.spell === Spell.Logic) this.logicCastAt(at);
       else this.clearingCastAt(at);
       return;
     }
@@ -5610,6 +3992,7 @@ export class GameScene extends Phaser.Scene {
     const pointing = this.session.aimed;
     this.session.aimAt(at);
     if (held.kind === "wire") this.stringWireAt(held, at);
+    else if (held.kind === "plan") this.stampPlanAt(held.from, at);
     else if (held.kind === "seed") this.plantSeed(held.plant);
     // The turn is handed over rather than read back off `this.armed`: the
     // rune is put out a few lines above this, so by the time anything is
@@ -6055,7 +4438,7 @@ export class GameScene extends Phaser.Scene {
       this.openBrickWall(() => done(true));
       return;
     }
-    const rung = rungAt(this.dev.rung ?? this.profile.rung);
+    const rung = this.additionRung;
     // The clearing spell keeps its number line at every rung. It shares this
     // ladder — the same instrument walked the other way — but taking the
     // line off a subtraction is a separate decision about a separate spell,
@@ -6085,7 +4468,7 @@ export class GameScene extends Phaser.Scene {
    * the world's business.
    */
   private askTheMultiplication(patch: Patch, action: PatchAction): void {
-    const rung = arrayRungAt(this.dev.arrayRung ?? this.profile.arrayRung);
+    const rung = arrayRungAt(this.ladders.held("arrayRung"));
     const problem = arrayProblemFor(patch.height, patch.width, rung);
     this.arrayPopup?.open(problem, (result) => {
       // The marker goes away *first*: it clears the message line on its way
@@ -6093,7 +4476,7 @@ export class GameScene extends Phaser.Scene {
       // cast had just done.
       this.stopMarking();
       if (result.solved) this.applyToPatch(patch, action);
-      this.noteArrayCast(result);
+      this.ladders.note("arrayRung", result);
     });
   }
 
@@ -6107,12 +4490,12 @@ export class GameScene extends Phaser.Scene {
    * the ground that says "into five". See `division.ts`.
    */
   private askTheShare(patch: Patch): void {
-    const rung = shareRungAt(this.dev.shareRung ?? this.profile.shareRung);
+    const rung = shareRungAt(this.ladders.held("shareRung"));
     this.sharePopup?.open(shareProblemFor(this.spellRng, rung), (result) => {
       // The marker first, for the reason the array's goes first.
       this.stopMarking();
       if (result.solved) this.applyToPatch(patch, PatchAction.Pick);
-      this.noteShareCast(result);
+      this.ladders.note("shareRung", result);
     });
   }
 
@@ -6224,15 +4607,7 @@ export class GameScene extends Phaser.Scene {
    * can do is move you.
    */
   private castPortalSpell(): void {
-    if (this.modalOpen) return;
-    this.spellTray?.setOpen(false);
-    // Refused with a reason, and the reason really does say where to go
-    // now — it used to cross the rune out, which says no and stops. A rune
-    // that did nothing at all would read as a broken button.
-    if (!this.knowsPortal) {
-      this.showWhereToLearn(Spell.Portal);
-      return;
-    }
+    if (this.spellRefused(Spell.Portal, this.knowsPortal)) return;
     if (this.interior) {
       this.showRefusalOnPlayer();
       return;
@@ -6275,10 +4650,10 @@ export class GameScene extends Phaser.Scene {
       // Ruled afresh each time the map is opened. The places do not move and
       // the ruler used not to either, which made the distance to the harbour
       // a thing to remember rather than a thing to measure. See `ruleAt`.
-      ruleAt(portalRungAt(this.dev.portalRung ?? this.profile.portalRung), this.spellRng),
+      ruleAt(portalRungAt(this.ladders.held("portalRung")), this.spellRng),
       (result, journey) => {
         if (journey) this.travelThrough(journey);
-        this.notePortalCast(result);
+        this.ladders.note("portalRung", result);
       },
     );
   }
@@ -6361,7 +4736,7 @@ export class GameScene extends Phaser.Scene {
   private landAt(journey: PortalJourney): void {
     this.session.setPosition(journey.to.col, journey.to.row);
     const feet = this.toFeet(journey.to.col, journey.to.row);
-    this.refreshVisibleChunks(feet);
+    this.chunks.refreshVisibleChunks(feet);
     this.player.setPosition(feet.x, feet.y).setScale(1).setAlpha(1);
     this.markPlaceReached();
     // Arriving somewhere else is what arriving somewhere else looks like.
@@ -6401,7 +4776,7 @@ export class GameScene extends Phaser.Scene {
     const feet = this.toFeet(journey.to.col, journey.to.row);
     // The far end's ground first, then the traveller. The other way round is
     // one frame of black — see `refreshVisibleChunks`.
-    this.refreshVisibleChunks(feet);
+    this.chunks.refreshVisibleChunks(feet);
     this.player.setPosition(this.portalMiddle.x, this.portalMiddle.y);
     this.tweens.add({
       targets: this.player,
@@ -6411,7 +4786,7 @@ export class GameScene extends Phaser.Scene {
       alpha: 1,
       duration: PORTAL_EXIT_MS,
       ease: "Cubic.easeOut",
-      onUpdate: () => this.refreshVisibleChunks(),
+      onUpdate: () => this.chunks.refreshVisibleChunks(),
       onComplete: () => {
         this.swingPortal(1, 0, PORTAL_CLOSE_MS, () => {
           this.portalGuard?.remove();
@@ -6441,7 +4816,7 @@ export class GameScene extends Phaser.Scene {
     // One dual tile back on each axis: a dual tile is centred on a cell's
     // corner, so the one that covers the first cell's left half starts
     // outside the patch. The texture clips it, which is what is wanted.
-    this.paintTiles(
+    this.chunks.paintTiles(
       ground,
       {
         minCol: Math.max(DUAL_ORIGIN, view.minCol - 1),
@@ -6679,23 +5054,93 @@ export class GameScene extends Phaser.Scene {
   }
 
   private castHourglass(): void {
-    if (this.modalOpen) return;
-    this.spellTray?.setOpen(false);
-    if (!this.knowsHourglass) {
-      this.showWhereToLearn(Spell.Hourglass);
-      return;
-    }
+    if (this.spellRefused(Spell.Hourglass, this.knowsHourglass)) return;
     // No other gate, and there used to be three: something must have been
     // planted, the child must have been away, and long enough for the glass
     // to have anything to give. All three served a payout that is gone, and
     // between them they made the spell almost uncastable — a child who had
     // just sat down could never see it work.
-    const rung = clockRungAt(this.dev.clockRung ?? this.profile.clockRung);
+    const rung = clockRungAt(this.ladders.held("clockRung"));
     this.joystick?.release();
     const from = readClock(this.worldNow(), rung.reading);
     this.clockPopup?.open(from, rung, (result, to, minutes) => {
       if (result.solved && to) this.windClockTo(to, sandFor(minutes), minutes);
-      this.noteClockCast(result);
+      this.ladders.note("clockRung", result);
+    });
+  }
+
+  private get knowsLogic(): boolean {
+    return knowsSpell([...this.profile.learned, ...this.dev.learned], Spell.Logic);
+  }
+
+  /**
+   * The logic spell: lit over her head, and cast at a machine that decides.
+   *
+   * Its job in the world is waking the gates — the press, the funnel and
+   * the bell — so the rune arms like every other and the next tap says
+   * which machine. Cast at anything else it is refused on the square, the
+   * way a seed is refused on stone: there is nothing there for it to do.
+   * Tapping a sleeping gate directly asks the same parchment, so the rune
+   * is the long way round on purpose; it is there so the spellbook says
+   * the spell exists, and so a child who learned it in the garage can find
+   * it again without first finding a machine.
+   */
+  private castLogicSpell(): void {
+    if (this.spellRefused(Spell.Logic, this.knowsLogic)) return;
+    this.armSpell(Spell.Logic, UiAsset.RuneLogic);
+  }
+
+  private logicCastAt(at: GridPoint): void {
+    if (this.modalOpen) return;
+    const key = tileKey(at.col, at.row);
+    const machine = this.machineAt(key);
+    if (!machine || SPARK[machine] !== Spell.Logic) {
+      this.markRefusal(at.col, at.row);
+      return;
+    }
+    const state = this.machines.get(key) ?? newMachine();
+    if (state.awake) {
+      // Already awake: nothing to do, and a rune that did nothing would
+      // read as broken. The machine's own tap is what empties or fills it.
+      this.showResult(UiAsset.MarkYes, at.col, at.row);
+      return;
+    }
+    this.showTheSum(key, state, machine);
+  }
+
+  /**
+   * The mechanic, behind her bench, and the spell she hands over.
+   *
+   * Taught for being spoken to, like the clockmaker's and the fisherman's:
+   * what the logic spell costs a child is the walk to the city and finding
+   * the one building in it with a cog on the wall. And then the parchment
+   * opens, because somebody who says hello and nothing else reads as
+   * broken — talking to her *is* casting it, on nothing, which is the one
+   * cast of this spell that wakes no machine and is the lesson.
+   */
+  private meetMechanic(): void {
+    if (this.modalOpen) return;
+    this.joystick?.release();
+    this.closeTrays();
+    const learned = learnSpell(this.profile.learned, Spell.Logic);
+    if (learned === this.profile.learned) {
+      // Taught already: what she has is a job. The lesson is still there,
+      // under the rune in the spellbook.
+      this.showJobs();
+      return;
+    }
+    this.saveProfileChange({ learned });
+    this.spellTray?.refresh();
+    this.showEarned(UiAsset.RuneLogic);
+    this.time.delayedCall(EARNED_MS, () => this.openLogicLesson());
+  }
+
+  /** The parchment on its own, as a lesson: nothing is woken by it. */
+  private openLogicLesson(): void {
+    if (this.modalOpen) return;
+    const rung = logicRungAt(this.ladders.held("logicRung"));
+    this.logicPopup?.open(this.spellRng, rung, (result) => {
+      this.ladders.note("logicRung", result);
     });
   }
 
@@ -6799,9 +5244,9 @@ export class GameScene extends Phaser.Scene {
 
   /** The mirror's grid, and whether she finished it. */
   private openMirrorPuzzle(done: (worked: boolean) => void): void {
-    const rung = symmetryRungAt(this.dev.symmetryRung ?? this.profile.symmetryRung);
+    const rung = symmetryRungAt(this.ladders.held("symmetryRung"));
     this.symmetryPopup?.open(this.spellRng, rung, (result) => {
-      this.noteMirrorCast(result);
+      this.ladders.note("symmetryRung", result);
       done(result.solved);
     });
   }
@@ -6870,57 +5315,12 @@ export class GameScene extends Phaser.Scene {
     maxCol: number;
     maxRow: number;
   }): void {
-    for (const chunk of chunksCoveringTileRange(
-      range,
-      this.worldGrid.width,
-      this.worldGrid.height,
-      0,
-    )) {
-      const key = chunkKey(chunk);
-      const entry = this.activeChunks.get(key);
-      if (!entry) continue;
-      entry.texture.destroy();
-      this.activeChunks.delete(key);
-      this.despawnSceneryIn(key);
-      // The sea with it. A chunk is thrown away here because the ground
-      // under it has changed, and water that was laid for the old ground
-      // would not be relaid — `spawnWaterIn` returns early for a key it
-      // already holds — so the coast would keep its old shape while the
-      // land changed underneath it.
-      this.despawnWaterIn(key);
-    }
-  }
-
-  /**
-   * Let the mirror ladder see how a cast went.
-   *
-   * The one ladder with no band in it. See `nextSymmetryRung`: folding is a
-   * way of looking rather than a fluency, so an older child starts on the
-   * square with everybody else and climbs from there.
-   */
-  private noteMirrorCast(result: CastResult): void {
-    this.recentSymmetryCasts = recordCast(this.recentSymmetryCasts, result);
-    const moved = nextSymmetryRung(this.profile.symmetryRung, this.recentSymmetryCasts);
-    if (moved === this.profile.symmetryRung) return;
-    this.recentSymmetryCasts = [];
-    if (this.dev.symmetryRung !== null) return;
-    this.saveProfileChange({ symmetryRung: moved });
+    this.chunks.forgetGround(range, this.worldGrid);
   }
 
   /** Whether this child has climbed to the dome and been taught. */
   private get knowsMirror(): boolean {
     return knowsSpell([...this.profile.learned, ...this.dev.learned], Spell.Mirror);
-  }
-
-  /** Let the clock spell's own ladder see how a cast went. */
-  private noteClockCast(result: CastResult): void {
-    this.recentClockCasts = recordCast(this.recentClockCasts, result);
-    const band = bandAt(this.profile.band);
-    const moved = nextRung(band, this.profile.clockRung, this.recentClockCasts, HARDEST_CLOCK_RUNG);
-    if (moved === this.profile.clockRung) return;
-    this.recentClockCasts = [];
-    if (this.dev.clockRung !== null) return;
-    this.saveProfileChange({ clockRung: moved });
   }
 
   /** Whether this child has climbed to the dome and been taught. */
@@ -6931,58 +5331,6 @@ export class GameScene extends Phaser.Scene {
   /** Whether this child has been into the old wood and touched the tree. */
   private get knowsArray(): boolean {
     return knowsSpell([...this.profile.learned, ...this.dev.learned], Spell.Array);
-  }
-
-  /**
-   * Let the array spell's own ladder see how a cast went.
-   *
-   * A third window and a third rung, on the same rules as the other two:
-   * seeing that four rows of six is twenty-four is not the skill that adds
-   * 347 and 265, and a child fluent at one can be nowhere near the other.
-   */
-  /** The same, for the sharing ladder. See `noteArrayCast`. */
-  private noteShareCast(result: CastResult): void {
-    this.recentShareCasts = recordCast(this.recentShareCasts, result);
-    const band = bandAt(this.profile.band);
-    const moved = nextRung(band, this.profile.shareRung, this.recentShareCasts, HARDEST_SHARE_RUNG);
-    if (moved === this.profile.shareRung) return;
-    this.recentShareCasts = [];
-    if (this.dev.shareRung !== null) return;
-    this.saveProfileChange({ shareRung: moved });
-  }
-
-  private noteArrayCast(result: CastResult): void {
-    this.recentArrayCasts = recordCast(this.recentArrayCasts, result);
-    const band = bandAt(this.profile.band);
-    const moved = nextRung(band, this.profile.arrayRung, this.recentArrayCasts, HARDEST_ARRAY_RUNG);
-    if (moved === this.profile.arrayRung) return;
-    this.recentArrayCasts = [];
-    // Not while `?arrayRung=` is holding the spell at one rung: the
-    // adaptation is computed against the child's own saved rung, so a dev
-    // session that answers four cleanly would move a child who never played.
-    if (this.dev.arrayRung !== null) return;
-    this.saveProfileChange({ arrayRung: moved });
-  }
-
-  /**
-   * Let the bricklaying ladder see how a wall went.
-   *
-   * A fifth window and a fifth rung, on the same rules as the other four.
-   * Filling a gap in a wall is not the skill that adds 347 and 265 — half
-   * the gaps run the sum backwards — and a child fluent at one can be
-   * nowhere near the other.
-   */
-  private noteBrickCast(result: CastResult): void {
-    this.recentBrickCasts = recordCast(this.recentBrickCasts, result);
-    const band = bandAt(this.profile.band);
-    const moved = nextRung(band, this.profile.brickRung, this.recentBrickCasts, HARDEST_BRICK_RUNG);
-    if (moved === this.profile.brickRung) return;
-    this.recentBrickCasts = [];
-    // Not while `?brickRung=` is holding the spell at one rung: the
-    // adaptation is computed against the child's own saved rung, so a dev
-    // session that answers four cleanly would move a child who never played.
-    if (this.dev.brickRung !== null) return;
-    this.saveProfileChange({ brickRung: moved });
   }
 
   /**
@@ -6998,31 +5346,12 @@ export class GameScene extends Phaser.Scene {
     // that is already up — a second one over the top of it would be two
     // questions at once and a keypad that types into whichever was newer.
     if (this.modalOpen) return;
-    const rung = brickRungAt(this.dev.brickRung ?? this.profile.brickRung);
+    const rung = brickRungAt(this.ladders.held("brickRung"));
     this.joystick?.release();
     this.brickPopup?.open(makeBrickProblem(this.spellRng, rung), rung, (result) => {
       if (result.solved) onBuilt();
-      this.noteBrickCast(result);
+      this.ladders.note("brickRung", result);
     });
-  }
-
-  private notePortalCast(result: CastResult): void {
-    this.recentPortalCasts = recordCast(this.recentPortalCasts, result);
-    const band = bandAt(this.profile.band);
-    const moved = nextRung(
-      band,
-      this.profile.portalRung,
-      this.recentPortalCasts,
-      HARDEST_PORTAL_RUNG,
-    );
-    if (moved === this.profile.portalRung) return;
-    this.recentPortalCasts = [];
-    // Not while `?portalRung=` is holding the spell at one rung. The
-    // adaptation is computed against the child's own saved rung, not the one
-    // being looked at, so a dev session that answers four cleanly would move
-    // a child who never played. The seam shows; it does not teach.
-    if (this.dev.portalRung !== null) return;
-    this.saveProfileChange({ portalRung: moved });
   }
 
   /**
@@ -7064,7 +5393,7 @@ export class GameScene extends Phaser.Scene {
     }
     const { col, row } = target.tile;
     this.joystick?.release();
-    const rung = rungAt(this.dev.rung ?? this.profile.rung);
+    const rung = this.additionRung;
     this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, (result) => {
       if (result.solved) this.clearAt(col, row);
       this.noteCast(result);
@@ -7093,7 +5422,7 @@ export class GameScene extends Phaser.Scene {
       return true;
     }
     this.joystick?.release();
-    const rung = rungAt(this.dev.rung ?? this.profile.rung);
+    const rung = this.additionRung;
     this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, (result) => {
       if (result.solved) this.takeMachineBack(fixture, at.col, at.row);
       this.noteCast(result);
@@ -7132,9 +5461,10 @@ export class GameScene extends Phaser.Scene {
     if (!result.ok) return;
     if (state?.holding) {
       const back = state.heap + state.crates.reduce((all, count) => all + count, 0);
-      if (back > 0) this.inventory.add(state.holding as ItemType, back);
+      if (back > 0) this.inventory.add(state.holding, back);
     }
     this.machines.delete(key);
+    this.drawings.delete(key);
     this.placedFixtures.get(key)?.destroy();
     this.placedFixtures.delete(key);
     this.refreshCarried();
@@ -7163,20 +5493,9 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const object = cleared.object;
-    // The sprite lives in its chunk's bucket, so both have to forget it —
-    // the bucket is what respawns a chunk when the camera comes back, and a
-    // tree left in there would grow again the moment the player walked away
-    // and returned.
-    const key = chunkKey(dualTileToChunk(object.col, object.row));
-    const bucket = this.sceneryByChunk.get(key);
-    if (bucket) {
-      this.sceneryByChunk.set(
-        key,
-        bucket.filter((standing) => standing.id !== object.id),
-      );
-    }
-    this.despawnSceneryIn(key);
-    this.spawnSceneryIn(key);
+    // Its chunk's bucket has to forget it too, or it would grow again the
+    // moment the player walked away and returned — see `fellScenery`.
+    this.chunks.fellScenery(object);
     this.playEffect(EffectType.Minus, col, row);
     // What it was made of, into the basket. The spell used to give nothing,
     // which made it the one loop in the game with no reward at the end.
@@ -7197,33 +5516,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Let the difficulty see how a cast went, and move it if it should.
-   *
-   * The whole of the adaptation, and deliberately silent: nothing on screen
-   * says a rung changed, there is no level, no badge and no sound. A child
-   * who is flying simply finds the sums getting bigger, and one who is stuck
-   * finds them getting smaller — which is what a good teacher does and what
-   * a progress bar does not. It cannot leave the band somebody picked, so
-   * the worst it can do is nudge.
+   * Let the addition ladder see how a cast went — see `Ladders`, which is
+   * the whole of the adaptation. The one ladder with something to redraw
+   * when it moves: the lesson's number line is cut to this rung.
    */
   private noteCast(result: CastResult): void {
-    this.recentCasts = recordCast(this.recentCasts, result);
-    const band = bandAt(this.profile.band);
-    const moved = nextRung(band, this.profile.rung, this.recentCasts);
-    if (moved === this.profile.rung) return;
-    // Cleared whenever it moves. Left alone, the four clean casts that earned
-    // a climb would still be sitting there on the next cast and earn another
-    // one straight away, walking a child from the bottom of their band to the
-    // top in five casts — a ramp rather than an adaptation.
-    this.recentCasts = [];
-    // Not while `?rung=` is holding the sums at one setting, for the reason
-    // every other ladder's seam is exempt: the adaptation is computed
-    // against the child's own saved rung rather than the one being looked
-    // at, so a dev session that answered four cleanly would move a real
-    // child up a rung nobody watched them earn.
-    if (this.dev.rung !== null) return;
-    this.saveProfileChange({ rung: moved });
-    this.applyRung();
+    if (this.ladders.note("rung", result)) this.applyRung();
+  }
+
+  /** The addition rung the sums come from: the dev seam's while `?rung=` holds one, else the child's. */
+  private get additionRung(): Rung {
+    return rungAt(this.ladders.held("rung"));
   }
 
   /**
@@ -7740,6 +6043,7 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(0, () => this.checkGrove());
     const result = this.session.growAt(col, row);
     if (!result.ok || !result.crop) return;
+    this.noteDeed(result.crop.stage === HARVEST_STAGE ? Deed.Ripened : Deed.Grew);
     // The plus lands on the tile it is being added to, which is the whole of
     // what the effect has to say.
     this.playEffect(EffectType.Plus, col, row);
@@ -7781,8 +6085,7 @@ export class GameScene extends Phaser.Scene {
       new Phaser.Geom.Rectangle(0, frame.realHeight - TILE_SIZE, TILE_SIZE, TILE_SIZE),
       Phaser.Geom.Rectangle.Contains,
     );
-    sprite.on("pointerdown", () => {
-      if (this.pointerIsSpokenFor) return;
+    this.onTap(sprite, () => {
       // In any direction, diagonals included — unlike harvesting, which
       // measures orthogonally because it acts on the tile the player faces
       // and there is no diagonal facing to turn to. Talking to someone needs
@@ -7827,8 +6130,7 @@ export class GameScene extends Phaser.Scene {
       new Phaser.Geom.Rectangle(inset, 0, width, sprite.frame.realHeight),
       Phaser.Geom.Rectangle.Contains,
     );
-    sprite.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      if (this.pointerIsSpokenFor) return;
+    this.onTap(sprite, (pointer) => {
       const near = sidecar.blocked_cells_relative_to_anchor.reduce(
         (best, [row, col]) =>
           Math.min(
@@ -7866,14 +6168,414 @@ export class GameScene extends Phaser.Scene {
    * halfway has still been offered it, and re-opening it on their next visit
    * would read as the game not having noticed they closed it.
    */
-  private openIntro(): void {
+  private openIntro(onClose: () => void = () => {}): void {
     if (this.modalOpen) return;
-    this.introToGive = false;
+    this.delivery = null;
     this.joystick?.release();
     this.closeTrays();
+    // Asked again, not given: the guides come round again as well — see
+    // `forgetGuides`. Told apart by whether the welcome had been given, and
+    // decided before `rememberIntroSeen` settles that it now has.
+    if (this.profile.introSeen) this.forgetGuides();
     this.rememberIntroSeen();
     // No greeting. The panel he opens is the greeting.
-    this.introPanel?.open_(() => {});
+    this.introPanel?.open_(onClose);
+  }
+
+  /**
+   * What he still owes this child, asked once at load.
+   *
+   * `?intro` and `?news` ask for one again without clearing the save, which
+   * is the same seam-rather-than-reaching-in argument every other dev hook
+   * makes: the alternative is editing local storage from outside to see the
+   * thing twice.
+   */
+  private deliveryOwed(): Delivery | null {
+    // The seams first, and each meaning only itself. Asked the other way
+    // round — what is owed, then what was typed — `?news` was answered with
+    // the *welcome* on any save that had not had one yet, which is every
+    // save a script starts from: the letter could not be reached from a
+    // script at all, and the scenario that thought it was testing one
+    // passed on the other.
+    if (this.dev.intro) return Delivery.Welcome;
+    if (this.dev.news) return Delivery.News;
+    // And then what he actually owes. The welcome outranks the letter, and
+    // giving it settles both — see `rememberIntroSeen`.
+    if (!this.profile.introSeen) return Delivery.Welcome;
+    if (this.profile.newsSeen < NEWS_BEATS.length) return Delivery.News;
+    return null;
+  }
+
+  /**
+   * Whichever of the two he has, and the welcome if he has neither.
+   *
+   * The fallback is what a tap on him does once everything is delivered: he
+   * is the man who explained the game, so asking him again gets the
+   * explanation. Asking him again for *news* he has already given would be a
+   * blank sheet.
+   */
+  private openDelivery(onClose: () => void = () => {}): void {
+    if (this.delivery === Delivery.News) this.openNews(onClose);
+    else this.openIntro(onClose);
+  }
+
+  /**
+   * The letter: what has changed since this child last played.
+   *
+   * Cut to them before it is opened rather than after — `setSince` decides
+   * which pages there are, and `rememberNewsSeen` moves the count past them,
+   * so the order of these two lines is the whole difference between a child
+   * seeing the beats they are owed and seeing none.
+   */
+  private openNews(onClose: () => void = () => {}): void {
+    if (this.modalOpen) return;
+    this.delivery = null;
+    this.joystick?.release();
+    this.closeTrays();
+    // `?news` shows the whole list. Cutting it to the count would hand a
+    // developer who has already read everything a sheet with no pages on it
+    // — `deck()` returns nothing, `open_` takes its first entry, and what
+    // renders is a blank piece of parchment — which is a seam that answers
+    // "show me the letter" with silence.
+    this.newsPanel?.setSince(this.dev.news ? 0 : this.profile.newsSeen);
+    this.rememberNewsSeen();
+    this.newsPanel?.open_(onClose);
+  }
+
+  /**
+   * Note that the news has been read, to the end of the list as it stands.
+   *
+   * Marked on the way *in*, for the reason the welcome is: a child who shuts
+   * it halfway has still been handed it, and bringing the same letter back
+   * next time would read as the game not having noticed.
+   */
+  private rememberNewsSeen(): void {
+    if (this.profile.newsSeen >= NEWS_BEATS.length) return;
+    this.saveProfileChange({ newsSeen: NEWS_BEATS.length });
+  }
+
+  /**
+   * One frame of the guide: start or advance it, and draw what it points at.
+   *
+   * Every frame, because both halves move every frame — the arrow bobs, the
+   * ring breathes, and the thing under the arrow may be walking. The world
+   * is looked at less often than that; see `guideWorld`.
+   */
+  private driveGuide(): void {
+    const guide = this.guide;
+    const marks = this.guideMarks;
+    if (!guide || !marks) return;
+    if (this.modalOpen) {
+      marks.hide();
+      return;
+    }
+    guide.tick(this.guideWorld(), this.guideView());
+    const cue = guide.cue();
+    const drawn = cue ? this.drawCue(cue, marks) : false;
+    if (!drawn) marks.hide();
+  }
+
+  /**
+   * What the guide can see of the world, looked at twice a second.
+   *
+   * Counting crops and machines means walking every sprite she has put
+   * down, which is nothing on a new farm and something on an old one; and a
+   * guide that starts half a second after something ripens is a guide that
+   * started when it ripened, as far as anybody watching can tell.
+   */
+  private guideWorld(): GuideWorld {
+    const now = this.time.now;
+    const seen = this.guideWorldSeen;
+    if (seen && now - seen.at < 500) return seen.world;
+    let unripe = 0;
+    let ripe = 0;
+    for (const at of this.cropsOfStage(null)) {
+      if (at.ripe) ripe++;
+      else unripe++;
+    }
+    const world: GuideWorld = {
+      outdoors: !this.interior,
+      unripeCrops: unripe,
+      ripeCrops: ripe,
+      cropsInBasket: PLANT_TYPES.reduce((sum, plant) => sum + this.inventory.count(plant), 0),
+      thingsInCrate: CRATE_GROUPS.reduce(
+        (sum, group) =>
+          sum + thingsIn(group).reduce((held, thing) => held + this.crateHeld(thing), 0),
+        0,
+      ),
+      sleepingMachines: this.sleepingMachines().length,
+    };
+    this.guideWorldSeen = { at: now, world };
+    return world;
+  }
+
+  /** What the guide can see of the interface, which is cheap and asked every frame. */
+  private guideView(): GuideView {
+    const trayOpen = Object.entries(this.trays()).find(([, tray]) => tray?.isOpen)?.[0] ?? null;
+    const held = this.armed;
+    const armed: GuideView["armed"] =
+      held === null
+        ? null
+        : held.kind === "seed"
+          ? "seed"
+          : held.kind === "spell" && held.spell === Spell.Growth
+            ? "growth"
+            : held.kind === "fixture" || held.kind === "decor"
+              ? "thing"
+              : "other";
+    return {
+      trayOpen,
+      crateGroupOpen: this.crateGroup !== null,
+      armed,
+      indoors: this.interior ? this.enteredBuilding : null,
+    };
+  }
+
+  /**
+   * Draw one cue, and say whether there was anything to draw it on.
+   *
+   * A button is glowed where the scene says the button is — by the same
+   * name a script taps it by, so the guide and the browser suite cannot
+   * disagree about which button is the pouch. A tray's own button stands in
+   * for a thing inside it while the tray is shut: pointing at a seed nobody
+   * can see is pointing at nothing, and the pouch is how to see it.
+   */
+  private drawCue(cue: Cue, marks: GuideMarks): boolean {
+    const glow = (name: string, fallback?: string): boolean => {
+      const positions = this.uiPositions();
+      const at = positions[name] ?? (fallback ? positions[fallback] : undefined);
+      if (!at) return false;
+      marks.glowButton(at, (this.mobileControls ? 64 : 56) / 2 + 6);
+      return true;
+    };
+    const point = (cell: GridPoint | null): boolean => {
+      if (!cell) return false;
+      marks.clearTrail();
+      marks.pointAt(this.screenOf(cell.col, cell.row));
+      return true;
+    };
+    switch (cue.kind) {
+      case "button":
+        return glow(cue.name);
+      case "seed":
+        return this.seedTray?.isOpen ? glow("seeds.0", "seeds") : glow("seeds");
+      case "growth-rune":
+        return this.spellTray?.isOpen
+          ? glow(`spellbook.${SPELLS.indexOf(Spell.Growth)}`, "spellbook")
+          : glow("spellbook");
+      case "crate-group": {
+        const thing = this.firstThingInCrate();
+        return thing && this.crateTray?.isOpen
+          ? glow(`crate.${groupOf(thing)}`, "crate")
+          : glow("crate");
+      }
+      case "crate-thing": {
+        const thing = this.firstThingInCrate();
+        return thing && this.crateTray?.isOpen ? glow(`crate.${thing}`, "crate") : glow("crate");
+      }
+      case "ahead":
+        return point(this.squareToUse());
+      case "crop":
+        return point(this.nearest(this.cropsOfStage(cue.ripe)));
+      case "door": {
+        const building = this.buildings.find((one) => one.id === cue.building);
+        if (!building) return false;
+        return this.pointTheWay(marks, { col: building.doorCol, row: building.doorRow });
+      }
+      case "attendant":
+        return point(this.attendantCell);
+      case "sleeping-machine":
+        return point(this.nearest(this.sleepingMachines()));
+    }
+  }
+
+  /**
+   * Point at a square she has to walk to — over it if it is on the screen,
+   * and along the way to it if not.
+   *
+   * The way rather than the bearing. An arrow at the edge of the screen
+   * turned towards a door fifty squares off is a line, and a line goes on
+   * past the door to whatever lies beyond it; from the garden the store and
+   * the enchanted forest were in the same direction, and the arrow was read
+   * as the forest. So the guide walks the path it wants her to walk — the
+   * one the postman walks, found the same way — and hangs the arrow over
+   * the last square of it still on the screen, with the trail of dots the
+   * game already draws for *too far* laid from her feet to it. It turns
+   * where the path turns, and it moves as she moves.
+   *
+   * The bearing is kept for the one case the way cannot be found, which is
+   * a door nothing can walk to. An arrow that says roughly where is better
+   * than none.
+   */
+  private pointTheWay(marks: GuideMarks, target: GridPoint): boolean {
+    const { width, height } = this.scale;
+    const inside = (at: ScreenPoint, inset: number) =>
+      at.x >= inset && at.x <= width - inset && at.y >= inset && at.y <= height - inset;
+    const there = this.screenOf(target.col, target.row);
+    if (inside(there, 0)) {
+      marks.clearTrail();
+      marks.pointAt(there);
+      return true;
+    }
+    const path = this.wayTo(target);
+    const trail: ScreenPoint[] = [];
+    let end: ScreenPoint | null = null;
+    for (const cell of path ?? []) {
+      const at = this.screenOf(cell.col, cell.row);
+      if (!inside(at, GUIDE_TRAIL_INSET)) break;
+      trail.push(at);
+      end = at;
+    }
+    if (!end) {
+      marks.clearTrail();
+      marks.pointAt(there);
+      return true;
+    }
+    marks.pointAlong(trail, end);
+    return true;
+  }
+
+  /**
+   * The way from where she stands to a square, remembered until she moves.
+   *
+   * A door is walked into, so the door's own square is the goal when it can
+   * be stood on, and the square in front of it otherwise.
+   */
+  private wayTo(target: GridPoint): GridPoint[] | null {
+    if (this.interior) return null;
+    const from = tileKey(this.playerCol, this.playerRow);
+    const to = tileKey(target.col, target.row);
+    const known = this.guideRoute;
+    if (known && known.from === from && known.to === to) return known.path;
+    const here = { col: this.playerCol, row: this.playerRow };
+    const goal = this.grid.isPassable(target.col, target.row)
+      ? target
+      : { col: target.col, row: target.row + 1 };
+    const path = findPath(this.grid, here, goal);
+    this.guideRoute = { from, to, path };
+    return path;
+  }
+
+  /**
+   * The square the arrow says to put a thing on: the one she faces, if it
+   * will take it, else the first beside her that will.
+   *
+   * A seed or a thing in her hands goes on any square in reach, so the
+   * arrow is a suggestion and not a rule — but a suggestion of a square
+   * that refuses the seed would be an arrow at a red cross. What "will take
+   * it" means is the grid's own rule for a seed and the plain one — free
+   * ground with nothing growing on it — for anything else.
+   */
+  private squareToUse(): GridPoint | null {
+    const held = this.armed;
+    const ahead = stepForFacing(this.session.facing);
+    const steps = [
+      ahead,
+      { dCol: 1, dRow: 0 },
+      { dCol: -1, dRow: 0 },
+      { dCol: 0, dRow: 1 },
+      { dCol: 0, dRow: -1 },
+    ];
+    for (const step of steps) {
+      const col = this.playerCol + step.dCol;
+      const row = this.playerRow + step.dRow;
+      if (!this.grid.isPassable(col, row) || this.grid.getCrop(col, row)) continue;
+      if (held?.kind === "seed" && !this.grid.canPlant(col, row, held.plant)) continue;
+      return { col, row };
+    }
+    return null;
+  }
+
+  /** Every crop she has, or only the ripe or unripe ones. */
+  private cropsOfStage(ripe: boolean | null): (GridPoint & { ripe: boolean })[] {
+    if (this.interior) return [];
+    const found: (GridPoint & { ripe: boolean })[] = [];
+    for (const key of this.cropSprites.keys()) {
+      const [col, row] = key.split(",").map(Number);
+      if (col === undefined || row === undefined) continue;
+      const crop = this.grid.getCrop(col, row);
+      if (!crop) continue;
+      const isRipe = crop.stage === HARVEST_STAGE;
+      if (ripe === null || ripe === isRipe) found.push({ col, row, ripe: isRipe });
+    }
+    return found;
+  }
+
+  /** The machines near her that nobody has woken. */
+  private sleepingMachines(): GridPoint[] {
+    if (this.interior) return [];
+    const found: GridPoint[] = [];
+    for (const key of this.placedFixtures.keys()) {
+      if (!this.machineAt(key)) continue;
+      if (this.machines.get(key)?.awake) continue;
+      const [col, row] = key.split(",").map(Number);
+      if (col === undefined || row === undefined) continue;
+      const off = Math.max(Math.abs(col - this.playerCol), Math.abs(row - this.playerRow));
+      if (off <= GUIDE_MACHINE_REACH) found.push({ col, row });
+    }
+    return found;
+  }
+
+  /** The first thing in the crate she has one of, in the crate's own order. */
+  private firstThingInCrate(): CrateThing | null {
+    for (const group of CRATE_GROUPS) {
+      for (const thing of thingsIn(group)) {
+        if (this.crateHeld(thing) > 0) return thing;
+      }
+    }
+    return null;
+  }
+
+  /** Whichever of these is fewest steps from her, or nothing. */
+  private nearest<T extends GridPoint>(cells: readonly T[]): T | null {
+    let best: T | null = null;
+    let bestSteps = Number.POSITIVE_INFINITY;
+    for (const cell of cells) {
+      const steps = Math.abs(cell.col - this.playerCol) + Math.abs(cell.row - this.playerRow);
+      if (steps < bestSteps) {
+        best = cell;
+        bestSteps = steps;
+      }
+    }
+    return best;
+  }
+
+  /** Tell the guide what she did. */
+  private noteDeed(deed: Deed): void {
+    this.guide?.note(deed);
+  }
+
+  /** A tray opened, which for three of them is a deed the guide waits for. */
+  private noteTray(name: string): void {
+    if (name === "seeds") this.noteDeed(Deed.OpenedSeeds);
+    else if (name === "spellbook") this.noteDeed(Deed.OpenedSpellbook);
+    else if (name === "crate") this.noteDeed(Deed.OpenedCrate);
+  }
+
+  /** Something was lit over her head, which for three kinds is a deed. */
+  private noteArmed(what: Armed): void {
+    if (what.kind === "seed") this.noteDeed(Deed.ArmedSeed);
+    else if (what.kind === "spell" && what.spell === Spell.Growth) this.noteDeed(Deed.ArmedGrowth);
+    else if (what.kind === "fixture" || what.kind === "decor") this.noteDeed(Deed.ArmedThing);
+  }
+
+  /** Note that a guide has been walked through — by *this child*. */
+  private rememberGuided(guide: Guide): void {
+    if (this.profile.guided.includes(guide)) return;
+    this.saveProfileChange({ guided: [...this.profile.guided, guide] });
+  }
+
+  /**
+   * Forget every guide, so each is given again when its moment comes.
+   *
+   * What asking the postal worker for the welcome again means: he is the
+   * one who explains this game, and "show me again" is all of it, not the
+   * five pages he happens to carry. Nothing else forgets a guide.
+   */
+  private forgetGuides(): void {
+    this.guide?.forgetAll();
+    if (this.profile.guided.length === 0) return;
+    this.saveProfileChange({ guided: [] });
   }
 
   /**
@@ -7887,7 +6589,12 @@ export class GameScene extends Phaser.Scene {
    */
   private rememberIntroSeen(): void {
     if (this.profile.introSeen) return;
-    this.saveProfileChange({ introSeen: true });
+    // Caught up on the news in the same write. Everything on that list is
+    // already true of the game this child is being shown for the first
+    // time, so it is not news to them — and a letter about what changed,
+    // delivered to somebody who has seen none of what came before, is a
+    // sentence with nothing behind it.
+    this.saveProfileChange({ introSeen: true, newsSeen: NEWS_BEATS.length });
   }
 
   /**
@@ -7925,7 +6632,7 @@ export class GameScene extends Phaser.Scene {
       this.spellTray?.refresh();
     }
     if (first) this.showEarned(UiAsset.RunePortal);
-    this.geometryPanel?.setRung(portalRungAt(this.dev.portalRung ?? this.profile.portalRung));
+    this.geometryPanel?.setRung(portalRungAt(this.ladders.held("portalRung")));
     this.geometryPanel?.open_(() => {});
   }
 
@@ -8050,7 +6757,7 @@ export class GameScene extends Phaser.Scene {
       this.spellTray?.refresh();
       this.showEarned(UiAsset.RuneDivide);
     }
-    this.sharePanel?.setRung(shareRungAt(this.dev.shareRung ?? this.profile.shareRung));
+    this.sharePanel?.setRung(shareRungAt(this.ladders.held("shareRung")));
     this.sharePanel?.open_(() => {});
   }
 
@@ -8103,7 +6810,7 @@ export class GameScene extends Phaser.Scene {
     // opened over it, in the smallest type the game has — and is now the
     // panel's own first page, where it is read rather than missed.
     if (first) this.showEarned(UiAsset.RuneTimes);
-    this.grovePanel?.setRung(arrayRungAt(this.dev.arrayRung ?? this.profile.arrayRung));
+    this.grovePanel?.setRung(arrayRungAt(this.ladders.held("arrayRung")));
     // The shape of one bed and how many there are, which is what the panel
     // draws: four squares of two by two rather than one block of twelve.
     this.grovePanel?.setTask(progress, {
@@ -8128,6 +6835,7 @@ export class GameScene extends Phaser.Scene {
     // everywhere. The only way to reach this is tapping the shopkeeper, and
     // she is only ever in the one room.
     if (this.modalOpen) return;
+    this.noteDeed(Deed.OpenedShop);
     // A stick still held when a panel opens never sends its release, and the
     // player walks off the moment it closes.
     this.joystick?.release();
@@ -8210,6 +6918,11 @@ export class GameScene extends Phaser.Scene {
     // met the astronomer.
     for (const [index, at] of (this.patchMenu?.buttonPositions() ?? []).entries()) {
       positions[`patch.${this.patchChoices[index] ?? index}`] = at;
+    }
+    // Named by what pressing one does, because that is the whole of what
+    // the ring is: the question *use it or take it*, asked in two pictures.
+    for (const [action, at] of Object.entries(this.wheel?.buttonPositions() ?? {})) {
+      positions[`wheel.${action}`] = at;
     }
     if (this.optionsPanel?.isOpen) Object.assign(positions, this.optionsPanel.buttonPositions());
     // The about sheet's, which nothing could reach until its heading became
@@ -8410,6 +7123,19 @@ export class GameScene extends Phaser.Scene {
     this.optionsButton?.label.setVisible(shown);
   }
 
+  /**
+   * Say what a thing is, and what it costs.
+   *
+   * Opened from the little cloud on its own button rather than from a help
+   * screen somewhere, which is the whole idea: a child wondering about a
+   * picture taps that picture's cloud, and never has to have discovered that
+   * help exists.
+   */
+  private tellAbout(thing: FixtureType): void {
+    sound().effect(Sfx.Page);
+    this.thingPanel?.openFor(thing, () => {});
+  }
+
   private openOptions(): void {
     sound().effect(Sfx.Page);
     if (this.modalOpen) return;
@@ -8475,11 +7201,12 @@ export class GameScene extends Phaser.Scene {
       const key = tileKey(object.col, object.row);
       const state = this.machines.get(key);
       this.machines.delete(key);
+      this.drawings.delete(key);
       const item = state?.made ?? state?.holding;
       if (!state || !item) continue;
       const inside = state.heap + state.crates.reduce((all, count) => all + count, 0);
-      if (inside > 0) this.inventory.add(item as ItemType, inside);
-      if (state.binned && state.bin > 0) this.inventory.add(state.binned as ItemType, state.bin);
+      if (inside > 0) this.inventory.add(item, inside);
+      if (state.binned && state.bin > 0) this.inventory.add(state.binned, state.bin);
     }
     // Any line whose machine is now in her basket is a line to nowhere.
     this.wires = this.wires.filter(
@@ -8567,6 +7294,7 @@ export class GameScene extends Phaser.Scene {
     // machine built and never tapped actually is.
     this.machines = machinesFromSave(saved?.world?.machines);
     this.wires = wiresFromSave(saved?.world?.wires);
+    this.drawings = plansFromSave(saved?.world?.blueprints);
     this.wireCarried.clear();
     this.wireWork.clear();
     // The child's own things come from their progress in this game, never
@@ -8619,6 +7347,7 @@ export class GameScene extends Phaser.Scene {
       this.paintedTiles(),
       machinesToSave(this.machines),
       wiresToSave(this.wires),
+      plansToSave(this.drawings),
     );
     // And this child's own things, which nobody else's game may touch. Kept
     // separate all the way down: a shared purse would let one child spend
@@ -8706,11 +7435,7 @@ export class GameScene extends Phaser.Scene {
    */
   private applyBand(band: number): void {
     if (band === this.profile.band) return;
-    this.recentCasts = [];
-    this.recentPortalCasts = [];
-    this.recentArrayCasts = [];
-    this.recentClockCasts = [];
-    this.recentBrickCasts = [];
+    this.ladders.empty(["rung", "portalRung", "arrayRung", "clockRung", "brickRung"]);
     // Not the mirror window. Every other ladder is scaled to the band, so a
     // run earned in one says nothing in the next; the folding ladder is the
     // same six shapes for everybody, and a child who has just found four
@@ -8745,7 +7470,7 @@ export class GameScene extends Phaser.Scene {
    * they were doing yesterday.
    */
   private applyRung(): void {
-    this.lessonPanel?.setRung(rungAt(this.dev.rung ?? this.profile.rung));
+    this.lessonPanel?.setRung(this.additionRung);
   }
 
   private applySettings(next: Settings): void {
@@ -8765,14 +7490,17 @@ export class GameScene extends Phaser.Scene {
     this.spellPopup?.setPhrases(this.words);
     this.optionsPanel?.setPhrases(this.words);
     this.aboutPanel?.setPhrases(this.words);
+    this.thingPanel?.setPhrases(this.words);
     this.lessonPanel?.setPhrases(this.words);
     this.introPanel?.setPhrases(this.words);
+    this.newsPanel?.setPhrases(this.words);
     this.mapPanel?.setPhrases(this.words);
     this.portalPanel?.setPhrases(this.words);
     this.geometryPanel?.setPhrases(this.words);
     this.brickPopup?.setPhrases(this.words);
     this.sharePopup?.setPhrases(this.words);
     this.symmetryPopup?.setPhrases(this.words);
+    this.logicPopup?.setPhrases(this.words);
     this.shopPanel?.setPhrases(this.words);
     // The line on screen was written in the old language by whatever the
     // player last did; it would otherwise sit there until they did something
@@ -8811,6 +7539,7 @@ export class GameScene extends Phaser.Scene {
         for (const [which, tray] of Object.entries(this.trays())) {
           if (which !== name) tray?.setOpen(false);
         }
+        this.noteTray(name);
       },
       canOpen: () => !this.modalOpen,
     };
@@ -8833,6 +7562,7 @@ export class GameScene extends Phaser.Scene {
     this.crateGroup = null;
     for (const tray of Object.values(this.trays())) tray?.setOpen(false);
     this.flowerMenu?.close();
+    this.closeWheel();
     // And the array spell's marker, if one is half drawn. State surviving a
     // transition is this codebase's recurring bug — scenery across a portal,
     // a tray behind a popup, the great tree's own cell — and a rectangle
@@ -8872,6 +7602,7 @@ export class GameScene extends Phaser.Scene {
     // reads back byte for byte.
     if (turn !== Turn.Toward) result.object.turn = turn;
     sound().effect(Sfx.PutDown);
+    this.noteDeed(Deed.Placed);
     const sprite = this.spawnFootprintSprite(
       result.object,
       sidecar,
@@ -8887,7 +7618,7 @@ export class GameScene extends Phaser.Scene {
     if (isMachine(fixture)) this.watchMachine(sprite, col, row);
     else this.watchPlacedFixture(sprite, fixture, col, row);
     this.placedFixtures.set(tileKey(col, row), sprite);
-    if (fixture === FixtureType.Lamp) this.lightLamp(col, row);
+    if (fixture === FixtureType.Lamp) this.lighting.lightLamp(col, row);
     this.playGesture(PLANT); // she bends to set it down, same as planting
     this.refreshCarried();
     this.paintSockets();
@@ -8910,9 +7641,8 @@ export class GameScene extends Phaser.Scene {
       new Phaser.Geom.Rectangle(0, frame.realHeight - TILE_SIZE, TILE_SIZE, TILE_SIZE),
       Phaser.Geom.Rectangle.Contains,
     );
-    sprite.on("pointerdown", () => {
-      if (this.pointerIsSpokenFor) return;
-      this.takeFixture(fixture, col, row);
+    this.onTap(sprite, () => {
+      this.offerActions(fixture, [{ col, row }], () => this.takeFixture(fixture, col, row));
     });
   }
 
@@ -8968,8 +7698,7 @@ export class GameScene extends Phaser.Scene {
       new Phaser.Geom.Rectangle(0, frame.realHeight - TILE_SIZE, TILE_SIZE, TILE_SIZE),
       Phaser.Geom.Rectangle.Contains,
     );
-    sprite.on("pointerdown", () => {
-      if (this.pointerIsSpokenFor) return;
+    this.onTap(sprite, () => {
       this.tapMachine(col, row);
     });
   }
@@ -8992,6 +7721,13 @@ export class GameScene extends Phaser.Scene {
       this.showTheSum(key, state, machine);
       return;
     }
+    // A woken blueprint is picked up, not emptied: what it holds is a
+    // drawing, and the tap that would empty any other machine lifts the
+    // drawing into her hands to be stamped down somewhere else.
+    if (machine === FixtureType.Blueprint) {
+      this.armPlan(key);
+      return;
+    }
     // Three answers in the order a child meets them: wake it, empty it,
     // fill it — and for a sieve there are two things to empty, so the good
     // ones come out before the rejects. A tap that handed back the bin while
@@ -8999,7 +7735,7 @@ export class GameScene extends Phaser.Scene {
     const crate = fullestCrate(state);
     if ((state.crates[crate] ?? 0) > 0) {
       const taken = takeShare(state, crate);
-      const item = taken.item as ItemType | null;
+      const item = taken.item;
       if (item) {
         this.machines.set(key, taken.state);
         this.inventory.add(item, taken.count);
@@ -9013,7 +7749,7 @@ export class GameScene extends Phaser.Scene {
     // is in there is what the machine would *not* have, and taking it must
     // not cost her a share of what it kept.
     const tipped = tipBin(state);
-    const rejects = tipped.item as ItemType | null;
+    const rejects = tipped.item;
     if (rejects) {
       this.machines.set(key, tipped.state);
       this.inventory.add(rejects, tipped.count);
@@ -9043,6 +7779,10 @@ export class GameScene extends Phaser.Scene {
     const woken = (result: { solved: boolean }) => {
       if (!result.solved) return;
       this.machines.set(key, wake(state));
+      this.noteDeed(Deed.Woke);
+      // A blueprint draws the moment it wakes: the line as it stands now,
+      // which is the one she was looking at when she woke it.
+      if (machine === FixtureType.Blueprint) this.recordPlan(key);
       this.showEarned(RUNE_OF[spell]);
       this.autosave();
     };
@@ -9050,10 +7790,20 @@ export class GameScene extends Phaser.Scene {
     // this branches: a hothouse woken by a division would be a toll, where
     // one woken by the rows and columns it is about to do three at a time is
     // the machine asking to be understood before it starts.
+    if (spell === Spell.Logic) {
+      // Which things get through, or whether the lamp lights: the question
+      // a gate is, asked on paper before it is asked of carrots.
+      const rung = logicRungAt(this.ladders.held("logicRung"));
+      this.logicPopup?.open(this.spellRng, rung, (result) => {
+        this.ladders.note("logicRung", result);
+        woken(result);
+      });
+      return;
+    }
     if (spell === Spell.Growth) {
       // Counting up to a number on a line, which is what the growth spell
       // walks and what a tally does to a heap.
-      const rung = rungAt(this.dev.rung ?? this.profile.rung);
+      const rung = this.additionRung;
       const cast = additionCastFor(this.spellRng, rung);
       this.spellPopup.open(cast.problem, cast.given, woken, cast.bare);
       return;
@@ -9062,12 +7812,12 @@ export class GameScene extends Phaser.Scene {
       // The number line walked backwards, which is what a sieve does to a
       // heap: take out what does not belong. The same parchment the rune
       // opens on a tree, because it is the same sum.
-      const rung = rungAt(this.dev.rung ?? this.profile.rung);
+      const rung = this.additionRung;
       this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, woken);
       return;
     }
     if (spell === Spell.Array) {
-      const rung = arrayRungAt(this.dev.arrayRung ?? this.profile.arrayRung);
+      const rung = arrayRungAt(this.ladders.held("arrayRung"));
       // The machine's own rectangle: three shoots, three times over. Chosen
       // rather than rolled, and chosen to be the smallest square that is
       // genuinely a multiplication — because this is a demonstration and not
@@ -9077,7 +7827,7 @@ export class GameScene extends Phaser.Scene {
       this.arrayPopup?.open(arrayProblemFor(SHARES, SHARES, rung), woken);
       return;
     }
-    const rung = shareRungAt(this.dev.shareRung ?? this.profile.shareRung);
+    const rung = shareRungAt(this.ladders.held("shareRung"));
     this.sharePopup?.open(shareProblemFor(this.spellRng, rung), woken);
   }
 
@@ -9159,15 +7909,234 @@ export class GameScene extends Phaser.Scene {
     // anything from end to end, which is a garden that looks asleep.
     this.runWires(minutes);
     let dealt = false;
+    // A strongbox's lid is open at night and shut by day: the hour the
+    // village keeps, because a child who has watched the shops shut has
+    // already met the signal.
+    const open = !isOpenHours(this.hourNow());
     for (const [key, state] of this.machines) {
       const machine = this.machineAt(key);
       if (!machine) continue;
-      const worked = advanceMachine(state, minutes, machine);
+      const worked = advanceMachine(state, minutes, machine, open);
       if (worked === state) continue;
       this.machines.set(key, worked);
       if (worked.crates.some((count, at) => count !== (state.crates[at] ?? 0))) dealt = true;
+      // The bell rings where it stands: its own picture rising off it, and
+      // the machine's own noise. A bell that counted in silence would be a
+      // tally with a different shape.
+      if (machine === FixtureType.Bell && worked.rung > state.rung) {
+        const [col, row] = key.split(",").map(Number);
+        if (col !== undefined && row !== undefined) {
+          this.showResult(itemIcon(FixtureType.Bell), col, row);
+          sound().effect(Sfx.Machine);
+        }
+      }
     }
-    if (dealt) this.autosave();
+    if (dealt) {
+      this.autosave();
+      this.checkJobs();
+    }
+  }
+
+  // --- Blueprints -------------------------------------------------------------
+  //
+  // A drawing of a line, to build again somewhere else. The one machine that
+  // is not a machine; see `world/blueprint.ts` for what it draws and what a
+  // stamping costs.
+
+  /** Draw what stands round a blueprint, the moment it is woken. */
+  private recordPlan(key: string): void {
+    const origin = tileOf(key);
+    if (!origin) return;
+    const standing: { key: string; type: MachineType }[] = [];
+    for (const where of this.placedFixtures.keys()) {
+      const type = this.machineAt(where);
+      if (type) standing.push({ key: where, type });
+    }
+    this.drawings.set(key, drawPlan(origin, standing, this.wires));
+  }
+
+  /**
+   * Pick a drawing up, to be stamped down.
+   *
+   * Lit over her head as the blueprint's own picture, the way a coil is,
+   * and put down the way a coil is: a tap on a square. An empty drawing —
+   * a blueprint woken with nothing near it — is refused here rather than
+   * at the stamping, so she is not handed a thing that cannot be used.
+   */
+  private armPlan(key: string): void {
+    const plan = this.drawings.get(key);
+    if (!plan || plan.machines.length === 0) {
+      this.showRefusalOnPlayer(itemIcon(FixtureType.Blueprint));
+      return;
+    }
+    this.arm({ kind: "plan", from: key }, uiTextureKey(itemIcon(FixtureType.Blueprint)));
+  }
+
+  /**
+   * Build the drawing here: every machine at its offset, every wire between
+   * them, paid for out of the basket.
+   *
+   * Refused whole or done whole. A square of the drawing that is taken, or
+   * a material the basket is short of, is a cross on the square or the
+   * material over her head and nothing built — a line half stamped would
+   * be a line that does something other than the drawing, and the whole
+   * point of a drawing is that it does the same thing every time.
+   */
+  private stampPlanAt(from: string, at: GridPoint): void {
+    const plan = this.drawings.get(from);
+    if (!plan || this.interior) {
+      this.markRefusal(at.col, at.row);
+      return;
+    }
+    const cells = stampedAt(plan, at);
+    for (const cell of cells) {
+      const free =
+        this.grid.inBounds(cell.col, cell.row) &&
+        this.grid.isPassable(cell.col, cell.row) &&
+        !this.grid.getCrop(cell.col, cell.row) &&
+        !this.grid.getObjectAt(cell.col, cell.row);
+      if (!free) {
+        this.markRefusal(cell.col, cell.row);
+        // Kept in her hands, like a refused fence: a fat finger is not a
+        // change of mind.
+        this.arm({ kind: "plan", from }, uiTextureKey(itemIcon(FixtureType.Blueprint)));
+        return;
+      }
+    }
+    const short = shortFor(this.inventory, plan);
+    if (short !== null || !canStamp(this.inventory, plan)) {
+      this.showRefusalOnPlayer(short ? iconForItem(short) : itemIcon(FixtureType.Blueprint));
+      this.arm({ kind: "plan", from }, uiTextureKey(itemIcon(FixtureType.Blueprint)));
+      return;
+    }
+    if (!payForStamp(this.inventory, plan)) return;
+    for (const cell of cells) this.putMachineAt(cell.type, cell);
+    for (const wire of stampedWires(plan, at)) {
+      if (!this.wires.some((one) => one.from === wire.from && one.to === wire.to)) {
+        this.wires.push(wire);
+      }
+    }
+    this.drawWires();
+    // The blueprint counts its stampings, which is what the mechanic's last
+    // job reads.
+    const state = this.machines.get(from) ?? newMachine();
+    this.machines.set(from, { ...state, rung: state.rung + 1 });
+    sound().effect(Sfx.PutDown);
+    this.showResult(itemIcon(FixtureType.Blueprint), at.col, at.row);
+    this.playGesture(PLANT);
+    this.refreshCarried();
+    this.paintSockets();
+    this.checkJobs();
+    this.autosave();
+  }
+
+  /**
+   * A machine on a square she named, asleep, hers.
+   *
+   * What `placeFixture` does after the session has said yes, without the
+   * session: a stamping has already checked the square and paid, and the
+   * session's `place` puts things on the square she is *facing*, which is
+   * not where a drawing's machines go.
+   */
+  private putMachineAt(fixture: MachineType, cell: GridPoint): void {
+    const object: PlacedObject = {
+      id: `${fixture}-${cell.col}-${cell.row}`,
+      type: fixture,
+      col: cell.col,
+      row: cell.row,
+      width: 1,
+      height: 1,
+      blocksMovement: true,
+      anchorCol: cell.col,
+      anchorRow: cell.row,
+      mine: true,
+    };
+    this.grid.placeObject(object);
+    const sidecar = this.fixtureSidecars.get(fixture);
+    if (!sidecar) throw new Error(`no art loaded for fixture "${fixture}"`);
+    const sprite = this.spawnFootprintSprite(
+      object,
+      sidecar,
+      fixtureSheetKey(fixture),
+      fixtureAnimKey(fixture, drawnLook(Turn.Toward)),
+      false,
+      drawnFlip(Turn.Toward),
+    );
+    this.watchMachine(sprite, cell.col, cell.row);
+    this.placedFixtures.set(tileKey(cell.col, cell.row), sprite);
+  }
+
+  // --- The mechanic's jobs ----------------------------------------------------
+
+  /** The jobs this child has done, and the ones `?jobs=` says to count. */
+  private get jobsDone(): readonly string[] {
+    return [...this.profile.jobs, ...this.dev.jobs];
+  }
+
+  /** Whether the crate shows this: everything but a machine a job has not yet earned. */
+  private crateOffers(fixture: FixtureType): boolean {
+    return !isMachine(fixture) || offered(this.jobsDone).includes(fixture);
+  }
+
+  /** The garden's lines, as a job reads them: every machine and every wire. */
+  private lineView(): LineView {
+    const machines: { key: string; type: MachineType; state: MachineState }[] = [];
+    for (const key of this.placedFixtures.keys()) {
+      const type = this.machineAt(key);
+      if (type) machines.push({ key, type, state: this.machines.get(key) ?? newMachine() });
+    }
+    return { machines, wires: this.wires };
+  }
+
+  /**
+   * Whether the garden has done the job she set, and if so, remember it.
+   *
+   * Asked whenever a line changes — a wire strung, a machine dealt — rather
+   * than every frame, because it walks every machine in the garden. The
+   * reward is the crate offering the next machine, and the picture rising
+   * over her head is that machine's, so the child knows what to go and
+   * look for.
+   */
+  private checkJobs(): void {
+    const job = nextJob(this.jobsDone);
+    if (!job) return;
+    const spec = JOB_SPECS[job];
+    if (spec.progress(this.lineView()) < spec.wanted) return;
+    this.saveProfileChange({ jobs: [...this.profile.jobs, job] });
+    this.crateTray?.refresh();
+    if (spec.unlocks) this.showEarned(itemIcon(spec.unlocks));
+  }
+
+  /**
+   * The sheet on her bench: the job, how far along it is, and what it earns.
+   *
+   * The astronomer's errand panel, with a line of machines on it: the row is
+   * the number for a child who cannot read, and the sentence is for the one
+   * who can. What is *counted* is what she can see in the garden — wires
+   * into the funnel, rings of the bell.
+   */
+  private showJobs(): void {
+    const job = nextJob(this.jobsDone);
+    const spec = job ? JOB_SPECS[job] : null;
+    const progress = spec ? Math.min(spec.wanted, spec.progress(this.lineView())) : 0;
+    this.taskPanel?.show(
+      {
+        title: this.words.jobsTitle,
+        line: job
+          ? this.words.jobAsk(job, Math.max(0, (spec?.wanted ?? 0) - progress))
+          : this.words.jobsAllDone,
+        bargain: job ? this.words.jobBargain(job) : this.words.jobEarned,
+        token: spec
+          ? spec.token === "wire"
+            ? itemIcon(CRATE_WIRE as never)
+            : itemIcon(spec.token)
+          : itemIcon(FixtureType.Bell),
+        needed: spec?.wanted ?? 0,
+        done: progress,
+        reward: spec?.unlocks ? itemIcon(spec.unlocks) : UiAsset.MarkGlad,
+      },
+      () => {},
+    );
   }
 
   // --- Wire ---------------------------------------------------------------
@@ -9224,6 +8193,7 @@ export class GameScene extends Phaser.Scene {
     this.showResult(UiAsset.MarkYes, at.col, at.row);
     this.drawWires();
     this.autosave();
+    this.checkJobs();
   }
 
   /**
@@ -9336,6 +8306,343 @@ export class GameScene extends Phaser.Scene {
     ink.strokePath();
   }
 
+  // --- Using things -------------------------------------------------------
+  //
+  // A tap on a thing she put down asks what to do with it, and one of the
+  // two answers is a small gesture that changes nothing. `world/uses.ts`
+  // says which thing gets which; `ActionWheel` does the asking; this is the
+  // doing.
+
+  /**
+   * Ask what to do with a thing: use it, or take it.
+   *
+   * It used to go straight into the basket, which made every piece of
+   * furniture a kind of luggage — a bench was a thing to have and never a
+   * thing to sit on. Now the tap asks, in two pictures: the glad face for
+   * using it and the basket for taking it. The design's rule that nothing
+   * selects-then-confirms is kept, because this is not a confirmation: it
+   * is a question with two different answers, and only the child knows
+   * which she meant.
+   *
+   * Opened over the thing rather than over her, because the question is
+   * about the thing. The tap that opened it is still on its way to the
+   * scene's own handler, which is what `wheelFresh` is for.
+   *
+   * A thing with no use skips the question — a chooser of one is not a
+   * choice. Nothing hers has no use; the rule is kept for the day something
+   * does.
+   */
+  private offerActions(
+    thing: UsableThing,
+    cells: readonly GridPoint[],
+    take: () => void,
+    /** Where on the thing she lies, if not its near edge. The bed's pillow. */
+    head?: GridPoint,
+  ): void {
+    if (this.modalOpen || cells.length === 0) return;
+    const use = useOf(thing);
+    if (!use) {
+      take();
+      return;
+    }
+    const feet = cells.map((cell) => this.toFeet(cell.col, cell.row));
+    const x = feet.reduce((sum, at) => sum + at.x, 0) / feet.length;
+    const y = feet.reduce((sum, at) => sum + at.y, 0) / feet.length;
+    const middle = this.screenOfPoint(x, y - TILE_SIZE / 2);
+    this.wheel?.openAt(
+      middle,
+      [
+        { action: "use", icon: uiTextureKey(UiAsset.MarkGlad) },
+        { action: "take", icon: uiTextureKey(UiAsset.Basket) },
+      ],
+      (action) => {
+        this.wheelOpenedAt = null;
+        if (action === "take") take();
+        else this.useThing(use, cells, head);
+      },
+    );
+    this.wheelFresh = true;
+    this.wheelOpenedAt = { col: this.playerCol, row: this.playerRow };
+  }
+
+  private closeWheel(): void {
+    this.wheel?.close();
+    this.wheelFresh = false;
+    this.wheelOpenedAt = null;
+  }
+
+  /**
+   * Do the small thing she does with it.
+   *
+   * From one step away, diagonals included, like talking to somebody: a
+   * bench three squares off is a bench to walk to first, and the same trail
+   * of dots that says so for a villager says so here. Nothing in the world
+   * changes. The sprite hops, tilts, wriggles or sinks, and after a second
+   * or two she is standing where she was, facing what she used.
+   *
+   * Taps and keys do nothing while it plays — `using` is folded into
+   * `modalOpen` — which is why every move is short. The one timer at the
+   * end is what puts her back, whatever the move did: every move is built
+   * to finish inside its `USE_MS`, and the timer does not care whether it
+   * did. A move that left her lying on the bed for ever would be a game
+   * that had stopped listening.
+   *
+   * Except that some of them are *meant* to leave her there. A lasting use
+   * — see `LASTING` — ends its timer settled rather than stood up: from
+   * then on she stays, and the next tap anywhere is what gets her off. That
+   * is not the game not listening; it is the game having been asked to sit
+   * her down, and waiting to be asked the next thing.
+   */
+  private useThing(use: Use, cells: readonly GridPoint[], head?: GridPoint): void {
+    // Not mid-step: a hop kills the tweens on her, and the walking tween is
+    // what clears `isMoving` — killed, it would leave her unable to walk
+    // ever again. The ring closes on the step anyway; this is the frame in
+    // between.
+    if (this.modalOpen || this.isMoving || cells.length === 0) return;
+    const her = this.session.tile;
+    const nearest = cells.reduce((best, cell) =>
+      stepsToSpeak(her, cell) < stepsToSpeak(her, best) ? cell : best,
+    );
+    if (stepsToSpeak(her, nearest) > 1) {
+      this.markRefusal(nearest.col, nearest.row);
+      this.markTooFar(nearest.col, nearest.row);
+      return;
+    }
+    const toward =
+      facingForVector(nearest.col - her.col, nearest.row - her.row) ?? this.playerFacing;
+    this.session.face(toward);
+    this.joystick?.release();
+    this.path = [];
+    this.playerGesture = null;
+    this.using = use;
+    const home = this.toFeet(her.col, her.row);
+    // The near edge of the thing, a hair in front of it: her feet are her
+    // depth, so landing there draws her on the bench rather than behind it.
+    // The middle of that edge, for a thing wider than a square.
+    const bottom = Math.max(...cells.map((cell) => cell.row));
+    const edge = cells
+      .filter((cell) => cell.row === bottom)
+      .map((cell) => this.toFeet(cell.col, cell.row));
+    const there: ScreenPoint = {
+      x: edge.reduce((sum, at) => sum + at.x, 0) / edge.length,
+      y: (edge[0]?.y ?? home.y) + ON_THING_NUDGE,
+    };
+    // Sleeping is done with her head on the pillow, which may be the far
+    // end; she is still sorted in front of the whole bed from there.
+    const pillow = head ? this.toFeet(head.col, head.row) : null;
+    const lying: ScreenPoint =
+      use === Use.Nap && pillow ? { x: pillow.x, y: pillow.y + ON_THING_NUDGE } : there;
+    if (isOnTheThing(use)) this.perchDepth = there.y;
+    this.performUse(use, toward, home, isOnTheThing(use) ? lying : home);
+    this.time.delayedCall(USE_MS[use], () => {
+      // The moon rises off her, and she is at the pillow end.
+      if (isLasting(use)) this.stay(use, home, toward, use === Use.Nap && head ? head : nearest);
+      else this.standBack(home, toward);
+    });
+  }
+
+  /** Where she was, as she was: the end of every use. */
+  private standBack(home: ScreenPoint, toward: Facing): void {
+    this.perchDepth = null;
+    this.tweens.killTweensOf(this.player);
+    this.player.setPosition(home.x, home.y).setAngle(0).setScale(1).setDepth(home.y);
+    this.session.face(toward);
+    this.playerGesture = null;
+    this.using = null;
+  }
+
+  /**
+   * Settled on something, and staying.
+   *
+   * What runs from here is what she does while she waits — a breath, a
+   * bob, a moon — and all of it is on a loop, because there is no knowing
+   * how long she will be left there. Every loop is killed by `standUp`.
+   */
+  private stay(use: Use, home: ScreenPoint, toward: Facing, cell: GridPoint): void {
+    this.rest = { home, toward };
+    const breathe = (from: number, ms: number) =>
+      this.tweens.add({
+        targets: this.player,
+        scaleY: from + 0.02,
+        duration: ms,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
+    switch (use) {
+      case Use.Sit:
+        breathe(SIT_SQUASH, 900);
+        return;
+      case Use.Nap:
+        breathe(NAP_SQUASH - 0.02, 700);
+        this.restLoop = this.time.addEvent({
+          delay: NAP_MOON_MS,
+          loop: true,
+          callback: () => this.showResult(UiAsset.MarkNight, cell.col, cell.row),
+        });
+        return;
+      case Use.Splash:
+        this.tweens.add({
+          targets: this.player,
+          y: this.player.y + 3,
+          scaleX: 1.08,
+          scaleY: 0.92,
+          duration: 180,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut",
+        });
+        return;
+      default:
+        return;
+    }
+  }
+
+  /**
+   * Up off the chair, the bed or the bath, and back to where she was.
+   *
+   * A hop rather than a cut, because getting on was one. Taps go on doing
+   * nothing until she lands — `using` is still set — so a child who taps
+   * twice gets one hop, not one hop and a walk.
+   */
+  private standUp(): void {
+    const rest = this.rest;
+    if (!rest) return;
+    this.rest = null;
+    this.restLoop?.remove();
+    this.restLoop = null;
+    this.hop(rest.home, () => this.standBack(rest.home, rest.toward));
+  }
+
+  /**
+   * The moves themselves: a few tweens on her sprite, and the odd mark.
+   *
+   * Built out of what the art already has. The sheet holds idle, walk and
+   * one bend, so sitting is a hop and a sink, sleeping is a slower sink with
+   * a moon or two, washing is the bend twice, and a twirl is the four
+   * facings in a ring. None of it is a new drawing, and all of it reads,
+   * which is the argument for doing it this way rather than waiting for a
+   * sitting frame that would have to be drawn for six bodies.
+   */
+  private performUse(use: Use, toward: Facing, home: ScreenPoint, there: ScreenPoint): void {
+    const her = this.session.tile;
+    const at = (ms: number, act: () => void) => this.time.delayedCall(ms, act);
+    switch (use) {
+      // The three that last only get her on and settled here. What she does
+      // once she is there is `stay`'s, because it has to go on for as long
+      // as she is left, and getting off is `standUp`'s.
+      case Use.Sit:
+        this.hop(there, () => {
+          this.session.face(Facing.Down);
+          this.settle(SIT_SQUASH);
+        });
+        return;
+      case Use.Nap:
+        this.hop(there, () => {
+          this.session.face(Facing.Down);
+          this.settle(NAP_SQUASH);
+        });
+        return;
+      case Use.Splash:
+        this.hop(there, () => this.session.face(Facing.Down));
+        return;
+      case Use.Swing:
+        // Through and straight back: a gate is for going through.
+        this.hop(there, () => at(60, () => this.hop(home)));
+        return;
+      case Use.Wash:
+        this.playGesture(PLANT);
+        at(650, () => this.playGesture(PLANT));
+        return;
+      case Use.Peek:
+        this.playGesture(PLANT);
+        at(600, () => this.showResult(UiAsset.MarkGlad, her.col, her.row));
+        return;
+      case Use.Warm:
+        this.wriggle(3, 5, 80);
+        at(300, () => this.showResult(UiAsset.MarkGlad, her.col, her.row));
+        return;
+      case Use.Twirl: {
+        const round: readonly Facing[] = [Facing.Left, Facing.Up, Facing.Right, Facing.Down];
+        for (let turn = 0; turn < 8; turn++) {
+          at(TWIRL_STEP_MS * (turn + 1), () => this.session.face(round[turn % 4] ?? toward));
+        }
+        at(TWIRL_STEP_MS * 9, () =>
+          this.tweens.add({
+            targets: this.player,
+            y: home.y - 10,
+            duration: 140,
+            yoyo: true,
+            ease: "Quad.easeOut",
+          }),
+        );
+        return;
+      }
+      case Use.Lean: {
+        // Sideways she tilts toward it; front-on she leans over it, which
+        // from above is being a little shorter.
+        const tilt =
+          toward === Facing.Left ? -LEAN_DEGREES : toward === Facing.Right ? LEAN_DEGREES : 0;
+        this.tweens.add({
+          targets: this.player,
+          angle: tilt,
+          scaleY: tilt === 0 ? LEAN_FORWARD : 1,
+          duration: 220,
+          hold: 600,
+          yoyo: true,
+          ease: "Quad.easeOut",
+        });
+        return;
+      }
+    }
+  }
+
+  /** A little jump from where she is to a point, landing with the callback. */
+  private hop(to: ScreenPoint, onLand?: () => void): void {
+    const from = { x: this.player.x, y: this.player.y };
+    this.tweens.killTweensOf(this.player);
+    this.player.setAngle(0).setScale(1);
+    this.tweens.add({ targets: this.player, x: to.x, duration: HOP_MS, ease: "Linear" });
+    this.tweens.add({
+      targets: this.player,
+      y: Math.min(from.y, to.y) - HOP_RISE,
+      duration: HOP_MS / 2,
+      ease: "Quad.easeOut",
+      onComplete: () =>
+        this.tweens.add({
+          targets: this.player,
+          y: to.y,
+          duration: HOP_MS / 2,
+          ease: "Quad.easeIn",
+          onComplete: onLand,
+        }),
+    });
+  }
+
+  /** Sink a little, the way sitting down is shorter than standing. */
+  private settle(squash: number): void {
+    this.tweens.add({
+      targets: this.player,
+      scaleY: squash,
+      duration: SETTLE_MS,
+      ease: "Quad.easeOut",
+    });
+  }
+
+  /** Shiver side to side about where she stands. */
+  private wriggle(px: number, times: number, ms: number): void {
+    const x = this.player.x;
+    this.tweens.add({
+      targets: this.player,
+      x: x + px,
+      duration: ms,
+      yoyo: true,
+      repeat: times,
+      ease: "Sine.easeInOut",
+      onComplete: () => this.player.setX(x),
+    });
+  }
+
   private takeFixture(fixture: FixtureType, col: number, row: number): void {
     if (this.modalOpen) return;
     const result = this.session.takeBack(fixture, col, row);
@@ -9344,7 +8651,7 @@ export class GameScene extends Phaser.Scene {
     const key = tileKey(col, row);
     this.placedFixtures.get(key)?.destroy();
     this.placedFixtures.delete(key);
-    this.snuffLamp(col, row);
+    this.lighting.snuffLamp(col, row);
     this.refreshCarried();
     this.paintSockets();
   }
@@ -9381,6 +8688,7 @@ export class GameScene extends Phaser.Scene {
     this.report(result, result.crop ? cropIcon(result.crop.plant) : undefined);
     if (!result.ok || !result.tile) return;
     sound().effect(Sfx.Harvest);
+    this.noteDeed(Deed.Picked);
 
     // The sprite has to go *and* leave the registry: a stale entry would have
     // the growth spell re-animating a destroyed object the next time this
@@ -9447,6 +8755,7 @@ export class GameScene extends Phaser.Scene {
     // action. The patch gets one sound of its own, the same way it gets one
     // bend of the back rather than sixteen.
     sound().effect(Sfx.Seed);
+    this.noteDeed(Deed.Planted);
 
     const { col, row } = result.tile;
     this.spawnCropSprite(col, row, { plant, stage: PLANTED_STAGE });
@@ -9469,6 +8778,7 @@ export class GameScene extends Phaser.Scene {
   private plantCropAt(plant: PlantType, col: number, row: number): void {
     if (!this.grid.plant(col, row, plant)) return;
     this.spawnCropSprite(col, row, { plant, stage: PLANTED_STAGE });
+    this.noteDeed(Deed.Planted);
   }
 
   /**
@@ -9516,8 +8826,7 @@ export class GameScene extends Phaser.Scene {
       new Phaser.Geom.Rectangle(0, frame.realHeight - TILE_SIZE, TILE_SIZE, TILE_SIZE),
       Phaser.Geom.Rectangle.Contains,
     );
-    sprite.on("pointerdown", () => {
-      if (this.pointerIsSpokenFor) return;
+    this.onTap(sprite, () => {
       this.handleCropTap(col, row);
     });
   }
@@ -9617,8 +8926,7 @@ export class GameScene extends Phaser.Scene {
         thinking: [],
       };
       sprite.setInteractive({ useHandCursor: true });
-      sprite.on("pointerdown", () => {
-        if (this.pointerIsSpokenFor) return;
+      this.onTap(sprite, () => {
         this.feedAnimal(animal);
       });
       this.animals.push(animal);
@@ -9889,6 +9197,7 @@ export class GameScene extends Phaser.Scene {
       share: () => this.castShareSpell(),
       hourglass: () => this.castHourglass(),
       mirror: () => this.castMirrorSpell(),
+      logic: () => this.castLogicSpell(),
     };
     casts[spell]();
   }
@@ -10079,7 +9388,7 @@ export class GameScene extends Phaser.Scene {
       // the scene already sees every one of them exactly once, as it puts it
       // on screen.
       if (fixture === FixtureType.Lamp || fixture === FixtureType.Glowcap) {
-        this.lightLamp(object.col, object.row);
+        this.lighting.lightLamp(object.col, object.row);
       }
       return;
     }
@@ -10097,7 +9406,7 @@ export class GameScene extends Phaser.Scene {
       // the same path a lamp and a glowcap take, and the reason the harbour
       // is worth walking to after dark.
       if (landmark === LandmarkType.Lighthouse) {
-        this.lightLamp(object.col, object.row + sidecar.footprint_tiles.height - 1);
+        this.lighting.lightLamp(object.col, object.row + sidecar.footprint_tiles.height - 1);
       }
       // Only the one that has something to say answers a tap. The other two
       // used to, with a refusal, and it cost more than it looked: a game
@@ -10292,7 +9601,14 @@ export class GameScene extends Phaser.Scene {
         .sprite(feet.x, feet.y, characterSheetKey(characterFor(part, 0)))
         .setOrigin(0.5, 1)
         .setDepth(feet.y)
-        .play(characterAnimKey(characterFor(part, 0), IDLE, Facing.Down)),
+        .play(
+          // The mechanic is at work: the bend the player makes to plant,
+          // over and over at her bench, with the sparks the room draws
+          // flying off it. Everybody else stands and waits to be spoken to.
+          part === MECHANIC_ID
+            ? { key: characterAnimKey(characterFor(part, 0), PLANT, Facing.Down), repeat: -1 }
+            : characterAnimKey(characterFor(part, 0), IDLE, Facing.Down),
+        ),
     );
     if (part === SHOPKEEPER_ID)
       this.watchAttendant(
@@ -10323,6 +9639,12 @@ export class GameScene extends Phaser.Scene {
         sprite,
         () => cell,
         () => this.meetAstronomer(),
+      );
+    if (part === MECHANIC_ID)
+      this.watchAttendant(
+        sprite,
+        () => cell,
+        () => this.meetMechanic(),
       );
     this.attendant = sprite;
     this.attendantCell = cell;
@@ -10360,8 +9682,7 @@ export class GameScene extends Phaser.Scene {
       new Phaser.Geom.Rectangle(0, 0, TILE_SIZE, TILE_SIZE),
       Phaser.Geom.Rectangle.Contains,
     );
-    sprite.on("pointerdown", () => {
-      if (this.pointerIsSpokenFor) return;
+    this.onTap(sprite, () => {
       // The map opens the map. The chart is a picture, so tapping it holds
       // the picture up — with the two things the drawing cannot say about
       // itself written round it: whose sky it is, and when.
@@ -10746,7 +10067,7 @@ export class GameScene extends Phaser.Scene {
     inside.decor = [];
 
     const sizes = this.pieceSizes();
-    this.snuffHearth();
+    this.lighting.snuffHearth();
     for (const placed of this.decorIn(inside.house)) {
       // The size it is *lying* at, not the size it was drawn: a bed turned
       // across the room is two cells wide and one deep, and its depth and
@@ -10779,7 +10100,7 @@ export class GameScene extends Phaser.Scene {
               .setDepth(depth),
       );
       if (art?.light === LightKind.Fire) {
-        this.lightHearthAt({
+        this.lighting.lightHearthAt({
           col: placed.col - inside.origin.col,
           row: placed.row - inside.origin.row,
         });
@@ -10805,9 +10126,27 @@ export class GameScene extends Phaser.Scene {
         ),
         Phaser.Geom.Rectangle.Contains,
       );
-      sprite.on("pointerdown", () => {
-        if (this.pointerIsSpokenFor) return;
-        this.takeDecor(placed);
+      // Every square it stands on, in grid coordinates, so the question can
+      // be asked over the middle of a bed rather than its corner and the
+      // answer measured to whichever end of it she is nearest.
+      const cells: GridPoint[] = [];
+      for (let dRow = 0; dRow < size.rows; dRow++) {
+        for (let dCol = 0; dCol < size.cols; dCol++) {
+          cells.push({
+            col: placed.col - inside.origin.col + dCol,
+            row: placed.row - inside.origin.row + dRow,
+          });
+        }
+      }
+      // The pillow end of a bed, where she sleeps. The bed's corner in grid
+      // coordinates is the first cell listed.
+      const corner = cells[0];
+      const head =
+        placed.piece === DecorType.Bed && corner
+          ? pillowOf(decorTurnOf(placed), corner)
+          : undefined;
+      this.onTap(sprite, () => {
+        this.offerActions(placed.piece, cells, () => this.takeDecor(placed), head);
       });
       inside.decor.push(sprite);
     }
@@ -10867,8 +10206,7 @@ export class GameScene extends Phaser.Scene {
       new Phaser.Geom.Rectangle(0, frame.realHeight - TILE_SIZE, TILE_SIZE, TILE_SIZE),
       Phaser.Geom.Rectangle.Contains,
     );
-    sprite.on("pointerdown", () => {
-      if (this.pointerIsSpokenFor) return;
+    this.onTap(sprite, () => {
       onTap();
     });
     this.flowerSprites.set(tileKey(object.col, object.row), sprite);
@@ -11068,6 +10406,7 @@ export class GameScene extends Phaser.Scene {
    */
   private openCrateGroup(group: CrateGroup): void {
     this.crateGroup = group;
+    this.noteDeed(Deed.OpenedGroup);
     this.crateTray?.setOpen(true);
     this.crateTray?.restack();
   }
@@ -11306,6 +10645,8 @@ export class GameScene extends Phaser.Scene {
     if (!inside?.plan || !inside.house) return;
     const parts = this.growable;
     if (!parts) return;
+    // The thing the ring was about is about to be redrawn, or is gone.
+    this.closeWheel();
     // The grid too: what blocks the way changed, and a chair that had been
     // moved would go on blocking the square it left.
     const door = growableDoor(parts);
@@ -11438,6 +10779,8 @@ export class GameScene extends Phaser.Scene {
     }
     const sidecar = this.interiorSidecars.get(room);
     if (!sidecar) throw new Error(`no interior for "${room}"`);
+    this.enteredBuilding = building.id;
+    if (building.id === STORE_ID) this.noteDeed(Deed.EnteredStore);
 
     const door = interiorDoor(sidecar);
     const entered = this.setInterior({
@@ -11469,7 +10812,7 @@ export class GameScene extends Phaser.Scene {
     );
     if ((sidecar.sheet?.frame_count ?? 1) > 1) image.play(interiorAnimKey(painted));
     entered.image = image;
-    this.lightHearth(sidecar);
+    this.lighting.lightHearth(sidecar);
 
     this.grid = entered.grid;
     this.originX = 0;
@@ -11528,10 +10871,7 @@ export class GameScene extends Phaser.Scene {
    * sideways in between.
    */
   private zoomWanted(): number {
-    // What the child has asked for, or what her fingers are asking for right
-    // now. The live value wins while a pinch is running and is gone the
-    // moment it ends, which is the whole difference between the two.
-    const chosen = this.pinching?.live ?? this.restingZoom;
+    const chosen = this.pinch.zoom;
     if (!this.marking) return chosen;
     const camera = this.cameras.main;
     // Her choice is the ceiling, not `CAMERA_ZOOM`. The spell pulls the view
@@ -11539,67 +10879,6 @@ export class GameScene extends Phaser.Scene {
     // further out than that did not ask to be zoomed back in by arming a
     // rune.
     return markingZoom({ width: camera.width, height: camera.height }, TILE_SIZE, chosen);
-  }
-
-  /**
-   * A second finger has landed: start following the two of them.
-   *
-   * Answered true when this press belongs to a pinch, which is what keeps it
-   * from also being a tap. The joystick is let go rather than left holding
-   * the first finger — a stick that stayed on would walk her across the
-   * world for as long as the zoom took.
-   *
-   * The two ids are remembered rather than re-read every frame. A third
-   * finger on a tablet held in two hands is common, and a pinch that
-   * silently changed which fingers it was watching would jump.
-   */
-  private beginPinch(): boolean {
-    if (this.pinching) return true;
-    if (this.touching.size < 2) return false;
-    const [first, second] = [...this.touching.entries()];
-    if (!first || !second) return false;
-    const steps = zoomSteps(CAMERA_ZOOM);
-    if (steps.length < 2) return false;
-    this.joystick?.release();
-    this.pinched = true;
-    this.pinching = {
-      a: first[0],
-      b: second[0],
-      from: spread(first[1], second[1]),
-      held: this.restingZoom,
-      live: this.restingZoom,
-    };
-    return true;
-  }
-
-  /** The fingers moved: put the camera where they are holding it. */
-  private dragPinch(): boolean {
-    const pinch = this.pinching;
-    if (!pinch) return false;
-    const one = this.touching.get(pinch.a);
-    const other = this.touching.get(pinch.b);
-    if (!one || !other) return true;
-    pinch.live = pinchedZoom(pinch.held, pinch.from, spread(one, other), zoomSteps(CAMERA_ZOOM));
-    this.applyZoom();
-    return true;
-  }
-
-  /**
-   * One of the two lifted: let it come to rest on a step.
-   *
-   * On the *nearest* step rather than wherever the fingers left it, so the
-   * world is never drawn at a fraction of a pixel while nobody is touching
-   * it — see `pinch.ts`. Nothing happens for the other fingers on the glass:
-   * the gesture is over the moment it is no longer two.
-   */
-  private endPinch(pointerId: number): void {
-    const pinch = this.pinching;
-    if (pinch && (pointerId === pinch.a || pointerId === pinch.b)) {
-      this.restingZoom = settledZoom(pinch.live, zoomSteps(CAMERA_ZOOM));
-      this.pinching = null;
-      this.applyZoom();
-    }
-    if (this.touching.size === 0) this.pinched = false;
   }
 
   /**
@@ -11675,11 +10954,12 @@ export class GameScene extends Phaser.Scene {
   private leaveInterior(): void {
     const interior = this.interior;
     if (!interior) return;
+    this.closeWheel();
     interior.canvas?.destroy();
     for (const fire of interior.fires) fire.destroy();
     for (const standing of interior.decor) standing.destroy();
     if (!interior.canvas) interior.image.destroy();
-    this.snuffHearth();
+    this.lighting.snuffHearth();
     this.interiorLayer.setVisible(false);
     this.worldLayer.setVisible(true);
     this.wallMap?.destroy();
@@ -11701,7 +10981,7 @@ export class GameScene extends Phaser.Scene {
     // longer tracking would walk off the edge of the screen.
     this.cameras.main.startFollow(this.player);
     this.placePlayer(interior.returnTo.col, interior.returnTo.row, Facing.Down);
-    this.refreshVisibleChunks();
+    this.chunks.refreshVisibleChunks();
   }
 
   // Teleport rather than walk: used at both ends of a doorway, where the two
@@ -11790,7 +11070,7 @@ export class GameScene extends Phaser.Scene {
               const npc = this.npcs.find((one) => one.id === POSTAL_WORKER_ID);
               return { col: npc?.col ?? spec.home.col, row: npc?.row ?? spec.home.row };
             },
-            () => this.openIntro(),
+            () => this.openDelivery(),
           );
         }
         return {
@@ -11840,12 +11120,13 @@ export class GameScene extends Phaser.Scene {
     if (this.frozen) {
       for (const npc of this.npcs) {
         if (npc.isMoving) continue;
-        // ?intro asks for the welcome, and the welcome is a walk across the
-        // square: the one NPC movement a frozen world is still allowed, or
-        // the two seams would cancel each other and the tutorial could not
-        // be tested from a script at all.
-        if (this.dev.intro && this.deliveringIntro(npc)) this.npcDeliverIntroStep(npc);
-        else this.npcRetreatStep(npc);
+        // ?intro asks for the welcome and ?news asks for the letter, and
+        // both are a walk across the square: the one NPC movement a frozen
+        // world is still allowed, or the two seams would cancel each other
+        // and neither could be tested from a script at all.
+        if ((this.dev.intro || this.dev.news) && this.deliveringIntro(npc)) {
+          this.npcDeliverIntroStep(npc);
+        } else this.npcRetreatStep(npc);
       }
       return;
     }
@@ -11902,11 +11183,42 @@ export class GameScene extends Phaser.Scene {
    */
   private deliveringIntro(npc: NpcRuntime): boolean {
     return (
-      this.introToGive &&
+      this.delivery !== null &&
       npc.id === POSTAL_WORKER_ID &&
       this.introStepsLeft > 0 &&
+      this.playerInVillage &&
       !this.session.indoors &&
       !this.modalOpen
+    );
+  }
+
+  /**
+   * Whether the player is somewhere he could plausibly walk to.
+   *
+   * **The village box, and no path test.** Asking "can he get there" means
+   * running `findPath`, and `findPath` is a breadth-first search of the
+   * whole grid — the very cost this gate exists to avoid. A cheap containment
+   * test is the only kind that can be asked every frame, and the box is not
+   * an arbitrary radius: his round *is* the village, which is the rule
+   * `spawnNpcs` already gives him (`PATROL_WANDER_RADIUS`, centred on the
+   * square) and the one the design doc states.
+   *
+   * Without this he would set off for the harbour. That is not hypothetical
+   * and it did not need the news to happen: a child who skipped the welcome,
+   * walked across the world and closed the tab comes back with their saved
+   * position in `col`/`row` and `introSeen` still false, and he would start
+   * routing at them from the post office — sixty steps of whole-grid search,
+   * one every 230ms. Worse when there is no route at all, because a failed
+   * search leaves `introPath` empty, which is exactly the condition that
+   * asks for another one: that case re-searches whether or not they move.
+   *
+   * Outside the box a door opens instead. See `postmanIn`.
+   */
+  private get playerInVillage(): boolean {
+    const box = this.anchors.village;
+    const { col, row } = this.session.tile;
+    return (
+      col >= box.col && row >= box.row && col < box.col + box.width && row < box.row + box.height
     );
   }
 
@@ -11923,7 +11235,7 @@ export class GameScene extends Phaser.Scene {
   private npcDeliverIntroStep(npc: NpcRuntime): void {
     if (stepsToSpeak({ col: npc.col, row: npc.row }, this.session.tile) <= 1) {
       npc.facing = facingFor(this.session.col - npc.col, this.session.row - npc.row, npc.facing);
-      this.openIntro();
+      this.openDelivery();
       return;
     }
     this.introStepsLeft--;
@@ -11946,6 +11258,212 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.moveNpcTo(npc, next.col, next.row, INTRO_MOVE_MS);
+  }
+
+  /**
+   * The other arrival: a door, for a child he cannot walk to.
+   *
+   * The walk above is the right shape while the player is somewhere his
+   * round covers, and it is the *only* shape the game had. That was fine
+   * while the only thing he ever delivered was the welcome, which is given
+   * in the first minute in a garden twenty tiles from his own door. A letter
+   * about what has changed is owed to a child who may be anywhere in a
+   * five-hundred-cell world — up the tower, out on the quay — and "he sets
+   * off and arrives in four minutes" is not a delivery, it is a rumour.
+   *
+   * So: inside the village he walks, and outside it the post office opens a
+   * door. Which is not him learning the geometer's spell — the spell is
+   * something a child earns, and a postman who could cast it would be
+   * teaching them otherwise. It is how the post gets about, and he is the
+   * man who steps out of it with the letter.
+   *
+   * Asked every frame and answers on almost none of them, like everything
+   * else in `update`: the four conditions are a flag, two integers and a
+   * containment test.
+   */
+  private updatePost(): void {
+    if (this.delivery === null || this.postArriving) return;
+    // **The door is the letter's, not the welcome's.** A new game starts in
+    // the garden, so the welcome is always given inside his round — the only
+    // way to be owed one anywhere else is to have skipped it and walked off,
+    // and a portal tearing open in front of a child who has been avoiding
+    // him is the game insisting. She can tap him, or come home. It also
+    // keeps a door out of every scenario that puts a fresh save down on the
+    // quay, which is most of them.
+    if (this.delivery !== Delivery.News) return;
+    // Inside his round he walks, and `updateNpcs` has him. Outside it, this.
+    //
+    // **Including when he has run out of patience.** A child who spends the
+    // whole of `INTRO_PATIENCE_STEPS` running rings round him in the village
+    // gets no letter that session — not a door, which would be the loud
+    // arrival used as a consolation for the quiet one having failed, in the
+    // one place the quiet one is right. She gets it by tapping him, the way
+    // the welcome has always worked, or on her next load: the budget is a
+    // field initialiser and comes back with the scene, while the letter
+    // stays owed in the save until it is actually read.
+    if (this.playerInVillage) return;
+    if (!this.postReady) return;
+    // Not into a room: an interior is its own coordinate space, and a hole
+    // cut in a schoolroom floor has no post office on the other side of it.
+    // Not over an open sheet. And not under a child mid-step — a door opens
+    // in front of somebody who is standing still, or it opens in front of
+    // where they were a moment ago.
+    if (this.session.indoors || this.modalOpen || this.isMoving) return;
+    this.postmanIn();
+  }
+
+  /**
+   * The door tears open on the tile they are facing, and he comes out of it.
+   *
+   * The same doorway the player's own crossing builds, and the far end is
+   * the post office — painted from the world's own grid by the loop that
+   * paints the terrain, so what shows through the hole is the place he is
+   * coming from. `travelThrough` makes that rule about the player and it is
+   * the whole of what sells the effect; a hole showing anywhere else would
+   * be a lie in the one frame the child is looking straight at.
+   *
+   * What is *not* reused is `travelThrough` itself. That method is about the
+   * player: it sets `travelling`, moves `session`, refreshes the chunks
+   * round the far end and lands somebody there. None of that is true here —
+   * nobody is going anywhere, and the camera does not move at all.
+   */
+  private postmanIn(): void {
+    const him = this.npcs.find((one) => one.id === POSTAL_WORKER_ID);
+    // No postman in this world, somehow. Better a letter that never comes
+    // than a stranger stepping out of a hole.
+    if (!him) return;
+    const world = { width: this.grid.width, height: this.grid.height };
+    const cell = portalCell(this.session.tile, this.session.facing, world);
+    this.postArriving = true;
+    this.joystick?.release();
+    sound().effect(Sfx.Portal);
+    this.openPortal(cell, { col: him.homeCol, row: him.homeRow });
+
+    const feet = this.toFeet(cell.col, cell.row);
+    const sprite = this.world(
+      this.add
+        .sprite(this.portalMiddle.x, this.portalMiddle.y, characterSheetKey(him.character))
+        .setOrigin(0.5, 1)
+        .setDepth(this.portalDepth + 0.2)
+        .setScale(0.12)
+        .setAlpha(0.15),
+    );
+    // Facing back the way he came out, which is at the player: the doorway
+    // stands on the tile they are looking at.
+    this.playCharacterAnim(sprite, him.character, oppositeFacing(this.session.facing), false);
+    this.postman = sprite;
+
+    // Cancelled on success rather than guarded on a flag, for the reason
+    // `portalGuard` is: a beat that merely ran long on a cheap tablet would
+    // otherwise fire in the middle of the arrival and tear down graphics a
+    // tween was still writing to. It covers the arrival only — the sheet
+    // after it is open for as long as a child wants to read it, which is not
+    // a duration anything can fail to finish within.
+    this.postGuard = this.time.delayedCall((PORTAL_OPEN_MS + POST_STEP_MS) * 2, () => {
+      this.postGuard = null;
+      // Not "open the sheet anyway": a parchment with nobody standing in
+      // front of it is the failure this is meant to avoid, said differently.
+      // The letter is what the visit was for, so it is left owed and tried
+      // again — losing it to one dropped frame is the thing worth avoiding.
+      this.abandonArrival();
+    });
+
+    this.swingPortal(0, 1, PORTAL_OPEN_MS, () => {
+      this.tweens.add({
+        targets: sprite,
+        x: feet.x,
+        y: feet.y,
+        scale: 1,
+        alpha: 1,
+        duration: POST_STEP_MS,
+        ease: "Cubic.easeOut",
+        onComplete: () => {
+          this.postGuard?.remove();
+          this.postGuard = null;
+          // The sheet is modal in its own right from here, and `openDelivery`
+          // refuses to open over anything that already is.
+          this.postArriving = false;
+          // Which is a refusal that has to be *handled* rather than
+          // ignored, even though nothing in the game is currently known to
+          // cause it: the arrival is itself modal, so a child cannot open a
+          // tray or sit on a chair while he is coming out. That is what
+          // makes this defensive rather than live — and it is exactly why it
+          // is written down, because the day something else learns to put a
+          // sheet up on a timer, `openNews` returning early would leave him
+          // standing on the quay forever with nothing in his hands and
+          // nothing to send him home. The visit is abandoned instead and the
+          // letter left *owed*: `updatePost` brings him back.
+          //
+          // Untested for the same reason it is unreachable. See `postGuard`,
+          // which is the other half of this and just as defensive.
+          if (this.modalOpen) {
+            this.abandonArrival();
+            return;
+          }
+          this.openDelivery(() => this.postmanOut());
+        },
+      });
+    });
+  }
+
+  /**
+   * Give up on this visit, keeping the letter.
+   *
+   * `delivery` is deliberately untouched: whatever went wrong here, he still
+   * has something for this child, and the next quiet moment is another
+   * chance at it rather than a letter nobody ever gets.
+   */
+  private abandonArrival(): void {
+    this.postmanAway();
+    this.armPostArrival();
+  }
+
+  /** Hold the door shut for a beat, from now. See `postReady`. */
+  private armPostArrival(): void {
+    this.postReady = false;
+    this.time.delayedCall(POST_ARRIVAL_MS, () => {
+      this.postReady = true;
+    });
+  }
+
+  /** Read, folded away: he steps back through and the door shuts after him. */
+  private postmanOut(): void {
+    const sprite = this.postman;
+    if (!sprite) return;
+    this.postArriving = true;
+    sound().effect(Sfx.Portal);
+    this.postGuard = this.time.delayedCall((POST_STEP_MS + PORTAL_CLOSE_MS) * 2, () => {
+      this.postGuard = null;
+      this.postmanAway();
+    });
+    this.tweens.add({
+      targets: sprite,
+      x: this.portalMiddle.x,
+      y: this.portalMiddle.y,
+      scale: 0.12,
+      alpha: 0.15,
+      duration: POST_STEP_MS,
+      ease: "Cubic.easeIn",
+      onComplete: () => {
+        this.swingPortal(1, 0, PORTAL_CLOSE_MS, () => this.postmanAway());
+      },
+    });
+  }
+
+  /**
+   * Him gone, the door shut, the failsafe stood down.
+   *
+   * Both ends call it and so does the failsafe, so it has to survive being
+   * called twice — which is why every line of it is idempotent.
+   */
+  private postmanAway(): void {
+    this.postGuard?.remove();
+    this.postGuard = null;
+    if (this.postman) this.tweens.killTweensOf(this.postman);
+    this.postman?.destroy();
+    this.postman = null;
+    this.closePortal();
+    this.postArriving = false;
   }
 
   // A bounded random walk, not a route to a chosen destination — simple,
@@ -12133,6 +11651,525 @@ export class GameScene extends Phaser.Scene {
     return this.dev.hungry || this.debugHungry;
   }
 
+  // --- What the scenarios can see -----------------------------------------
+
+  /**
+   * Everything a driving script is allowed to ask the running game.
+   *
+   * It lived inline in `create()` and was half of it — four hundred and
+   * ninety-odd lines of getters wedged between setting the input up and
+   * laying the HUD out, so that the one method a reader opens first to
+   * find out what a scene *is* answered mostly with what a test can see.
+   * Nothing about it changed on the way out here; it is the same object,
+   * built at the same moment, by a method whose name says what it is for.
+   *
+   * Not a function in devHooks.ts, where `exposeForTests` itself lives.
+   * The literal reads sixty-seven of this class's private members, and a
+   * free function could only be given them by making them public — which
+   * would open the whole scene to the world in order to tidy one method.
+   *
+   * Every entry but the first is lazy on purpose: a scenario reads these
+   * long after `create()` has returned, so they have to be questions asked
+   * of the scene now rather than answers copied out of it then. `session`
+   * is the exception because the session object itself never changes.
+   */
+  private devHandle(): DevHandle {
+    return {
+      session: this.session,
+      ui: () => this.uiPositions(),
+      // Whether the world map is up. There is exactly one way to open it —
+      // tapping the picture on the post office wall — and no other sign on
+      // screen that it worked: the panel is a picture of a world that is
+      // also on screen behind it.
+      mapOpen: () => this.mapPanel?.isOpen === true,
+      armed: () => armedTag(this.armed),
+      // And the square it will land on, which is not the same question: the
+      // rune says a spell is waiting, this says where it is pointed.
+      aimed: () => this.session.aimed,
+      // Which way round the thing in her hands is. Its own seam rather than
+      // part of `armed`, which is a name several scenarios compare against
+      // and which should go on meaning what it has always meant.
+      armedTurn: () => this.armedTurn,
+      telling: () => this.thingPanel?.telling ?? null,
+      // The move she is making at a thing, while she makes it. Nothing else
+      // can see one: it changes nothing in the world, which is the point of
+      // it and also what makes a use that never played look exactly like
+      // one that did.
+      using: () => this.using,
+      /** Whether she is settled on something and waiting to be got up. */
+      resting: () => this.rest !== null,
+      marking: () => this.marking?.action ?? null,
+      teaching: () => this.teacherMarks?.showing() ?? [],
+      grove: () => ({
+        col: this.grove.doorstep.col,
+        row: this.grove.doorstep.row,
+        tree: { col: this.grove.tree.col, row: this.grove.tree.row },
+        thicket: this.grove.thicket.map((at) => ({ col: at.col, row: at.row })),
+      }),
+      /**
+       * Which spells this child has been taught.
+       *
+       * The profile's own list rather than the seam that seeds it, so a
+       * scenario can watch one being *earned* — which is the only way to
+       * check that a teacher pays at the moment it is supposed to.
+       */
+      spells: () => [...this.profile.learned],
+      /**
+       * Every machine in the world and what it is holding.
+       *
+       * Nothing else can see this. A machine's state is not an object on the
+       * grid, not in the basket and not on screen beyond three little heaps
+       * of pixels in three crates — so a sorter that had quietly stopped
+       * dealing, or one that dealt without ever being woken, would look
+       * exactly like one that was working.
+       */
+      machines: () =>
+        [...this.machines].map(([where, state]) => ({
+          where,
+          awake: state.awake,
+          holding: state.holding,
+          heap: state.heap,
+          crates: [...state.crates],
+          // How often a bell has rung, which is the one thing a bell does.
+          rung: state.rung,
+          // What a sieve lets through and what it has caught. Nothing else
+          // can see either: a jammed sieve and an idle one look the same
+          // from outside, which is exactly the failure worth catching.
+          passes: state.passes,
+          binned: state.binned,
+          bin: state.bin,
+          /** What a tally waits for. Nought until it has been shown. */
+          mark: state.mark,
+          // What the crates hold, which for a machine that turns is not what
+          // the mouth holds — and is the difference a scenario cannot see any
+          // other way. See `MachineState.made`.
+          made: state.made,
+          // A press's second funnel and the proportion it was shown. Both
+          // are invisible from outside — a press waiting for its other half
+          // and a press that has been fed the wrong pair look identical on
+          // the ground, and the proportion is a number nothing draws.
+          other: state.other,
+          otherHeap: state.otherHeap,
+          otherMark: state.otherMark,
+        })),
+      /**
+       * Every length of wire, and whether it is actually carrying.
+       *
+       * The `moved` is the half nothing else can see. A wire that is backed
+       * up — the machine at the far end is full of something else — and a
+       * wire that was never joined to anything both sit there carrying
+       * nothing, and from outside they are the same picture. Without this a
+       * scenario cannot tell a line that is correctly stopped from one that
+       * never worked at all.
+       */
+      wires: () =>
+        this.wires.map((wire) => ({
+          from: wire.from,
+          to: wire.to,
+          moved: this.wireCarried.get(wireKey(wire.from, wire.to)) ?? 0,
+        })),
+      /** Which end of a wire she has hold of, part way through stringing one. */
+      wiring: () => {
+        const held = this.armed;
+        if (held?.kind !== "wire" || !held.from) return null;
+        return { col: held.from.col, row: held.from.row };
+      },
+      sea: () => {
+        const tiles = this.chunks.waterTiles();
+        return {
+          tiles: tiles.length,
+          phase: this.chunks.seaPhase,
+          showing: [...new Set(tiles.map((tile) => tile.image.frame.name))],
+          // A handful of named tiles rather than a count, because with sixty
+          // frames of sea on screen the *set* of them saturates: every frame
+          // there is is showing somewhere, before and after, and a sea that
+          // had frozen solid would look identical by that measure. What moves
+          // is which tile shows which.
+          //
+          // Sorted before it is cut down, so the same tiles come back each
+          // time. Unsorted this is Map insertion order — which chunk came on
+          // screen first — and a script comparing two readings would see the
+          // names change whenever a chunk did, which is a green test on a
+          // frozen sea.
+          sample: tiles
+            .sort((a, b) => a.col - b.col || a.row - b.row)
+            .slice(0, SEA_SAMPLE)
+            .map((tile) => `${tile.col},${tile.row}=${tile.image.frame.name}`),
+        };
+      },
+      stats: () => ({
+        fps: Math.round(this.game.loop.actualFps),
+        frames: this.chunks.frames,
+        renderer: this.game.renderer.type === Phaser.WEBGL ? "webgl" : "canvas",
+        objects: this.children.list.length,
+        // Everything Phaser calls preUpdate on every frame, which is where a
+        // wood of animating trees is actually paid for.
+        updating: this.sys.updateList.length,
+        view: { width: this.scale.width, height: this.scale.height },
+      }),
+      // Every fire alight in the room she is in. Was one or none, which is
+      // the shape the bug had: a scenario could not have told a room with
+      // three stoves from a room with one.
+      hearths: () => this.lighting.litHearths(),
+      doors: () =>
+        Object.fromEntries(this.buildings.map((b) => [b.id, { col: b.doorCol, row: b.doorRow }])),
+      screenOf: (col, row) => this.screenOf(col, row),
+      spell: () => {
+        const cast = this.spellPopup?.cast;
+        if (!cast) return null;
+        return {
+          start: cast.problem.start,
+          addend: movedBy(cast.problem),
+          stops: cast.problem.stops,
+          index: cast.index,
+          // The three numbers and which of them is the box, when the rung
+          // asks for a sum with no line under it. Null otherwise, so a
+          // scenario can tell the two forms apart — which it otherwise
+          // could not: a bare cast runs on a one-jump line, and a one-jump
+          // line is also what the gentlest rung in the game sets.
+          bare: this.spellPopup?.bareSum ?? null,
+        };
+      },
+      spellHint: () => this.spellPopup?.hintText ?? "",
+      thought: () => this.lastThought,
+      share: () => {
+        const cast = this.sharePopup?.cast;
+        if (!cast) return null;
+        const { problem } = cast;
+        return {
+          total: problem.total,
+          parts: problem.parts,
+          each: problem.each,
+          left: problem.left,
+          tier: problem.tier,
+          box: cast.box,
+          boxes: [...boxesOf(problem)],
+          typed: { each: cast.each, left: cast.left },
+          done: cast.done,
+          missteps: cast.missteps,
+        };
+      },
+      mapMark: () => this.whereOnTheMap(),
+      sound: () => sound().report(),
+      ships: () => this.traffic?.positions() ?? [],
+      blimps: () => this.blimps?.positions() ?? [],
+      scenery: () => this.chunks.sceneryCount(),
+      sceneryOnScreen: () => {
+        const view = this.cameras.main.worldView;
+        const inside = (object: PlacedObject) => {
+          const feet = this.toFeet(object.col, object.row);
+          return (
+            feet.x >= view.x &&
+            feet.x <= view.x + view.width &&
+            feet.y >= view.y &&
+            feet.y <= view.y + view.height
+          );
+        };
+        let inView = 0;
+        for (const bucket of this.chunks.sceneryBuckets()) {
+          for (const object of bucket) if (inside(object)) inView++;
+        }
+        let live = 0;
+        for (const bucket of this.chunks.liveSceneryBuckets()) {
+          for (const object of bucket) if (inside(object)) live++;
+        }
+        return { inView, live };
+      },
+      /**
+       * The wall on the parchment: which brick is being asked for, what the
+       * answer to it is, and what has been typed.
+       *
+       * The answer is handed over deliberately. A script cannot work a wall
+       * out for itself without reimplementing the solver, and a test that
+       * reimplements the thing it is testing checks nothing.
+       */
+      house: () => {
+        const inside = this.interior;
+        const parts = this.growable;
+        if (!inside?.plan || !parts) return null;
+        const door = growableDoor(parts);
+        return {
+          room: inside.room,
+          id: inside.house ?? null,
+          floor: [...inside.plan.floor],
+          origin: { ...inside.origin },
+          buildable: buildableCells(inside.plan, door).map(({ col, row }) => ({
+            col: col - inside.origin.col,
+            row: row - inside.origin.row,
+          })),
+        };
+      },
+      shop: () => this.shopPanel?.counter ?? null,
+      decor: () => {
+        const inside = this.interior;
+        if (!inside?.plan || !inside.house) return null;
+        return this.decorIn(inside.house).map((placed) => ({
+          piece: placed.piece,
+          col: placed.col,
+          row: placed.row,
+          look: placed.look,
+          // Normalised rather than passed through, so a script reads the
+          // same number for a chair from an old save as for one just put
+          // down. See `turnOf`.
+          turn: decorTurnOf(placed),
+        }));
+      },
+      bricks: () => {
+        const cast = this.brickPopup?.cast;
+        if (!cast) return null;
+        const asked = brickBeingAsked(cast);
+        return {
+          values: [...cast.problem.values],
+          hidden: [...cast.problem.hidden],
+          asked,
+          answer: asked === null ? null : (cast.problem.values[asked] ?? null),
+          entry: cast.entry,
+          missteps: cast.missteps,
+          done: cast.done,
+        };
+      },
+      array: () => {
+        const cast = this.arrayPopup?.cast;
+        if (!cast) return null;
+        return {
+          rows: cast.problem.rows,
+          columns: cast.problem.columns,
+          answer: cast.problem.rows * cast.problem.columns,
+          entry: cast.entry,
+          done: cast.done,
+        };
+      },
+      /**
+       * The tint over the world right now: the time of day, the wood's own
+       * dusk, and what the two come to.
+       *
+       * A seam rather than an API, and the one the dusk needs: the only
+       * other way to check it is to sample a screenshot, and every glow in
+       * the grove lightens the very pixels a sample would land on.
+       */
+      shade: () => ({
+        dusk: this.lighting.dusk,
+        night: nightTintAlpha(this.hourNow()),
+        alpha: this.lighting.tintAlpha,
+      }),
+      clock: () => {
+        const cast = this.clockPopup?.cast;
+        if (!cast) return null;
+        const asked = askedOf(cast);
+        return {
+          from: cast.from,
+          to: cast.to,
+          hours: asked.hours,
+          minutes: asked.minutes,
+          entry: cast.hours,
+          entryMinutes: cast.minutes,
+          box: cast.box,
+          asksMinutes: asksMinutes(cast),
+          done: cast.done,
+          // Where the face she drags is, so a script can take hold of a hand.
+          grip: this.clockPopup?.face ?? null,
+        };
+      },
+      /**
+       * The grid on the mirror parchment, and where it is on the screen.
+       *
+       * The only spell whose answer is a *tap on a picture*: there is no box
+       * to type into and no button with a name. So the grid is published —
+       * where it is drawn, which squares came with it, and which ones are
+       * still wanted — and a script taps the squares the game itself worked
+       * out rather than ones it guessed.
+       */
+      logic: () => {
+        const cast = this.logicPopup?.cast;
+        if (!cast) return null;
+        return {
+          puzzle: cast.rung.puzzle,
+          tokens: cast.tray?.tokens.map((t) => ({ id: t.id, hue: t.hue, shape: t.shape })) ?? [],
+          rule: cast.tray?.rule ?? null,
+          wanted: [...(cast.tray?.wanted ?? [])],
+          picked: [...cast.picked],
+          switches: cast.circuit?.switches ?? 0,
+          lamp: cast.circuit?.lamp ?? null,
+          on: [...cast.on],
+          board: this.logicPopup?.where ?? null,
+          done: cast.done,
+          missteps: cast.missteps,
+          wrong: cast.wrong,
+          hinting: logicHint(cast) !== null,
+        };
+      },
+      symmetry: () => {
+        const cast = this.symmetryPopup?.cast;
+        if (!cast) return null;
+        return {
+          size: cast.size,
+          axis: cast.axis,
+          given: [...cast.given],
+          wanted: [...cast.wanted],
+          filled: [...cast.filled],
+          board: this.symmetryPopup?.where ?? null,
+          done: cast.done,
+          missteps: cast.missteps,
+          wrong: cast.wrong,
+          hinting: symmetryHint(cast) !== null,
+        };
+      },
+      /**
+       * The three wild flowers, and which of them this child has found.
+       *
+       * Where they grow is chosen from the world's seed out of every cell
+       * the connectivity pass proved walkable, so it is a different answer
+       * in every world and there is nothing a script could hard-code. This
+       * is how a scenario walks to one.
+       */
+      flowers: () => ({
+        wild: this.wildFlowers,
+        found: [...this.foundFlowers],
+        planted: this.worldGrid.listObjects().flatMap((object) => {
+          const parts = flowerParts(object.type);
+          return parts ? [{ ...parts, col: object.col, row: object.row }] : [];
+        }),
+      }),
+      inside: () => {
+        const room = this.interior;
+        return room ? { room: room.room, building: room.house ?? null } : null;
+      },
+      /**
+       * Where the camera is pulled to.
+       *
+       * The one number in the game that depends on how big the screen is, so
+       * it is also the one a scenario cannot work out for itself — see
+       * `markingZoom`. Reported live rather than as the constant, because
+       * what is worth checking is that it *moved* and came back.
+       */
+      zoom: () => this.cameras.main.zoom,
+      openHours: () => ({
+        open: this.villageIsOpen,
+        hour: this.hourNow(),
+        opensIn: opensIn(this.hourNow()),
+      }),
+      /**
+       * How many pictures are rising over her head at this moment.
+       *
+       * Counted off the layer rather than reported from the field that holds
+       * the one, so it is a count of what is on screen and not of what the
+       * scene believes it put there. A moon and a sun are the only two
+       * drawn this way — the runes a spell is earned with are their own
+       * picture, and an animal's cloud is a container rather than an image.
+       */
+      floatingMarks: () =>
+        this.sceneryLayer()
+          .getChildren()
+          .filter(
+            (object) =>
+              object instanceof Phaser.GameObjects.Image &&
+              (object.texture.key === uiTextureKey(UiAsset.MarkNight) ||
+                object.texture.key === uiTextureKey(UiAsset.MarkDay)),
+          ).length,
+      /**
+       * What the clock in the corner is showing, as a child sees it.
+       *
+       * Read off the text objects rather than worked out again, which is the
+       * point: `worldClock` already says what hour the world is at, and this
+       * says what the screen is telling somebody about it.
+       */
+      hudClock: () => ({
+        time: this.clockHud?.time.text ?? "",
+        date: this.clockHud?.date.text ?? "",
+        sky: this.clockHud?.sky.texture.key ?? "",
+        shown: this.clockHud?.time.visible ?? false,
+      }),
+      geometry: () => (this.geometryPanel?.isOpen ? (this.geometryPanel.readout() ?? null) : null),
+      post: () => ({
+        owed: this.delivery,
+        arriving: this.postArriving,
+        here: this.postman !== null,
+        sheet: this.newsPanel?.isOpen
+          ? this.newsPanel.readout()
+          : this.introPanel?.isOpen
+            ? this.introPanel.readout()
+            : null,
+      }),
+      blueprints: () => Object.fromEntries([...this.drawings]),
+      jobs: () => {
+        const job = nextJob(this.jobsDone);
+        const spec = job ? JOB_SPECS[job] : null;
+        return {
+          next: job,
+          progress: spec ? Math.min(spec.wanted, spec.progress(this.lineView())) : 0,
+          wanted: spec?.wanted ?? 0,
+          done: this.profile.jobs,
+        };
+      },
+      guide: () => ({
+        running: this.guide?.current?.guide ?? null,
+        step: this.guide?.current?.step ?? null,
+        cue: this.guide?.cue() ?? null,
+        marks: this.guideMarks?.showing() ?? { ring: null, arrow: null },
+        done: this.profile.guided,
+      }),
+      city: () => ({
+        gates: this.city.gates.map(({ col, row }) => ({ col, row })),
+        wall: this.city.wall.length,
+      }),
+      hiding: () =>
+        this.tallThings
+          .filter(({ sprite }) => sprite.active)
+          .map(({ id, at, sprite }) => ({ id, col: at.col, row: at.row, alpha: sprite.alpha })),
+      // Where the world's clock stands, and how far it has been wound from
+      // the real one. The spell's whole effect, and nothing on screen states
+      // it as a number — the light does, which a script cannot read.
+      worldClock: () => ({
+        hour: this.hourNow(),
+        offset: this.clockOffset,
+      }),
+      lamps: () => {
+        const observatory = this.observatory;
+        if (!observatory) return null;
+        return {
+          posts: observatory.posts.map((at) => ({ col: at.col, row: at.row })),
+          lit: lampsLit(this.worldGrid, observatory),
+        };
+      },
+      animals: () =>
+        this.animals.map((animal) => ({
+          id: animal.id,
+          kind: animal.kind,
+          col: animal.col,
+          row: animal.row,
+          craves: animal.craves,
+          mood: animal.mood,
+          bubble: animal.bubble !== undefined,
+          // What is in the cloud over it, which is not the same question as
+          // whether it has one: a tap on a quiet animal puts up a cloud that
+          // is nobody's bubble and lasts a beat.
+          thinking: [...animal.thinking],
+        })),
+      portalMarks: () => this.portalPanel?.marks() ?? {},
+      portal: () => {
+        const journey = this.portalPanel?.journey;
+        if (!journey) return null;
+        return {
+          place: journey.place,
+          league: journey.league,
+          tier: journey.rung.tier,
+          across: journey.across.marks,
+          down: journey.down.marks,
+          answer: journey.answer,
+          reached: this.profile.reached,
+        };
+      },
+      npcs: () => {
+        const where: Record<string, { col: number; row: number }> = {};
+        for (const npc of this.npcs) where[npc.id] = { col: npc.col, row: npc.row };
+        if (this.attendantCell && this.attendantId) {
+          where[this.attendantId] = { ...this.attendantCell };
+        }
+        return where;
+      },
+    };
+  }
+
   /**
    * What the debug panel reaches for.
    *
@@ -12189,6 +12226,42 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
+  /**
+   * Everything that draws a parchment or a menu and must be torn down with
+   * the scene. One list, so shutdown cannot forget a panel that `modalOpen`
+   * remembers — the two used to be maintained by hand and disagreed.
+   */
+  private panels(): readonly ({ destroy(): void } | undefined)[] {
+    return [
+      this.spellPopup,
+      this.portalPanel,
+      this.shopPanel,
+      this.optionsPanel,
+      this.aboutPanel,
+      this.lessonPanel,
+      this.introPanel,
+      this.newsPanel,
+      this.mapPanel,
+      this.picturePanel,
+      this.taskPanel,
+      this.geometryPanel,
+      this.grovePanel,
+      this.sharePanel,
+      this.thingPanel,
+      this.arrayPopup,
+      this.sharePopup,
+      this.brickPopup,
+      this.clockPopup,
+      this.symmetryPopup,
+      this.logicPopup,
+      this.patchMenu,
+      this.decorMenu,
+      this.flowerMenu,
+      this.wheel,
+      this.sandGlass,
+    ];
+  }
+
   private get modalOpen(): boolean {
     return (
       // Optional throughout: the status line is written once while the scene
@@ -12197,8 +12270,14 @@ export class GameScene extends Phaser.Scene {
       this.shopPanel?.isOpen === true ||
       this.optionsPanel?.isOpen === true ||
       this.aboutPanel?.isOpen === true ||
+      // Counted, like every other sheet. A panel left out of here is a panel
+      // a child can walk out from underneath: the world goes on taking taps
+      // behind it, and a tap that lands on a square while a page is up is a
+      // seed planted somewhere nobody was looking.
+      this.thingPanel?.isOpen === true ||
       this.lessonPanel?.isOpen === true ||
       this.introPanel?.isOpen === true ||
+      this.newsPanel?.isOpen === true ||
       this.mapPanel?.isOpen === true ||
       this.picturePanel?.isOpen === true ||
       this.taskPanel?.isOpen === true ||
@@ -12212,8 +12291,18 @@ export class GameScene extends Phaser.Scene {
       this.brickPopup?.isOpen === true ||
       this.sharePopup?.isOpen === true ||
       this.symmetryPopup?.isOpen === true ||
+      this.logicPopup?.isOpen === true ||
+      // Mid-move: halfway onto a bench, or sitting on one. Brief moves are
+      // short — see `USE_MS` — and for the same reason a crossing is: a
+      // step taken from the middle of it lands nowhere. A lasting one is
+      // modal until the tap that gets her up, which the pointer handler
+      // takes *before* asking this.
+      this.using !== null ||
       // Mid-crossing: a step from a tile they are no longer standing on.
-      this.travelling
+      this.travelling ||
+      // And mid-*arrival*: a door is open on the tile in front of them and
+      // somebody is coming out of it. Same argument, other direction.
+      this.postArriving
     );
   }
 

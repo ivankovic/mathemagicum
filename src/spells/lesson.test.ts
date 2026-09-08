@@ -4,7 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { EN } from "../i18n/en";
 import { createRng } from "../world/rng";
-import { PLACES, makeAdditionProblem, problemFor } from "./addition";
+import { makeAdditionProblem, problemFor } from "./addition";
 import { BareForm, HARDEST_RUNG, RUNGS, SHARED_TOP_RUNG, rungAt } from "./difficulty";
 import {
   LESSON_ADDEND,

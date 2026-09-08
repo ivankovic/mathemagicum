@@ -9,9 +9,10 @@ import { LANGUAGES, LANGUAGE_NAMES, type Settings } from "../settings";
 import { makeAdditionProblem } from "../spells/addition";
 import { BANDS, DEFAULT_BAND, sampleProblem } from "../spells/difficulty";
 import { createRng } from "../world/rng";
-import { PANEL_PAD as PAD, ParchmentPanel } from "./ParchmentPanel";
+import { type Chip, type CloseChip, Panel } from "./Panel";
+import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import { UiAsset, type UiIndex, flagIcon, uiTextureKey } from "./assets";
-import { FACE, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX } from "./parchment";
+import { ACTIVE_HEX, INK, INK_DIM, INK_HEX, PAPER_PALE_HEX, TYPE } from "./parchment";
 
 /**
  * The options: which language the game is read in.
@@ -61,13 +62,11 @@ const PANEL_MAX_H = 452;
 const PANEL_MIN_W = 280;
 const PANEL_MIN_H = 290;
 
-const CHOSEN_HEX = 0xc8901c;
-
 /** On first, because that is what the game does unless somebody says otherwise. */
 const SOUND_CHOICES: readonly boolean[] = [true, false];
 
-const TITLE_SIZE = 17;
-const ROW_SIZE = 13;
+const TITLE_SIZE = TYPE.title;
+const ROW_SIZE = TYPE.body;
 /** The smallest a row's words may be set before they stop being words. */
 const ROW_SIZE_MIN = 8;
 /**
@@ -79,7 +78,7 @@ const ROW_SIZE_MIN = 8;
  * off the type.
  */
 const NARROWEST = 0.75;
-const SMALL_SIZE = 12;
+const SMALL_SIZE = TYPE.small;
 
 const BUTTON_H = 32;
 const BUTTON_GAP = 6;
@@ -91,26 +90,16 @@ const ICON = 22;
 /** Between a flag and the name of the language it stands for. */
 const LABEL_GAP = 8;
 
-interface Choice {
-  readonly box: Phaser.GameObjects.Rectangle;
-  readonly label: Phaser.GameObjects.Text;
-}
-
-type PanelPart = Phaser.GameObjects.GameObject &
-  Phaser.GameObjects.Components.Depth &
-  Phaser.GameObjects.Components.ScrollFactor &
-  Phaser.GameObjects.Components.Visible;
-
-export class OptionsPanel {
-  private readonly paper: ParchmentPanel;
-  private readonly parts: PanelPart[] = [];
+export class OptionsPanel extends Panel {
   private readonly title: Phaser.GameObjects.Text;
   private readonly headings: Phaser.GameObjects.Text[] = [];
-  private readonly aboutButton: Choice;
-  private readonly exportButton: Choice;
+  private readonly aboutButton: Chip;
+  private readonly exportButton: Chip;
   /** Set while the button is saying "saved" rather than what it does. */
   private exported = false;
-  private readonly languageChoices: Choice[] = [];
+  /** How long "exported" stays said, so a close can take the word back. */
+  private said: Phaser.Time.TimerEvent | null = null;
+  private readonly languageChoices: Chip[] = [];
   /**
    * Which sums this child gets, shown as four sample sums.
    *
@@ -120,7 +109,7 @@ export class OptionsPanel {
    * wrong band with no way to overrule it is worse than no adaptation at
    * all. The game moves *inside* a band; only a person moves between them.
    */
-  private readonly bandChoices: Choice[] = [];
+  private readonly bandChoices: Chip[] = [];
   /**
    * Whether the game makes a sound at all, as two words.
    *
@@ -129,13 +118,13 @@ export class OptionsPanel {
    * looking — and because a mute button on the playing screen is a button a
    * child will find, press, and not be able to explain afterwards.
    */
-  private readonly soundChoices: Choice[] = [];
-  private readonly closeButton: Choice;
+  private readonly soundChoices: Chip[] = [];
+  private readonly closeButton: CloseChip;
   /** The games row: one tile per saved game, and the "+" that starts another. */
-  private readonly gameChoices: Choice[] = [];
-  private readonly newButton: Choice;
-  private readonly yesButton: Choice;
-  private readonly noButton: Choice;
+  private readonly gameChoices: Chip[] = [];
+  private readonly newButton: Chip;
+  private readonly yesButton: Chip;
+  private readonly noButton: Chip;
   private readonly resetHint: Phaser.GameObjects.Text;
   private readonly icons: Phaser.GameObjects.Image[] = [];
 
@@ -206,27 +195,24 @@ export class OptionsPanel {
   /** Whether the world row has been tapped once and is asking. */
   private asking = false;
   private onClose: (() => void) | null = null;
-  private keyHandler: ((event: KeyboardEvent) => void) | null = null;
 
   /** Set by the scene: a choice was made, apply it and remember it. */
   onChange: ((settings: Settings) => void) | null = null;
   onBandChange: ((band: number) => void) | null = null;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     index: UiIndex,
     depth: number,
     private settings: Settings,
     private words: Phrases,
     register: (object: Phaser.GameObjects.GameObject) => void,
   ) {
-    this.paper = new ParchmentPanel(scene, index, {
+    super(scene, index, depth, register, {
       maxWidth: PANEL_MAX_W,
       maxHeight: PANEL_MAX_H,
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
-      depth,
-      register,
     });
 
     this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
@@ -277,19 +263,11 @@ export class OptionsPanel {
     this.resetHint = this.own(
       this.text("", SMALL_SIZE, INK_DIM).setOrigin(0.5, 0).setAlign("center"),
     );
-    this.closeButton = this.choice("x", () => this.close());
-
-    for (const part of this.parts) {
-      part
-        .setDepth(depth + 1)
-        .setScrollFactor(0)
-        .setVisible(false);
-      register(part);
-    }
+    this.closeButton = this.closeChip(ROW_SIZE, () => this.close());
     for (const choice of this.allChoices()) choice.label.setDepth(depth + 2);
   }
 
-  private allChoices(): Choice[] {
+  private allChoices(): Chip[] {
     return [
       ...this.languageChoices,
       ...this.bandChoices,
@@ -304,7 +282,7 @@ export class OptionsPanel {
   }
 
   /** A button with a picture on it rather than a word. */
-  private iconChoice(asset: string, onTap: () => void): Choice {
+  private iconChoice(asset: string, onTap: () => void): Chip {
     const choice = this.choice("", onTap);
     const icon = this.own(
       this.scene.add.image(0, 0, uiTextureKey(asset)).setDisplaySize(ICON, ICON),
@@ -322,7 +300,7 @@ export class OptionsPanel {
    * square is a flag drawn wrong rather than a flag drawn small. The same
    * is true of the backup sign, which is why the two share this.
    */
-  private pictureChoice(asset: string, text: string, onTap: () => void): Choice {
+  private pictureChoice(asset: string, text: string, onTap: () => void): Chip {
     const choice = this.choice(text, onTap);
     const icon = this.own(this.scene.add.image(0, 0, uiTextureKey(asset)).setOrigin(0.5));
     this.icons.push(icon);
@@ -340,7 +318,7 @@ export class OptionsPanel {
     return choice;
   }
 
-  get isOpen(): boolean {
+  override get isOpen(): boolean {
     return this.open;
   }
 
@@ -391,33 +369,22 @@ export class OptionsPanel {
     this.onClose = onClose;
     this.paper.setVisible(true);
     this.render();
-    this.keyHandler = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      this.close();
-    };
-    this.scene.input.keyboard?.on("keydown", this.keyHandler);
+    this.escapeCloses();
   }
 
-  close(): void {
+  override close(): void {
+    this.said?.remove();
+    this.said = null;
+    this.exported = false;
     // Never still asking when it opens again. A confirm that survived being
     // dismissed would be a confirm that answered a question nobody had just
     // asked.
     this.asking = false;
-    if (this.keyHandler) {
-      this.scene.input.keyboard?.off("keydown", this.keyHandler);
-      this.keyHandler = null;
-    }
+    super.close();
     this.open = false;
-    this.paper.setVisible(false);
-    for (const part of this.parts) part.setVisible(false);
     const done = this.onClose;
     this.onClose = null;
     done?.();
-  }
-
-  layout(): void {
-    if (this.open) this.render();
   }
 
   /** The settings the panel is showing, for a scene that changed them elsewhere. */
@@ -458,7 +425,7 @@ export class OptionsPanel {
     this.render();
   }
 
-  private render(): void {
+  protected render(): void {
     const { width, height } = this.scene.scale;
     const rect = this.paper.layout(width, height);
     for (const part of this.parts) part.setVisible(false);
@@ -467,8 +434,7 @@ export class OptionsPanel {
       .setText(this.words.optionsTitle)
       .setPosition(rect.centreX, rect.top + PAD)
       .setVisible(true);
-    this.place(this.closeButton, rect.left + rect.width - PAD - 14, rect.top + PAD + 10, 28, 24);
-    this.show(this.closeButton);
+    this.closeButton.place(rect);
 
     // Each row starts where the last one ended rather than at a multiple of
     // one height: a row that wraps onto two lines is taller than a row that
@@ -602,7 +568,8 @@ export class OptionsPanel {
       if (!saved || !this.open) return;
       this.exported = true;
       this.render();
-      this.scene.time.delayedCall(EXPORT_SAID_MS, () => {
+      this.said?.remove();
+      this.said = this.scene.time.delayedCall(EXPORT_SAID_MS, () => {
         this.exported = false;
         if (this.open) this.render();
       });
@@ -659,7 +626,7 @@ export class OptionsPanel {
       if (!button) continue;
       button.label.setText(this.words.gameWhen(game.savedAt));
       this.place(button, at(n), y, width, BUTTON_H);
-      button.box.setStrokeStyle(2, game.id === this.playing ? CHOSEN_HEX : INK_HEX);
+      button.box.setStrokeStyle(2, game.id === this.playing ? ACTIVE_HEX : INK_HEX);
       this.show(button);
     }
     if (this.games.length >= slots) return;
@@ -673,7 +640,7 @@ export class OptionsPanel {
     top: number,
     slot: number,
     heading: string,
-    buttons: Choice[],
+    buttons: Chip[],
     values: readonly T[],
     chosen: T,
     floor = Number.POSITIVE_INFINITY,
@@ -749,13 +716,13 @@ export class OptionsPanel {
       const x = left + (width + BUTTON_GAP) * at + width / 2;
       const middle = y + line * (BUTTON_H + BUTTON_GAP) + BUTTON_H / 2;
       this.place(button, x, middle, width, BUTTON_H, tight);
-      button.box.setStrokeStyle(2, value === chosen ? CHOSEN_HEX : INK_HEX);
+      button.box.setStrokeStyle(2, value === chosen ? ACTIVE_HEX : INK_HEX);
       this.show(button);
     }
     return y + lines * BUTTON_H + (lines - 1) * BUTTON_GAP;
   }
 
-  private choice(text: string, onTap: () => void): Choice {
+  private choice(text: string, onTap: () => void): Chip {
     const box = this.own(
       this.scene.add
         .rectangle(0, 0, 10, 10, PAPER_PALE_HEX)
@@ -776,13 +743,13 @@ export class OptionsPanel {
   >();
 
   /** How wide a picture-and-word button wants to be. */
-  private blockWidth(choice: Choice): number {
+  private blockWidth(choice: Chip): number {
     const icon = this.iconOf.get(choice.box);
     return icon ? icon.width + LABEL_GAP + choice.label.width : choice.label.width;
   }
 
   private place(
-    choice: Choice,
+    choice: Chip,
     x: number,
     y: number,
     width: number,
@@ -810,31 +777,12 @@ export class OptionsPanel {
     choice.label.setPosition(left + icon.width + LABEL_GAP + choice.label.width / 2, y);
   }
 
-  private show(choice: Choice): void {
+  private show(choice: Chip): void {
     choice.box.setVisible(true);
     // Except a word `place` has just decided there is no room for. `render`
     // hides every part before laying anything out, so this cannot simply
     // read the label's own visibility — it would be false for all of them.
     choice.label.setVisible(!this.wordless.has(choice.box));
     this.iconOf.get(choice.box)?.image.setVisible(true);
-  }
-
-  private text(value: string, size: number, color: string): Phaser.GameObjects.Text {
-    return this.scene.add.text(0, 0, value, {
-      fontFamily: FACE,
-      fontSize: `${size}px`,
-      color,
-    });
-  }
-
-  private own<T extends PanelPart>(object: T): T {
-    this.parts.push(object);
-    return object;
-  }
-
-  destroy(): void {
-    this.close();
-    this.paper.destroy();
-    for (const part of this.parts) part.destroy();
   }
 }

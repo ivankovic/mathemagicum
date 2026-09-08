@@ -3,7 +3,7 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { FixtureType } from "../src/world/fixtures";
-import { type Game, play, shutDown, takeFromCrate } from "./harness";
+import { type Game, type Handles, play, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
 
@@ -41,16 +41,9 @@ async function roomBeside(game: Game): Promise<{ col: number; row: number }> {
   const here = await game.where();
   const free = await game.tab.evaluate(
     ([c, r]) => {
-      const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-        .__mathemagicum;
+      const handle = (globalThis as never as Handles).__mathemagicum;
       if (!handle) throw new Error("the game has not put its handle out");
-      const session = handle.session as {
-        grid: {
-          isPassable: (col: number, row: number) => boolean;
-          getCrop: (col: number, row: number) => unknown;
-          getObjectAt: (col: number, row: number) => unknown;
-        };
-      };
+      const session = handle.session;
       const round: readonly (readonly [number, number])[] = [
         [1, 0],
         [-1, 0],
@@ -81,15 +74,7 @@ describe("coming back after the ground has moved", () => {
       await play({ seams: AT_HOME }, async (game) => {
         // A fence she owns, standing where she put it.
         const at = await roomBeside(game);
-        await game.tab.evaluate((item) => {
-          const handle = (globalThis as never as Record<string, Record<string, unknown>>)
-            .__mathemagicum;
-          if (!handle) throw new Error("the game has not put its handle out");
-          (handle.session as { inventory: { add: (of: string, n: number) => void } }).inventory.add(
-            item as string,
-            1,
-          );
-        }, FixtureType.Fence);
+        await game.give(FixtureType.Fence, 1);
         await game.settle(200);
         expect(await takeFromCrate(game, FixtureType.Fence)).toBe(true);
         await game.settle(300);

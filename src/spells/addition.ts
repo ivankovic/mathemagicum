@@ -6,6 +6,16 @@ import type { Phrases } from "../i18n/phrases";
 import { type Rng, randInt } from "../world/rng";
 import { type CastResult, castResult } from "./cast";
 import { BareForm, HARDEST_RUNG, type Rung, rungAt } from "./difficulty";
+import {
+  type PlaceRule,
+  ceilingFor,
+  countWithin,
+  digitsOf,
+  drawPair,
+  nthWithin,
+  pairTable,
+  widthOf,
+} from "./numberLine";
 
 /**
  * The addition spell: column addition, worked on a number line.
@@ -90,88 +100,6 @@ export function runsDown(problem: NumberLine): boolean {
 }
 
 /**
- * Every pair the spell may set at one difficulty, and how often each addend
- * should be drawn.
- *
- * Built per rung and cached, because the useful thing is not the list of
- * addends but *how many valid starts each one leaves*. Drawing addends
- * evenly and then picking a start inside whatever range is left skews the
- * start badly: a large addend leaves a narrow range, so an evenly drawn
- * addend squeezes every start into the low end. That happened once already —
- * it passed every correctness check and simply meant the player never saw a
- * large first number — and a no-crossing rule makes it far worse, since
- * `startDigit + addendDigit <= 9` leaves a big addend almost nowhere to
- * start from.
- *
- * So the weight *is* the number of valid starts, and the pair comes out
- * uniform over the problems that actually exist rather than over the
- * addends that happen to be legal.
- *
- * **Counted rather than listed.** This used to hold, for every addend, an
- * array of every start that worked — which is a table of every problem the
- * game can set, and at three places that is about half a million numbers and
- * nobody noticed. At six it is of the order of a hundred billion, and the
- * six-digit band could not have existed while this worked that way.
- *
- * It never needed the list. It needed the *count*, and a way to fetch the
- * k-th of them; both are arithmetic. See `startsFor` and `nthStart`.
- */
-interface Pairs {
-  readonly places: number;
-  readonly crossing: boolean;
-  readonly addends: readonly number[];
-  readonly weights: readonly number[];
-  /**
-   * The weights added up as we go, for finding one without walking them.
-   *
-   * A running total rather than a scan. The scan was fine while a rung held
-   * a few hundred addends and became half a million of them at six places —
-   * every problem set walked the lot, in the tests and on a tablet.
-   */
-  readonly running: Float64Array;
-  readonly total: number;
-}
-
-/**
- * Which entry a ticket falls in, by halving rather than by walking.
- *
- * `running[i]` is the weight of everything up to and including `i`, so the
- * answer is the first entry whose running total reaches the ticket.
- */
-function ticketAt(running: Float64Array, ticket: number): number {
-  let low = 0;
-  let high = running.length - 1;
-  while (low < high) {
-    const middle = (low + high) >> 1;
-    if ((running[middle] as number) < ticket) low = middle + 1;
-    else high = middle;
-  }
-  return low;
-}
-
-const PAIRS = new Map<string, Pairs>();
-
-function digitsOf(value: number, places: number): number[] {
-  const out: number[] = [];
-  for (let at = 0; at < places; at++) out.push(Math.floor(value / 10 ** at) % 10);
-  return out;
-}
-
-/**
- * How high the answer may go.
- *
- * At two and three places a carry is *internal*: the tens spill into the
- * hundreds and the answer is still the same width. At one place there is
- * nothing above the ones for a carry to go into, so `7 + 5` would be
- * impossible — and that rung exists precisely to teach bridging ten at that
- * size — so the answer is allowed its second digit, and only there.
- */
-function sumCeiling(places: number, crossing: boolean): number {
-  const most = 10 ** places - 1;
-  return crossing && places === 1 ? most * 2 : most;
-}
-
-/**
  * How many starts an addend leaves, and what the k-th of them is.
  *
  * Two shapes, one per rule, and both are closed form.
@@ -185,29 +113,36 @@ function sumCeiling(places: number, crossing: boolean): number {
  * nowhere else. The places are independent, so the count is their product,
  * and the k-th start in counting order is that product read as a mixed-radix
  * number — most significant place slowest, which is what makes the k-th here
- * the same start as the k-th of a list built by counting upwards.
+ * the same start as the k-th of a list built by counting upwards. That
+ * reading is `countWithin` and `nthWithin`; what this spell owns is the rule
+ * they read, which is `noCarry`.
  *
  * The top place is the one exception, and it is the same exception in both:
  * its digit cannot be nought, or the number would not be this wide.
  */
+function noCarry(places: number, addendDigits: readonly number[]): PlaceRule {
+  const first: number[] = [];
+  const span: number[] = [];
+  for (let at = 0; at < places; at++) {
+    const digit = addendDigits[at] ?? 0;
+    // The top place may not start at nought; every other place may.
+    first.push(at === places - 1 ? 1 : 0);
+    span.push((at === places - 1 ? 9 : 10) - digit);
+  }
+  return { first, span };
+}
+
 function startsFor(
   places: number,
   crossing: boolean,
   addend: number,
   addendDigits: readonly number[],
 ): number {
-  const low = places === 1 ? 1 : 10 ** (places - 1);
-  const high = 10 ** places - 1;
   if (crossing) {
-    return Math.max(0, Math.min(high, sumCeiling(places, crossing) - addend) - low + 1);
+    const { low, high } = widthOf(places);
+    return Math.max(0, Math.min(high, ceilingFor(places, crossing) - addend) - low + 1);
   }
-  let count = 1;
-  for (let at = 0; at < places; at++) {
-    const digit = addendDigits[at] ?? 0;
-    // The top place may not start at nought; every other place may.
-    count *= at === places - 1 ? 9 - digit : 10 - digit;
-  }
-  return Math.max(0, count);
+  return countWithin(noCarry(places, addendDigits));
 }
 
 /**
@@ -220,76 +155,19 @@ function startsFor(
 function nthStart(
   places: number,
   crossing: boolean,
-  addend: number,
   addendDigits: readonly number[],
   k: number,
 ): number {
-  const low = places === 1 ? 1 : 10 ** (places - 1);
-  if (crossing) return low + k;
-  const span = (at: number) => (at === places - 1 ? 9 : 10) - (addendDigits[at] ?? 0);
-  const first = (at: number) => (at === places - 1 ? 1 : 0);
-  let rest = k;
-  let start = 0;
-  for (let at = places - 1; at >= 0; at--) {
-    let below = 1;
-    for (let under = at - 1; under >= 0; under--) below *= span(under);
-    const step = Math.floor(rest / below);
-    rest -= step * below;
-    start += (first(at) + step) * 10 ** at;
-  }
-  return start;
+  if (crossing) return widthOf(places).low + k;
+  return nthWithin(noCarry(places, addendDigits), k);
 }
 
-function pairsFor(places: number, crossing: boolean): Pairs {
-  const key = `${places}:${crossing}`;
-  const cached = PAIRS.get(key);
-  if (cached) return cached;
-
-  const low = places === 1 ? 1 : 10 ** (places - 1);
-  const high = 10 ** places - 1;
-  const addends: number[] = [];
-  const weights: number[] = [];
-
-  for (let addend = low; addend <= high; addend++) {
-    // No zero digit in the addend. A zero makes one of the jumps a `+0` that
-    // lands where it started, and an arrow pointing back at the number it
-    // came from reads as a piece missing from the puzzle rather than as an
-    // easy one.
-    const addendDigits = digitsOf(addend, places);
-    if (addendDigits.some((digit) => digit === 0)) continue;
-    const count = startsFor(places, crossing, addend, addendDigits);
-    if (count === 0) continue;
-    addends.push(addend);
-    weights.push(count);
-  }
-
-  const pairs: Pairs = {
-    places,
-    crossing,
-    addends,
-    weights,
-    running: runningTotals(weights),
-    total: weights.reduce((sum, weight) => sum + weight, 0),
-  };
-  PAIRS.set(key, pairs);
-  return pairs;
-}
+/** Every pair this spell may set, per rung. See `pairTable`. */
+const pairsFor = pairTable(startsFor);
 
 /** How many pairs a rung can draw from. Worth asking, and worth testing. */
 export function additionPairCount(places: number, crossing: boolean): number {
   return pairsFor(places, crossing).total;
-}
-
-/**
- * Whether every jump lands without carrying.
- *
- * On a number line a carry is "the jump crossed a ten", which is exactly
- * what makes column addition hard — and it is a step a child takes long
- * after they can add two digits at all. So it is a dial of its own rather
- * than something bundled into how big the numbers are.
- */
-function noJumpCrosses(startDigits: readonly number[], addendDigits: readonly number[]): boolean {
-  return startDigits.every((digit, at) => digit + (addendDigits[at] ?? 0) <= 9);
 }
 
 /**
@@ -300,19 +178,12 @@ function noJumpCrosses(startDigits: readonly number[], addendDigits: readonly nu
  * on a number line that is simply shorter.
  */
 export function makeAdditionProblem(rng: Rng, rung: Rung = rungAt(HARDEST_RUNG)): AdditionProblem {
-  const pairs = pairsFor(rung.places, rung.crossing);
-  const index = ticketAt(pairs.running, randInt(rng, 1, pairs.total));
-  const addend = pairs.addends[index] as number;
-  // Uniform over the starts this addend leaves, without ever building the
-  // list of them: the k-th is arithmetic. See `nthStart`.
-  const count = pairs.weights[index] as number;
-  const start = nthStart(
-    rung.places,
-    rung.crossing,
-    addend,
-    digitsOf(addend, rung.places),
-    randInt(rng, 0, count - 1),
-  );
+  const {
+    amount: addend,
+    digits,
+    k,
+  } = drawPair(rng, pairsFor(rung.places, rung.crossing), rung.places);
+  const start = nthStart(rung.places, rung.crossing, digits, k);
   return problemFor(start, addend, rung.places);
 }
 
@@ -671,16 +542,5 @@ export function nthStartForTest(
   addend: number,
   k: number,
 ): number {
-  return nthStart(places, crossing, addend, digitsOf(addend, places), k);
-}
-
-/** The weights added up as we go. See `ticketAt`. */
-function runningTotals(weights: readonly number[]): Float64Array {
-  const running = new Float64Array(weights.length);
-  let sum = 0;
-  for (const [at, weight] of weights.entries()) {
-    sum += weight;
-    running[at] = sum;
-  }
-  return running;
+  return nthStart(places, crossing, digitsOf(addend, places), k);
 }
