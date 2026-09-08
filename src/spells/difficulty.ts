@@ -114,6 +114,22 @@ export interface Rung {
    * has asked for it.
    */
   readonly bare?: BareForm;
+  /**
+   * Set on the rungs where the sum is counted out in things instead.
+   *
+   * The mirror of `bare` at the other end of the ladder, and absent
+   * everywhere else for the same reason: it reads as the exception it is
+   * rather than as a field every rung has to answer. `bare` takes the number
+   * line off the top because a child who has got that far has had the method
+   * for a thousand casts; this puts something *under* the line at the
+   * bottom, for a child who cannot read one yet. The box starts with the
+   * line's own start in it and she moves the line's own jump — see
+   * `spells/counting.ts`. No new arithmetic, and deliberately not: the rung
+   * indices in this table are written into every saved profile as `band` and
+   * `rung`, so a new easiest rung would renumber the ladder under every
+   * child who has already played.
+   */
+  readonly counted?: boolean;
 }
 
 /**
@@ -125,8 +141,8 @@ export interface Rung {
  * its first jump already made rather than all at once.
  */
 export const RUNGS: readonly Rung[] = [
-  { places: 1, crossing: false, given: 0 }, //  3 + 4
-  { places: 1, crossing: true, given: 0 }, //   7 + 5
+  { places: 1, crossing: false, given: 0, counted: true }, //  3 + 4, in counters
+  { places: 1, crossing: true, given: 0, counted: true }, //   7 + 5, in counters
   { places: 2, crossing: false, given: 1 }, // 34 + 25, ones done
   { places: 2, crossing: false, given: 0 }, // 34 + 25
   { places: 2, crossing: true, given: 1 }, //  27 + 45, ones done

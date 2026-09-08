@@ -652,6 +652,9 @@ export const HR: Phrases = {
   sumsHeading: "Tvoji zadaci",
   sumsTitle: "Koliko su veliki tvoji zadaci?",
   nextStep: "Dalje",
+  countingTitle: "Koliko ih je?",
+  countingPutIn: "Dodaj ih još dok ih ne bude dovoljno.",
+  countingTakeOut: "Vadi ih dok ih ne ostane točno toliko.",
   parentsNotice: "Va\u017ene informacije za roditelje",
   offlineNotice:
     "Ova se igra ne igra na internetu. Sve što sprema ostaje na ovom uređaju i nikada ga ne napušta.",

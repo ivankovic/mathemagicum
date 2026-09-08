@@ -443,6 +443,9 @@ export const DE: Phrases = {
   sumsHeading: "Deine Aufgaben",
   sumsTitle: "Wie groß sind deine Aufgaben?",
   nextStep: "Weiter",
+  countingTitle: "Wie viele?",
+  countingPutIn: "Lege so lange welche dazu, bis es genug sind.",
+  countingTakeOut: "Nimm so lange welche weg, bis es genau genug sind.",
   parentsNotice: "Wichtige Hinweise f\u00fcr Eltern",
   offlineNotice:
     "Dieses Spiel wird nicht online gespielt. Alles, was es speichert, bleibt auf diesem Gerät und verlässt es nie.",

@@ -954,6 +954,26 @@ export interface DevHandle {
    * it was laid in, so nothing outside the generator knows where it is —
    * and a scenario about walking through a gate has to be able to find one.
    */
+  /**
+   * The counting box: what it holds, and where every counter on it is.
+   *
+   * The positions are the point. What a finger has to reach here is a
+   * region and a scatter of circles rather than a button with a name, so a
+   * scenario has nothing to aim at unless the panel says where things are —
+   * the same argument `shop.counter` makes for the half of the table coins
+   * are dropped onto.
+   */
+  readonly counting: () => {
+    readonly target: number;
+    readonly held: number;
+    readonly tray: number;
+    readonly takingAway: boolean;
+    readonly colour: string;
+    readonly box: { x: number; y: number; w: number; h: number };
+    readonly inBox: { x: number; y: number }[];
+    readonly inTray: { x: number; y: number }[];
+  } | null;
+
   readonly city: () => { gates: { col: number; row: number }[]; wall: number };
   readonly hiding: () => readonly { id: string; col: number; row: number; alpha: number }[];
   /**

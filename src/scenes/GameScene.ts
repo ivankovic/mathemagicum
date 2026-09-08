@@ -54,7 +54,13 @@ import {
   writeSettings,
 } from "../settings";
 import { CURRENCY, largestCoin } from "../shop/currency";
-import { type AdditionCast, additionCastFor, movedBy } from "../spells/addition";
+import {
+  type AdditionCast,
+  type BareSum,
+  type NumberLine,
+  additionCastFor,
+  movedBy,
+} from "../spells/addition";
 import {
   HARDEST_BRICK_RUNG,
   brickBeingAsked,
@@ -120,6 +126,7 @@ import { ActionWheel } from "../ui/ActionWheel";
 import { ArrayPopup } from "../ui/ArrayPopup";
 import { BrickPopup } from "../ui/BrickPopup";
 import { ClockPopup } from "../ui/ClockPopup";
+import { CountingPopup } from "../ui/CountingPopup";
 import { GeometryLessonPanel } from "../ui/GeometryLessonPanel";
 import { GroveLessonPanel } from "../ui/GroveLessonPanel";
 import { GuideMarks } from "../ui/GuideMarks";
@@ -1269,6 +1276,7 @@ export class GameScene extends Phaser.Scene {
   // rather than found again by hunting the display list.
   private cropSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private spellPopup!: SpellPopup;
+  private countingPopup!: CountingPopup;
   private seedTray?: IconTray;
   private spellTray?: IconTray;
   private basketTray?: IconTray;
@@ -2178,6 +2186,9 @@ export class GameScene extends Phaser.Scene {
     this.spellPopup = new SpellPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
+    this.countingPopup = new CountingPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
+      this.ui(object),
+    );
     this.shopPanel = new ShopPanel(
       this,
       uiIndex,
@@ -2798,6 +2809,7 @@ export class GameScene extends Phaser.Scene {
     // The popup can be open across a phone rotation, and every one of its
     // pieces is placed from the viewport's size.
     this.spellPopup?.layout();
+    this.countingPopup?.layout();
     this.brickPopup?.layout();
     this.sharePopup?.layout();
     this.symmetryPopup?.layout();
@@ -3476,7 +3488,7 @@ export class GameScene extends Phaser.Scene {
     this.joystick?.release();
     const rung = this.additionRung;
     const cast = additionCastFor(this.spellRng, rung);
-    this.spellPopup.open(
+    this.askSum(
       cast.problem,
       cast.given,
       (result) => {
@@ -3484,6 +3496,7 @@ export class GameScene extends Phaser.Scene {
         this.noteCast(result);
       },
       cast.bare,
+      rung,
     );
   }
 
@@ -3551,10 +3564,16 @@ export class GameScene extends Phaser.Scene {
 
     this.joystick?.release();
     const rung = this.additionRung;
-    this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, (result) => {
-      if (result.solved) this.takeFloorUp([cell]);
-      this.noteCast(result);
-    });
+    this.askSum(
+      makeSubtractionProblem(this.spellRng, rung),
+      rung.given,
+      (result) => {
+        if (result.solved) this.takeFloorUp([cell]);
+        this.noteCast(result);
+      },
+      null,
+      rung,
+    );
     return true;
   }
 
@@ -4496,7 +4515,7 @@ export class GameScene extends Phaser.Scene {
       action === PatchAction.Grow
         ? additionCastFor(this.spellRng, rung)
         : { problem: makeSubtractionProblem(this.spellRng, rung), given: rung.given, bare: null };
-    this.spellPopup.open(
+    this.askSum(
       cast.problem,
       cast.given,
       (result) => {
@@ -4504,6 +4523,7 @@ export class GameScene extends Phaser.Scene {
         done(result.solved);
       },
       cast.bare,
+      rung,
     );
   }
 
@@ -5447,10 +5467,16 @@ export class GameScene extends Phaser.Scene {
     const { col, row } = target.tile;
     this.joystick?.release();
     const rung = this.additionRung;
-    this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, (result) => {
-      if (result.solved) this.clearAt(col, row);
-      this.noteCast(result);
-    });
+    this.askSum(
+      makeSubtractionProblem(this.spellRng, rung),
+      rung.given,
+      (result) => {
+        if (result.solved) this.clearAt(col, row);
+        this.noteCast(result);
+      },
+      null,
+      rung,
+    );
   }
 
   /**
@@ -5476,10 +5502,16 @@ export class GameScene extends Phaser.Scene {
     }
     this.joystick?.release();
     const rung = this.additionRung;
-    this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, (result) => {
-      if (result.solved) this.takeMachineBack(fixture, at.col, at.row);
-      this.noteCast(result);
-    });
+    this.askSum(
+      makeSubtractionProblem(this.spellRng, rung),
+      rung.given,
+      (result) => {
+        if (result.solved) this.takeMachineBack(fixture, at.col, at.row);
+        this.noteCast(result);
+      },
+      null,
+      rung,
+    );
     return true;
   }
 
@@ -6704,6 +6736,35 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * Ask a sum, on whichever parchment this rung wants.
+   *
+   * One place decides, rather than seven. The counting box is the easiest
+   * rungs' form of the number line — see `Rung.counted` — and every cast in
+   * the game that puts a line in front of a child comes through here, so a
+   * child at the bottom of the ladder meets counters wherever the sum came
+   * from: a crop, a floor, a tree, a machine.
+   *
+   * A bare sum never goes to the counters. `bare` is set at the very top of
+   * the ladder and `counted` at the very bottom, so the two cannot both be
+   * true of one rung — but saying so here means a table edited badly fails
+   * towards the parchment that can draw anything rather than towards a box
+   * of counters asked to hold six hundred.
+   */
+  private askSum(
+    problem: NumberLine,
+    given: number,
+    onDone: (result: CastResult) => void,
+    bare: BareSum | null,
+    rung: Rung,
+  ): void {
+    if (rung.counted && bare === null) {
+      this.countingPopup.open(problem, this.spellRng, onDone);
+      return;
+    }
+    this.spellPopup.open(problem, given, onDone, bare);
+  }
+
+  /**
    * The geometer's lesson.
    *
    * The portal spell's own parchment offers help only after two wrong
@@ -7583,6 +7644,7 @@ export class GameScene extends Phaser.Scene {
     writeSettings(browserStore(), next);
     this.words = phrasesFor(next.language);
     this.spellPopup?.setPhrases(this.words);
+    this.countingPopup?.setWords(this.words);
     this.optionsPanel?.setPhrases(this.words);
     this.aboutPanel?.setPhrases(this.words);
     this.thingPanel?.setPhrases(this.words);
@@ -7900,7 +7962,7 @@ export class GameScene extends Phaser.Scene {
       // walks and what a tally does to a heap.
       const rung = this.additionRung;
       const cast = additionCastFor(this.spellRng, rung);
-      this.spellPopup.open(cast.problem, cast.given, woken, cast.bare);
+      this.askSum(cast.problem, cast.given, woken, cast.bare, rung);
       return;
     }
     if (spell === Spell.Clearing) {
@@ -7908,7 +7970,7 @@ export class GameScene extends Phaser.Scene {
       // heap: take out what does not belong. The same parchment the rune
       // opens on a tree, because it is the same sum.
       const rung = this.additionRung;
-      this.spellPopup.open(makeSubtractionProblem(this.spellRng, rung), rung.given, woken);
+      this.askSum(makeSubtractionProblem(this.spellRng, rung), rung.given, woken, null, rung);
       return;
     }
     if (spell === Spell.Array) {
@@ -12255,6 +12317,17 @@ export class GameScene extends Phaser.Scene {
         marks: this.guideMarks?.showing() ?? { ring: null, arrow: null, trail: 0 },
         done: this.profile.guided,
       }),
+      counting: () => {
+        const counter = this.countingPopup?.counter;
+        if (!counter) return null;
+        const at = this.countingPopup.places;
+        return {
+          ...counter,
+          box: at.box,
+          inBox: at.inBox.map((one) => ({ ...one })),
+          inTray: at.inTray.map((one) => ({ ...one })),
+        };
+      },
       city: () => ({
         gates: this.city.gates.map(({ col, row }) => ({ col, row })),
         wall: this.city.wall.length,
@@ -12381,6 +12454,7 @@ export class GameScene extends Phaser.Scene {
   private panels(): readonly ({ destroy(): void } | undefined)[] {
     return [
       this.spellPopup,
+      this.countingPopup,
       this.portalPanel,
       this.shopPanel,
       this.optionsPanel,
@@ -12414,6 +12488,7 @@ export class GameScene extends Phaser.Scene {
       // Optional throughout: the status line is written once while the scene
       // is still assembling itself, before any of these exist.
       this.spellPopup?.isOpen === true ||
+      this.countingPopup?.isOpen === true ||
       this.shopPanel?.isOpen === true ||
       this.optionsPanel?.isOpen === true ||
       this.aboutPanel?.isOpen === true ||

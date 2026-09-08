@@ -517,6 +517,11 @@ export interface Phrases {
    * be a different adult, and the one about backups is the one message in
    * the game worth repeating.
    */
+  /** The heading over the counting box: the easiest sum, done by hand. */
+  countingTitle: string;
+  /** Under the box when it starts too empty, and when it starts too full. */
+  countingPutIn: string;
+  countingTakeOut: string;
   parentsNotice: string;
   offlineNotice: string;
   backupNotice: string;

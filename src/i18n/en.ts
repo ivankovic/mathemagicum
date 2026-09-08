@@ -460,6 +460,9 @@ export const EN: Phrases = {
   sumsHeading: "Your sums",
   sumsTitle: "How big are your sums?",
   nextStep: "Next",
+  countingTitle: "How many?",
+  countingPutIn: "Put more in until there are enough.",
+  countingTakeOut: "Take some out until there are just enough.",
   parentsNotice: "Important information for parents",
   offlineNotice:
     "This game is not played online. Everything it saves stays on this device and never leaves it.",
