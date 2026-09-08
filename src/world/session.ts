@@ -129,13 +129,23 @@ export function stepsBetween(a: GridPoint, b: GridPoint): number {
 }
 
 /**
- * Whether a thing is close enough to reach for: one orthogonal step.
+ * Whether a thing is close enough to reach for: one step in any direction.
  *
  * The measure a *hand* uses, named so that the other one can be handed to
  * `takeBack` in its place. See there for why that is a caller's business.
+ *
+ * **Diagonals included, which they were not.** The argument for orthogonal
+ * was that gardening acts on the tile she *faces* and a facing is one of
+ * four, so a thing at her corner is out of reach of a trowel. That is a good
+ * argument about planting and the wrong one about picking up: a flowerpot at
+ * her corner is a thing she is standing next to, she can see that she is,
+ * and the game answered a tap on it by doing nothing at all. Nothing tells
+ * a child that the game measures a corner as two steps — and the rule it was
+ * protecting, that she can always take back what she put down, is the one it
+ * was breaking.
  */
 export function beside(from: GridPoint, at: GridPoint): boolean {
-  return stepsBetween(from, at) <= 1;
+  return stepsToSpeak(from, at) <= 1;
 }
 
 /**
@@ -161,10 +171,10 @@ export function beside(from: GridPoint, at: GridPoint): boolean {
  * and the answer is a red cross. Two squares absorbs one step of drift,
  * which is the whole of the miss.
  *
- * Deliberately not the measure a hand uses. `beside` stays at one orthogonal
- * step because gardening acts on the tile the player *faces* and a facing is
- * one of four, so a diagonal neighbour is genuinely out of reach of a
- * trowel. Talking needs no facing, and neither does holding out a carrot.
+ * Deliberately further than the measure a hand uses. `beside` is one step in
+ * any direction — what she can lay a hand on — and this is two, because a
+ * person moves while a finger is on the way down and a thing standing on a
+ * square does not.
  */
 export const SPEAK_REACH = 2;
 

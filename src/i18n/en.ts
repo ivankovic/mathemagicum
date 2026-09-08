@@ -461,7 +461,8 @@ export const EN: Phrases = {
   sumsTitle: "How big are your sums?",
   nextStep: "Next",
   parentsNotice: "Important information for parents",
-  offlineNotice: "This game is not played online.",
+  offlineNotice:
+    "This game is not played online. Everything it saves stays on this device and never leaves it.",
   backupNotice:
     "If you lose your device, your game world is lost. Back up your save file regularly.",
   exportSaves: "Export saves",

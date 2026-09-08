@@ -41,7 +41,7 @@ export const NAMED_PEOPLE = {
   astronomer: "Vera",
   fisher: "Tomo",
   clockmaker: "Emil",
-  mechanic: "Iva",
+  mechanic: "Frida",
 } as const;
 
 /**

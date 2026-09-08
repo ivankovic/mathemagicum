@@ -274,18 +274,27 @@ describe("putting things down", () => {
    *
    * Both measures, in one test, because the bug was the gap between them.
    */
-  test("a spell takes back what it can be aimed at, a hand only what is beside her", () => {
+  test("a hand reaches its own corners, and a spell reaches further still", () => {
     const s = session();
     s.inventory.add(FixtureType.Sorter, 1);
     expect(s.place(FixtureType.Sorter).tile).toEqual({ col: 2, row: 3 });
-    // At its corner: one step diagonally, which she can point at.
-    s.setPosition(1, 2);
-    expect(withinReach(s.tile, { col: 2, row: 3 })).toBe(true);
 
-    expect(s.takeBack(FixtureType.Sorter, 2, 3).outcome).toBe(Outcome.TooFar);
-    expect(s.takeBack(FixtureType.Sorter, 2, 3, withinReach).ok).toBe(true);
+    // At its corner: one step diagonally. Refused once, and reported from a
+    // playtest a second time — *I can't pick it up* — because nothing on
+    // screen says the game counts a corner as two steps. She is standing
+    // next to it, so she can pick it up.
+    s.setPosition(1, 2);
+    expect(s.takeBack(FixtureType.Sorter, 2, 3).ok).toBe(true);
     expect(s.inventory.count(FixtureType.Sorter)).toBe(1);
     expect(s.grid.isPassable(2, 3)).toBe(true);
+
+    // Two away is still a spell's business and not a hand's, which is the
+    // gap the two measures are for.
+    expect(s.place(FixtureType.Sorter).tile).toEqual({ col: 1, row: 3 });
+    s.setPosition(3, 1);
+    expect(withinReach(s.tile, { col: 1, row: 3 })).toBe(true);
+    expect(s.takeBack(FixtureType.Sorter, 1, 3).outcome).toBe(Outcome.TooFar);
+    expect(s.takeBack(FixtureType.Sorter, 1, 3, withinReach).ok).toBe(true);
   });
 
   // The reason there is no connectivity check before placing: whatever she

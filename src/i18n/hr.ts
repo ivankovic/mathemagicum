@@ -558,7 +558,7 @@ export const HR: Phrases = {
   logicHintTray: "Ovaj prolazi.",
   logicHintCircuit: "Probaj ovaj prekidač.",
 
-  jobsTitle: `${NAMED_PEOPLE.mechanic}in stol`,
+  jobsTitle: `${NAMED_PEOPLE.mechanic.replace(/a$/, "")}in stol`,
   jobAsk: (job, left) =>
     ({
       either: `Spoji dva niza u jedan lijevak, a lijevak u brojilo. ${left === 1 ? "Još jedan niz" : `Još ${left} niza`}.`,
@@ -653,7 +653,8 @@ export const HR: Phrases = {
   sumsTitle: "Koliko su veliki tvoji zadaci?",
   nextStep: "Dalje",
   parentsNotice: "Va\u017ene informacije za roditelje",
-  offlineNotice: "Ova se igra ne igra na internetu.",
+  offlineNotice:
+    "Ova se igra ne igra na internetu. Sve što sprema ostaje na ovom uređaju i nikada ga ne napušta.",
   backupNotice:
     "Izgubite li ure\u0111aj, izgubljen je i svijet igre. Redovito sigurnosno kopirajte datoteku sa spremljenim igrama.",
   exportSaves: "Izvezi spremljene igre",

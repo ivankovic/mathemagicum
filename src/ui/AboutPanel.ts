@@ -113,7 +113,21 @@ export class AboutPanel extends Panel {
    * this panel would have opened without a browser opening it.
    */
   openLink: (url: string) => void = (url) => {
-    globalThis.open?.(url, "_blank", "noopener,noreferrer");
+    // A new tab if the browser will give one, and this one if it will not.
+    //
+    // Safari on an iPad would not. `window.open` is allowed only while a
+    // user gesture is still being handled, and Phaser does not handle taps
+    // as they arrive — it collects them and works through them inside its
+    // own frame, by which time the gesture is over and the call is a
+    // silently blocked popup. From the outside that is a button that does
+    // nothing, which is what a playtest reported.
+    //
+    // So the answer is checked. A blocked `open` returns null, and then the
+    // link is followed in the tab we are already in — the game saves on the
+    // way out (see the `pagehide` handler in `create`), so nothing is lost
+    // by leaving, and a link that goes somewhere beats a link that does not.
+    const opened = globalThis.open?.(url, "_blank", "noopener,noreferrer");
+    if (!opened) globalThis.location?.assign(url);
   };
 
   /**

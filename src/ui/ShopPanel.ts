@@ -597,6 +597,7 @@ export class ShopPanel extends Panel {
 
   private startSell(plant: ItemType): void {
     if (this.inventory.count(plant) <= 0) return;
+    this.onChooseCrop?.(plant);
     this.mode = "sell";
     this.chosenCrop = plant;
     // The whole basket, rather than one of them. Selling has no flat limit
@@ -914,6 +915,8 @@ export class ShopPanel extends Panel {
    */
   lookTexture: ((piece: DecorType, look: number) => string) | null = null;
   onSell: ((item: ItemType, count: number, earned: number) => void) | null = null;
+  /** A crop was chosen off the counter, so the shop is counting it out. */
+  onChooseCrop: ((item: ItemType) => void) | null = null;
 
   // --- drawing --------------------------------------------------------------
 

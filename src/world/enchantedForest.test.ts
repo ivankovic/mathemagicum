@@ -281,6 +281,14 @@ describe("what the great tree asks for", () => {
       // Walked past, not walked round: a marker you cannot cross would be a
       // fence post, and the bed inside four of them has to be reachable.
       expect(grid.isPassable(at.col, at.row)).toBe(true);
+      // And safe from the route the world carves to the doorstep, which
+      // clears whatever is standing on it and is not marked. It took the
+      // near corners off the two beds closest to the way in, so a child
+      // arrived to two beds with four lights and two with two — and four
+      // points say *square* only when there are four of them. Passable and
+      // unbreakable at once is exactly right here: the path may run over a
+      // glowcap, it may not sweep one away.
+      expect(grid.getObjectAt(at.col, at.row)?.unbreakable).toBe(true);
     }
   });
 

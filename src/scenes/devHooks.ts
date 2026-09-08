@@ -942,6 +942,8 @@ export interface DevHandle {
     readonly marks: {
       readonly ring: { x: number; y: number } | null;
       readonly arrow: { x: number; y: number } | null;
+      /** How many dots of the way are drawn, nought when none are. */
+      readonly trail: number;
     };
     readonly done: readonly string[];
   };

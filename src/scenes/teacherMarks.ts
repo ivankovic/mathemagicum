@@ -46,6 +46,16 @@ export interface Standing {
   readonly part: string;
   /** Where their feet are, in world pixels. */
   readonly feet: GridPoint & { readonly x: number; readonly y: number };
+  /**
+   * A rune to draw whatever `part` teaches, for a mark that is not a person.
+   *
+   * The wood in the enchanted forest wears one: a child standing in front of
+   * twelve squares of thicket has to be told the minus spell is what takes
+   * them down, and a square is not somebody who can be asked. Given here, the
+   * `owed` question is not asked at all — a square owes nothing and teaches
+   * nothing, it is simply marked while it stands.
+   */
+  readonly rune?: string;
 }
 
 export class TeacherMarks {
@@ -67,9 +77,12 @@ export class TeacherMarks {
     const shown = new Set<string>();
     const beat = DIM + (BRIGHT - DIM) * this.pulse();
     for (const who of here) {
-      const spell = spellTaughtBy(who.part);
-      if (!spell || !owed(spell)) continue;
-      const rune = RUNE_OF[spell];
+      let rune = who.rune;
+      if (!rune) {
+        const spell = spellTaughtBy(who.part);
+        if (!spell || !owed(spell)) continue;
+        rune = RUNE_OF[spell];
+      }
       shown.add(who.part);
       let mark = this.marks.get(who.part);
       if (!mark) {

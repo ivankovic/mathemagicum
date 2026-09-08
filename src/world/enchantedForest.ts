@@ -478,6 +478,15 @@ export function growGrove(grid: WorldGrid, box: AreaPlacement, rng: Rng): Grove 
         if (!grid.inBounds(at.col, at.row)) continue;
         const mark = put(grid, FixtureType.Glowcap, at.col, at.row, 1, false);
         if (!mark) continue;
+        // Unbreakable, for the same reason the thicket is and with none of
+        // the cost: the world carves a route to the doorstep afterwards and
+        // clears whatever is standing on it, which took out the corners of
+        // the two beds nearest the way in — so a child arrived to find two
+        // beds marked with four lights and two marked with two, and four
+        // points at the corners of a square say *square* only when there are
+        // four of them. A glowcap does not block anybody, so the route still
+        // runs straight over it; it is simply no longer swept away.
+        mark.unbreakable = true;
         markers.push(at);
         placed.push(mark);
       }

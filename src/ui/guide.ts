@@ -39,9 +39,18 @@
  * it. The names are saved, so a guide's name is part of the save format:
  * renaming one gives it again to every child.
  *
- * **What has no guide.** The spells with a teacher — the portal, the
- * hourglass, the mirror, the array and the share — are shown by the person
- * who gives them, in their own lesson. The wheel over a bench has two
+ * **What has no guide, and what gained one.** The spells with a teacher were
+ * all shown by the person who gives them, in their own lesson, and the rune
+ * over that person's head was the whole of how a child was meant to find
+ * them. Watched, that is not enough for the *first* of them: she has been
+ * as far as the shop and no further, the tower is a building she has never
+ * had a reason to open, and a rune she can only see once she is standing
+ * under it cannot be what sends her there. So the portal has a guide — the
+ * way to the tower, and then the man at the top of it — and the rune stays
+ * where it is, doing the job it does well, which is saying *this one, still*
+ * once she has arrived. The other four are still their teachers' own.
+ *
+ * The wheel over a bench has two
  * pictures on it and nothing else, and an arrow at one of them would be the
  * game choosing. Walking through a door needs no arrow; she can see the
  * door. The one arrow for a place is the shop's, because it is the first
@@ -64,6 +73,10 @@ export const Guide = {
   Place: "place",
   /** A machine that is asleep. */
   Wake: "wake",
+  /** The tower over the post office, and the man at the top of it. */
+  Learn: "learn",
+  /** The great tree's errand: the wood, the tree, and the spell it pays with. */
+  Grove: "grove",
 } as const;
 
 export type Guide = (typeof Guide)[keyof typeof Guide];
@@ -74,8 +87,15 @@ export const GUIDES: readonly Guide[] = [
   Guide.Grow,
   Guide.Pick,
   Guide.Sell,
+  // After the shop, because the first errand a child is given that is not
+  // about her own garden is the one that pays for it — and the spell at the
+  // top of the tower is what the next errand needs.
+  Guide.Learn,
   Guide.Place,
   Guide.Wake,
+  // Last, because it is the only one that is not offered in the village: it
+  // starts when she is standing in the wood, whenever that turns out to be.
+  Guide.Grove,
 ];
 
 /**
@@ -104,9 +124,27 @@ export const Deed = {
   Picked: "picked",
   EnteredStore: "entered-store",
   OpenedShop: "opened-shop",
+  /** A crop on the counter was chosen, so the shop is counting it out. */
+  ChoseCrop: "chose-crop",
+  /** The trade was agreed and paid for. */
+  Sold: "sold",
   Placed: "placed",
   /** A machine was woken with a sum. */
   Woke: "woke",
+  /** She climbed the tower over the post office. */
+  ClimbedTower: "climbed-tower",
+  /** A teacher gave her a spell she did not have. */
+  LearnedSpell: "learned-spell",
+  /** One square of the great tree's wood came down. */
+  ClearedWood: "cleared-wood",
+  /** Every square of it is down. */
+  WoodAllDown: "wood-all-down",
+  /** The tree gave her the times spell. */
+  LearnedArray: "learned-array",
+  /** The times rune is lit over her head. */
+  ArmedArray: "armed-array",
+  /** A patch was marked out and answered with a times sum. */
+  CastArray: "cast-array",
 } as const;
 
 export type Deed = (typeof Deed)[keyof typeof Deed];
@@ -136,8 +174,18 @@ export type Cue =
   | { readonly kind: "door"; readonly building: string }
   /** Whoever is behind the counter of the room she is in. */
   | { readonly kind: "attendant" }
+  /** The counter's row for the first crop in her basket. */
+  | { readonly kind: "sell-row" }
   /** The nearest machine that is asleep. */
-  | { readonly kind: "sleeping-machine" };
+  | { readonly kind: "sleeping-machine" }
+  /** The nearest square of the great tree's wood still standing. */
+  | { readonly kind: "wood" }
+  /** The great tree, once its wood is down and it has something to give. */
+  | { readonly kind: "great-tree" }
+  /** The times rune in the spellbook. */
+  | { readonly kind: "array-rune" }
+  /** The first empty square of the tree's beds. */
+  | { readonly kind: "grove-bed" };
 
 /**
  * What the scene can see of the interface, for `already`.
@@ -150,7 +198,7 @@ export interface GuideView {
   /** Whether the crate is showing one group's things rather than the groups. */
   readonly crateGroupOpen: boolean;
   /** What is lit over her head. */
-  readonly armed: "seed" | "growth" | "thing" | "other" | null;
+  readonly armed: "seed" | "growth" | "array" | "thing" | "other" | null;
   /** The building she is in, or null out of doors. */
   readonly indoors: string | null;
 }
@@ -168,6 +216,10 @@ export interface GuideWorld {
   readonly cropsInBasket: number;
   readonly thingsInCrate: number;
   readonly sleepingMachines: number;
+  /** Whether there is still a spell waiting to be given to her. */
+  readonly spellToLearn: boolean;
+  /** Squares of the great tree's wood still standing, nought away from it. */
+  readonly woodStanding: number;
 }
 
 export interface Step {
@@ -183,6 +235,18 @@ export interface GuideSpec {
   /** Whether the guide is worth starting now. */
   readonly when: (world: GuideWorld) => boolean;
   /**
+   * Guides that have to be finished before this one may start.
+   *
+   * `when` alone cannot say this, and one guide needed it: the tower is
+   * offered whenever the portal spell is still owed, which is true from the
+   * first minute of the game. The world is re-read twice a second rather
+   * than every frame, so in the half-second after she plants her first seed
+   * the counts still say nothing is growing — and in that gap the tower was
+   * the first guide whose `when` was true, so a child who had just put a
+   * seed in the ground was sent to the post office.
+   */
+  readonly after?: readonly Guide[];
+  /**
    * The deed that finishes the whole guide, for one whose steps go round
    * more than once. Growing is the spellbook, the rune and the crop *twice*
    * — once per stage — so its steps repeat until something ripens. A guide
@@ -192,6 +256,7 @@ export interface GuideSpec {
 }
 
 const STORE = "store";
+const TOWER = "post-office";
 
 export const GUIDE_SPECS: Record<Guide, GuideSpec> = {
   [Guide.Plant]: {
@@ -236,6 +301,14 @@ export const GUIDE_SPECS: Record<Guide, GuideSpec> = {
         already: (view) => view.indoors === STORE,
       },
       { cue: { kind: "attendant" }, until: Deed.OpenedShop },
+      // And then through the sale itself. Opening the counter used to be
+      // where this stopped, on the argument that a shop is a shop and she
+      // could see it — but what she is looking at is a page of prices with
+      // her own carrot somewhere on it, and "sell" is not a word she can
+      // read. Watched: a child reached the shopkeeper, opened the counter,
+      // and had no idea which line was hers.
+      { cue: { kind: "sell-row" }, until: Deed.ChoseCrop },
+      { cue: { kind: "button", name: "shop.yes" }, until: Deed.Sold },
     ],
   },
   [Guide.Place]: {
@@ -262,6 +335,51 @@ export const GUIDE_SPECS: Record<Guide, GuideSpec> = {
   [Guide.Wake]: {
     when: (world) => world.outdoors && world.sleepingMachines > 0,
     steps: [{ cue: { kind: "sleeping-machine" }, until: Deed.Woke }],
+  },
+  [Guide.Grove]: {
+    when: (world) => world.woodStanding > 0,
+    steps: [
+      // Three, and then it lets go. The wood is twelve squares and a child
+      // who has taken three down knows how; a ring on each of the remaining
+      // nine would be the game doing the errand with her. What carries the
+      // other nine is the minus rune standing on each of them — see
+      // `woodToClear` — which is a sign rather than an instruction.
+      { cue: { kind: "wood" }, until: Deed.ClearedWood },
+      { cue: { kind: "wood" }, until: Deed.ClearedWood },
+      { cue: { kind: "wood" }, until: Deed.ClearedWood },
+      // Drawn only once the wood is gone: until then this points at nothing
+      // and the marks are put away, which is the quiet stretch above.
+      { cue: { kind: "great-tree" }, until: Deed.LearnedArray },
+      // And then the spell it just paid her with, on the beds it wants
+      // filled. The whole argument for multiplication is those two things
+      // happening ten seconds apart — see `openGroveLesson`.
+      {
+        cue: { kind: "button", name: "spellbook" },
+        until: Deed.OpenedSpellbook,
+        already: (view) => view.trayOpen === "spellbook",
+      },
+      {
+        cue: { kind: "array-rune" },
+        until: Deed.ArmedArray,
+        already: (view) => view.armed === "array",
+      },
+      { cue: { kind: "grove-bed" }, until: Deed.CastArray },
+    ],
+  },
+  [Guide.Learn]: {
+    when: (world) => world.spellToLearn,
+    // After the shop, which is also where it belongs in the telling: the
+    // first errand that is not about her own garden is the one that pays
+    // for it, and the spell at the top of the tower is what the next needs.
+    after: [Guide.Sell],
+    steps: [
+      {
+        cue: { kind: "door", building: TOWER },
+        until: Deed.ClimbedTower,
+        already: (view) => view.indoors === TOWER,
+      },
+      { cue: { kind: "attendant" }, until: Deed.LearnedSpell },
+    ],
   },
 };
 
@@ -313,7 +431,10 @@ export class GuideRun {
   tick(world: GuideWorld, view: GuideView): void {
     if (!this.running) {
       const next = GUIDES.find(
-        (guide) => !this.finishedGuides.has(guide) && GUIDE_SPECS[guide].when(world),
+        (guide) =>
+          !this.finishedGuides.has(guide) &&
+          (GUIDE_SPECS[guide].after ?? []).every((need) => this.finishedGuides.has(need)) &&
+          GUIDE_SPECS[guide].when(world),
       );
       if (!next) return;
       this.running = { guide: next, step: 0 };

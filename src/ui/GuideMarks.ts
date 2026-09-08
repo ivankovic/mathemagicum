@@ -55,6 +55,8 @@ export class GuideMarks {
   private readonly ring: Phaser.GameObjects.Arc;
   private readonly arrow: Phaser.GameObjects.Graphics;
   private readonly dots: Phaser.GameObjects.Graphics;
+  /** How many dots the last `pointAlong` laid down. */
+  private trailLength = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -113,6 +115,7 @@ export class GuideMarks {
    * the game already draws for "too far", in the guide's own colour.
    */
   pointAlong(trail: readonly ScreenPoint[], end: ScreenPoint): void {
+    this.trailLength = trail.length;
     this.dots.clear();
     this.dots.fillStyle(ACTIVE_HEX, 0.9);
     this.dots.lineStyle(1, INK_HEX, 0.6);
@@ -170,10 +173,14 @@ export class GuideMarks {
   }
 
   /** Where the marks are, for a script: a mark that breathes is the one thing a screenshot cannot settle. */
-  showing(): { ring: ScreenPoint | null; arrow: ScreenPoint | null } {
+  showing(): { ring: ScreenPoint | null; arrow: ScreenPoint | null; trail: number } {
     return {
       ring: this.ring.visible ? { x: this.ring.x, y: this.ring.y } : null,
       arrow: this.arrow.visible ? { x: this.arrow.x, y: this.arrow.y } : null,
+      // How many dots are down. A count rather than the points: what a
+      // scenario asks is whether the way is still being shown, and the
+      // dots move with the camera on every frame she walks.
+      trail: this.dots.visible ? this.trailLength : 0,
     };
   }
 

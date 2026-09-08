@@ -22,6 +22,8 @@ const GARDEN: GuideWorld = {
   cropsInBasket: 0,
   thingsInCrate: 0,
   sleepingMachines: 0,
+  spellToLearn: false,
+  woodStanding: 0,
 };
 
 function run(finished: readonly string[] = []): { run: GuideRun; done: string[] } {
@@ -130,6 +132,13 @@ describe("the rest, in the order the loop goes", () => {
     guide.tick({ ...GARDEN, outdoors: false, cropsInBasket: 3 }, { ...QUIET, indoors: "store" });
     expect(guide.cue()).toEqual({ kind: "attendant" });
     guide.note(Deed.OpenedShop);
+    // The counter is open, and the guide goes on through the sale: her own
+    // crop's line on it, and then the yes that agrees the trade.
+    expect(guide.cue()).toEqual({ kind: "sell-row" });
+    guide.note(Deed.ChoseCrop);
+    expect(guide.cue()).toEqual({ kind: "button", name: "shop.yes" });
+    expect(guide.finished).not.toContain(Guide.Sell);
+    guide.note(Deed.Sold);
     expect(guide.finished).toContain(Guide.Sell);
   });
 
@@ -179,5 +188,94 @@ describe("what a child has been shown", () => {
     expect(readGuided(undefined)).toEqual([]);
     expect(readGuided("plant")).toEqual([]);
     expect(readGuided(null)).toEqual([]);
+  });
+});
+
+describe("the tower, and the man at the top of it", () => {
+  test("is not offered before the shop, however long a spell has been owed", () => {
+    // The gap that caught this: the world is re-read twice a second, so for
+    // half a second after her first seed goes in nothing is growing yet —
+    // and the tower was the first guide whose `when` was true.
+    const { run: guide } = run([Guide.Plant]);
+    guide.tick({ ...GARDEN, spellToLearn: true }, QUIET);
+    expect(guide.current).toBe(null);
+    guide.tick({ ...GARDEN, spellToLearn: true, unripeCrops: 1 }, QUIET);
+    expect(guide.current?.guide).toBe(Guide.Grow);
+  });
+
+  test("waits for a spell still owed, and ends when he gives it", () => {
+    const { run: guide } = run([Guide.Plant, Guide.Grow, Guide.Pick, Guide.Sell]);
+    guide.tick(GARDEN, QUIET);
+    expect(guide.current).toBe(null);
+    guide.tick({ ...GARDEN, spellToLearn: true }, QUIET);
+    expect(guide.cue()).toEqual({ kind: "door", building: "post-office" });
+    guide.note(Deed.ClimbedTower);
+    expect(guide.cue()).toEqual({ kind: "attendant" });
+    guide.note(Deed.LearnedSpell);
+    expect(guide.finished).toContain(Guide.Learn);
+  });
+
+  test("skips the climb for a child already up there", () => {
+    const { run: guide } = run([Guide.Plant, Guide.Grow, Guide.Pick, Guide.Sell]);
+    guide.tick(
+      { ...GARDEN, outdoors: false, spellToLearn: true },
+      { ...QUIET, indoors: "post-office" },
+    );
+    expect(guide.cue()).toEqual({ kind: "attendant" });
+  });
+});
+
+describe("the great tree's errand", () => {
+  const WOOD = { ...GARDEN, woodStanding: 12 };
+  const before = [
+    Guide.Plant,
+    Guide.Grow,
+    Guide.Pick,
+    Guide.Sell,
+    Guide.Learn,
+    Guide.Place,
+    Guide.Wake,
+  ];
+
+  test("shows three squares of wood and then lets her get on with it", () => {
+    const { run: guide } = run(before);
+    guide.tick(WOOD, QUIET);
+    for (let square = 0; square < 3; square++) {
+      expect(guide.cue()).toEqual({ kind: "wood" });
+      guide.note(Deed.ClearedWood);
+    }
+    // The fourth is the tree, which draws nothing until the wood is down —
+    // that part is the scene's, and is why the quiet stretch is quiet.
+    expect(guide.cue()).toEqual({ kind: "great-tree" });
+    expect(guide.finished).not.toContain(Guide.Grove);
+  });
+
+  test("and then the spell the tree pays with, on the beds it wants filled", () => {
+    const { run: guide } = run(before);
+    guide.tick(WOOD, QUIET);
+    for (let square = 0; square < 3; square++) guide.note(Deed.ClearedWood);
+    guide.note(Deed.LearnedArray);
+    expect(guide.cue()).toEqual({ kind: "button", name: "spellbook" });
+    guide.note(Deed.OpenedSpellbook);
+    expect(guide.cue()).toEqual({ kind: "array-rune" });
+    guide.note(Deed.ArmedArray);
+    expect(guide.cue()).toEqual({ kind: "grove-bed" });
+    guide.note(Deed.CastArray);
+    expect(guide.finished).toContain(Guide.Grove);
+  });
+
+  test("the spellbook already open is a step already taken", () => {
+    const { run: guide } = run(before);
+    guide.tick(WOOD, QUIET);
+    for (let square = 0; square < 3; square++) guide.note(Deed.ClearedWood);
+    guide.note(Deed.LearnedArray);
+    guide.tick(WOOD, { ...QUIET, trayOpen: "spellbook" });
+    expect(guide.cue()).toEqual({ kind: "array-rune" });
+  });
+
+  test("is not offered away from the wood", () => {
+    const { run: guide } = run(before);
+    guide.tick(GARDEN, QUIET);
+    expect(guide.current).toBe(null);
   });
 });

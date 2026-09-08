@@ -817,6 +817,21 @@ const GUIDE_TRAIL_INSET = 60;
  * picked her first carrot on a walk across the map to it.
  */
 const GUIDE_MACHINE_REACH = 10;
+/**
+ * And how near the great tree's wood has to be before the guide means it.
+ *
+ * The same rule as the machine above, learned the same way and one guide
+ * later. The wood stands in the enchanted forest from the moment the world
+ * is made, so "is there wood standing" is true in the village, in the city
+ * and on the quay — and the grove guide, offered anywhere, took the first
+ * gap the loop left it: a child planted her first seed and was pointed at a
+ * forest she had never been to.
+ *
+ * Wider than the machine's, because a grove is a place rather than a thing
+ * she put down: standing at the doorstep with the beds spread out in front
+ * of her, the far corner is further off than ten.
+ */
+const GUIDE_GROVE_REACH = 20;
 // The other villager with something to say: she explains the addition spell,
 // and she is in the school for the same reason the shopkeeper is in the
 // store — a teacher you have to find in the square is one you meet by
@@ -1219,6 +1234,11 @@ function armedTag(what: Armed | null): string | null {
  */
 type ThingAction = "use" | "take";
 
+/** Whether a cue points at something on the shop's own counter. */
+function insideShop(cue: Cue): boolean {
+  return cue.kind === "sell-row" || (cue.kind === "button" && cue.name.startsWith("shop."));
+}
+
 export class GameScene extends Phaser.Scene {
   private grid!: WorldGrid;
   private originX = 0;
@@ -1331,6 +1351,18 @@ export class GameScene extends Phaser.Scene {
   private guideMarks?: GuideMarks;
   /** What the guide last saw of the world, and when; it is not cheap to look. */
   private guideWorldSeen: { at: number; world: GuideWorld } | null = null;
+  /** How much of the tree's wood was standing last time it was counted. */
+  private woodStandingSeen: number | null = null;
+  /**
+   * The last square she sowed, so the guide can point back at it.
+   *
+   * The growing guide asks for "a crop that is not ripe" and the scene
+   * answered with the *nearest* one, which is right in an empty garden and
+   * wrong in every other: a bed with seedlings already in it, one seed just
+   * put down at the far end, and the arrow went to somebody else's row. What
+   * she is being walked through is the seed she just planted.
+   */
+  private justPlanted: GridPoint | null = null;
   /** The building she walked into, for the guide that points at a door. */
   private enteredBuilding: string | null = null;
   /**
@@ -2164,7 +2196,9 @@ export class GameScene extends Phaser.Scene {
     // The shop draws its swatches with the same recolouring the room's own
     // furniture uses, so a chair on the shelf is the chair she will get.
     this.shopPanel.lookTexture = (piece, look) => this.decorTexture(piece, look);
+    this.shopPanel.onChooseCrop = () => this.noteDeed(Deed.ChoseCrop);
     this.shopPanel.onSell = (plant, count) => {
+      this.noteDeed(Deed.Sold);
       this.session.sell(plant, count);
       this.refreshCarried();
     };
@@ -2249,7 +2283,9 @@ export class GameScene extends Phaser.Scene {
     // and squares, and a panel over the top of them is a moment they are
     // not pointing at anything.
     this.guideMarks?.destroy();
-    this.guideMarks = new GuideMarks(this, TOUCH_UI_DEPTH + 100, (object) => this.ui(object));
+    // Over the panels, not under them. The counter's rows are on a sheet of
+    // parchment at MODAL_DEPTH, and a ring below that is a ring nobody sees.
+    this.guideMarks = new GuideMarks(this, MODAL_DEPTH + 100, (object) => this.ui(object));
     this.guideWorldSeen = null;
     this.guide = new GuideRun([...this.profile.guided, ...this.dev.guided], (guide) =>
       this.rememberGuided(guide),
@@ -2491,7 +2527,10 @@ export class GameScene extends Phaser.Scene {
       // is the world's clock, unless a script has asked for everything to
       // hold still. See `FROZEN_TIDE`.
       this.traffic?.sail(this.frozen ? FROZEN_TIDE : this.worldNow() / 60_000);
-      this.teacherMarks?.show(this.teachersOnScreen(), (spell) => !this.knows(spell));
+      this.teacherMarks?.show(
+        [...this.teachersOnScreen(), ...this.woodToClear()],
+        (spell) => !this.knows(spell),
+      );
       this.chunks.cullScenery();
     }
     // Indoors as well as out: she is present either way, and a sorter in the
@@ -2788,7 +2827,17 @@ export class GameScene extends Phaser.Scene {
   private groveDone = false;
 
   private checkGrove(): void {
-    this.groveDone = groveProgress(this.worldGrid, this.grove).task === GroveTask.Done;
+    const progress = groveProgress(this.worldGrid, this.grove);
+    this.groveDone = progress.task === GroveTask.Done;
+    // Counted here rather than in the clearing spell, because the wood comes
+    // down by more than one route — a square cleared, a save reloaded — and
+    // this is the one place that re-reads the grove whatever did it.
+    const before = this.woodStandingSeen;
+    this.woodStandingSeen = progress.standing;
+    if (before !== null && progress.standing < before) {
+      this.noteDeed(Deed.ClearedWood);
+      if (progress.standing === 0) this.noteDeed(Deed.WoodAllDown);
+    }
   }
 
   /**
@@ -4590,6 +4639,10 @@ export class GameScene extends Phaser.Scene {
       this.layFloor(cells);
       done += cells.length;
     }
+    // Planting a whole patch at once is the times spell doing the thing it
+    // was given for. Only planting: the same marking is used to clear, to
+    // grow and to build, and none of those is the sum the tree paid for.
+    if (action === PatchAction.Plant && done > 0) this.noteDeed(Deed.CastArray);
     void done;
   }
 
@@ -6173,10 +6226,13 @@ export class GameScene extends Phaser.Scene {
     this.delivery = null;
     this.joystick?.release();
     this.closeTrays();
-    // Asked again, not given: the guides come round again as well — see
-    // `forgetGuides`. Told apart by whether the welcome had been given, and
-    // decided before `rememberIntroSeen` settles that it now has.
-    if (this.profile.introSeen) this.forgetGuides();
+    // **And that is all it does.** Asking him again used to forget every
+    // guide, so the whole tutorial came round with the welcome — which reads
+    // well as "show me again" and reads terribly as what actually happened:
+    // he stands in the village on the way to the shop, a child walking past
+    // taps him because he is there, and an errand she was halfway through
+    // started over. A tutorial anyone can restart by accident is worse than
+    // one nobody can restart at all.
     this.rememberIntroSeen();
     // No greeting. The panel he opens is the greeting.
     this.introPanel?.open_(onClose);
@@ -6265,12 +6321,22 @@ export class GameScene extends Phaser.Scene {
     const guide = this.guide;
     const marks = this.guideMarks;
     if (!guide || !marks) return;
-    if (this.modalOpen) {
+    guide.tick(this.guideWorld(), this.guideView());
+    const cue = guide.cue();
+    // A panel over the world hides almost everything a guide points at, so
+    // for a long time it switched the guide off outright. That is right for
+    // an arrow over a square nobody can see and wrong for the counter: the
+    // sale happens *inside* a panel, and a child in front of a page of
+    // prices she cannot read is exactly who the guide is for.
+    //
+    // So the rule is narrower than "no modals". While one is open the only
+    // cues drawn are the ones the open panel itself publishes positions
+    // for — see `ShopPanel.buttonPositions` — which keeps a stale glow off
+    // a lesson that happens to open over a half-finished errand.
+    if (this.modalOpen && !(cue && this.shopPanel?.isOpen && insideShop(cue))) {
       marks.hide();
       return;
     }
-    guide.tick(this.guideWorld(), this.guideView());
-    const cue = guide.cue();
     const drawn = cue ? this.drawCue(cue, marks) : false;
     if (!drawn) marks.hide();
   }
@@ -6298,6 +6364,10 @@ export class GameScene extends Phaser.Scene {
       unripeCrops: unripe,
       ripeCrops: ripe,
       cropsInBasket: PLANT_TYPES.reduce((sum, plant) => sum + this.inventory.count(plant), 0),
+      // Only the portal, which is the one a guide walks her to. The other
+      // four teachers are found the way they always were.
+      spellToLearn: !knowsSpell([...this.profile.learned, ...this.dev.learned], Spell.Portal),
+      woodStanding: this.woodStillStanding().length,
       thingsInCrate: CRATE_GROUPS.reduce(
         (sum, group) =>
           sum + thingsIn(group).reduce((held, thing) => held + this.crateHeld(thing), 0),
@@ -6320,9 +6390,11 @@ export class GameScene extends Phaser.Scene {
           ? "seed"
           : held.kind === "spell" && held.spell === Spell.Growth
             ? "growth"
-            : held.kind === "fixture" || held.kind === "decor"
-              ? "thing"
-              : "other";
+            : held.kind === "spell" && held.spell === Spell.Array
+              ? "array"
+              : held.kind === "fixture" || held.kind === "decor"
+                ? "thing"
+                : "other";
     return {
       trayOpen,
       crateGroupOpen: this.crateGroup !== null,
@@ -6375,8 +6447,13 @@ export class GameScene extends Phaser.Scene {
       }
       case "ahead":
         return point(this.squareToUse());
-      case "crop":
-        return point(this.nearest(this.cropsOfStage(cue.ripe)));
+      case "crop": {
+        const growing = this.cropsOfStage(cue.ripe);
+        const hers = this.justPlanted;
+        const own =
+          hers && growing.some((at) => at.col === hers.col && at.row === hers.row) ? hers : null;
+        return point(own ?? this.nearest(growing));
+      }
       case "door": {
         const building = this.buildings.find((one) => one.id === cue.building);
         if (!building) return false;
@@ -6384,8 +6461,27 @@ export class GameScene extends Phaser.Scene {
       }
       case "attendant":
         return point(this.attendantCell);
+      case "sell-row": {
+        // Hers, not the first on the shelf: the counter lists every crop it
+        // buys and only one of them is in her basket.
+        const carrying = PLANT_TYPES.find((plant) => this.inventory.count(plant) > 0);
+        return carrying ? glow(`shop.sell.${carrying}`) : false;
+      }
       case "sleeping-machine":
         return point(this.nearest(this.sleepingMachines()));
+      case "wood":
+        return point(this.nearest(this.woodStillStanding()));
+      case "great-tree":
+        // Nothing at all while the wood is up: the tree has nothing to give
+        // until it is down, and an arrow over it then would be sending her
+        // away from the errand she is in the middle of.
+        return this.woodStillStanding().length > 0 ? false : point(this.grove.tree);
+      case "array-rune":
+        return this.spellTray?.isOpen
+          ? glow(`spellbook.${SPELLS.indexOf(Spell.Array)}`, "spellbook")
+          : glow("spellbook");
+      case "grove-bed":
+        return point(this.firstEmptyGroveSquare());
     }
   }
 
@@ -6412,11 +6508,6 @@ export class GameScene extends Phaser.Scene {
     const inside = (at: ScreenPoint, inset: number) =>
       at.x >= inset && at.x <= width - inset && at.y >= inset && at.y <= height - inset;
     const there = this.screenOf(target.col, target.row);
-    if (inside(there, 0)) {
-      marks.clearTrail();
-      marks.pointAt(there);
-      return true;
-    }
     const path = this.wayTo(target);
     const trail: ScreenPoint[] = [];
     let end: ScreenPoint | null = null;
@@ -6425,6 +6516,20 @@ export class GameScene extends Phaser.Scene {
       if (!inside(at, GUIDE_TRAIL_INSET)) break;
       trail.push(at);
       end = at;
+    }
+    // The door in view is not the end of the errand — she still has to walk
+    // there. The trail used to stop the moment it came on screen and leave
+    // only the arrow, which is the frame a child is *most* likely to be
+    // looking at: the shop appears, and the way to it goes away. So the way
+    // stays drawn, all the way in, and the arrow sits over the door itself
+    // rather than over the last dot short of it.
+    if (inside(there, 0)) {
+      if (trail.length > 0) marks.pointAlong(trail, there);
+      else {
+        marks.clearTrail();
+        marks.pointAt(there);
+      }
+      return true;
     }
     if (!end) {
       marks.clearTrail();
@@ -6556,6 +6661,7 @@ export class GameScene extends Phaser.Scene {
   private noteArmed(what: Armed): void {
     if (what.kind === "seed") this.noteDeed(Deed.ArmedSeed);
     else if (what.kind === "spell" && what.spell === Spell.Growth) this.noteDeed(Deed.ArmedGrowth);
+    else if (what.kind === "spell" && what.spell === Spell.Array) this.noteDeed(Deed.ArmedArray);
     else if (what.kind === "fixture" || what.kind === "decor") this.noteDeed(Deed.ArmedThing);
   }
 
@@ -6563,19 +6669,6 @@ export class GameScene extends Phaser.Scene {
   private rememberGuided(guide: Guide): void {
     if (this.profile.guided.includes(guide)) return;
     this.saveProfileChange({ guided: [...this.profile.guided, guide] });
-  }
-
-  /**
-   * Forget every guide, so each is given again when its moment comes.
-   *
-   * What asking the postal worker for the welcome again means: he is the
-   * one who explains this game, and "show me again" is all of it, not the
-   * five pages he happens to carry. Nothing else forgets a guide.
-   */
-  private forgetGuides(): void {
-    this.guide?.forgetAll();
-    if (this.profile.guided.length === 0) return;
-    this.saveProfileChange({ guided: [] });
   }
 
   /**
@@ -6632,6 +6725,7 @@ export class GameScene extends Phaser.Scene {
       this.spellTray?.refresh();
     }
     if (first) this.showEarned(UiAsset.RunePortal);
+    this.noteDeed(Deed.LearnedSpell);
     this.geometryPanel?.setRung(portalRungAt(this.ladders.held("portalRung")));
     this.geometryPanel?.open_(() => {});
   }
@@ -6804,6 +6898,7 @@ export class GameScene extends Phaser.Scene {
     if (first) {
       this.saveProfileChange({ learned });
       this.spellTray?.refresh();
+      this.noteDeed(Deed.LearnedArray);
     }
     // Only the moment of learning goes to the message line. What the tree is
     // still asking for used to go there too — behind the panel this call then
@@ -8778,6 +8873,7 @@ export class GameScene extends Phaser.Scene {
   private plantCropAt(plant: PlantType, col: number, row: number): void {
     if (!this.grid.plant(col, row, plant)) return;
     this.spawnCropSprite(col, row, { plant, stage: PLANTED_STAGE });
+    this.justPlanted = { col, row };
     this.noteDeed(Deed.Planted);
   }
 
@@ -9164,6 +9260,56 @@ export class GameScene extends Phaser.Scene {
    * Every one of them placed through `toFeet`, because that is how anything
    * standing on ground is placed here. See `LIFT`.
    */
+  /**
+   * A minus rune over every square of the tree's wood still standing.
+   *
+   * The errand is twelve subtractions and the game never said so anywhere a
+   * child could see it: the tree asks in a parchment she has to walk up to
+   * and read, and then she is standing in a wood with no sign of what to do
+   * to it. The rune is the sign, on each square that still wants it, and it
+   * goes out square by square as she clears them — so the wood also counts
+   * down how much of the errand is left.
+   *
+   * Only while the wood is what is wanted. Once it is down the beds want
+   * planting, and a minus over a bed would be the wrong spell entirely.
+   */
+  private woodToClear(): Standing[] {
+    const marks: Standing[] = [];
+    for (const at of this.woodStillStanding()) {
+      const feet = this.toFeet(at.col, at.row);
+      marks.push({
+        part: `wood:${at.col},${at.row}`,
+        feet: { ...at, x: feet.x, y: feet.y },
+        rune: RUNE_OF[Spell.Clearing],
+      });
+    }
+    return marks;
+  }
+
+  /** Every square of the tree's wood still up, in world order. */
+  private woodStillStanding(): GridPoint[] {
+    if (this.interior || this.groveDone) return [];
+    return this.grove.thicket
+      .filter((at) => this.worldGrid.getObjectAt(at.col, at.row) !== null)
+      .filter(
+        (at) =>
+          Math.max(Math.abs(at.col - this.playerCol), Math.abs(at.row - this.playerRow)) <=
+          GUIDE_GROVE_REACH,
+      )
+      .map((at) => ({ col: at.col, row: at.row }));
+  }
+
+  /** The first square of the beds with nothing growing in it, or null. */
+  private firstEmptyGroveSquare(): GridPoint | null {
+    if (this.interior) return null;
+    for (const bed of this.grove.beds) {
+      for (const at of patchCells(bed)) {
+        if (this.worldGrid.getCrop(at.col, at.row) === null) return { col: at.col, row: at.row };
+      }
+    }
+    return null;
+  }
+
   private teachersOnScreen(): Standing[] {
     const here: Standing[] = [];
     const at = (part: string, cell: GridPoint) => {
@@ -10781,6 +10927,7 @@ export class GameScene extends Phaser.Scene {
     if (!sidecar) throw new Error(`no interior for "${room}"`);
     this.enteredBuilding = building.id;
     if (building.id === STORE_ID) this.noteDeed(Deed.EnteredStore);
+    if (building.id === TOWER_ID) this.noteDeed(Deed.ClimbedTower);
 
     const door = interiorDoor(sidecar);
     const entered = this.setInterior({
@@ -12105,7 +12252,7 @@ export class GameScene extends Phaser.Scene {
         running: this.guide?.current?.guide ?? null,
         step: this.guide?.current?.step ?? null,
         cue: this.guide?.cue() ?? null,
-        marks: this.guideMarks?.showing() ?? { ring: null, arrow: null },
+        marks: this.guideMarks?.showing() ?? { ring: null, arrow: null, trail: 0 },
         done: this.profile.guided,
       }),
       city: () => ({

@@ -34,7 +34,11 @@ interface GuideSeam {
   running: string | null;
   step: number | null;
   cue: { kind: string; name?: string; ripe?: boolean; building?: string } | null;
-  marks: { ring: { x: number; y: number } | null; arrow: { x: number; y: number } | null };
+  marks: {
+    ring: { x: number; y: number } | null;
+    arrow: { x: number; y: number } | null;
+    trail: number;
+  };
   done: string[];
 }
 
@@ -129,6 +133,9 @@ describe("the guide", () => {
         expect(arrow && arrow.x >= 0 && arrow.x <= 1000 && arrow.y >= 0 && arrow.y <= 760).toBe(
           true,
         );
+        // And the way there is drawn, which is the point of a trail: a
+        // bearing would say the store is somewhere past the hedge.
+        expect(seen.marks.trail).toBeGreaterThan(0);
 
         // --- Tomorrow: what she was walked through stays walked through.
         await game.reload();
@@ -137,6 +144,44 @@ describe("the guide", () => {
       });
     },
     5 * MINUTES,
+  );
+
+  test(
+    "shows her which line on the counter is hers, and the yes that agrees it",
+    async () => {
+      // Opening the counter used to finish the guide, which left a child in
+      // front of a page of prices she cannot read with no sign of which one
+      // is her carrot. It goes on through the sale now.
+      await play(
+        // The three before it already given, so this opens on the errand
+        // it is about rather than walking the whole loop again.
+        {
+          seams: `${STILL}&crops=3&coins=0&at=244,258&guided=plant,grow,pick`,
+          firstTime: true,
+        },
+        async (game) => {
+          await game.goShopping();
+
+          let seen = await reaches(game, Guide.Sell, 2);
+          expect(seen.cue).toEqual({ kind: "sell-row" });
+          // On her own crop's line, not the first the counter happens to
+          // list. Read after the step is reached: the counter's rows are
+          // not on the screen to be measured until it is.
+          expect(near(seen.marks.ring, (await game.ui())["shop.sell.carrot"])).toBe(true);
+
+          await game.tap("shop.sell.carrot");
+          seen = await reaches(game, Guide.Sell, 3);
+          expect(seen.cue).toEqual({ kind: "button", name: "shop.yes" });
+          expect(near(seen.marks.ring, (await game.ui())["shop.yes"])).toBe(true);
+          expect(seen.done).not.toContain(Guide.Sell);
+
+          await game.tap("shop.yes");
+          await game.settle(900);
+          expect((await guide(game)).done).toContain(Guide.Sell);
+        },
+      );
+    },
+    3 * MINUTES,
   );
 
   test(
@@ -162,7 +207,7 @@ describe("the guide", () => {
         await game.settle(500);
         const seen = await guide(game);
         expect(seen.running).toBe(null);
-        expect(seen.marks).toEqual({ ring: null, arrow: null });
+        expect(seen.marks).toEqual({ ring: null, arrow: null, trail: 0 });
         // Counted as given by the seam, not written to the child.
         expect(seen.done).toEqual([]);
         expect(GUIDES.length).toBeGreaterThan(0);

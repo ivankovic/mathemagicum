@@ -444,7 +444,8 @@ export const DE: Phrases = {
   sumsTitle: "Wie groß sind deine Aufgaben?",
   nextStep: "Weiter",
   parentsNotice: "Wichtige Hinweise f\u00fcr Eltern",
-  offlineNotice: "Dieses Spiel wird nicht online gespielt.",
+  offlineNotice:
+    "Dieses Spiel wird nicht online gespielt. Alles, was es speichert, bleibt auf diesem Gerät und verlässt es nie.",
   backupNotice:
     "Geht das Ger\u00e4t verloren, ist die Spielwelt verloren. Sichern Sie die Speicherdatei regelm\u00e4\u00dfig.",
   exportSaves: "Spielst\u00e4nde sichern",
