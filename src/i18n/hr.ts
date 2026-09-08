@@ -656,6 +656,8 @@ export const HR: Phrases = {
   countingTitle: "Koliko ih je?",
   countingPutIn: "Dodaj ih još dok ih ne bude dovoljno.",
   countingTakeOut: "Vadi ih dok ih ne ostane točno toliko.",
+  vennTitle: "Gdje ide koji?",
+  vennHint: "Povuci svaki u krug. Neki ne idu ni u jedan.",
   parentsNotice: "Va\u017ene informacije za roditelje",
   offlineNotice:
     "Ova se igra ne igra na internetu. Sve što sprema ostaje na ovom uređaju i nikada ga ne napušta.",

@@ -523,6 +523,8 @@ export interface Phrases {
   /** Under the box when it starts too empty, and when it starts too full. */
   countingPutIn: string;
   countingTakeOut: string;
+  vennTitle: string;
+  vennHint: string;
   parentsNotice: string;
   offlineNotice: string;
   backupNotice: string;

@@ -201,6 +201,8 @@ export interface DevOptions {
   readonly symmetryRung: number | null;
   /** `?logicRung=` — which tray or circuit the logic spell puts on the parchment. */
   readonly logicRung: number | null;
+  /** `?vennRung=` — which set diagram the funnel puts on the parchment. */
+  readonly vennRung: number | null;
   /**
    * Spells to count as already taught.
    *
@@ -385,6 +387,7 @@ export function parseDevOptions(search: string): DevOptions {
     clockRung: number("clockRung"),
     symmetryRung: number("symmetryRung"),
     logicRung: number("logicRung"),
+    vennRung: number("vennRung"),
     learned: names(params.get("learned"), ALL_SPELLS),
     flowers: names(params.get("flowers"), FLOWER_TYPES),
     guided: names(params.get("guided"), GUIDES),
@@ -1018,6 +1021,39 @@ export interface DevHandle {
     readonly wrong: string | null;
     /** Whether the grid has started giving a square away. */
     readonly hinting: boolean;
+  } | null;
+  /**
+   * The funnel's set diagram: how far she has got, and where the rings are.
+   *
+   * The rings are published as circles rather than as boxes because that is
+   * what they are — the lens is where two circles genuinely cross, and a
+   * scenario aiming at the middle of a bounding box would be aiming at a
+   * place the parchment does not agree is the lens.
+   */
+  readonly venn: () => {
+    readonly rings: number;
+    readonly waiting: number;
+    readonly placed: number;
+    readonly missteps: number;
+    readonly left: unknown;
+    readonly right: unknown;
+    readonly onTray: readonly {
+      readonly id: string;
+      readonly hue: string;
+      readonly shape: string;
+    }[];
+    readonly board: {
+      readonly rings: readonly { readonly x: number; readonly y: number; readonly r: number }[];
+      readonly tray: {
+        readonly x: number;
+        readonly y: number;
+        readonly w: number;
+        readonly h: number;
+      };
+      readonly waiting: readonly { readonly x: number; readonly y: number }[];
+      readonly placed: readonly { readonly x: number; readonly y: number }[];
+      readonly spots: Readonly<Record<string, { readonly x: number; readonly y: number }>>;
+    } | null;
   } | null;
   /**
    * The logic parchment: the tray and its rule, or the switches and the

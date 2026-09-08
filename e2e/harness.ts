@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { type Page, chromium } from "playwright";
+import { type Region, regionOf } from "../src/minigames/venn";
 import { GAMES_KEY, PLAYING_KEY, gameKey } from "../src/save/games";
 // The seams as the game *declares* them, not as a scenario remembers them.
 // Type-only, so nothing of the game is loaded into the test process — what
@@ -863,6 +864,17 @@ async function drawn(page: Page): Promise<void> {
   await page.waitForLoadState("networkidle", { timeout: SETUP_MS });
 }
 
+interface VennSeam {
+  waiting: number;
+  left: unknown;
+  right: unknown;
+  onTray: { id: string; hue: string; shape: string }[];
+  board: {
+    waiting: { x: number; y: number }[];
+    spots: Record<Region, { x: number; y: number }>;
+  } | null;
+}
+
 /** A child playing, as a scenario can drive her. */
 export class Game {
   constructor(private readonly page: Page) {}
@@ -1389,7 +1401,7 @@ export class Game {
    * `stopped()`: once the parchment is down, the scene has already been told.
    */
   private async closed(
-    parchment: "bricks" | "spell" | "array" | "share" | "logic",
+    parchment: "bricks" | "spell" | "array" | "share" | "logic" | "venn",
     tail = 150,
   ): Promise<void> {
     await this.ask(`the ${parchment} parchment to close`, (page) =>
@@ -1508,6 +1520,51 @@ export class Game {
       }
     }
     await this.closed("logic");
+  }
+
+  /**
+   * Answer the funnel's set diagram: every thing on the tray into its ring.
+   *
+   * Where each one belongs is worked out here, with the game's own
+   * `regionOf` against the rules the seam publishes — the same trick
+   * `solveLogic` uses on a circuit, and for the same reason. The parchment
+   * says where its regions *are*, because the lens is where two circles
+   * cross and nothing out here could find it; it does not say what goes in
+   * them, so a scenario that dropped things in the wrong rings would fail.
+   */
+  async solveVenn(): Promise<void> {
+    // Bounded rather than `while`, because a parchment that stopped
+    // accepting drops would otherwise hang here until the scenario's own
+    // timeout and say nothing about why.
+    for (let left = 40; left > 0; left--) {
+      if (!(await this.solveVennOnce())) break;
+    }
+    await this.closed("venn");
+  }
+
+  /**
+   * Put one thing where it belongs, and say whether there was one to put.
+   *
+   * Separate from `solveVenn` so a scenario can stop one short of the end:
+   * that the parchment is *still open* with one thing left on the tray is
+   * the whole of "every thing has to go somewhere", and it cannot be
+   * checked by something that only knows how to finish.
+   */
+  async solveVennOnce(): Promise<boolean> {
+    const seen = await this.seam<VennSeam | null>("venn");
+    if (!seen?.board) return false;
+    const one = seen.onTray[0];
+    const from = seen.board.waiting[0];
+    if (!one || !from) return false;
+    const region = regionOf(
+      { left: seen.left as never, right: seen.right as never, tokens: [] },
+      one as never,
+    );
+    const to = seen.board.spots[region];
+    if (!to) throw new Error(`the diagram has nowhere to put a ${region} thing`);
+    await this.drag(from, to);
+    await this.settle(140);
+    return true;
   }
 
   /**

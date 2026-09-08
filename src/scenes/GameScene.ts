@@ -149,6 +149,7 @@ import { SpellPopup } from "../ui/SpellPopup";
 import { SymmetryPopup } from "../ui/SymmetryPopup";
 import { TaskPanel } from "../ui/TaskPanel";
 import { ThingPanel } from "../ui/ThingPanel";
+import { VennPopup } from "../ui/VennPopup";
 import {
   UI_SIDECAR_KEY,
   UiAsset,
@@ -1438,6 +1439,7 @@ export class GameScene extends Phaser.Scene {
   private symmetryPopup?: SymmetryPopup;
   /** The logic spell's: a tray and a rule, or switches and a lamp. */
   private logicPopup?: LogicPopup;
+  private vennPopup?: VennPopup;
   /**
    * The little menu over her head, which asks two questions in turn.
    *
@@ -2264,6 +2266,9 @@ export class GameScene extends Phaser.Scene {
     this.logicPopup = new LogicPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
       this.ui(object),
     );
+    this.vennPopup = new VennPopup(this, uiIndex, MODAL_DEPTH, this.words, (object) =>
+      this.ui(object),
+    );
     // Above the parchment, because the parchment has closed by the time the
     // sand runs and what is underneath is the world changing colour.
     this.sandGlass = new SandGlass(this, MODAL_DEPTH + 10, (object) => this.ui(object));
@@ -2814,6 +2819,7 @@ export class GameScene extends Phaser.Scene {
     this.sharePopup?.layout();
     this.symmetryPopup?.layout();
     this.logicPopup?.layout();
+    this.vennPopup?.layout();
     this.portalPanel?.layout();
     this.geometryPanel?.layout();
     this.shopPanel?.layout();
@@ -7658,6 +7664,7 @@ export class GameScene extends Phaser.Scene {
     this.sharePopup?.setPhrases(this.words);
     this.symmetryPopup?.setPhrases(this.words);
     this.logicPopup?.setPhrases(this.words);
+    this.vennPopup?.setWords(this.words);
     this.shopPanel?.setPhrases(this.words);
     // The line on screen was written in the old language by whatever the
     // player last did; it would otherwise sit there until they did something
@@ -7928,21 +7935,37 @@ export class GameScene extends Phaser.Scene {
    * started.
    */
   private showTheSum(key: string, state: MachineState, machine: MachineType): void {
-    const spell: Spell = SPARK[machine];
-    if (!knowsSpell([...this.profile.learned, ...this.dev.learned], spell)) {
-      this.showWhereToLearn(spell);
-      return;
-    }
-    const woken = (result: { solved: boolean }) => {
+    const woken = (shown: string) => (result: { solved: boolean }) => {
       if (!result.solved) return;
       this.machines.set(key, wake(state));
       this.noteDeed(Deed.Woke);
       // A blueprint draws the moment it wakes: the line as it stands now,
       // which is the one she was looking at when she woke it.
       if (machine === FixtureType.Blueprint) this.recordPlan(key);
-      this.showEarned(RUNE_OF[spell]);
+      this.showEarned(shown);
       this.autosave();
     };
+    // A machine with a category of its own is not gated on a spell, and that
+    // is the point rather than an oversight. Seven machines used to share
+    // the logic spell between them, which meant a child could not wake a
+    // funnel without first walking to the city — and what a funnel wants
+    // shown is *its* idea, not a rune. So the ones that have moved off the
+    // spell ask their own question, and knowing it is what waking is.
+    if (machine === FixtureType.Funnel) {
+      // Two mouths and one spout is the union, and the union is drawn as
+      // two rings that cross.
+      this.vennPopup?.open(this.ladders.held("vennRung"), this.spellRng, (result: CastResult) => {
+        this.ladders.note("vennRung", result);
+        woken(FixtureType.Funnel)(result);
+      });
+      return;
+    }
+    const spell: Spell = SPARK[machine];
+    if (!knowsSpell([...this.profile.learned, ...this.dev.learned], spell)) {
+      this.showWhereToLearn(spell);
+      return;
+    }
+    const wokenBySpell = woken(RUNE_OF[spell]);
     // Each machine is shown *its own* arithmetic, which is the whole of why
     // this branches: a hothouse woken by a division would be a toll, where
     // one woken by the rows and columns it is about to do three at a time is
@@ -7953,7 +7976,7 @@ export class GameScene extends Phaser.Scene {
       const rung = logicRungAt(this.ladders.held("logicRung"));
       this.logicPopup?.open(this.spellRng, rung, (result) => {
         this.ladders.note("logicRung", result);
-        woken(result);
+        wokenBySpell(result);
       });
       return;
     }
@@ -7962,7 +7985,7 @@ export class GameScene extends Phaser.Scene {
       // walks and what a tally does to a heap.
       const rung = this.additionRung;
       const cast = additionCastFor(this.spellRng, rung);
-      this.askSum(cast.problem, cast.given, woken, cast.bare, rung);
+      this.askSum(cast.problem, cast.given, wokenBySpell, cast.bare, rung);
       return;
     }
     if (spell === Spell.Clearing) {
@@ -7970,7 +7993,13 @@ export class GameScene extends Phaser.Scene {
       // heap: take out what does not belong. The same parchment the rune
       // opens on a tree, because it is the same sum.
       const rung = this.additionRung;
-      this.askSum(makeSubtractionProblem(this.spellRng, rung), rung.given, woken, null, rung);
+      this.askSum(
+        makeSubtractionProblem(this.spellRng, rung),
+        rung.given,
+        wokenBySpell,
+        null,
+        rung,
+      );
       return;
     }
     if (spell === Spell.Array) {
@@ -7981,11 +8010,11 @@ export class GameScene extends Phaser.Scene {
       // a test. The three is the three a child can already count through the
       // glass, so the sum on the parchment is a sum about the thing they are
       // standing in front of.
-      this.arrayPopup?.open(arrayProblemFor(SHARES, SHARES, rung), woken);
+      this.arrayPopup?.open(arrayProblemFor(SHARES, SHARES, rung), wokenBySpell);
       return;
     }
     const rung = shareRungAt(this.ladders.held("shareRung"));
-    this.sharePopup?.open(shareProblemFor(this.spellRng, rung), woken);
+    this.sharePopup?.open(shareProblemFor(this.spellRng, rung), wokenBySpell);
   }
 
   /**
@@ -12188,6 +12217,20 @@ export class GameScene extends Phaser.Scene {
        * still wanted — and a script taps the squares the game itself worked
        * out rather than ones it guessed.
        */
+      /**
+       * The funnel's rings, and where a finger has to go.
+       *
+       * Published for the reason the logic grid is: what a child aims at
+       * here is a *region* — a circle, or the lens where two circles cross
+       * — and there is no button with a name anywhere on the sheet. A
+       * scenario that guessed at coordinates would be a scenario testing
+       * its own arithmetic rather than the parchment's.
+       */
+      venn: () => {
+        const seen = this.vennPopup?.diagram;
+        if (!seen) return null;
+        return { ...seen, board: this.vennPopup?.places ?? null };
+      },
       logic: () => {
         const cast = this.logicPopup?.cast;
         if (!cast) return null;
@@ -12490,6 +12533,7 @@ export class GameScene extends Phaser.Scene {
       this.clockPopup,
       this.symmetryPopup,
       this.logicPopup,
+      this.vennPopup,
       this.patchMenu,
       this.decorMenu,
       this.flowerMenu,
@@ -12529,6 +12573,7 @@ export class GameScene extends Phaser.Scene {
       this.sharePopup?.isOpen === true ||
       this.symmetryPopup?.isOpen === true ||
       this.logicPopup?.isOpen === true ||
+      this.vennPopup?.isOpen === true ||
       // Mid-move: halfway onto a bench, or sitting on one. Brief moves are
       // short — see `USE_MS` — and for the same reason a crossing is: a
       // step taken from the middle of it lands nowhere. A lasting one is

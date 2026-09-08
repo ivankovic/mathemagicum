@@ -464,6 +464,8 @@ export const EN: Phrases = {
   countingTitle: "How many?",
   countingPutIn: "Put more in until there are enough.",
   countingTakeOut: "Take some out until there are just enough.",
+  vennTitle: "Where does each one go?",
+  vennHint: "Drag each one into a ring. Some belong in neither.",
   parentsNotice: "Important information for parents",
   offlineNotice:
     "This game is not played online. Everything it saves stays on this device and never leaves it.",

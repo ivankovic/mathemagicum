@@ -27,6 +27,7 @@
  * dial on evidence about one.
  */
 
+import { nextVennRung } from "../../minigames/venn";
 import type { Profile } from "../../save/profiles";
 import { HARDEST_BRICK_RUNG } from "../../spells/bricks";
 import type { CastResult } from "../../spells/cast";
@@ -54,6 +55,7 @@ export type LadderKey =
   | "clockRung"
   | "symmetryRung"
   | "logicRung"
+  | "vennRung"
   | "brickRung";
 
 /** The rung a ladder would move to, given the child and how they have been doing. */
@@ -74,6 +76,7 @@ const LADDERS: Readonly<Record<LadderKey, Climb>> = {
   clockRung: (p, recent) => nextRung(bandAt(p.band), p.clockRung, recent, HARDEST_CLOCK_RUNG),
   symmetryRung: (p, recent) => nextSymmetryRung(p.symmetryRung, recent),
   logicRung: (p, recent) => nextLogicRung(p.logicRung, recent),
+  vennRung: (p, recent) => nextVennRung(p.vennRung, recent),
   brickRung: (p, recent) => nextRung(bandAt(p.band), p.brickRung, recent, HARDEST_BRICK_RUNG),
 };
 
@@ -100,6 +103,7 @@ export class Ladders {
     clockRung: [],
     symmetryRung: [],
     logicRung: [],
+    vennRung: [],
     brickRung: [],
   };
 

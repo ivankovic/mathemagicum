@@ -3,6 +3,7 @@
 
 import type { AvatarStyle } from "../avatar/style";
 import { DEFAULT_AVATAR } from "../avatar/style";
+import { HARDEST_VENN_RUNG } from "../minigames/venn";
 import { type Language, languageOf } from "../settings";
 import { HARDEST_BRICK_RUNG } from "../spells/bricks";
 import { type Band, DEFAULT_BAND, bandAt, bandOn, rungInBand } from "../spells/difficulty";
@@ -208,6 +209,14 @@ export interface Progress {
    */
   readonly logicRung: number;
   /**
+   * Which rung of the funnel's set diagram this child is on.
+   *
+   * Bandless, like the mirror's and the logic ladder's, and for the reason
+   * given there: whether a five-year-old can see that a thing is in both
+   * rings at once is not a fact about how big her sums are.
+   */
+  readonly vennRung: number;
+  /**
    * Which flowers this child has walked into, and may now plant.
    *
    * A set of names, like `learned`, and for the same reason: what is locked
@@ -406,6 +415,7 @@ export function createProfile(
     clockOffset: 0,
     symmetryRung: 0,
     logicRung: 0,
+    vennRung: 0,
     found: [],
     brickRung: brickFloor(bandAt(wanted.band)),
     // The village, because that is where they live. A portal spell whose
@@ -465,6 +475,7 @@ export function freshProgress(bandAt_: number): Progress {
     clockOffset: 0,
     symmetryRung: 0,
     logicRung: 0,
+    vennRung: 0,
     found: [],
     brickRung: brickFloor(band),
     reached: [HOME_PLACE],
@@ -519,6 +530,12 @@ function readOffset(raw: unknown): number {
 function readSymmetryRung(raw: unknown): number {
   const rung = Math.trunc(Number(raw ?? 0));
   return Number.isFinite(rung) ? Math.max(0, Math.min(HARDEST_SYMMETRY_RUNG, rung)) : 0;
+}
+
+/** The same again, against the funnel's set diagram. */
+function readVennRung(raw: unknown): number {
+  const rung = Math.trunc(Number(raw ?? 0));
+  return Number.isFinite(rung) ? Math.max(0, Math.min(HARDEST_VENN_RUNG, rung)) : 0;
 }
 
 /** The same again, against the logic ladder. */
@@ -663,6 +680,8 @@ export function readProgress(value: unknown, bandNumber: number): Progress {
     symmetryRung: readSymmetryRung(record.symmetryRung),
     // A child saved before the mechanic taught anything has never lit a lamp.
     logicRung: readLogicRung(record.logicRung),
+    // A child saved before a funnel could be woken has sorted nothing.
+    vennRung: readVennRung(record.vennRung),
     found: readFound(record.found),
     // A child saved before anybody could build a room has never laid a
     // brick: the bottom of their own band, exactly as a new child gets.

@@ -42,11 +42,13 @@ async function running(game: Game, machine: FixtureType): Promise<{ col: number;
   const at = await game.squareBeside();
   await game.tapCell(at.col, at.row);
   await game.settle(500);
-  // Asleep: the first tap asks the sum, which for these is the logic
-  // parchment.
+  // Asleep: the first tap asks the sum. Which parchment that is depends on
+  // the machine — the funnel has moved onto a category of its own and asks
+  // about sets, the rest still share the logic spell.
   await game.tapCell(at.col, at.row);
   await game.settle(400);
-  await game.solveLogic();
+  if (machine === FixtureType.Funnel) await game.solveVenn();
+  else await game.solveLogic();
   await game.settle(400);
   const woken = (await machines(game)).find((one) => one.where === `${at.col},${at.row}`);
   expect(woken?.awake).toBe(true);
