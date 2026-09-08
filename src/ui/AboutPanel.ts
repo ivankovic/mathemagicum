@@ -48,6 +48,8 @@ export interface DebugControls {
   readonly fillPurse: () => void;
   readonly fillBasket: () => void;
   readonly learnEverything: () => void;
+  /** Show the tutorial again, from the top. See `debugGuides`. */
+  readonly replayGuides: () => void;
 }
 
 /**
@@ -83,7 +85,7 @@ const SMALL_SIZE = TYPE.tiny;
 const BUTTON_H = 34;
 const BUTTON_GAP = 10;
 /** How many rows the debug face draws. See renderDebug. */
-const DEBUG_ROWS = 7;
+const DEBUG_ROWS = 8;
 
 /** Where the two buttons go. Stated here so a script need not guess. */
 export const SOURCE_URL = "https://github.com/ivankovic/mathemagicum";
@@ -340,6 +342,11 @@ export class AboutPanel extends Panel {
             act: () => this.give("basket"),
           },
           { label: this.words.debugLearn, value: this.given.learn, act: () => this.give("learn") },
+          {
+            label: this.words.debugGuides,
+            value: this.given.guides,
+            act: () => this.give("guides"),
+          },
         ]
       : [];
 
@@ -384,14 +391,15 @@ export class AboutPanel extends Panel {
   }
 
   /** What each hand-over row says: its own name, until it has been used. */
-  private given = { purse: "", basket: "", learn: "" };
+  private given = { purse: "", basket: "", learn: "", guides: "" };
 
-  private give(which: "purse" | "basket" | "learn"): void {
+  private give(which: "purse" | "basket" | "learn" | "guides"): void {
     const at = this.controls;
     if (!at) return;
     if (which === "purse") at.fillPurse();
     if (which === "basket") at.fillBasket();
     if (which === "learn") at.learnEverything();
+    if (which === "guides") at.replayGuides();
     this.given = { ...this.given, [which]: this.words.debugDone };
   }
 

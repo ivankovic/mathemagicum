@@ -492,6 +492,7 @@ export const HR: Phrases = {
   debugPurse: "Napuni novčanik",
   debugBasket: "Napuni košaru",
   debugLearn: "Nauči sve, idi svugdje",
+  debugGuides: "Ponovno prikaži upute",
   debugOn: "uključeno",
   debugOff: "isključeno",
   debugDone: "gotovo",

@@ -288,6 +288,7 @@ export const DE: Phrases = {
   debugPurse: "Geldbeutel füllen",
   debugBasket: "Korb füllen",
   debugLearn: "Alles lernen, überall hinkommen",
+  debugGuides: "Die Einführung nochmal zeigen",
   debugOn: "an",
   debugOff: "aus",
   debugDone: "fertig",

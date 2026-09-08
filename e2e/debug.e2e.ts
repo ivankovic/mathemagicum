@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterAll, describe, expect, test } from "bun:test";
+import { Guide } from "../src/ui/guide";
 import { play, shutDown } from "./harness";
 
 const MINUTES = 60_000;
@@ -43,9 +44,9 @@ describe("turning the seams on", () => {
         await game.tap("about.title");
         await game.settle(500);
         buttons = Object.keys(await game.ui());
-        // Seven rows, and the links have gone: it is a different sheet now
+        // Eight rows, and the links have gone: it is a different sheet now
         // rather than the same one with things added underneath.
-        expect(buttons.filter((name) => name.startsWith("debug."))).toHaveLength(7);
+        expect(buttons.filter((name) => name.startsWith("debug."))).toHaveLength(8);
         expect(buttons).not.toContain("source");
 
         // And back again, because a gesture that cannot be undone by whoever
@@ -98,7 +99,76 @@ describe("turning the seams on", () => {
         await game.reload();
         await toTheSheet(game);
         // Opened straight onto the debug face, without the gesture.
-        expect(Object.keys(await game.ui()).filter((n) => n.startsWith("debug."))).toHaveLength(7);
+        expect(Object.keys(await game.ui()).filter((n) => n.startsWith("debug."))).toHaveLength(8);
+      });
+    },
+    5 * MINUTES,
+  );
+});
+
+/**
+ * Giving the tutorial back, which is the row with a story behind it.
+ *
+ * It used to happen by accident: talking to the postman reset the guide, and
+ * a playtest found that the way you find that sort of thing — halfway
+ * through the tutorial, having just said hello to somebody. Taking the
+ * accident out took the only way of replaying it with it, and a tutorial
+ * that can be seen once per child is one a parent cannot show a younger
+ * sibling.
+ *
+ * Asserted on what the guide is doing rather than on the row existing,
+ * because clearing the saved list is only half of it: the run holds the list
+ * it was built with, so a version that forgot and did not start again would
+ * pass a check on the save file and show a child nothing at all.
+ */
+describe("asking for the tutorial again", () => {
+  test(
+    "a guide already finished comes back, and is running from the top",
+    async () => {
+      await play({ seams: AT_HOME, firstTime: true }, async (game) => {
+        // Four taps, which is the whole first guide: pouch, seed, square.
+        await game.tap("seeds");
+        await game.settle(300);
+        await game.tap("seeds.0");
+        await game.settle(300);
+        const bed = await game.squareBeside();
+        await game.tapCell(bed.col, bed.row);
+        await game.settle(600);
+        const before = await game.seam<{ done: string[] }>("guide");
+        expect(before.done).toContain(Guide.Plant);
+
+        await toTheSheet(game);
+        await game.tap("about.title");
+        await game.settle(500);
+        // The eighth row, by position, the way the purse is the fifth.
+        expect(await game.tap("debug.7")).toBe(true);
+        await game.settle(400);
+        await game.press("Escape");
+        await game.settle(600);
+
+        const after = await game.seam<{
+          done: string[];
+          running: string | null;
+          step: number | null;
+        }>("guide");
+        // Forgotten, and started again: nothing done, and the pouch being
+        // pointed at once more.
+        expect(after.done).toEqual([]);
+        expect(after.running).toBe(Guide.Plant);
+        expect(after.step).toBe(0);
+
+        // And still forgotten tomorrow, which is the case the row is for: a
+        // grown-up taps it and hands the tablet to a younger child, and that
+        // is a different session by the time anybody plays. An empty list
+        // has to survive `readGuided` the same way a full one does, and a
+        // reader that treated empty as "nothing saved, use the default"
+        // would put the finished tutorial back and pass every assertion
+        // above.
+        await game.reload();
+        await game.settle(800);
+        const tomorrow = await game.seam<{ done: string[]; running: string | null }>("guide");
+        expect(tomorrow.done).toEqual([]);
+        expect(tomorrow.running).toBe(Guide.Plant);
       });
     },
     5 * MINUTES,

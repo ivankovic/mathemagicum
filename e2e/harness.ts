@@ -467,6 +467,27 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
   // passed on its own, it passed with its own file, and it failed only after
   // another file had run first, which is the worst shape a test failure has.
   const browser = await bounded("a browser to start", chromium.launch(), SETUP_MS);
+  // A browser that goes away mid-scenario, said out loud.
+  //
+  // It does go away: watched live, a scenario stalled with no browser
+  // process left on the machine at all, the dev server answering in a
+  // millisecond and memory pressure at zero. Playwright does not mind — an
+  // `evaluate` against a browser that is gone simply never returns — so the
+  // scenario sat there until the runner's own five-minute timeout and blamed
+  // itself. This turns that into one sentence, immediately.
+  //
+  // Listened for on the line after the browser starts, and not four awaits
+  // later where it used to be, because a browser can die while its own
+  // window is being made: an event with nobody listening is an event that
+  // did not happen, and the whole point of this is that it is heard.
+  const lost = new Promise<never>((_, reject) => {
+    browser.on("disconnected", () =>
+      reject(new Error("the browser exited in the middle of the scenario")),
+    );
+  });
+  // Nothing ever awaits `lost` on the happy path, and an unobserved
+  // rejection is a crash in bun. Every use races it against real work.
+  lost.catch(() => {});
   const context = await bounded(
     "a browser window",
     browser.newContext({
@@ -525,23 +546,6 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
     if (message.type() === "error") complaints.push(`console: ${message.text().slice(0, 200)}`);
   });
 
-  // A browser that goes away mid-scenario, said out loud.
-  //
-  // It does go away: watched live, a scenario stalled with no browser
-  // process left on the machine at all, the dev server answering in a
-  // millisecond and memory pressure at zero. Playwright does not mind — an
-  // `evaluate` against a browser that is gone simply never returns — so the
-  // scenario sat there until the runner's own five-minute timeout and blamed
-  // itself. This turns that into one sentence, immediately.
-  const lost = new Promise<never>((_, reject) => {
-    browser.on("disconnected", () =>
-      reject(new Error("the browser exited in the middle of the scenario")),
-    );
-  });
-  // Nothing ever awaits `lost` on the happy path, and an unobserved
-  // rejection is a crash in bun. Every use races it against real work.
-  lost.catch(() => {});
-
   const game = new Game(page);
   try {
     // `domcontentloaded`, not `load`. This game's `load` event waits for
@@ -588,8 +592,17 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
   } finally {
     // Bounded like everything else, and for the same reason: a browser that
     // will not close is indistinguishable from a scenario that will not end.
-    await bounded("the window to close", context.close(), SETUP_MS).catch(() => {});
-    await bounded("the browser to close", browser.close(), SETUP_MS).catch(() => {});
+    //
+    // Waited on and not killed, because there is nothing here to kill with:
+    // Playwright hands the process out on a `BrowserServer` and this is a
+    // `Browser`. What that leaves is a browser that could in principle be
+    // abandoned still running — so the bound is short rather than long for
+    // two reasons and not one. A leak of five seconds’ patience is bounded
+    // by the driver, which reaps every browser it launched when this process
+    // exits, and `run.ts` gives every file its own process; a leak of three
+    // minutes’ patience would have been the whole file.
+    await bounded("the window to close", context.close(), CLOSE_MS).catch(() => {});
+    await bounded("the browser to close", browser.close(), CLOSE_MS).catch(() => {});
   }
 }
 
@@ -638,6 +651,25 @@ const ANSWER_MS = 30_000;
  * the cost of opening three times over.
  */
 const SETUP_MS = 180_000;
+/**
+ * How long a browser gets to shut, which is nothing like how long it gets to
+ * start.
+ *
+ * These were both `SETUP_MS`, and that is how a scenario came to fail with
+ * nothing said about it. The harness works the failure out correctly — the
+ * scene never starts, and the bound on that fires at a hundred and eighty
+ * seconds with the right words in it — and then spends thirty more
+ * photographing a page that is gone and the rest of the budget waiting on a
+ * dead browser to close, so bun's own five-minute timeout arrives first and
+ * reports nothing. Three minutes to shut and thirty seconds for a picture is
+ * five hundred and seventy in the worst case against a three hundred second
+ * test: the diagnosis could never fit inside the time it had to escape in.
+ *
+ * A browser that has not closed in a few seconds is not closing. Whatever it
+ * was, the answer is already known by then and the only thing left to do is
+ * say it.
+ */
+const CLOSE_MS = 5_000;
 
 /**
  * How long the build may take before it is the thing that has failed.
@@ -677,6 +709,14 @@ let failed = 0;
  * reporting is the one that was already in hand.
  */
 async function pictured(page: Page, opening: Opening, whyNot: unknown): Promise<unknown> {
+  // Nothing to photograph, and thirty seconds not spent finding that out.
+  //
+  // A screenshot of a page whose browser has gone never returns — Playwright
+  // does not mind, it simply waits — so this cost the failure its own bound
+  // and then its message. The commonest reason a scenario fails at all is
+  // that the browser went away, which is exactly when this was most
+  // expensive and least use.
+  if (page.isClosed() || !page.context().browser()?.isConnected()) return whyNot;
   failed += 1;
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const hint = (opening.seams ?? "plain")

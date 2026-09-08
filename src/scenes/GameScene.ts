@@ -12434,6 +12434,21 @@ export class GameScene extends Phaser.Scene {
         for (const item of DECOR_ITEMS) this.inventory.add(item, DEBUG_EACH);
         this.refreshCarried();
       },
+      replayGuides: () => {
+        // Forgotten and started again, not merely forgotten: the run holds
+        // the list it was built with, so clearing the saved one and leaving
+        // the run alone would show nothing until the game was reopened.
+        //
+        // This is here because it used to happen by accident. Talking to the
+        // postman reset the tutorial, which a playtest found the way you
+        // find that sort of thing — halfway through the tutorial, having
+        // just said hello to somebody. Taking the accident out took the only
+        // way of replaying it with it, and a tutorial that can be seen once
+        // per child is one a parent cannot show a younger sibling.
+        this.saveProfileChange({ guided: [] });
+        this.guide = new GuideRun([...this.dev.guided], (guide) => this.rememberGuided(guide));
+        this.guideWorldSeen = null;
+      },
       learnEverything: () => {
         this.saveProfileChange({
           learned: [...SPELLS],

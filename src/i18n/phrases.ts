@@ -224,6 +224,7 @@ export interface Phrases {
   debugPurse: string;
   debugBasket: string;
   debugLearn: string;
+  debugGuides: string;
   /** What a row says when it is on, and when it is off. */
   debugOn: string;
   debugOff: string;

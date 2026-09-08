@@ -4,7 +4,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
 import { PlantType } from "../src/world/plants";
-import { type Game, play, runeButton, seedButton, shutDown } from "./harness";
+import { type Game, PHONE, play, runeButton, seedButton, shutDown } from "./harness";
 
 /**
  * The easiest sum in the game, counted out by hand.
@@ -113,6 +113,76 @@ describe("counting into the box", () => {
         // Nothing in the tray: what she moves comes out of the box.
         expect(seen.tray).toBe(0);
         expect(seen.inBox.length).toBe(seen.held);
+      });
+    },
+    3 * MINUTES,
+  );
+});
+
+/**
+ * And the same box on a touchscreen, which is the only screen it will meet.
+ *
+ * This parchment was written for the child at the bottom of the ladder, and
+ * that child is holding a tablet — the playtest that asked for it was run on
+ * an iPad. Everything above drives the mouse, and Phaser routes touch
+ * through a different half of its input manager, so a counter that picks up
+ * under a mouse and not under a finger would pass every scenario in this
+ * file and be broken for every child who ever sees it.
+ *
+ * **What this does not test, so that nobody reads it as covering that.** It
+ * is headless Chromium with `hasTouch` on, not Safari: it exercises the
+ * touch route through Phaser, and says nothing about iOS gesture rules or
+ * anything Safari does differently. The one iPad finding it cannot stand in
+ * for is the popup blocker in `AboutPanel.openLink`, which does not exist
+ * in this browser at all.
+ */
+describe("counting on a touchscreen", () => {
+  test(
+    "the counters pick up under a finger, on a screen the size of a hand",
+    async () => {
+      await play({ seams: AT_THE_BOTTOM, viewport: PHONE, touch: true }, async (game) => {
+        await game.tap("seeds");
+        await game.tap(seedButton(PlantType.Carrot));
+        const at = await game.where();
+        await game.tapCell(at.col, at.row + 1);
+        await game.settle(400);
+
+        await game.tap("spellbook");
+        await game.tap(runeButton(Spell.Growth));
+        await game.tapCell(at.col, at.row + 1);
+        await game.settle(600);
+
+        const seen = await counting(game);
+        if (!seen) throw new Error("the counting box did not open on a touchscreen");
+        expect(seen.held).toBeLessThan(seen.target);
+        // The box is on the screen it was drawn for, and not off the side of
+        // it: a parchment laid out for a thousand pixels and shown on three
+        // hundred and ninety is the shape of every phone bug this suite has
+        // found so far.
+        // A box with a size, asserted before it is asserted to be on the
+        // screen: a zero-sized one at the origin satisfies every bound below
+        // and is a box nobody can drop a counter into.
+        expect(seen.box.w).toBeGreaterThan(40);
+        expect(seen.box.h).toBeGreaterThan(40);
+        expect(seen.box.x).toBeGreaterThanOrEqual(0);
+        expect(seen.box.y).toBeGreaterThanOrEqual(0);
+        expect(seen.box.x + seen.box.w).toBeLessThanOrEqual(PHONE.width);
+        expect(seen.box.y + seen.box.h).toBeLessThanOrEqual(PHONE.height);
+
+        // Filled entirely by tapping, which is what a small hand does. A
+        // drag needs a child to know that holding on is a thing; a tap is
+        // the gesture she already has.
+        let now: Counting | null = seen;
+        while (now && now.held < now.target) {
+          const one = now.inTray[0];
+          if (!one) throw new Error("the tray ran out before the box was full");
+          await game.drag(one, one);
+          await game.settle(150);
+          now = await counting(game);
+        }
+        // Gone, because it was right: the finger did the whole round.
+        await game.settle(600);
+        expect(await counting(game)).toBe(null);
       });
     },
     3 * MINUTES,

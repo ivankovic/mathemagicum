@@ -64,6 +64,7 @@ function sample(p: Phrases): Record<string, string> {
     debugPurse: p.debugPurse,
     debugBasket: p.debugBasket,
     debugLearn: p.debugLearn,
+    debugGuides: p.debugGuides,
     debugOn: p.debugOn,
     debugOff: p.debugOff,
     debugDone: p.debugDone,
