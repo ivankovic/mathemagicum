@@ -3,6 +3,7 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { FixtureType } from "../src/world/fixtures";
+import { SHELVED } from "../src/world/jobs";
 import { type Game, crateGroup, play, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
@@ -175,7 +176,12 @@ describe("the rest of the tree", () => {
     8 * MINUTES,
   );
 
-  test(
+  // Skipped while the blueprint is shelved, and skipped *by asking* rather
+  // than by being commented out: the day it goes back in `SHELVED` this
+  // scenario starts running again on its own, which a commented-out test
+  // does not. See `world/jobs.ts`.
+  const drawing = (SHELVED as readonly string[]).includes(FixtureType.Blueprint) ? test.skip : test;
+  drawing(
     "a blueprint draws the line beside it and builds it again where it is stamped",
     async () => {
       // More crops than wood, so the funnel — which is handed the biggest

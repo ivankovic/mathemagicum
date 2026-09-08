@@ -9,6 +9,7 @@ import {
   LINES_WANTED,
   type LineView,
   RINGS_WANTED,
+  SHELVED,
   nextJob,
   offered,
   readJobs,
@@ -18,9 +19,20 @@ import { MACHINE_TYPES, MachineType, newMachine, wake } from "./machines";
 const at = (key: string, type: MachineType, state = wake(newMachine())) => ({ key, type, state });
 
 describe("the list of jobs", () => {
-  test("names every job once, and every job needs machines", () => {
-    expect([...JOBS].sort()).toEqual([...Object.values(Job)].sort());
+  test("names each one once, and every job needs machines", () => {
+    expect([...new Set(JOBS)]).toEqual([...JOBS]);
     for (const job of JOBS) expect(JOB_SPECS[job].needs.length).toBeGreaterThan(0);
+  });
+
+  test("asks for no machine that is shelved", () => {
+    // The rule that keeps a shelf honest. A job wanting a machine nobody
+    // can get hold of is a job that can never be finished, and the child it
+    // happens to would simply run out of jobs with the sheet still open.
+    for (const job of JOBS) {
+      for (const machine of JOB_SPECS[job].needs) {
+        expect(SHELVED).not.toContain(machine);
+      }
+    }
   });
 
   test("are given in order, and run out", () => {
@@ -103,6 +115,9 @@ describe("the jobs after the bell", () => {
     expect(JOB_SPECS[Job.Parity].progress({ machines: [even], wires: [] })).toBe(6);
     const latch = at("1,1", MachineType.Latch, stateWith({ crates: [3, 3, 3] }));
     expect(JOB_SPECS[Job.Hold].progress({ machines: [latch], wires: [] })).toBe(6);
+    // The blueprint's own job, kept working while the machine is shelved:
+    // what is switched off is getting hold of one, not the code that would
+    // count its stampings, so putting it back is one line in `SHELVED`.
     const drawn = at("1,1", MachineType.Blueprint, stateWith({ rung: 2 }));
     expect(JOB_SPECS[Job.Twice].progress({ machines: [drawn], wires: [] })).toBe(1);
   });
@@ -118,11 +133,14 @@ describe("what the crate offers", () => {
     expect(offered([Job.Either, Job.Ring])).toContain(MachineType.Inverter);
     expect(offered([Job.Either, Job.Ring])).not.toContain(MachineType.Seesaw);
     expect(offered([Job.Either, Job.Ring, Job.Else, Job.Parity])).toContain(MachineType.Latch);
-    expect(offered([Job.Either, Job.Ring, Job.Else, Job.Parity, Job.Hold])).toContain(
-      MachineType.Blueprint,
+    // And with every job done, every machine that is not shelved. The
+    // blueprint is never offered, however much she has finished — which is
+    // the difference between a machine waiting for a job and one that is
+    // not in the game yet.
+    expect(offered([...JOBS])).not.toContain(MachineType.Blueprint);
+    expect([...offered([...JOBS])].sort()).toEqual(
+      [...MACHINE_TYPES].filter((one) => !SHELVED.includes(one)).sort(),
     );
-    // And with every job done, every machine.
-    expect([...offered([...JOBS])].sort()).toEqual([...MACHINE_TYPES].sort());
   });
 
   test("reads the jobs done back from a save, dropping what it does not know", () => {

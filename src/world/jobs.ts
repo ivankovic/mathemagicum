@@ -60,7 +60,10 @@ export const JOBS: readonly Job[] = [
   Job.Else,
   Job.Parity,
   Job.Hold,
-  Job.Twice,
+  // `Job.Twice` is not here: it asks for a blueprint to be stamped and the
+  // blueprint is shelved, so it is a job nobody could finish. Its spec is
+  // left below rather than deleted, because putting it back is meant to be
+  // the same edit as taking it out.
 ];
 
 /** What the scene can see of the garden's lines. */
@@ -179,7 +182,11 @@ export const JOB_SPECS: Readonly<Record<Job, JobSpec>> = {
         PASSED_WANTED,
         Math.max(0, ...line.machines.filter((one) => one.type === MachineType.Latch).map(held)),
       ),
-    unlocks: MachineType.Blueprint,
+    // Nothing, while the blueprint is shelved. The jobs sheet draws a glad
+    // mark where there is no machine to earn — see `showEarned` — so a last
+    // job that hands nothing over still reads as finished rather than
+    // broken.
+    unlocks: null,
   },
   [Job.Twice]: {
     needs: [MachineType.Blueprint],
@@ -217,11 +224,31 @@ export function nextJob(done: readonly string[]): Job | null {
 }
 
 /**
+ * Machines that are built but not yet in the game.
+ *
+ * A shelf rather than a deletion, and it has to be an explicit one: this
+ * file's rule is that a machine no job unlocks is offered *from the start*,
+ * so quietly dropping the job that earns a machine would put it in the
+ * crate on day one — the exact opposite of holding it back. Everything else
+ * about a shelved machine stays where it is: the recipe, the drawing, the
+ * jobs' own code and every save that already has one standing in a garden.
+ * It simply cannot be got hold of.
+ *
+ * The blueprint is here because it is the odd one out of the eleven. It is
+ * not a machine — it makes nothing and does no arithmetic — it is a drawing
+ * of the other machines, which makes it the one whose minigame is not about
+ * an operation at all, and it wants thinking about on its own rather than
+ * being the last item on a list.
+ */
+export const SHELVED: readonly MachineType[] = [MachineType.Blueprint];
+
+/**
  * Which machines the crate may offer, given the jobs done.
  *
  * Every machine no job unlocks is offered from the start; a machine some
  * job unlocks waits for it. Read from the specs rather than listed, so a
  * job added with an `unlocks` gates its machine without a second edit.
+ * Shelved machines are offered by nothing — see `SHELVED`.
  */
 export function offered(done: readonly string[]): readonly MachineType[] {
   const gated = new Map<MachineType, Job>();
@@ -230,6 +257,7 @@ export function offered(done: readonly string[]): readonly MachineType[] {
     if (spec.unlocks) gated.set(spec.unlocks, job);
   }
   return Object.values(MachineType).filter((machine) => {
+    if (SHELVED.includes(machine)) return false;
     const by = gated.get(machine);
     return by === undefined || done.includes(by);
   });

@@ -5,6 +5,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { CRATE_GROUPS, CRATE_WIRE, thingsIn } from "../src/world/crate";
 import { DECOR_TYPES } from "../src/world/decor";
 import { FixtureType, PLACEABLE_FIXTURES } from "../src/world/fixtures";
+import { SHELVED } from "../src/world/jobs";
 import { type Game, type Handles, play, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
@@ -82,6 +83,8 @@ describe("the crate's two levels", () => {
         // beside it that says what the machine is, and that is a second
         // button in the tray rather than a second thing in the crate — see
         // telling.e2e.ts for the clouds themselves.
+        const inTheGame = (things: readonly string[]): readonly string[] =>
+          things.filter((one) => !(SHELVED as readonly string[]).includes(one));
         const named = async (): Promise<string[]> =>
           Object.keys(await game.ui())
             .filter((name) => name.startsWith("crate.") && !name.endsWith(".tell"))
@@ -98,7 +101,12 @@ describe("the crate's two levels", () => {
           await game.settle(250);
           const things = await named();
           expect({ group, any: things.length > 0 }).toEqual({ group, any: true });
-          expect([...things].sort()).toEqual([...thingsIn(group)].sort());
+          // `thingsIn` is the catalogue of what a group *contains*; what
+          // the crate draws is that minus whatever is shelved. Subtracted
+          // here rather than in `thingsIn`, because a shelf is a fact about
+          // the game being unfinished and not a fact about which group a
+          // machine belongs to.
+          expect([...things].sort()).toEqual([...inTheGame(thingsIn(group))].sort());
           seen.push(...things);
 
           // Its own button steps back out rather than shutting the crate.
@@ -107,12 +115,17 @@ describe("the crate's two levels", () => {
           expect((await named()).sort()).toEqual([...CRATE_GROUPS].sort());
         }
 
-        // And between them the groups hold everything, so nothing is lost
-        // behind a level it is not in.
+        // And between them the groups hold everything that is in the game,
+        // so nothing is lost behind a level it is not in. A shelved machine
+        // is a different thing from a lost one — it is deliberately not
+        // offered at all, at any level — so it is taken off the expectation
+        // rather than hunted for. See `SHELVED`.
         // The coil is in here too, and it is the one entry that is not a
         // thing a child owns: a wire is a line between two machines rather
         // than an object, so what the crate holds is the gesture.
-        expect(seen.sort()).toEqual([...PLACEABLE_FIXTURES, ...DECOR_TYPES, CRATE_WIRE].sort());
+        expect(seen.sort()).toEqual(
+          [...inTheGame(PLACEABLE_FIXTURES), ...DECOR_TYPES, CRATE_WIRE].sort(),
+        );
       });
     },
     5 * MINUTES,
