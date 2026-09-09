@@ -6772,12 +6772,23 @@ export class GameScene extends Phaser.Scene {
     return found;
   }
 
-  /** The machines near her that nobody has woken. */
+  /**
+   * The machines near her that nobody has woken.
+   *
+   * Not a shelved one, on the same terms as `crateShows` and for the same
+   * reason one step along: the errand to wake a machine is drawn over the
+   * machine itself, and a machine that has been taken out of the game is one
+   * the guide should not be advertising. Reachable only from a save written
+   * before the shelving, since nothing offers one to build now — which is
+   * exactly the sort of case that goes unfound until somebody's old garden
+   * starts giving them errands about it.
+   */
   private sleepingMachines(): GridPoint[] {
     if (this.interior) return [];
     const found: GridPoint[] = [];
     for (const key of this.placedFixtures.keys()) {
-      if (!this.machineAt(key)) continue;
+      const machine = this.machineAt(key);
+      if (!machine || !this.crateShows(machine)) continue;
       if (this.machines.get(key)?.awake) continue;
       const [col, row] = key.split(",").map(Number);
       if (col === undefined || row === undefined) continue;
