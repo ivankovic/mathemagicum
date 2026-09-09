@@ -384,6 +384,23 @@ export function additionCastFor(rng: Rng, rung: Rung): AdditionCast {
  */
 export interface CastState {
   readonly problem: NumberLine;
+  /**
+   * How many digits the box takes, when the answer is *written* rather than
+   * worked out.
+   *
+   * Unset for every sum, which is nearly always: a sum's box is as wide as
+   * its biggest stop, and that is what `maxDigits` works out. It is set for
+   * the place-value question, where both of those rules are wrong at once —
+   * the answer to "what is the nought in 4072 worth" is nothing, whose
+   * biggest stop is one digit wide, and a child who writes it as `000`
+   * because that is the digit and its zeros has answered correctly and
+   * would have been cut off after the first keystroke.
+   *
+   * It also says a leading nought is a real answer here. Everywhere else a
+   * leading nought is dropped, because no stop on a number line starts with
+   * one — see `typeDigit`.
+   */
+  readonly asWritten?: number;
   /** Which jump is being answered. Equal to the number of jumps when solved. */
   readonly index: number;
   /** The digits typed into the live box, as typed. */
@@ -416,10 +433,11 @@ export interface CastState {
  * looks like a problem they are part-way through rather than like a problem
  * with pieces missing.
  */
-export function beginCast(problem: NumberLine, given = 0): CastState {
+export function beginCast(problem: NumberLine, given = 0, asWritten?: number): CastState {
   const ahead = Math.max(0, Math.min(given, problem.jumps.length - 1));
   return {
     problem,
+    ...(asWritten === undefined ? {} : { asWritten }),
     index: ahead,
     entry: "",
     solved: problem.stops.slice(0, ahead),
@@ -447,6 +465,7 @@ function maxDigits(state: CastState): number {
   // same; coming down they are not, and a subtraction that ends in single
   // figures would have stopped taking the third digit of its first answer
   // half way along.
+  if (state.asWritten !== undefined) return Math.max(1, state.asWritten);
   const widest = Math.max(0, ...state.problem.stops);
   return String(widest).length;
 }
@@ -456,8 +475,9 @@ export function typeDigit(state: CastState, digit: number): CastState {
   if (!Number.isInteger(digit) || digit < 0 || digit > 9) return state;
   // A leading zero is dropped rather than rejected: no stop on this line
   // starts with one, and silently swallowing the keystroke reads as a broken
-  // button.
-  if (state.entry === "" && digit === 0) return state;
+  // button. Unless the answer is written rather than worked out, where a
+  // nought is a thing she may genuinely have to say — see `asWritten`.
+  if (state.entry === "" && digit === 0 && state.asWritten === undefined) return state;
   if (state.entry.length >= maxDigits(state)) return state;
   // Clearing `wrong` on the next keystroke is what makes the mark on the box
   // read as "that answer was wrong" rather than as a permanent state.
