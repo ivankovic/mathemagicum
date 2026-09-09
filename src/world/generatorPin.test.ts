@@ -87,12 +87,14 @@ describe("what a seed grows", () => {
    * in that order and never one without the other.
    */
   const PINNED: Readonly<Record<number, number>> = {
-    // Unchanged at five: a hundred-and-fifty-square world's city has no block
-    // the garage can stand in off the rampart, so seed one builds without
-    // one — which is the small-world rule the citadel already follows.
-    1: 1810746765,
-    12345: 552879380,
-    99991: 2522563725,
+    // Six: the ground moved under every anchor but the village. Story areas
+    // are chosen by the spread of the ground beneath them rather than by its
+    // average, a reserved area settles at the level most of it is already
+    // at, and the sea at the world's edge is no longer walled. See
+    // `GENERATOR_VERSION`.
+    1: 2201024642,
+    12345: 2904625202,
+    99991: 2688060661,
   };
 
   for (const seed of SEEDS) {

@@ -343,21 +343,46 @@ describe("the highlands stay reachable in a real world", () => {
 // that had to be placed, kept off the story areas and excused to the
 // connectivity pass. A rim that is simply higher needs none of that.
 describe("the edge of the world", () => {
-  test("the outermost ring stands a step above the ground inside it", () => {
-    const world = generateWorld(120, 120, 3);
-    const grid = world.grid;
-    for (const [col, row, inCol, inRow] of [
-      [40, 0, 40, 1],
-      [40, grid.height - 1, 40, grid.height - 2],
-      [0, 40, 1, 40],
-      [grid.width - 1, 40, grid.width - 2, 40],
-    ] as const) {
-      expect({ col, row, step: grid.getLevel(col, row) - grid.getLevel(inCol, inRow) }).toEqual({
-        col,
-        row,
-        step: 1,
-      });
+  /**
+   * The whole ring, cell by cell, and in two halves — because the ring has
+   * two halves.
+   *
+   * Where the world ends in ground, the rim stands above it: that is the
+   * wall. Where it ends in open sea — the whole southern coast of every
+   * world, and the far ends of the other two sides — there is nothing to
+   * wall, and the sea is left at sea level. It was raised there too, once,
+   * which built a two-step cliff *in the water* along the coast: a thousand
+   * cells a world of rock standing in the sea, seen from a town on the
+   * shore and reported as *mountains in the water*.
+   *
+   * Both counts are asserted to be more than nought, so a rule that quietly
+   * stopped applying to either half fails here rather than in a playthrough.
+   */
+  test("stands above the ground where the world ends in ground", () => {
+    const grid = generateWorld(120, 120, 3).grid;
+    let walled = 0;
+    let wet = 0;
+    const ring = (col: number, row: number, inCol: number, inRow: number) => {
+      if (grid.getTerrain(col, row) === TerrainType.Water) {
+        wet++;
+        // Flat, and the water inside it is flat too: no step, so no cliff.
+        expect({ col, row, level: grid.getLevel(col, row) }).toEqual({ col, row, level: 0 });
+        return;
+      }
+      walled++;
+      const step = grid.getLevel(col, row) - grid.getLevel(inCol, inRow);
+      expect({ col, row, above: step >= 1 }).toEqual({ col, row, above: true });
+    };
+    for (let col = 1; col < grid.width - 1; col++) {
+      ring(col, 0, col, 1);
+      ring(col, grid.height - 1, col, grid.height - 2);
     }
+    for (let row = 1; row < grid.height - 1; row++) {
+      ring(0, row, 1, row);
+      ring(grid.width - 1, row, grid.width - 2, row);
+    }
+    expect(walled).toBeGreaterThan(0);
+    expect(wet).toBeGreaterThan(0);
   });
 
   /**

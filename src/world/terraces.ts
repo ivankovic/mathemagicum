@@ -5,6 +5,7 @@ import type { AreaPlacement } from "./anchors";
 import { cornerLevelsFor, isRampTile } from "./cliffAtlas";
 import type { WorldGrid } from "./grid";
 import { isStraightStep, levelForTerrain, smoothLevels, stepOf } from "./levels";
+import { TerrainType } from "./terrain";
 
 /**
  * Giving the world its levels, and cutting the ways up.
@@ -102,9 +103,26 @@ function onTheRim(grid: WorldGrid, col: number, row: number): boolean {
 /**
  * Set every cell's level from its terrain, then flatten the big jumps.
  *
- * Reserved story areas are pinned to the lowest level they contain, so a
- * harbour or an observatory is never cut in half by a cliff running through
- * the middle of it.
+ * Reserved story areas are pinned to **the level most of the box is already
+ * at**, so a harbour or an observatory is never cut in half by a cliff
+ * running through the middle of it.
+ *
+ * The level most of it is at, and not the lowest it contains, which is what
+ * this did. The difference only shows on a box that straddles a band, and
+ * the observatory straddles one on most seeds: it is asked for the mountain
+ * and the mountain is a cap, so a twenty-four-square box in it usually has a
+ * toe on the grass below. Pinned to the lowest, one toe on the grass dragged
+ * the whole box down to sea level — a twenty-four-square pit cut two steps
+ * into the rock, with a two-step wall all the way round it. A playthrough
+ * reported that wall as *two sets of cliffs one right next to the other*,
+ * which is exactly what a two-step is: there is one frame in the atlas for a
+ * step of one, so a jump of two is drawn as two of them back to back.
+ *
+ * The mode also says the right thing about what these boxes are *for*. An
+ * observatory is up in the rock; it should stand on the rock it is mostly
+ * on, not in a hole in it. See `spaceCliffs` for the other half — the mode
+ * puts the box on the mountain, and that is what stops the wall being a
+ * cliff at all where the rock already reaches it.
  */
 export function assignLevels(grid: WorldGrid, reservedBoxes: readonly AreaPlacement[]): void {
   const levels = new Uint8Array(grid.width * grid.height);
@@ -114,26 +132,123 @@ export function assignLevels(grid: WorldGrid, reservedBoxes: readonly AreaPlacem
     }
   }
   for (const box of reservedBoxes) {
-    let lowest = Number.POSITIVE_INFINITY;
+    const tally = new Map<number, number>();
     for (let row = box.row; row < box.row + box.height; row++) {
       for (let col = box.col; col < box.col + box.width; col++) {
         if (!grid.inBounds(col, row)) continue;
-        lowest = Math.min(lowest, levels[row * grid.width + col] ?? 0);
+        const level = levels[row * grid.width + col] ?? 0;
+        tally.set(level, (tally.get(level) ?? 0) + 1);
       }
     }
-    if (!Number.isFinite(lowest)) continue;
+    let settled = -1;
+    let most = 0;
+    for (const [level, count] of [...tally].sort(([a], [b]) => a - b)) {
+      // Sorted, and strictly greater, so a tie goes to the lower ground: two
+      // halves of a box are a box with no majority, and the lower half is
+      // the one that can be built on and walked off.
+      if (count > most) {
+        most = count;
+        settled = level;
+      }
+    }
+    if (settled < 0) continue;
     for (let row = box.row; row < box.row + box.height; row++) {
       for (let col = box.col; col < box.col + box.width; col++) {
         if (!grid.inBounds(col, row)) continue;
-        levels[row * grid.width + col] = lowest;
+        levels[row * grid.width + col] = settled;
       }
     }
   }
+  spaceCliffs(levels, grid.width, grid.height, reservedBoxes);
   raiseRim(grid, levels);
   const smoothed = smoothLevels(levels, grid.width, grid.height);
   // Last word, after the smoothing rather than before it. See `sealRim`.
   sealRim(grid, smoothed);
   grid.setLevels(smoothed);
+}
+
+/**
+ * How far apart two cliff lines have to be, in cells.
+ *
+ * Two, which is the smallest number that reads as a shelf. At one the two
+ * lines touch and there is nowhere to stand between them; at nought they are
+ * the same tile, which is a two-step and has no frame at all.
+ */
+const CLIFFS_APART = 2;
+
+/**
+ * Pull the tops down until no two cliff lines stand on top of each other.
+ *
+ * `smoothLevels` guarantees that neighbours differ by at most one, which is
+ * what makes every step *drawable*. It says nothing about how close two
+ * steps may be, and a world with three levels in it has two cliff lines by
+ * construction — grass to hills, hills to rock. Where the hillside is thin
+ * they land within a cell of each other, and what a player sees is not a
+ * two-stage climb but a doubled line, reported from a playthrough as *two
+ * sets of cliffs one right next to the other*.
+ *
+ * So the rock is shaved back until there is a shelf to stand on between the
+ * two. **Lowering rather than raising**, which is `smoothLevels`' own rule
+ * and for its own reason: raising would grow the highlands outwards on every
+ * pass and could swallow a village, while lowering only ever shaves the
+ * peaks, and the peaks are where nothing lives.
+ *
+ * Run before `raiseRim`, and that ordering is load-bearing. The rim is
+ * deliberately two steps above the ground inside it — a wall, not a
+ * hillside — so a pass that took the tops down would take the edge of the
+ * world down with them and let a child walk off it.
+ *
+ * **Reserved story areas are left exactly as they were flattened**, which is
+ * the other ordering constraint and was found the hard way. A harbour is
+ * pinned flat so that its quay, its gangway and its piers are all on one
+ * level and can be walked between; shaving a corner of it opens a step
+ * across the middle of a dock, and a step is not terrain, so the
+ * connectivity pass cannot carve it away afterwards. On one seed that left a
+ * moored ship nobody could board.
+ */
+function spaceCliffs(
+  levels: Uint8Array,
+  width: number,
+  height: number,
+  reservedBoxes: readonly AreaPlacement[],
+  apart = CLIFFS_APART,
+  maxPasses = 8,
+): void {
+  const reserved = new Uint8Array(width * height);
+  for (const box of reservedBoxes) {
+    for (let row = Math.max(0, box.row); row < Math.min(height, box.row + box.height); row++) {
+      for (let col = Math.max(0, box.col); col < Math.min(width, box.col + box.width); col++) {
+        reserved[row * width + col] = 1;
+      }
+    }
+  }
+  for (let pass = 0; pass < maxPasses; pass++) {
+    let moved = false;
+    for (let row = 0; row < height; row++) {
+      for (let col = 0; col < width; col++) {
+        const at = row * width + col;
+        const here = levels[at] ?? 0;
+        if (here === 0 || reserved[at] === 1) continue;
+        let lowest = here;
+        for (let down = -apart; down <= apart; down++) {
+          const near = row + down;
+          if (near < 0 || near >= height) continue;
+          for (let across = -apart; across <= apart; across++) {
+            const beside = col + across;
+            if (beside < 0 || beside >= width) continue;
+            lowest = Math.min(lowest, levels[near * width + beside] ?? 0);
+          }
+        }
+        // At most one above the lowest thing within reach, so between any
+        // two lines there is a shelf `apart` cells wide.
+        if (here > lowest + 1) {
+          levels[at] = lowest + 1;
+          moved = true;
+        }
+      }
+    }
+    if (!moved) return;
+  }
 }
 
 /**
@@ -166,8 +281,29 @@ const RIM_RISE = 2;
  */
 const RIM_KEEP_OUT = 2;
 
+/**
+ * Whether the world's edge needs a wall here, or already has one.
+ *
+ * Open sea is the far edge of every world — see `sealFarEdges` — and water
+ * is not walked on. Raising it built a cliff two steps high *in the sea*,
+ * along the whole southern coast and both far sides: a thousand-odd cells
+ * per world of rock standing in open water, which is what a playthrough saw
+ * from a city on the coast and called *mountains in the water*.
+ *
+ * The rim's whole job is to stop a child walking off the map. Where the map
+ * ends in water, that is already done, and the cliff was a wall built along
+ * the top of a wall.
+ */
+function needsWall(grid: WorldGrid, col: number, row: number): boolean {
+  return grid.getTerrain(col, row) !== TerrainType.Water;
+}
+
 function raiseRim(grid: WorldGrid, levels: Uint8Array): void {
   const at = (col: number, row: number) => levels[row * grid.width + col] ?? 0;
+  const raise = (col: number, row: number, inside: number) => {
+    if (!needsWall(grid, col, row)) return;
+    levels[row * grid.width + col] = inside + RIM_RISE;
+  };
   // Two steps, not one, and then the smoothing pass takes it back down to
   // one wherever the ground beside it is lower.
   //
@@ -179,12 +315,12 @@ function raiseRim(grid: WorldGrid, levels: Uint8Array): void {
   //
   // Starting two above leaves smoothing somewhere to come down to.
   for (let col = 0; col < grid.width; col++) {
-    levels[col] = at(col, 1) + RIM_RISE;
-    levels[(grid.height - 1) * grid.width + col] = at(col, grid.height - 2) + RIM_RISE;
+    raise(col, 0, at(col, 1));
+    raise(col, grid.height - 1, at(col, grid.height - 2));
   }
   for (let row = 0; row < grid.height; row++) {
-    levels[row * grid.width] = at(1, row) + RIM_RISE;
-    levels[row * grid.width + grid.width - 1] = at(grid.width - 2, row) + RIM_RISE;
+    raise(0, row, at(1, row));
+    raise(grid.width - 1, row, at(grid.width - 2, row));
   }
 }
 
@@ -217,6 +353,9 @@ function sealRim(grid: WorldGrid, levels: Uint8Array): void {
     levels[row * grid.width + col] = value;
   };
   const repair = (col: number, row: number, inside: readonly (readonly [number, number])[]) => {
+    // Sea is left at sea level, the same as in `raiseRim` and for the same
+    // reason: there is nothing to wall off water that is already water.
+    if (!needsWall(grid, col, row)) return;
     let highest = -1;
     for (const [c, r] of inside) {
       if (c < 0 || r < 0 || c >= grid.width || r >= grid.height) continue;

@@ -79,8 +79,23 @@ import type { GridPoint } from "../world/topdown";
  * laid out after it moved along by one. What a child put down inside the
  * city comes back through the same door as it did at four; the village,
  * the garden and everything indoors are untouched.
+ *
+ * **6** — the ground moved, in three places at once. Story areas are chosen
+ * by the *spread* of the ground under them rather than by its average, so
+ * the city no longer straddles the shoreline and the observatory no longer
+ * straddles the foot of the mountain; a reserved area settles at the level
+ * most of it is already at rather than the lowest it touches, so the
+ * observatory stands on the rock instead of in a pit cut into it; and the
+ * sea at the world's edge is left at sea level instead of being walled,
+ * because water is a wall already.
+ *
+ * Every anchor but the village is in a different place, so this is the
+ * widest bump yet in area — though not in what it costs a child, since what
+ * she puts down is nearly all in the village and her own garden, which have
+ * not moved. Whatever no longer fits comes back in her basket through
+ * `restoreWorld`, as always.
  */
-export const GENERATOR_VERSION = 5;
+export const GENERATOR_VERSION = 6;
 
 /**
  * Bumped when the shape below changes, which is a different thing.

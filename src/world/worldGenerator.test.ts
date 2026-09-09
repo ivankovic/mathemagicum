@@ -627,6 +627,86 @@ function assertHighCornerIsHighest(grid: WorldGrid, corner: HighCorner): void {
   expect(grid.getTerrain(grid.width - 1 - cornerCol, grid.height - 1 - cornerRow)).toBe("water");
 }
 
+/**
+ * How far in from the edge the "one cliff at a time" rule starts applying.
+ *
+ * The rim is deliberately two steps above the ground inside it — a wall, not
+ * a hillside — so it is the one place in a world where two lines *should* sit
+ * on top of each other. Three cells clears the ring and the smoothing that
+ * hangs off it.
+ */
+const OFF_THE_RIM = 3;
+
+/**
+ * No two cliff lines standing on top of each other.
+ *
+ * A world with three levels in it has two cliff lines by construction —
+ * grass to hills, hills to rock — and where the hillside between them is
+ * thin they land within a cell of each other. What a player sees then is not
+ * a two-stage climb but a doubled line, reported from a playthrough as *two
+ * sets of cliffs one right next to the other* around the observatory.
+ *
+ * Asked as "no ground at the bottom level is within two cells of ground at
+ * the top", which is the same statement and the one that can be counted.
+ * Nought, not a small number: it was ninety-odd cells a world, essentially
+ * all of them in one place, because the observatory is asked for the
+ * mountain and its box was flattened to the *lowest* ground it touched —
+ * a twenty-four-square pit two steps deep, whose wall is two cliffs back to
+ * back. See `spaceCliffs` and `assignLevels`.
+ */
+function assertOneCliffAtATime(grid: WorldGrid): void {
+  const doubled: string[] = [];
+  for (let row = OFF_THE_RIM; row < grid.height - OFF_THE_RIM; row++) {
+    for (let col = OFF_THE_RIM; col < grid.width - OFF_THE_RIM; col++) {
+      if (grid.getLevel(col, row) !== 0) continue;
+      for (let down = -2; down <= 2; down++) {
+        for (let across = -2; across <= 2; across++) {
+          if (grid.getLevel(col + across, row + down) === 2) doubled.push(`${col},${row}`);
+        }
+      }
+    }
+  }
+  expect(doubled.slice(0, 4)).toEqual([]);
+}
+
+/**
+ * The sea lies at sea level, everywhere.
+ *
+ * Water is not walked on, so a step drawn in it is a cliff standing in the
+ * open sea. Every world had a thousand-odd cells of it: the rim that stops a
+ * child walking off the edge was raised whether the edge was ground or
+ * ocean, and the edge is ocean along the whole southern coast. Seen from a
+ * town on the shore and reported as *mountains in the water*.
+ */
+function assertTheSeaIsFlat(grid: WorldGrid): void {
+  const standing: string[] = [];
+  for (let row = 0; row < grid.height; row++) {
+    for (let col = 0; col < grid.width; col++) {
+      if (grid.getTerrain(col, row) !== TerrainType.Water) continue;
+      if (grid.getLevel(col, row) !== 0) standing.push(`${col},${row}`);
+    }
+  }
+  expect(standing.slice(0, 4)).toEqual([]);
+}
+
+/**
+ * The observatory stands on high ground, not in a hole in it.
+ *
+ * It is asked for the mountain band and the mountain is a cap, so its box
+ * usually has one toe on the grass below. Settled at the lowest level it
+ * touched, that one toe dragged the whole of it down to sea level — an
+ * observatory at the bottom of a pit cut into the rock it was supposed to be
+ * standing on. Which level exactly is not the claim; that it is above the
+ * sea is.
+ */
+function assertTheObservatoryIsUpInTheRock(grid: WorldGrid, box: AreaPlacement): void {
+  const middle = centerOf(box);
+  expect({ at: middle, level: grid.getLevel(middle.col, middle.row) >= 1 }).toEqual({
+    at: middle,
+    level: true,
+  });
+}
+
 describe("generateWorld seed sweep", () => {
   for (const seed of SWEEP_SEEDS) {
     test(`seed ${seed}: every invariant holds`, () => {
@@ -673,6 +753,12 @@ describe("generateWorld seed sweep", () => {
       assertGroveIsReachedAndStandsThere(grid, reachable, world.grove);
       assertTheHarbourHasSeaInIt(grid, anchors.harbour);
       assertTheSeaIsSouthOfTheHarbour(grid, anchors.harbour);
+      // Three shapes of ground a playthrough found, all of them cheap to
+      // ask here because the world has already been built for the checks
+      // above.
+      assertOneCliffAtATime(grid);
+      assertTheSeaIsFlat(grid);
+      assertTheObservatoryIsUpInTheRock(grid, anchors.observatory);
     });
   }
 

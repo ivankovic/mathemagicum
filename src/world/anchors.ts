@@ -107,21 +107,75 @@ function placeVillage(worldWidth: number, worldHeight: number, spec: AnchorSpec)
  */
 type ElevationAt = (col: number, row: number) => number;
 
-function boxElevation(box: AreaPlacement, elevation: ElevationAt): number {
-  // The centre alone is a poor test for a 24-tile box on a slope; sampling
-  // the centre and the four corners rejects boxes that straddle a band edge.
+/** How many samples across a box, per side. Corners included, so at least 2. */
+const BOX_SAMPLES = 4;
+
+/**
+ * The highest and lowest ground a box stands on.
+ *
+ * **A spread, because the mean cannot answer the question that is asked of
+ * it.** This used to return the average of five samples under a comment
+ * saying it "rejects boxes that straddle a band edge" — and an average is
+ * precisely the statistic that cannot see straddling. Half a box in the sea
+ * and half on the hillside averages to a meadow, and the caller was told a
+ * meadow.
+ *
+ * The harbour had already learned this the hard way and gone its own way
+ * over it: `placeOnTheShore` says, in as many words, that "the band test
+ * cannot see this because a mean says nothing about a spread". It was true
+ * of every other anchor as well. Measured over eight seeds of a real
+ * five-hundred-cell world, the big city came out with up to a fifth of its
+ * box under water, and the observatory straddled the foot of the mountain on
+ * every one — which is what a playthrough reported as *the city got
+ * generated on the coast* and *two sets of cliffs one right next to the
+ * other*. The second follows from the first: a box that straddles the rock's
+ * edge is flattened to the *lowest* ground in it, so an observatory with one
+ * toe on the grass is a twenty-four-square pit cut two steps into the
+ * mountain — and a two-step wall is two cliffs back to back.
+ *
+ * A lattice rather than the corners and the middle. A slope is not the only
+ * shape ground comes in: a box can have its corners in one band and a
+ * shoulder of rock through the middle of it, and five points walk straight
+ * past that.
+ */
+function boxElevation(
+  box: AreaPlacement,
+  elevation: ElevationAt,
+): { readonly low: number; readonly high: number } {
   const right = box.col + box.width - 1;
   const bottom = box.row + box.height - 1;
-  const midCol = box.col + Math.floor(box.width / 2);
-  const midRow = box.row + Math.floor(box.height / 2);
-  const samples = [
-    elevation(midCol, midRow),
-    elevation(box.col, box.row),
-    elevation(right, box.row),
-    elevation(box.col, bottom),
-    elevation(right, bottom),
-  ];
-  return samples.reduce((sum, v) => sum + v, 0) / samples.length;
+  let low = Number.POSITIVE_INFINITY;
+  let high = Number.NEGATIVE_INFINITY;
+  const last = BOX_SAMPLES - 1;
+  for (let down = 0; down <= last; down++) {
+    for (let across = 0; across <= last; across++) {
+      const here = elevation(
+        box.col + Math.round(((right - box.col) * across) / last),
+        box.row + Math.round(((bottom - box.row) * down) / last),
+      );
+      low = Math.min(low, here);
+      high = Math.max(high, here);
+    }
+  }
+  return { low, high };
+}
+
+/**
+ * How far outside its band a box sits, for choosing between misses.
+ *
+ * Nought when it is wholly inside. Both ends are counted, so a box hanging
+ * out of the bottom *and* the top of a narrow band is worse than one hanging
+ * out of either alone — which is what straddling is, and what this is here
+ * to rank last.
+ */
+function outsideBand(
+  box: AreaPlacement,
+  elevation: ElevationAt,
+  floor: number,
+  ceiling: number,
+): number {
+  const { low, high } = boxElevation(box, elevation);
+  return Math.max(0, floor - low) + Math.max(0, high - ceiling);
 }
 
 function placeInBand(
@@ -136,7 +190,6 @@ function placeInBand(
 ): AreaPlacement {
   let best: AreaPlacement | null = null;
   let bestMiss = Number.POSITIVE_INFINITY;
-  const target = (floor + ceiling) / 2;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const box: AreaPlacement = {
       id: spec.id,
@@ -146,12 +199,15 @@ function placeInBand(
       height: spec.height,
     };
     if (overlapsAny(box, placed)) continue;
-    const height = boxElevation(box, elevation);
-    if (height >= floor && height <= ceiling) return box;
+    const miss = outsideBand(box, elevation, floor, ceiling);
+    if (miss === 0) return box;
     // Remember the near miss: a band can be small enough that random
     // sampling never lands squarely in it, and a story area slightly out of
-    // its band beats throwing.
-    const miss = Math.abs(height - target);
+    // its band beats throwing. Scored by how far *outside* it hangs rather
+    // than by how far its middle is from the middle of the band, which is
+    // the same change as the one above: a box whose average is perfect and
+    // whose ends are in the sea and up the mountain is the worst answer
+    // here, not the best.
     if (miss < bestMiss) {
       bestMiss = miss;
       best = box;
@@ -285,6 +341,7 @@ function placeNear(
   rng: Rng,
 ): AreaPlacement {
   let fallback: AreaPlacement | null = null;
+  let bestMiss = Number.POSITIVE_INFINITY;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const col = clamp(
       anchor.col + randInt(rng, -NEAR_DISTANCE, NEAR_DISTANCE),
@@ -298,9 +355,17 @@ function placeNear(
     );
     const box: AreaPlacement = { id: spec.id, col, row, width: spec.width, height: spec.height };
     if (overlapsAny(box, placed)) continue;
-    fallback ??= box;
-    const height = boxElevation(box, elevation);
-    if (height >= floor && height <= ceiling) return box;
+    const miss = outsideBand(box, elevation, floor, ceiling);
+    if (miss === 0) return box;
+    // The *best* miss, not the first one that did not overlap. That is not
+    // tidiness: the band test above got stricter, so it fails more often,
+    // and a fallback that took the first box at any elevation would put the
+    // city in the sea more often than the loose test ever did. The two
+    // changes are one change.
+    if (miss < bestMiss) {
+      bestMiss = miss;
+      fallback = box;
+    }
   }
   // Somewhere near beats nowhere: proximity is the point of this placement,
   // and the clearing pass still makes the middle of it habitable.

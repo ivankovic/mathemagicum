@@ -367,23 +367,39 @@ function raise(
  * Breadth-first over open water, so the jetty it lays is the shortest one
  * there is — which on a south-facing coast means round the ship's hull and
  * back to the beach, and on any other means straight in. Stops at the first
- * cell somebody could already stand on: the shore, a pier, another jetty.
+ * cell somebody could already stand on **and get off again from**: the
+ * shore, or a pier or jetty that reaches it.
+ *
+ * That second half was missing, and a jetty is exactly where it matters. A
+ * plank is something you can stand on, so the search stopped at the first
+ * one — including at the tip of a pier that does not itself come back to
+ * the beach. The ship was then moored, planked, and boardable only by
+ * somebody already standing on the pier she was tied to. It cost nothing
+ * for years because a pier normally does reach the shore; it surfaced the
+ * moment an anchor moved and the harbour landed on a different stretch of
+ * coast, which is the kind of bug a seed sweep finds and a playthrough
+ * never would.
+ *
+ * A plank that leads nowhere is water again as far as this is concerned, so
+ * the search goes straight on through it rather than stopping there — which
+ * is what lets a jetty cross an orphaned pier on its way to the beach.
  *
  * Null when there is nothing within reach, which is a real answer. A jetty
  * that wandered fifteen cells to find a beach would be a causeway, and the
- * harbour is better off with the ship moored somewhere else.
+ * harbour is better off with the ship moored somewhere else — the caller
+ * tries the next berth.
  */
 function walkAshore(
   grid: WorldGrid,
   box: AreaPlacement,
   from: GridPoint,
   berth: ReadonlySet<string>,
-): GridPoint[] | null {
+): { planks: GridPoint[]; landfall: GridPoint } | null {
   const key = (at: GridPoint) => `${at.col},${at.row}`;
   const cameFrom = new Map<string, GridPoint | null>([[key(from), null]]);
   let edge: GridPoint[] = [from];
   const ashore = (at: GridPoint) =>
-    grid.isPassable(at.col, at.row) || grid.isBridged(at.col, at.row);
+    (grid.isPassable(at.col, at.row) || grid.isBridged(at.col, at.row)) && joinsTheLand(grid, at);
 
   for (let step = 0; step <= GANGWAY_REACH && edge.length > 0; step++) {
     const next: GridPoint[] = [];
@@ -393,13 +409,20 @@ function walkAshore(
       if (ashore(at)) {
         // Arrived. The path back is the jetty, minus this cell — it is
         // already something you can stand on and needs no planking.
+        //
+        // Handed back all the same, because "needs no planking" is not
+        // "needs nothing". It is the one cell the whole gangway hangs off,
+        // and the quay is dressed afterwards: a stall on it seals the ship
+        // as surely as a stall on a plank, and it was not in the run of
+        // planks for anything to protect. See `decked`, whose comment
+        // already describes this happening to the piers.
         const planks: GridPoint[] = [];
         let walk = cameFrom.get(key(at)) ?? null;
         while (walk) {
           planks.push(walk);
           walk = cameFrom.get(key(walk)) ?? null;
         }
-        return planks.reverse();
+        return { planks: planks.reverse(), landfall: at };
       }
       if (grid.getTerrain(at.col, at.row) !== TerrainType.Water) continue;
       for (const [dCol, dRow] of NEIGHBOURS) {
@@ -412,6 +435,46 @@ function walkAshore(
     edge = next;
   }
   return null;
+}
+
+/**
+ * How far a walk over decking may go looking for dry ground.
+ *
+ * Generous, because it is measuring a structure rather than a distance a
+ * player has to cross: a pier is as long as the water is shallow, and a
+ * jetty may run along one before it turns in. What it is really for is
+ * ending the search on a seed where the decking loops.
+ */
+const DECK_WALK = 64;
+
+/**
+ * Whether somebody standing here can walk to real ground.
+ *
+ * Over decking and ground alike, stopping at the first cell that is ground
+ * — passable and not planked. A pier is water with boards on it, so "you
+ * can stand here" and "you can get off here" are two different questions,
+ * and only the second one is any use to a ship's gangway.
+ */
+function joinsTheLand(grid: WorldGrid, from: GridPoint): boolean {
+  const key = (at: GridPoint) => `${at.col},${at.row}`;
+  const seen = new Set<string>([key(from)]);
+  let edge: GridPoint[] = [from];
+  for (let step = 0; step < DECK_WALK && edge.length > 0; step++) {
+    const next: GridPoint[] = [];
+    for (const at of edge) {
+      if (!grid.inBounds(at.col, at.row)) continue;
+      if (!grid.isPassable(at.col, at.row) && !grid.isBridged(at.col, at.row)) continue;
+      if (grid.isPassable(at.col, at.row) && !grid.isBridged(at.col, at.row)) return true;
+      for (const [dCol, dRow] of NEIGHBOURS) {
+        const on = { col: at.col + dCol, row: at.row + dRow };
+        if (seen.has(key(on))) continue;
+        seen.add(key(on));
+        next.push(on);
+      }
+    }
+    edge = next;
+  }
+  return false;
 }
 
 /** The ship's footprint, mirroring her sidecar. See `buildings.ts`. */
@@ -512,7 +575,7 @@ function moorShip(
   box: AreaPlacement,
   shore: Shore,
   quay: readonly GridPoint[],
-): { ship: PlacedObject; gangway: GridPoint[] } | null {
+): { ship: PlacedObject; gangway: GridPoint[]; landfall: GridPoint } | null {
   const clearWater = (col: number, row: number) =>
     inside(box, col, row) &&
     grid.inBounds(col, row) &&
@@ -577,8 +640,9 @@ function moorShip(
         berth.add(`${col},${row}`);
       }
     }
-    const gangway = walkAshore(grid, box, board, berth);
-    if (!gangway) continue;
+    const walked = walkAshore(grid, box, board, berth);
+    if (!walked) continue;
+    const gangway = walked.planks;
     for (const plank of gangway) grid.setBridge(plank.col, plank.row, true);
 
     const ship: PlacedObject = {
@@ -593,7 +657,7 @@ function moorShip(
       anchorRow: top.row,
     };
     grid.placeObject(ship);
-    return { ship, gangway };
+    return { ship, gangway, landfall: walked.landfall };
   }
   return null;
 }
@@ -788,7 +852,13 @@ export function layoutHarbour(grid: WorldGrid, box: AreaPlacement, rng: Rng): Ha
   // a stall on one seals it off exactly as it sealed the piers off before
   // their landward ends were counted as part of them.
   const decked = new Set(
-    [...piers.flat(), ...(moored?.gangway ?? [])].map((at) => `${at.col},${at.row}`),
+    [
+      ...piers.flat(),
+      ...(moored?.gangway ?? []),
+      // And the cell the gangway comes ashore on, which is a plank's worth
+      // of route that is not a plank.
+      ...(moored ? [moored.landfall] : []),
+    ].map((at) => `${at.col},${at.row}`),
   );
   for (const [n, cell] of quay.entries()) {
     if (decked.has(`${cell.col},${cell.row}`)) continue;
