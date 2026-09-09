@@ -166,6 +166,7 @@ import { type Cue, Deed, type Guide, GuideRun, type GuideView, type GuideWorld }
 import { NEWS_BEATS } from "../ui/news";
 import { FACE, INK, INK_DIM } from "../ui/parchment";
 import { RUNE_OF } from "../ui/runes";
+import { type Given, flies, stageNow, stagesDone, stillWanted } from "../world/airship";
 import type { AreaPlacement } from "../world/anchors";
 import type { AnchorPlacements } from "../world/anchors";
 import {
@@ -361,7 +362,13 @@ import {
   wake,
   wouldTake,
 } from "../world/machines";
-import { GATHERED_MATERIALS, MADE_MATERIALS, MATERIAL_TYPES, yieldOf } from "../world/materials";
+import {
+  GATHERED_MATERIALS,
+  MADE_MATERIALS,
+  MATERIAL_TYPES,
+  MaterialType,
+  yieldOf,
+} from "../world/materials";
 import { markedPlaces } from "../world/minimap";
 import { NAMED_PEOPLE, nameCast } from "../world/names";
 import type { PlacedObject } from "../world/objects";
@@ -8301,8 +8308,109 @@ export class GameScene extends Phaser.Scene {
    * who can. What is *counted* is what she can see in the garden — wires
    * into the funnel, rings of the bell.
    */
+  /**
+   * What the airship has had carried up to it, as counts.
+   *
+   * The profile keeps a list with repeats — see `airshipParts` — because
+   * that is the shape that survives a save. The build wants counts.
+   */
+  private airshipGiven(): Given {
+    const given: Partial<Record<MaterialType, number>> = {};
+    for (const part of this.profile.airshipParts) {
+      const material = part as MaterialType;
+      given[material] = (given[material] ?? 0) + 1;
+    }
+    return given;
+  }
+
+  /**
+   * Hand one part over, if she is carrying what the stage is short of.
+   *
+   * Talking to the mechanic is the whole gesture, which is deliberate: she
+   * is the one who taught every machine that made the part, and a separate
+   * building to deliver to would be a second errand for no lesson. Nothing
+   * is refused out loud — a child arriving with the wrong thing simply sees
+   * what is still wanted, which is the sheet doing its job.
+   */
+  private giveAirshipPart(): boolean {
+    const short = stillWanted(this.airshipGiven());
+    const handed: string[] = [];
+    for (const [material, many] of short) {
+      // Everything she has of what is wanted, up to what is wanted. Taken
+      // out of the basket rather than out of her hands, the way a recipe
+      // spends: arriving with four trusses and handing over one at a time
+      // would be three more walks for no lesson.
+      const spare = Math.min(many, this.inventory.count(material));
+      for (let n = 0; n < spare; n++) handed.push(material);
+      if (spare > 0) this.inventory.remove(material, spare);
+    }
+    if (handed.length === 0) return false;
+    this.saveProfileChange({ airshipParts: [...this.profile.airshipParts, ...handed] });
+    this.refreshCarried();
+    return true;
+  }
+
+  /**
+   * The airship's own sheet, on the panel the jobs use.
+   *
+   * The same shape and deliberately so: a stage is a picture, a number
+   * wanted and a number done, which is exactly what a job is. A second
+   * panel that said the same thing in a different arrangement would be a
+   * second thing to learn at the very end of the game.
+   */
+  private showAirship(): void {
+    const given = this.airshipGiven();
+    const stage = stageNow(given);
+    const short = stillWanted(given);
+    const [material, many] = short[0] ?? [MaterialType.Truss, 0];
+    const wants = stage?.wants.find(([kind]) => kind === material)?.[1] ?? 0;
+    this.taskPanel?.show(
+      {
+        title: this.words.airshipTitle,
+        line: stage ? this.words.airshipAsk(stage.stage, many) : this.words.airshipReady,
+        bargain: stage ? this.words.airshipBargain : this.words.airshipEarned,
+        token: materialIcon(material),
+        needed: wants,
+        done: Math.max(0, wants - many),
+        reward: UiAsset.MarkGlad,
+      },
+      () => {},
+    );
+  }
+
+  /**
+   * The ending: she goes up, and then she is home.
+   *
+   * **Deliberately not a door out of the game.** The card says she flew and
+   * the airship is recorded as hers — see `flown` — and then she is
+   * standing in her own garden with everything exactly where she left it. A
+   * five-year-old who finished and was shown a screen she could not leave
+   * would have been punished for finishing.
+   *
+   * What is here is the *fact* of the flight and not yet the sight of it:
+   * the take-off, the city going under her and the coming down are a scene
+   * nobody has built. The state is right, which is what the rest of the
+   * game reads; the spectacle is owed.
+   */
+  private flyAway(): void {
+    this.saveProfileChange({ flown: true });
+    this.showEarned(materialIcon(MaterialType.Envelope));
+    this.time.delayedCall(EARNED_MS, () => this.showAirship());
+    this.autosave();
+  }
+
   private showJobs(): void {
     const job = nextJob(this.jobsDone);
+    // Her jobs done, and then the airship: the tree does not stop at the
+    // last machine, it stops at the thing the machines were for.
+    if (!job) {
+      if (this.giveAirshipPart() && flies(this.airshipGiven())) {
+        this.flyAway();
+        return;
+      }
+      this.showAirship();
+      return;
+    }
     const spec = job ? JOB_SPECS[job] : null;
     const progress = spec ? Math.min(spec.wanted, spec.progress(this.lineView())) : 0;
     this.taskPanel?.show(
@@ -12226,6 +12334,20 @@ export class GameScene extends Phaser.Scene {
        * scenario that guessed at coordinates would be a scenario testing
        * its own arithmetic rather than the parchment's.
        */
+      /** How far the airship has got, and whether it has flown. */
+      airship: () => {
+        const given = this.airshipGiven();
+        return {
+          parts: [...this.profile.airshipParts],
+          stage: stageNow(given)?.stage ?? null,
+          done: stagesDone(given),
+          wanted: stillWanted(given).map(
+            ([material, many]) => [material, many] as [string, number],
+          ),
+          flies: flies(given),
+          flown: this.profile.flown,
+        };
+      },
       venn: () => {
         const seen = this.vennPopup?.diagram;
         if (!seen) return null;

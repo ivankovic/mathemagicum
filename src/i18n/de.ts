@@ -369,11 +369,22 @@ export const DE: Phrases = {
       ring: "Tu das, und die Kiste bietet dir eine Falltür an.",
       else: "Tu das, und die Kiste bietet dir eine Wippe an.",
       parity: "Tu das, und die Kiste bietet dir eine Truhe an.",
-      hold: "Tu das, und die Kiste bietet dir einen Bauplan an.",
+      hold: "Tu das, und sie hat dir alles beigebracht. Dann baust du das Luftschiff.",
       twice:
         "Tu das, und du hast dieselbe Reihe zweimal gebaut — das Letzte, was sie dir beibringen kann.",
     })[job] ?? "",
   jobEarned: "Erledigt. Frag sie noch einmal nach dem nächsten.",
+  airshipTitle: "Das Luftschiff",
+  airshipAsk: (stage, left) =>
+    ({
+      keel: `Leg den Kiel: Fachwerke, eins ans andere. ${left === 1 ? "Noch eines" : `Noch ${left}`} zu bringen.`,
+      basket: `Häng die Gondel an, in der du stehen wirst. ${left === 1 ? "Noch eine" : `Noch ${left}`} zu bringen.`,
+      balloon: `Näh die Hülle darüber, dann sieht es nicht mehr nach Boot aus. ${left === 1 ? "Noch eine" : `Noch ${left}`} zu bringen.`,
+      rudder: `Setz die Steuerruder ein, damit es dorthin fährt, wohin du zeigst. ${left === 1 ? "Noch eines" : `Noch ${left}`} zu bringen.`,
+    })[stage] ?? "",
+  airshipBargain: "Bring ihr die Teile, und sie baut es mit dir zusammen.",
+  airshipReady: "Es ist fertig. Steig ein.",
+  airshipEarned: "Du bist geflogen. Es steht in deinem Garten, wann immer du willst.",
   jobsAllDone:
     "Alle Aufträge sind erledigt. Komm wieder, wenn es mehr Maschinen zu reparieren gibt.",
 

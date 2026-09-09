@@ -166,6 +166,8 @@ describe("the list of players", () => {
     symmetryRung: 0,
     logicRung: 0,
     vennRung: 0,
+    airshipParts: [],
+    flown: false,
     found: [],
     brickRung: 0,
     reached: ["village"],

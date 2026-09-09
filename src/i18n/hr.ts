@@ -584,10 +584,21 @@ export const HR: Phrases = {
       ring: "Učini to i sanduk će ti ponuditi zaklopku.",
       else: "Učini to i sanduk će ti ponuditi klackalicu.",
       parity: "Učini to i sanduk će ti ponuditi škrinju.",
-      hold: "Učini to i sanduk će ti ponuditi nacrt.",
+      hold: "Učini to i naučila te je sve. Onda gradiš zračni brod.",
       twice: "Učini to i sagradila si isti niz dvaput — to je zadnje što te ima naučiti.",
     })[job] ?? "",
   jobEarned: "Gotovo. Pitaj je opet za sljedeći.",
+  airshipTitle: "Zračni brod",
+  airshipAsk: (stage, left) =>
+    ({
+      keel: `Postavi kobilicu: rešetke, jednu za drugom. Treba donijeti još ${left}.`,
+      basket: `Objesi koš u kojem ćeš stajati. Treba donijeti još ${left}.`,
+      balloon: `Zašij balon preko njega i više ne izgleda kao brod. Treba donijeti još ${left}.`,
+      rudder: `Ugradi krmila da ide kamo pokažeš. Treba donijeti još ${left}.`,
+    })[stage] ?? "",
+  airshipBargain: "Donesi joj dijelove i sagradit će ga s tobom.",
+  airshipReady: "Gotov je. Ukrcaj se.",
+  airshipEarned: "Letjela si. Stoji ti u vrtu kad god poželiš.",
   jobsAllDone: "Svi su poslovi gotovi. Vrati se kad bude više strojeva za popravak.",
 
   hourglassTitle: "Pješčani sat",

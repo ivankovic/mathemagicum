@@ -1022,6 +1022,15 @@ export interface DevHandle {
     /** Whether the grid has started giving a square away. */
     readonly hinting: boolean;
   } | null;
+  /** How far the airship has got, and whether it has flown. */
+  readonly airship: () => {
+    readonly parts: readonly string[];
+    readonly stage: string | null;
+    readonly done: number;
+    readonly wanted: readonly (readonly [string, number])[];
+    readonly flies: boolean;
+    readonly flown: boolean;
+  };
   /**
    * The funnel's set diagram: how far she has got, and where the rings are.
    *

@@ -433,11 +433,24 @@ export const EN: Phrases = {
       ring: "Do that and the crate will offer you a trapdoor.",
       else: "Do that and the crate will offer you a seesaw.",
       parity: "Do that and the crate will offer you a strongbox.",
-      hold: "Do that and the crate will offer you a blueprint.",
+      // The blueprint is shelved, so this promises the thing that is
+      // actually next: her jobs end here and the airship begins.
+      hold: "Do that and she has taught you everything. Then you build the airship.",
       twice:
         "Do that and you have built the same line twice, which is the last thing she has to teach.",
     })[job] ?? "",
   jobEarned: "Done. Ask her again for the next one.",
+  airshipTitle: "The airship",
+  airshipAsk: (stage, left) =>
+    ({
+      keel: `Lay the keel: trusses, end to end. ${left === 1 ? "One" : left} still to bring.`,
+      basket: `Hang the basket you will stand in. ${left === 1 ? "One" : left} still to bring.`,
+      balloon: `Sew on the envelope, and it stops looking like a boat. ${left === 1 ? "One" : left} still to bring.`,
+      rudder: `Fit the vanes, so it goes where you point it. ${left === 1 ? "One" : left} still to bring.`,
+    })[stage] ?? "",
+  airshipBargain: "Bring her the parts and she will build it with you.",
+  airshipReady: "It is finished. Climb in.",
+  airshipEarned: "You flew it. It is in your garden whenever you want it.",
   jobsAllDone: "Every job is done. Come back when there are more machines to mend.",
 
   hourglassTitle: "The hourglass",

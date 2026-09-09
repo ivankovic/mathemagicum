@@ -16,6 +16,7 @@ import { HARDEST_SYMMETRY_RUNG } from "../spells/symmetry";
 import { readGuided } from "../ui/guide";
 import { readFound } from "../world/flowers";
 import { readJobs } from "../world/jobs";
+import { MADE_MATERIALS } from "../world/materials";
 import { HOME_PLACE, PLACE_NAMES, type PlaceName } from "../world/places";
 import type { PlayerSnapshot } from "./snapshot";
 
@@ -217,6 +218,24 @@ export interface Progress {
    */
   readonly vennRung: number;
   /**
+   * The parts of the airship she has carried up to the mechanic, one name
+   * per part, with repeats.
+   *
+   * A list rather than a count per kind, for the reason `guided` and
+   * `learned` are lists: it is the shape that survives a save without a
+   * schema, and handing a part over is an append. What the build wants is
+   * counts, and `airship.ts` is handed those — see `stagesDone`.
+   */
+  readonly airshipParts: readonly string[];
+  /**
+   * Whether she has flown it.
+   *
+   * Kept after the flight rather than cleared, because the airship comes
+   * back: this is what says the ending has happened and the ship is hers to
+   * travel in, not what says the game is over.
+   */
+  readonly flown: boolean;
+  /**
    * Which flowers this child has walked into, and may now plant.
    *
    * A set of names, like `learned`, and for the same reason: what is locked
@@ -416,6 +435,8 @@ export function createProfile(
     symmetryRung: 0,
     logicRung: 0,
     vennRung: 0,
+    airshipParts: [],
+    flown: false,
     found: [],
     brickRung: brickFloor(bandAt(wanted.band)),
     // The village, because that is where they live. A portal spell whose
@@ -476,6 +497,8 @@ export function freshProgress(bandAt_: number): Progress {
     symmetryRung: 0,
     logicRung: 0,
     vennRung: 0,
+    airshipParts: [],
+    flown: false,
     found: [],
     brickRung: brickFloor(band),
     reached: [HOME_PLACE],
@@ -530,6 +553,22 @@ function readOffset(raw: unknown): number {
 function readSymmetryRung(raw: unknown): number {
   const rung = Math.trunc(Number(raw ?? 0));
   return Number.isFinite(rung) ? Math.max(0, Math.min(HARDEST_SYMMETRY_RUNG, rung)) : 0;
+}
+
+/**
+ * The parts handed over, dropped to the ones that are really parts.
+ *
+ * Unknown names go, the way an unknown spell does in `readLearned`: a name
+ * that is not a made material can only come from a different build, and a
+ * save is never allowed to put something in the airship that the airship is
+ * not made of.
+ */
+function readAirshipParts(raw: unknown): readonly string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (name): name is string =>
+      typeof name === "string" && (MADE_MATERIALS as readonly string[]).includes(name),
+  );
 }
 
 /** The same again, against the funnel's set diagram. */
@@ -682,6 +721,9 @@ export function readProgress(value: unknown, bandNumber: number): Progress {
     logicRung: readLogicRung(record.logicRung),
     // A child saved before a funnel could be woken has sorted nothing.
     vennRung: readVennRung(record.vennRung),
+    // A child saved before there was an airship has built none of it.
+    airshipParts: readAirshipParts(record.airshipParts),
+    flown: record.flown === true,
     found: readFound(record.found),
     // A child saved before anybody could build a room has never laid a
     // brick: the bottom of their own band, exactly as a new child gets.

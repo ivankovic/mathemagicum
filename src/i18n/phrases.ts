@@ -523,6 +523,11 @@ export interface Phrases {
   /** Under the box when it starts too empty, and when it starts too full. */
   countingPutIn: string;
   countingTakeOut: string;
+  airshipTitle: string;
+  airshipAsk: (stage: string, left: number) => string;
+  airshipReady: string;
+  airshipBargain: string;
+  airshipEarned: string;
   vennTitle: string;
   vennHint: string;
   parentsNotice: string;
