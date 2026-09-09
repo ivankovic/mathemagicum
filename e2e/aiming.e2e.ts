@@ -4,12 +4,14 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
 import { FixtureType } from "../src/world/fixtures";
+import { PlantType } from "../src/world/plants";
 import {
   type Game,
   type Handles,
   PHONE,
   play,
   runeButton,
+  seedButton,
   shutDown,
   takeFromCrate,
 } from "./harness";
@@ -71,6 +73,40 @@ async function corner(game: Game): Promise<{ col: number; row: number }> {
   throw new Error("she has nothing standing at any of her four corners");
 }
 
+/**
+ * The same corner, but one a carrot will grow in.
+ *
+ * `isFree` asks whether a machine could stand on a square, and a machine
+ * stands on anything she can walk on. A seed is fussier, so this asks the
+ * grid the question the seed will ask.
+ */
+async function plantableCorner(game: Game): Promise<{ col: number; row: number }> {
+  const here = await game.where();
+  for (const [dCol, dRow] of [
+    [1, 1],
+    [-1, 1],
+    [1, -1],
+    [-1, -1],
+  ] as const) {
+    const at = { col: here.col + dCol, row: here.row + dRow };
+    const ok = await game.tab.evaluate(
+      ([c, r]) => {
+        const handle = (globalThis as never as Handles).__mathemagicum;
+        if (!handle) throw new Error("the game has not put its handle out");
+        const grid = handle.session.grid;
+        return (
+          grid.isPassable(c as number, r as number) &&
+          !grid.getCrop(c as number, r as number) &&
+          grid.canPlant(c as number, r as number, "carrot")
+        );
+      },
+      [at.col, at.row] as const,
+    );
+    if (ok) return at;
+  }
+  throw new Error("none of her four corners will take a carrot");
+}
+
 describe("the square she is pointing at", () => {
   /**
    * The minus rune takes a machine back from anywhere it can be aimed.
@@ -119,6 +155,74 @@ describe("the square she is pointing at", () => {
           standing: await game.objectOn(at.col, at.row),
           held: await game.held(FixtureType.Sorter),
         }).toEqual({ standing: null, held: 1 });
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * And a ripe carrot at her corner comes up on a tap.
+   *
+   * Reported from a playthrough as *I can't pick up plants diagonally*, and
+   * it was the last verb in the game still measuring a corner as two steps.
+   * Everything else that reaches down for a thing had already stopped: a
+   * flowerpot at her corner comes up, a machine three squares off comes up.
+   * The carrot beside the flowerpot answered a tap with nothing at all.
+   *
+   * The reason it survived is worth stating, because it is a real one and
+   * not an oversight. Picking used to work off the *facing*, and a facing is
+   * one of four however she got there — so a tap turned her toward the crop
+   * first, and there is no diagonal to turn to. Relaxing the distance alone
+   * would have picked the square beside the carrot. A tap points at the
+   * square now and the aim beats the facing, which is what makes a corner
+   * reachable without inventing a fifth way to stand.
+   *
+   * She is made to point somewhere else before the tap that matters. Planting
+   * leaves the aim on the square it planted, so a scenario that skipped this
+   * would pass on the old code too — the aim, not the tap, would have picked
+   * the carrot, and the bug would be sitting underneath a green test.
+   */
+  test(
+    "and a ripe crop at her corner comes up on a tap",
+    async () => {
+      await play({ seams: "&hour=12&freezeNpcs&learned=all" }, async (game) => {
+        const at = await plantableCorner(game);
+        const here = await game.where();
+
+        // One seed into the corner square, which is a square pointing
+        // already reaches — this is the half that always worked.
+        expect(await game.tap("seeds")).toBe(true);
+        expect(await game.tap(seedButton(PlantType.Carrot))).toBe(true);
+        await game.tapCell(at.col, at.row);
+        await game.settle(500);
+
+        // Seedling, growing, ripe: two casts, the ordinary way.
+        for (let cast = 0; cast < 2; cast++) {
+          expect(await game.tap("spellbook")).toBe(true);
+          expect(await game.tap(runeButton(Spell.Growth))).toBe(true);
+          await game.tapCell(at.col, at.row);
+          await game.solveNumberLine();
+          await game.settle(500);
+        }
+
+        // Point at the square under her feet instead. Now nothing but the
+        // tap on the carrot can aim at the carrot.
+        await game.tapCell(here.col, here.row);
+        await game.settle(300);
+        expect(await game.seam<unknown>("aimed")).toEqual(here);
+
+        const before = await game.held(PlantType.Carrot);
+        await game.tapCell(at.col, at.row);
+        await game.settle(600);
+
+        // In the basket, off the ground, and the ring has moved to the
+        // square she tapped. This is the whole report: it used to be none of
+        // the three.
+        expect({
+          picked: (await game.held(PlantType.Carrot)) - before,
+          left: await isFree(game, at.col, at.row),
+          aimed: await game.seam<unknown>("aimed"),
+        }).toEqual({ picked: 1, left: true, aimed: at });
       });
     },
     5 * MINUTES,

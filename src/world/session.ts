@@ -123,11 +123,6 @@ export interface SessionOptions {
   readonly facing?: Facing;
 }
 
-/** How far a thing can be and still be worked: one orthogonal step. */
-export function stepsBetween(a: GridPoint, b: GridPoint): number {
-  return Math.abs(a.col - b.col) + Math.abs(a.row - b.row);
-}
-
 /**
  * Whether a thing is close enough to reach for: one step in any direction.
  *
@@ -143,23 +138,18 @@ export function stepsBetween(a: GridPoint, b: GridPoint): number {
  * a child that the game measures a corner as two steps — and the rule it was
  * protecting, that she can always take back what she put down, is the one it
  * was breaking.
+ *
+ * **Picking a crop is the same verb and now uses the same measure.** It
+ * kept the orthogonal one for a while longer, on the facing argument above,
+ * which left one square of ground where a flowerpot came up on a tap and the
+ * carrot next to it did not. The way out was not a shorter reach for the
+ * pot: a tap on a crop points at the square before it picks, and a square
+ * she has pointed at needs no facing, exactly as talking does not.
  */
 export function beside(from: GridPoint, at: GridPoint): boolean {
   return stepsToSpeak(from, at) <= 1;
 }
 
-/**
- * How far a *person* can be and still be spoken to: one step in any
- * direction, diagonals included.
- *
- * Deliberately not the same measure as `stepsBetween`. Gardening acts on the
- * tile the player *faces*, and a facing is one of four however the player
- * got there — walking diagonally is a thing the game now does, but being
- * drawn diagonally is not — so a diagonal neighbour is still genuinely out
- * of reach of a trowel. Talking needs no facing, and refusing someone
- * standing at your corner would be a rule with no reason behind it that the
- * player could see.
- */
 /**
  * How far a person, an animal or the great tree can be and still be
  * answered: two squares in any direction, diagonals included.

@@ -8,14 +8,7 @@ import { WorldGrid } from "./grid";
 import { PlantStage, PlantType } from "./plants";
 import { sceneryType } from "./scenery";
 import { type Patch, patchCells } from "./selection";
-import {
-  AIM_REACH,
-  GameSession,
-  Outcome,
-  stepsBetween,
-  stepsToSpeak,
-  withinReach,
-} from "./session";
+import { AIM_REACH, GameSession, Outcome, beside, stepsToSpeak, withinReach } from "./session";
 import { CROP_PRICE, priceOf } from "./shop";
 import { TerrainType } from "./terrain";
 
@@ -352,9 +345,16 @@ describe("trading", () => {
 });
 
 describe("reach", () => {
-  test("gardening reaches one orthogonal step, not a diagonal one", () => {
-    expect(stepsBetween({ col: 2, row: 2 }, { col: 2, row: 3 })).toBe(1);
-    expect(stepsBetween({ col: 2, row: 2 }, { col: 3, row: 3 })).toBe(2);
+  // Picking a crop used to be measured orthogonally, so a carrot at her
+  // corner counted as two steps away and a tap on it did nothing. It is
+  // `beside` now, the same measure that brings a flowerpot up — one step in
+  // any direction. The rule that made the corner far away was about the
+  // *facing*, and a tap points at the square before it picks.
+  test("reaching down for a thing reaches a diagonal neighbour", () => {
+    expect(beside({ col: 2, row: 2 }, { col: 3, row: 3 })).toBe(true);
+    expect(beside({ col: 2, row: 2 }, { col: 2, row: 3 })).toBe(true);
+    expect(beside({ col: 2, row: 2 }, { col: 4, row: 2 })).toBe(false);
+    expect(beside({ col: 2, row: 2 }, { col: 4, row: 4 })).toBe(false);
   });
 
   // Talking needs no facing, so a diagonal neighbour is still next to you.

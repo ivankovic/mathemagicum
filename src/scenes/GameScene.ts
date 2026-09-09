@@ -403,6 +403,7 @@ import {
   Outcome,
   SPEAK_REACH,
   anywhereInThePatch,
+  beside,
   stepsToSpeak,
   withinReach,
   withinSpeaking,
@@ -9154,9 +9155,10 @@ export class GameScene extends Phaser.Scene {
 
   // --- Harvesting ---------------------------------------------------------
   //
-  // One rule, whichever way the player asks: **she can pick a crop she is
-  // facing, or one she is standing on.** The H key applies it where she is;
-  // a tap on a crop beside her turns her toward it first and then applies the
+  // One rule, whichever way the player asks: **she can pick the crop on the
+  // square she has pointed at, the one she is facing, or the one she is
+  // standing on.** The H key applies it wherever she has left the aim; a tap
+  // on a crop next to her points at that square first and then applies the
   // same rule, which is both the better feel and the reason the two routes
   // cannot drift into meaning different things.
   //
@@ -9203,23 +9205,43 @@ export class GameScene extends Phaser.Scene {
   /**
    * A tap on a crop, from the sprite's own hit area.
    *
-   * Turning to face it is what lets one rule serve both routes: after this,
-   * the crop is the faced tile and `tryHarvest` is the same code the H key
-   * runs. A crop further off than one step is not reached for — walking there
-   * on a tap would be a second kind of tap-to-move, and tapping the world to
+   * The square is *pointed at* and then picked, which is what lets one rule
+   * serve both routes: after this the crop is the aimed tile, and
+   * `tryHarvest` is the same code the H key runs. Turning toward it is for
+   * the look of the thing and nothing else — a diagonal facing is not one of
+   * the four a character can be drawn in, so `turnToward` resolves it to the
+   * dominant axis and would send the harvest to the square *beside* the crop
+   * if the facing were still what decided. The aim wins over the facing in
+   * `targetTile`, which is why it can.
+   *
+   * The reach is `beside`: one step in any direction, diagonals included.
+   * It was one *orthogonal* step, which made picking a carrot the only
+   * reaching-down verb in the game with a diamond around it — a flowerpot at
+   * her corner comes up on a tap, and the carrot beside it answered with
+   * nothing a child could read. See `beside` for the rest of that argument;
+   * it is the same one, and this is the verb it was written about.
+   *
+   * A crop further off than that is still not reached for. Walking there on
+   * a tap would be a second kind of tap-to-move, and tapping the world to
    * walk is exactly what the joystick replaced on touch.
    */
   private handleCropTap(col: number, row: number): void {
     if (this.modalOpen || this.interior) return;
-    const dCol = col - this.playerCol;
-    const dRow = row - this.playerRow;
-    const steps = Math.abs(dCol) + Math.abs(dRow);
-    if (steps > 1) {
+    const at = { col, row };
+    if (!beside(this.session.tile, at)) {
       this.markRefusal(col, row);
       this.markTooFar(col, row);
       return;
     }
-    if (steps === 1) this.session.turnToward(dCol, dRow);
+    // Both, in this order, the way a tap on bare ground does it: the aim is
+    // what `harvest` reads, and the ring is what says so on the screen. A
+    // move without the paint is a tap that looks like it did nothing, which
+    // is the symptom this whole change is about.
+    this.session.aimAt(at);
+    this.paintAim();
+    const dCol = col - this.playerCol;
+    const dRow = row - this.playerRow;
+    if (dCol !== 0 || dRow !== 0) this.session.turnToward(dCol, dRow);
     this.tryHarvest();
   }
 
