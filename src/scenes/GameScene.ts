@@ -406,6 +406,7 @@ import {
   withinSpeaking,
 } from "../world/session";
 import type { Purse } from "../world/shop";
+import { SkyThing, skyAnimKey, skySheetKey } from "../world/skyline";
 import { CITY_HOUSE_ID } from "../world/skyline";
 import {
   type BuildingSidecar,
@@ -643,6 +644,53 @@ const PORTAL_SPARKS = 6;
 // it. 2 keeps roughly the framing the old 800x600 canvas gave on a desktop
 // while doubling how big a character reads on a phone.
 const CAMERA_ZOOM = 2;
+/**
+ * The flight: how long each part of it takes, and how far back the camera
+ * goes to show it.
+ *
+ * Short. It is the last thing in the game and it should feel like an
+ * ending, but a five-year-old watching a cutscene she cannot skip is a
+ * five-year-old learning that finishing is when the game stops answering —
+ * so the whole thing is under six seconds and every beat of it is a tween
+ * that can be cut short by the failsafe below.
+ */
+const FLIGHT_RISE_MS = 2400;
+const FLIGHT_HOLD_MS = 1200;
+const FLIGHT_LAND_MS = 1400;
+/**
+ * How far out the camera pulls, and how much bigger her ship is than the
+ * city's.
+ *
+ * Both of these are the same lesson learned from looking at it. At half
+ * zoom the world was gloriously wide and her airship was a thirty-pixel
+ * white blob — indistinguishable from the moored blimps dotted over the
+ * rooftops, which is the opposite of what the last shot of the game should
+ * say. So the camera pulls back less, and the ship is drawn at twice the
+ * size of the ones hanging over the city, because hers is the one somebody
+ * built.
+ */
+const FLIGHT_ZOOM = 0.8;
+const FLIGHT_SHIP_SCALE = 2;
+/** How far up the ship climbs, in world pixels. */
+const FLIGHT_RISE_PX = 260;
+/**
+ * The blimp sheet, cut down to the part of it that is flying.
+ *
+ * The city's blimps are *moored* — each one hangs over a rooftop on a
+ * tether, and the sprite draws that tether as a long diagonal line under
+ * the balloon. Borrowing the art for an airship that has just cast off
+ * meant borrowing the rope too, which read as a ship still tied to
+ * something. So the frame is cropped to the balloon and its turbine, and
+ * the origin is moved onto the balloon's own middle rather than the middle
+ * of a frame that is mostly empty sky.
+ *
+ * Measured off the sheet: the balloon fills rows 15 to 54 of a 224-tall
+ * frame and columns 24 to 84 of a 128-wide one, with the turbine above it
+ * and the tether below.
+ */
+const BLIMP_KEEP_PX = 58;
+const BLIMP_ORIGIN_X = 54 / 128;
+const BLIMP_ORIGIN_Y = 35 / 224;
 
 const HUD_MARGIN = 8;
 /**
@@ -1364,6 +1412,11 @@ export class GameScene extends Phaser.Scene {
    * scene's, drawn every frame from whatever the run asks for.
    */
   private guide?: GuideRun;
+  /** Where she lives, kept from `startFor` so the airship knows where home is. */
+  private homeTile: GridPoint = { col: 0, row: 0 };
+  /** Whether the ending is playing. Counts as a modal: nothing takes input. */
+  private flying = false;
+  private flightGuard: Phaser.Time.TimerEvent | null = null;
   private guideMarks?: GuideMarks;
   /** What the guide last saw of the world, and when; it is not cheap to look. */
   private guideWorldSeen: { at: number; world: GuideWorld } | null = null;
@@ -2023,7 +2076,8 @@ export class GameScene extends Phaser.Scene {
     this.observatory = world.observatory;
     this.harbourFront = world.harbour;
     this.wildFlowers = world.wildFlowers;
-    this.session = new GameSession({ grid: world.grid, start: this.startFor(world) });
+    this.homeTile = this.startFor(world);
+    this.session = new GameSession({ grid: world.grid, start: this.homeTile });
     // What the generator made, remembered before the child's own world is
     // laid over it — the diff that gets saved is the difference between the
     // two, and after this line there is no other way to tell them apart.
@@ -8367,8 +8421,19 @@ export class GameScene extends Phaser.Scene {
     this.taskPanel?.show(
       {
         title: this.words.airshipTitle,
-        line: stage ? this.words.airshipAsk(stage.stage, many) : this.words.airshipReady,
-        bargain: stage ? this.words.airshipBargain : this.words.airshipEarned,
+        // Three things it can be saying, and the third is the one that was
+        // wrong: a child who has *already flown* was still being told to
+        // climb in, which reads as the ending not having happened.
+        line: stage
+          ? this.words.airshipAsk(stage.stage, many)
+          : this.profile.flown
+            ? this.words.airshipEarned
+            : this.words.airshipReady,
+        bargain: stage
+          ? this.words.airshipBargain
+          : this.profile.flown
+            ? ""
+            : this.words.airshipEarned,
         token: materialIcon(material),
         needed: wants,
         done: Math.max(0, wants - many),
@@ -8393,9 +8458,101 @@ export class GameScene extends Phaser.Scene {
    * game reads; the spectacle is owed.
    */
   private flyAway(): void {
+    if (this.flying) return;
+    this.flying = true;
+    // Written down *before* the spectacle and not after it. Everything
+    // below is tweens and timers on a tablet that may be having a bad
+    // afternoon; the one thing that must survive a scene going wrong is
+    // that she finished.
     this.saveProfileChange({ flown: true });
-    this.showEarned(materialIcon(MaterialType.Envelope));
-    this.time.delayedCall(EARNED_MS, () => this.showAirship());
+    this.autosave();
+
+    this.joystick?.release();
+    this.closeTrays();
+    this.taskPanel?.close();
+    // Out of doors first. She finishes the airship at the mechanic's bench,
+    // which is *inside* the garage, and a ship rising through a ceiling
+    // would be the least of it: the indoor mode owns the grid, the layers
+    // and the camera's bounds, so taking off from in there would fly her
+    // over a room and land her at a garden coordinate the scene was still
+    // reading as furniture. The seam caught exactly that.
+    this.leaveInterior();
+
+    const from = this.toFeet(this.session.tile.col, this.session.tile.row);
+    const ship = this.world(
+      this.add
+        .sprite(from.x, from.y - TILE_SIZE, skySheetKey(SkyThing.Blimp))
+        .setOrigin(BLIMP_ORIGIN_X, BLIMP_ORIGIN_Y)
+        .setDepth(WORLD_DEPTH_CEILING + 100),
+    );
+    if (this.anims.exists(skyAnimKey(SkyThing.Blimp))) ship.play(skyAnimKey(SkyThing.Blimp));
+    ship.setCrop(0, 0, ship.frame.width, BLIMP_KEEP_PX);
+    ship.setScale(FLIGHT_SHIP_SCALE);
+
+    // The same failsafe the portal keeps, and for the same reason: a beat
+    // that merely ran long on a cheap tablet would otherwise leave a child
+    // in the sky with the input still switched off. Cancelled on success.
+    this.flightGuard = this.time.delayedCall((FLIGHT_RISE_MS + FLIGHT_HOLD_MS) * 2, () => {
+      this.flightGuard = null;
+      this.comeHome(ship);
+    });
+
+    // She climbs in, and the ground lets go of both of them.
+    //
+    // The camera changes what it is following, which is the whole trick:
+    // left on the player it stayed with a body standing invisible in the
+    // street, and the ship simply left the top of the frame. Following the
+    // ship is what makes the pull-back read as *her* going up rather than
+    // as the world zooming out around a sprite that got away.
+    this.cameras.main.startFollow(ship);
+    this.tweens.add({ targets: this.player, alpha: 0, duration: 400 });
+    this.cameras.main.zoomTo(FLIGHT_ZOOM, FLIGHT_RISE_MS, "Sine.easeInOut");
+    this.tweens.add({
+      targets: ship,
+      y: from.y - TILE_SIZE - FLIGHT_RISE_PX,
+      duration: FLIGHT_RISE_MS,
+      ease: "Sine.easeInOut",
+      onComplete: () => {
+        this.showEarned(materialIcon(MaterialType.Envelope));
+        this.time.delayedCall(FLIGHT_HOLD_MS, () => {
+          if (!this.flightGuard) return;
+          this.flightGuard.remove();
+          this.flightGuard = null;
+          this.comeHome(ship);
+        });
+      },
+    });
+  }
+
+  /**
+   * Down again, in her own garden.
+   *
+   * The whole reason the ending is built this way round. She does not fly
+   * *off*: she goes up, the world gets small, and then she is standing
+   * where she started with everything exactly where she left it — and the
+   * sheet that comes back up says the airship is hers whenever she wants
+   * it. A child who finished and was shown a screen she could not leave
+   * would have been punished for finishing.
+   */
+  private comeHome(ship: Phaser.GameObjects.Sprite): void {
+    this.tweens.killTweensOf(ship);
+    this.tweens.killTweensOf(this.player);
+    ship.destroy();
+
+    const home = this.homeTile;
+    this.session.setPosition(home.col, home.row);
+    const feet = this.toFeet(home.col, home.row);
+    // The ground first and then the traveller, which is the order `landAt`
+    // takes for the reason given there: the other way round is a frame of
+    // black.
+    this.chunks.refreshVisibleChunks(feet);
+    this.player.setPosition(feet.x, feet.y).setScale(1).setAlpha(1);
+    this.cameras.main.startFollow(this.player);
+    this.cameras.main.zoomTo(CAMERA_ZOOM, FLIGHT_LAND_MS, "Sine.easeInOut");
+    this.time.delayedCall(FLIGHT_LAND_MS, () => {
+      this.flying = false;
+      this.showAirship();
+    });
     this.autosave();
   }
 
@@ -12346,6 +12503,12 @@ export class GameScene extends Phaser.Scene {
           ),
           flies: flies(given),
           flown: this.profile.flown,
+          // Mid-flight, which is the one part of the ending a screenshot
+          // cannot settle: a blimp against a sky looks the same whether it
+          // is rising, stuck, or was never told to move.
+          flying: this.flying,
+          zoom: this.cameras.main.zoom,
+          at: { col: this.session.tile.col, row: this.session.tile.row },
         };
       },
       venn: () => {
@@ -12666,6 +12829,10 @@ export class GameScene extends Phaser.Scene {
 
   private get modalOpen(): boolean {
     return (
+      // The ending, which is the one modal with no panel in it: there is
+      // nothing to tap and nothing to close, and a tap that moved her
+      // during the flight would move a sprite that is not on the ground.
+      this.flying ||
       // Optional throughout: the status line is written once while the scene
       // is still assembling itself, before any of these exist.
       this.spellPopup?.isOpen === true ||

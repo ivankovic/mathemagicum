@@ -31,6 +31,9 @@ interface Airship {
   wanted: [string, number][];
   flies: boolean;
   flown: boolean;
+  flying: boolean;
+  zoom: number;
+  at: { col: number; row: number };
 }
 
 const airship = (game: Game) => game.seam<Airship>("airship");
@@ -144,6 +147,57 @@ describe("building the airship", () => {
         expect(tomorrow.parts).toEqual(before.parts);
         expect(tomorrow.done).toBe(before.done);
         expect(tomorrow.stage).toBe(before.stage);
+      });
+    },
+    6 * MINUTES,
+  );
+});
+
+/**
+ * The ending itself: up, and then home.
+ *
+ * A screenshot cannot settle any of this — a blimp against a sky looks the
+ * same whether it is rising, stuck, or was never told to move — so this
+ * asks the seam instead: that the world really is seen from further away
+ * while she is up there, that the flight ends rather than parking her in
+ * the sky with the controls off, and that she comes down somewhere other
+ * than the city she took off from.
+ */
+describe("flying it", () => {
+  test(
+    "goes up, pulls the world back, and puts her down at home",
+    async () => {
+      await play({ seams: READY }, async (game) => {
+        const garage = await intoTheGarage(game);
+        const her = await theMechanic(game, garage);
+        const tookOffAt = (await airship(game)).at;
+        const groundZoom = (await airship(game)).zoom;
+
+        for (let tap = 0; tap < STAGE_COUNT - 1; tap++) await askHer(game, her);
+        expect((await airship(game)).done).toBe(STAGE_COUNT - 1);
+
+        // The last part is the one that flies it.
+        await game.tapCell(her.col, her.row);
+        await game.settle(1200);
+        const aloft = await airship(game);
+        expect(aloft.flown).toBe(true);
+        // Up: the world is seen from further away than it is from the ground.
+        expect(aloft.flying).toBe(true);
+        expect(aloft.zoom).toBeLessThan(groundZoom);
+
+        // And it ends. This is the assertion the whole failsafe exists for:
+        // a beat that ran long would leave a child in the sky with the
+        // input switched off, which is worse than no ending at all.
+        for (let waited = 0; waited < 20 && (await airship(game)).flying; waited++) {
+          await game.settle(500);
+        }
+        const landed = await airship(game);
+        expect(landed.flying).toBe(false);
+        expect(landed.zoom).toBeGreaterThan(aloft.zoom);
+        // Home, which is not the city she took off from.
+        expect(landed.at).not.toEqual(tookOffAt);
+        // And she can still play: the world takes her taps again.
+        expect(await game.seam<{ room: string } | null>("inside")).toBe(null);
       });
     },
     6 * MINUTES,

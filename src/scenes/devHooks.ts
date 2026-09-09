@@ -1030,6 +1030,9 @@ export interface DevHandle {
     readonly wanted: readonly (readonly [string, number])[];
     readonly flies: boolean;
     readonly flown: boolean;
+    readonly flying: boolean;
+    readonly zoom: number;
+    readonly at: { readonly col: number; readonly row: number };
   };
   /**
    * The funnel's set diagram: how far she has got, and where the rings are.
