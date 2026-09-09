@@ -5,6 +5,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { DecorType, decorItem } from "../src/world/decor";
 import { TURNS, Turn } from "../src/world/facing";
 import { FixtureType, PLACEABLE_FIXTURES } from "../src/world/fixtures";
+import { SHELVED } from "../src/world/jobs";
 import { type Game, type Handles, play, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
@@ -131,7 +132,14 @@ describe("turning a thing before putting it down", () => {
     "and everything in the crate turns, not only the bench",
     async () => {
       await play({ seams: GARDEN }, async (game) => {
-        for (const fixture of PLACEABLE_FIXTURES) {
+        // Everything in the crate, which is not the same list as everything
+        // placeable: a shelved machine is still a thing the world can hold
+        // and load, so it stays in `PLACEABLE_FIXTURES`, and it is not in the
+        // crate for anyone to turn. Asking for it here failed on a missing
+        // button and read as "the blueprint does not rotate".
+        for (const fixture of PLACEABLE_FIXTURES.filter(
+          (it) => !(SHELVED as readonly string[]).includes(it),
+        )) {
           await game.give(fixture, 1);
           expect(await takeFromCrate(game, fixture)).toBe(true);
           await game.settle(250);
