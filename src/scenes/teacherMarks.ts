@@ -3,6 +3,7 @@
 
 import type Phaser from "phaser";
 import { type Spell, spellTaughtBy } from "../spells/spellbook";
+import { GUIDE_GLOW_HEX, GUIDE_HEX } from "../ui/GuideMarks";
 import { uiTextureKey } from "../ui/assets";
 import { RUNE_OF } from "../ui/runes";
 import type { GridPoint } from "../world/topdown";
@@ -39,6 +40,31 @@ const LIFT = 28;
 const DIM = 0.38;
 const BRIGHT = 0.8;
 const BEAT_MS = 900;
+/**
+ * How much bigger the pale copy behind the rune is drawn.
+ *
+ * The glow is a second copy of the same picture, filled pale and scaled up a
+ * fraction, so what shows past the edges of the front one is an outline
+ * that follows the shape exactly — a halo drawn for the rune it is under,
+ * for free, without a second drawing to keep in step.
+ */
+const HALO = 1.14;
+
+/**
+ * Why the rune is *filled* cyan rather than tinted it.
+ *
+ * A playtest asked for these to match the tutorial's marks — "make the spell
+ * runes blue on top of the teacher, same as the tutorial arrows" — and the
+ * obvious way to do that is a tint. A tint multiplies, and the rune art is
+ * gold: gold times cyan is a dark olive, which is neither the gold it was
+ * nor the cyan it was asked to be. `setTintFill` replaces the colour outright
+ * and keeps only the shape, which is what an arrow drawn in cyan already is.
+ *
+ * The runes survive being reduced to a silhouette because every one of them
+ * is made of separated shapes — six dots, a bar between two dots, a cross —
+ * rather than of shading. See `GuideMarks` for the two colours and for why
+ * the pale one is what makes it read as lit rather than merely different.
+ */
 
 /** Somebody on screen who might have something to teach. */
 export interface Standing {
@@ -58,8 +84,14 @@ export interface Standing {
   readonly rune?: string;
 }
 
+/** A rune and the pale copy behind it that makes it glow. */
+interface Mark {
+  readonly halo: Phaser.GameObjects.Image;
+  readonly rune: Phaser.GameObjects.Image;
+}
+
 export class TeacherMarks {
-  private readonly marks = new Map<string, Phaser.GameObjects.Image>();
+  private readonly marks = new Map<string, Mark>();
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -86,29 +118,47 @@ export class TeacherMarks {
       shown.add(who.part);
       let mark = this.marks.get(who.part);
       if (!mark) {
-        mark = this.place(
-          this.scene.add
-            .image(0, 0, uiTextureKey(rune))
-            .setOrigin(0.5, 1)
-            .setDisplaySize(MARK, MARK),
-        );
+        const draw = (size: number, hex: number) => {
+          const image = this.place(
+            this.scene.add
+              .image(0, 0, uiTextureKey(rune as string))
+              .setOrigin(0.5, 1)
+              .setDisplaySize(size, size),
+          );
+          image.setTintFill(hex);
+          return image;
+        };
+        // The halo first, so it is behind: two images at one depth are drawn
+        // in the order they were made.
+        mark = { halo: draw(MARK * HALO, GUIDE_GLOW_HEX), rune: draw(MARK, GUIDE_HEX) };
         this.marks.set(who.part, mark);
       }
-      mark
+      const depth = depthFor(who.feet.y) + 1;
+      // The halo hangs a little lower so its foot lines up with the rune's:
+      // both are drawn from the bottom edge, and the taller one would
+      // otherwise stand on the rune's head rather than behind it.
+      mark.halo
+        .setPosition(who.feet.x, who.feet.y - LIFT + (MARK * (HALO - 1)) / 2)
+        .setDepth(depth)
+        .setAlpha(beat * 0.55)
+        .setVisible(true);
+      mark.rune
         .setPosition(who.feet.x, who.feet.y - LIFT)
-        .setDepth(depthFor(who.feet.y) + 1)
+        .setDepth(depth)
         .setAlpha(beat)
         .setVisible(true);
     }
     for (const [part, mark] of this.marks) {
-      if (!shown.has(part)) mark.setVisible(false);
+      if (shown.has(part)) continue;
+      mark.halo.setVisible(false);
+      mark.rune.setVisible(false);
     }
   }
 
   /** Who currently has one up. A dev seam: a faint mark that breathes is the
    * one thing on screen a screenshot cannot settle. */
   showing(): string[] {
-    return [...this.marks.entries()].filter(([, mark]) => mark.visible).map(([part]) => part);
+    return [...this.marks.entries()].filter(([, mark]) => mark.rune.visible).map(([part]) => part);
   }
 
   /** A nought-to-one that goes up and comes back, on a period in ms. */

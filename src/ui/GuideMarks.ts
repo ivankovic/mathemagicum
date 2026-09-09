@@ -22,8 +22,13 @@ import type Phaser from "phaser";
  * saturated edge reads as lit from within, which is what a magic thing
  * pointing somewhere should look like.
  */
-const GUIDE_HEX = 0x18c8e0;
-const GUIDE_GLOW_HEX = 0xb4f4ff;
+/**
+ * Exported, because a second mark now wears them: the rune over a teacher's
+ * head. A playtest asked for the two to match in as many words, and two
+ * spellings of `0x18c8e0` in two files is how they stop matching.
+ */
+export const GUIDE_HEX = 0x18c8e0;
+export const GUIDE_GLOW_HEX = 0xb4f4ff;
 
 /**
  * The guide's two marks: a glow round a button, and an arrow over a thing.
