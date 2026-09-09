@@ -119,7 +119,7 @@ import {
   knowsSpell,
   learnSpell,
 } from "../spells/spellbook";
-import { makeSubtractionProblem } from "../spells/subtraction";
+import { subtractionCastFor } from "../spells/subtraction";
 import { symmetryHint, symmetryRungAt } from "../spells/symmetry";
 import { AboutPanel, type DebugControls } from "../ui/AboutPanel";
 import { ActionWheel } from "../ui/ActionWheel";
@@ -3631,14 +3631,15 @@ export class GameScene extends Phaser.Scene {
 
     this.joystick?.release();
     const rung = this.additionRung;
+    const cast = subtractionCastFor(this.spellRng, rung);
     this.askSum(
-      makeSubtractionProblem(this.spellRng, rung),
-      rung.given,
+      cast.problem,
+      cast.given,
       (result) => {
         if (result.solved) this.takeFloorUp([cell]);
         this.noteCast(result);
       },
-      null,
+      cast.bare,
       rung,
     );
     return true;
@@ -4575,13 +4576,13 @@ export class GameScene extends Phaser.Scene {
     }
     const rung = this.additionRung;
     // The clearing spell keeps its number line at every rung. It shares this
-    // ladder — the same instrument walked the other way — but taking the
-    // line off a subtraction is a separate decision about a separate spell,
-    // and nobody has asked for it.
+    // ladder — the same instrument walked the other way — and it now takes
+    // the line off with it: `subtractionCastFor` reads the same `bare` the
+    // addition one does. That used to say "nobody has asked for it".
     const cast: AdditionCast =
       action === PatchAction.Grow
         ? additionCastFor(this.spellRng, rung)
-        : { problem: makeSubtractionProblem(this.spellRng, rung), given: rung.given, bare: null };
+        : subtractionCastFor(this.spellRng, rung);
     this.askSum(
       cast.problem,
       cast.given,
@@ -5534,14 +5535,15 @@ export class GameScene extends Phaser.Scene {
     const { col, row } = target.tile;
     this.joystick?.release();
     const rung = this.additionRung;
+    const cast = subtractionCastFor(this.spellRng, rung);
     this.askSum(
-      makeSubtractionProblem(this.spellRng, rung),
-      rung.given,
+      cast.problem,
+      cast.given,
       (result) => {
         if (result.solved) this.clearAt(col, row);
         this.noteCast(result);
       },
-      null,
+      cast.bare,
       rung,
     );
   }
@@ -5569,14 +5571,15 @@ export class GameScene extends Phaser.Scene {
     }
     this.joystick?.release();
     const rung = this.additionRung;
+    const cast = subtractionCastFor(this.spellRng, rung);
     this.askSum(
-      makeSubtractionProblem(this.spellRng, rung),
-      rung.given,
+      cast.problem,
+      cast.given,
       (result) => {
         if (result.solved) this.takeMachineBack(fixture, at.col, at.row);
         this.noteCast(result);
       },
-      null,
+      cast.bare,
       rung,
     );
     return true;
@@ -8054,13 +8057,8 @@ export class GameScene extends Phaser.Scene {
       // heap: take out what does not belong. The same parchment the rune
       // opens on a tree, because it is the same sum.
       const rung = this.additionRung;
-      this.askSum(
-        makeSubtractionProblem(this.spellRng, rung),
-        rung.given,
-        wokenBySpell,
-        null,
-        rung,
-      );
+      const cast = subtractionCastFor(this.spellRng, rung);
+      this.askSum(cast.problem, cast.given, wokenBySpell, cast.bare, rung);
       return;
     }
     if (spell === Spell.Array) {
@@ -12330,7 +12328,14 @@ export class GameScene extends Phaser.Scene {
           // scenario can tell the two forms apart — which it otherwise
           // could not: a bare cast runs on a one-jump line, and a one-jump
           // line is also what the gentlest rung in the game sets.
-          bare: this.spellPopup?.bareSum ?? null,
+          bare: (() => {
+            const sum = this.spellPopup?.bareSum;
+            // Spread with the flag made explicit rather than optional: a
+            // scenario asking "is this written as a take-away" wants false
+            // and not undefined, and the difference is one that reads as a
+            // missing seam rather than as an answer.
+            return sum ? { ...sum, takingAway: sum.takingAway === true } : null;
+          })(),
         };
       },
       spellHint: () => this.spellPopup?.hintText ?? "",

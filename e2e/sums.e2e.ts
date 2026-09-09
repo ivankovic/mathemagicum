@@ -37,7 +37,13 @@ interface Line {
   stops: number[];
   index: number;
   /** Set only at the rungs that ask a sum with no number line under it. */
-  bare: { start: number; addend: number; total: number; unknown: string } | null;
+  bare: {
+    start: number;
+    addend: number;
+    total: number;
+    unknown: string;
+    takingAway: boolean;
+  } | null;
 }
 
 /**
@@ -242,6 +248,59 @@ describe("a sum written down, in the middle of the ladder", () => {
         // Asked of the sum rather than of the table, so a generator that
         // ignored the rung would be caught here.
         expect((bare.start % 10) + (bare.addend % 10)).toBeLessThan(10);
+
+        await game.solveNumberLine();
+        expect(await game.seam<Line | null>("spell")).toBeNull();
+      });
+    },
+    5 * MINUTES,
+  );
+});
+
+/**
+ * And the same, taking away.
+ *
+ * `Rung.bare` was addition's alone, and said so: the two spells share this
+ * ladder — one instrument walked two ways — but taking the line off a
+ * subtraction was "a separate decision about a separate spell, and nobody
+ * has asked for it". This is that decision made, driven through the game
+ * rather than asserted off a table, because what it changes is which
+ * parchment the clearing rune opens.
+ */
+describe("a take-away written down", () => {
+  const WRITTEN = RUNGS.findIndex((rung) => rung.bare !== undefined && rung.places <= 3);
+
+  test(
+    "asks one box, with a minus in it, and closes on the answer",
+    async () => {
+      await play({ seams: `&learned=all&hour=12&crops=5&rung=${WRITTEN}` }, async (game) => {
+        // Something to clear, first: the rune is refused on bare ground,
+        // and a refusal looks exactly like a parchment that failed to open.
+        await game.tap("seeds");
+        await game.tap(seedButton(PlantType.Carrot));
+        await game.tapNear(0, 1);
+        await game.settle(500);
+
+        // Clearing it: the ordinary way the rune is cast, at a rung that
+        // now writes the sum instead of drawing it.
+        await game.tap("spellbook");
+        await game.tap(runeButton(Spell.Clearing));
+        await game.tapNear(0, 1);
+        await game.settle(700);
+
+        const line = await game.seam<Line | null>("spell");
+        if (!line) throw new Error("the clearing rune opened nothing");
+        const bare = line.bare;
+        if (!bare) throw new Error("a written rung drew a line for the clearing spell");
+
+        // Written as a take-away, which is the whole of what changed.
+        expect(bare.takingAway).toBe(true);
+        // The same triple either way round, and never below nothing.
+        expect(bare.total - bare.addend).toBe(bare.start);
+        expect(bare.start).toBeGreaterThanOrEqual(0);
+        expect(UNKNOWNS as readonly string[]).toContain(bare.unknown);
+        // One box, whichever term it is.
+        expect(line.stops).toHaveLength(1);
 
         await game.solveNumberLine();
         expect(await game.seam<Line | null>("spell")).toBeNull();

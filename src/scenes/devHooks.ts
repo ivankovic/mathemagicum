@@ -663,6 +663,8 @@ export interface DevHandle {
       readonly addend: number;
       readonly total: number;
       readonly unknown: string;
+      /** Whether the parchment writes it as a subtraction. */
+      readonly takingAway: boolean;
     } | null;
   } | null;
   /**

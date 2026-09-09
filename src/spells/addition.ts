@@ -221,6 +221,22 @@ export interface BareSum {
   readonly addend: number;
   readonly total: number;
   readonly unknown: Unknown;
+  /**
+   * Whether it is written as a subtraction rather than an addition.
+   *
+   * **The same three numbers either way**, which is the whole reason this
+   * is a flag and not a second type: `start + addend = total` and
+   * `total − addend = start` are one fact written from opposite ends, and
+   * this ladder has always been "the same instrument walked two ways". So a
+   * minus sum needs no new generator, no new answer rule and no new cast —
+   * only a different sentence and a different slot for the box.
+   *
+   * Which term is hidden keeps its name from the addition reading, because
+   * that is where the invariant lives. In minus form `Total` is the number
+   * being taken *from*, `Addend` is what is taken away, and `Start` is what
+   * is left — see `bareSumText`, which is the only place that has to know.
+   */
+  readonly takingAway?: boolean;
 }
 
 /** The number the child has to type. */
@@ -244,6 +260,10 @@ export function bareSumText(sum: BareSum, filled: string): string {
   const start = sum.unknown === Unknown.Start ? filled : String(sum.start);
   const addend = sum.unknown === Unknown.Addend ? filled : String(sum.addend);
   const total = sum.unknown === Unknown.Total ? filled : String(sum.total);
+  // Read from the other end, with the minus sign the game already uses for
+  // the clearing spell. The bigger number leads, which is the only way a
+  // subtraction can be written and the reason `total` moves to the front.
+  if (sum.takingAway) return `${total} − ${addend} = ${start}`;
   return `${start} + ${addend} = ${total}`;
 }
 

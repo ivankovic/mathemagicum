@@ -1,9 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Marko Ivankovic
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { Rng } from "../world/rng";
-import type { NumberLine } from "./addition";
-import { HARDEST_RUNG, type Rung, rungAt } from "./difficulty";
+import { type Rng, randInt } from "../world/rng";
+import {
+  type AdditionCast,
+  type BareSum,
+  type NumberLine,
+  UNKNOWNS,
+  Unknown,
+  bareLine,
+} from "./addition";
+import { BareForm, HARDEST_RUNG, type Rung, rungAt } from "./difficulty";
 import {
   type PlaceRule,
   ceilingFor,
@@ -163,4 +170,53 @@ export function subtractionFor(
     stops.push(at);
   }
   return { start, taken, jumps, stops };
+}
+
+/**
+ * One cast of the clearing spell, whichever form the rung asks for.
+ *
+ * The mirror of `additionCastFor`, and it exists for the reason that one
+ * does: there are two forms of the problem now and the choice belongs in
+ * one place rather than at each of the five sites that clear something.
+ *
+ * **`Rung.bare` used to be addition's alone**, and its own doc said why:
+ * the two spells share this ladder — the same instrument walked two ways —
+ * but taking the line off a subtraction was a separate decision nobody had
+ * asked for. Somebody asked. Nothing about the ladder changes to allow it,
+ * because the numbers were never the question: what a bare rung says is
+ * *write it down instead of walking it*, and that sentence is as true of
+ * taking away as of adding.
+ */
+export function subtractionCastFor(rng: Rng, rung: Rung): AdditionCast {
+  if (rung.bare === undefined) {
+    return { problem: makeSubtractionProblem(rng, rung), given: rung.given, bare: null };
+  }
+  const sum = makeBareSubtraction(rng, rung);
+  return { problem: bareLine(sum), given: 0, bare: sum };
+}
+
+/**
+ * A subtraction with the line taken off, out of the numbers this rung makes.
+ *
+ * Built from a real subtraction problem rather than by flipping an addition
+ * one, so that what a child is shown here is drawn from the same table as
+ * what she would have walked — a bare rung that invented its own numbers
+ * would be a different ladder wearing this one's name.
+ *
+ * The triple is the problem read as an addition, because that is the form
+ * `BareSum` keeps its invariant in: what is left, plus what was taken, is
+ * what she started with. `takingAway` is what turns it back round on the
+ * parchment.
+ */
+export function makeBareSubtraction(rng: Rng, rung: Rung): BareSum {
+  const problem = makeSubtractionProblem(rng, rung);
+  const end = problem.stops[problem.stops.length - 1] ?? problem.start - problem.taken;
+  const unknown =
+    rung.bare === BareForm.Any
+      ? (UNKNOWNS[randInt(rng, 0, UNKNOWNS.length - 1)] as Unknown)
+      : // `Total` in the addition reading is the number being taken *from*,
+        // which is not the answer anybody means by "what is the result". The
+        // result of a subtraction is what is left — `Start`.
+        Unknown.Start;
+  return { start: end, addend: problem.taken, total: problem.start, unknown, takingAway: true };
 }

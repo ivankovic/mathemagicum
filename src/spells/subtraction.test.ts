@@ -3,13 +3,25 @@
 
 import { describe, expect, test } from "bun:test";
 import { createRng } from "../world/rng";
-import { beginCast, movedBy, runsDown, submit, typeDigit } from "./addition";
-import { RUNGS, rungAt } from "./difficulty";
+import {
+  UNKNOWNS,
+  Unknown,
+  bareAnswer,
+  bareSumText,
+  beginCast,
+  movedBy,
+  runsDown,
+  submit,
+  typeDigit,
+} from "./addition";
+import { BareForm, RUNGS, rungAt } from "./difficulty";
 import {
   type SubtractionProblem,
+  makeBareSubtraction,
   makeSubtractionProblem,
   nthStartForTest,
   pairCountFor,
+  subtractionCastFor,
   subtractionFor,
 } from "./subtraction";
 
@@ -225,4 +237,97 @@ describe("counting the pairs without listing them", () => {
       });
     }
   }
+});
+
+describe("a subtraction written down", () => {
+  /** The lowest rung that asks for the written form. */
+  const WRITTEN = RUNGS.findIndex((rung) => rung.bare !== undefined);
+
+  test("is the same three numbers, read from the other end", () => {
+    // The invariant the whole flag rests on. `BareSum` keeps its triple in
+    // the addition reading — what is left, plus what was taken, is what she
+    // started with — and `takingAway` only changes the sentence.
+    for (let seed = 0; seed < 200; seed++) {
+      const sum = makeBareSubtraction(createRng(seed), rungAt(WRITTEN));
+      expect(sum.start + sum.addend).toBe(sum.total);
+      expect(sum.total - sum.addend).toBe(sum.start);
+      expect(sum.takingAway).toBe(true);
+      // Nothing goes below nothing: this game has no negative numbers, and
+      // a bare subtraction is the easiest place to introduce one by
+      // accident.
+      expect(sum.start).toBeGreaterThanOrEqual(0);
+      expect(sum.addend).toBeGreaterThan(0);
+    }
+  });
+
+  test("is written with the bigger number in front", () => {
+    const sum = makeBareSubtraction(createRng(4), rungAt(WRITTEN));
+    const text = bareSumText({ ...sum, unknown: Unknown.Start }, "?");
+    expect(text).toBe(`${sum.total} − ${sum.addend} = ?`);
+    // The minus sign the game already uses, not a hyphen typed by hand.
+    expect(text).toContain("−");
+    expect(text).not.toContain("+");
+  });
+
+  test("puts the box wherever the hidden term is", () => {
+    const sum = { start: 34, addend: 25, total: 59, unknown: Unknown.Start, takingAway: true };
+    // What is left.
+    expect(bareSumText(sum, "?")).toBe("59 − 25 = ?");
+    // What was taken away.
+    expect(bareSumText({ ...sum, unknown: Unknown.Addend }, "?")).toBe("59 − ? = 34");
+    // What she started with, which is the undoing kind: the only way to it
+    // is to add the other two back together.
+    expect(bareSumText({ ...sum, unknown: Unknown.Total }, "?")).toBe("? − 25 = 34");
+  });
+
+  test("and the same triple written as an addition is the same fact", () => {
+    // Stated because it is the argument for there being one type rather
+    // than two: the plus and minus renderings of one triple are the same
+    // sum, and `bareAnswer` does not need to know which is on screen.
+    const sum = { start: 34, addend: 25, total: 59, unknown: Unknown.Total, takingAway: true };
+    expect(bareSumText({ ...sum, takingAway: false }, "?")).toBe("34 + 25 = ?");
+    expect(bareAnswer(sum)).toBe(bareAnswer({ ...sum, takingAway: false }));
+  });
+
+  test("asks for what is left, when the rung does not vary the box", () => {
+    // `Total` in the addition reading is the number being taken *from*,
+    // which is nobody's idea of "the result" of a subtraction. On a rung
+    // that hides one fixed term it has to be the remainder.
+    const fixed = RUNGS.findIndex((rung) => rung.bare === BareForm.Total);
+    if (fixed < 0) return;
+    for (let seed = 0; seed < 50; seed++) {
+      expect(makeBareSubtraction(createRng(seed), rungAt(fixed)).unknown).toBe(Unknown.Start);
+    }
+  });
+
+  test("and every term gets hidden where the rung varies it", () => {
+    const seen = new Set(
+      Array.from(
+        { length: 200 },
+        (_, seed) => makeBareSubtraction(createRng(seed), rungAt(WRITTEN)).unknown,
+      ),
+    );
+    expect(seen.size).toBe(UNKNOWNS.length);
+  });
+});
+
+describe("one cast of the clearing spell", () => {
+  test("walks a line where the rung draws one", () => {
+    const line = RUNGS.findIndex((rung) => rung.bare === undefined && !rung.counted);
+    const cast = subtractionCastFor(createRng(1), rungAt(line));
+    expect(cast.bare).toBe(null);
+    expect(cast.problem.jumps.length).toBeGreaterThan(0);
+  });
+
+  test("and writes it down where the rung says so, in one box", () => {
+    const written = RUNGS.findIndex((rung) => rung.bare !== undefined);
+    const cast = subtractionCastFor(createRng(1), rungAt(written));
+    if (!cast.bare) throw new Error("a bare rung drew a line");
+    expect(cast.bare.takingAway).toBe(true);
+    // One box, and nothing arrives done: a written sum has no journey to
+    // have been part-way along.
+    expect(cast.problem.stops).toHaveLength(1);
+    expect(cast.given).toBe(0);
+    expect(cast.problem.stops[0]).toBe(bareAnswer(cast.bare));
+  });
 });
