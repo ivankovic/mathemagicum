@@ -2,7 +2,28 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type Phaser from "phaser";
-import { ACTIVE_HEX, INK_HEX } from "./parchment";
+
+/**
+ * What the guide is drawn in, and why it is not the game's gold.
+ *
+ * Everything the parchments mark in play — the box waiting for an answer,
+ * the page you are on, the clock's sweep — is `ACTIVE_HEX`, a warm gold
+ * that sits on paper. These marks are not on paper. They are laid over
+ * grass, turned earth, a wooden shop counter and a stone street, and a
+ * playtest on a tablet said what that means: gold on gold is a ring nobody
+ * can find, and the whole job of this ring is being findable by somebody
+ * who does not yet know what she is looking for.
+ *
+ * Cyan is the one hue the world does not already own. There is no cyan
+ * ground, no cyan building and no cyan crop, so it can never be mistaken
+ * for a thing in the garden — and against every one of those browns and
+ * greens it is the furthest apart a colour can be. The pale companion is
+ * what makes it *glow* rather than merely differ: a light core inside a
+ * saturated edge reads as lit from within, which is what a magic thing
+ * pointing somewhere should look like.
+ */
+const GUIDE_HEX = 0x18c8e0;
+const GUIDE_GLOW_HEX = 0xb4f4ff;
 
 /**
  * The guide's two marks: a glow round a button, and an arrow over a thing.
@@ -65,14 +86,17 @@ export class GuideMarks {
   ) {
     this.ring = scene.add
       .circle(0, 0, 10)
-      .setStrokeStyle(RING_STROKE, ACTIVE_HEX, 1)
+      .setStrokeStyle(RING_STROKE, GUIDE_HEX, 1)
       .setScrollFactor(0)
       .setDepth(depth)
       .setVisible(false);
     this.arrow = scene.add.graphics().setScrollFactor(0).setDepth(depth).setVisible(false);
     // Drawn once, pointing down; turned and moved from then on.
-    this.arrow.fillStyle(ACTIVE_HEX, 1);
-    this.arrow.lineStyle(2, INK_HEX, 0.9);
+    this.arrow.fillStyle(GUIDE_HEX, 1);
+    // Outlined in its own pale glow rather than in ink. An ink line round a
+    // cyan arrow is a cyan arrow with a dark edge, which reads as a hole;
+    // the light edge is what makes it read as lit.
+    this.arrow.lineStyle(2, GUIDE_GLOW_HEX, 0.9);
     this.arrow.beginPath();
     this.arrow.moveTo(-ARROW * 0.6, -ARROW);
     this.arrow.lineTo(ARROW * 0.6, -ARROW);
@@ -117,8 +141,8 @@ export class GuideMarks {
   pointAlong(trail: readonly ScreenPoint[], end: ScreenPoint): void {
     this.trailLength = trail.length;
     this.dots.clear();
-    this.dots.fillStyle(ACTIVE_HEX, 0.9);
-    this.dots.lineStyle(1, INK_HEX, 0.6);
+    this.dots.fillStyle(GUIDE_HEX, 0.9);
+    this.dots.lineStyle(1, GUIDE_GLOW_HEX, 0.6);
     for (const at of trail) {
       this.dots.fillCircle(at.x, at.y - DOT_LIFT, DOT);
       this.dots.strokeCircle(at.x, at.y - DOT_LIFT, DOT);

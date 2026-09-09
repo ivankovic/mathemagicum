@@ -210,6 +210,21 @@ function item(item: ItemType | Buyable): Noun {
   );
 }
 
+/**
+ * **German capitalises where the other two do not, and that is not a
+ * house-style slip.**
+ *
+ * Every label in this game is lowercase on purpose: the audience is five,
+ * and a lowercase `a` is the letter she has been taught. English and
+ * Croatian can carry that — a button reading "back" is informal there.
+ * German cannot. A word standing alone at the start of its own line is a
+ * sentence start, and one written small reads as a typo rather than as a
+ * choice; a playtest reported it as a bug, which is exactly what it looks
+ * like to somebody who reads German.
+ *
+ * So the buttons here are capitalised and the ones in `en.ts` and `hr.ts`
+ * are not, and neither file is wrong.
+ */
 export const DE: Phrases = {
   plant: (plant) => PLANTS[plant] ?? item(plant),
   fixture: (fixture) => FIXTURES[fixture] ?? item(fixture),
@@ -296,9 +311,9 @@ export const DE: Phrases = {
   debugBasket: "Korb füllen",
   debugLearn: "Alles lernen, überall hinkommen",
   debugGuides: "Die Einführung nochmal zeigen",
-  debugOn: "an",
-  debugOff: "aus",
-  debugDone: "fertig",
+  debugOn: "An",
+  debugOff: "Aus",
+  debugDone: "Fertig",
 
   shareLessonTitle: "Aufteilen",
   shareRune: `Der Strich mit den zwei Punkten in deinem Zauberbuch erntet ein ganzes Beet auf einmal — und fragt, wie sich der Fang aufteilt. ${NAMED_PEOPLE.fisher} macht das jeden Morgen.`,
@@ -502,12 +517,12 @@ export const DE: Phrases = {
   sheCountsOut: "sie zählt ab:",
   countHerCoins: "Zähl ihre Münzen. Stimmt das Geld?",
   countHerPiles: "Rechne ihre Stapel aus. Stimmt das Geld?",
-  back: "zurück",
-  pay: "zahlen",
-  done: "fertig",
-  clear: "leeren",
-  thatsRight: "stimmt",
-  thatsWrong: "stimmt nicht",
+  back: "Zurück",
+  pay: "Zahlen",
+  done: "Fertig",
+  clear: "Leeren",
+  thatsRight: "Stimmt",
+  thatsWrong: "Stimmt nicht",
 
   verdictExact: (owed) => `Richtig — genau ${owed}.`,
   verdictSpotted: (paid, owed, short) =>
@@ -536,9 +551,9 @@ export const DE: Phrases = {
     `Im letzten Kästchen steht die Lösung: ${answer}. Weil du klein anfängst, ändert sich jedes Mal nur ein Teil der Zahl — nichts zu übertragen, nichts im Kopf zu behalten.`,
   lessonUndo: (total, addend, start) =>
     `Manchmal fehlt die Zahl ganz vorne: ? + ${addend} = ${total}. Dann springst du dieselben Sprünge rückwärts von ${total} statt vorwärts und landest da, wo es angefangen haben muss: ${start}.`,
-  lessonNext: "weiter",
-  lessonBack: "zurück",
-  lessonDone: "ab in den Garten",
+  lessonNext: "Weiter",
+  lessonBack: "Zurück",
+  lessonDone: "Ab in den Garten",
   lessonExample: (start, addend) => `${start} + ${addend}`,
 
   place: (index) => PLACES[index] ?? "",

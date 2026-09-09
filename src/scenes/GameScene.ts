@@ -256,6 +256,7 @@ import {
   inTheWayOf,
   itemParts,
   pieceArt,
+  pieceBlocks,
   protectedCells,
   roomsAfforded,
   sizeOf,
@@ -6557,9 +6558,37 @@ export class GameScene extends Phaser.Scene {
         return point(own ?? this.nearest(growing));
       }
       case "door": {
+        // Indoors, a door somewhere in the village is not a place an arrow
+        // can point. The tiles under her feet belong to the room's own
+        // grid, so a world coordinate read through it lands wherever the
+        // arithmetic happens to put it — a playtest standing in the shop
+        // was sent towards the tower "somewhere in infinite distance",
+        // which is precisely what a village coordinate looks like when it
+        // is measured from the corner of a shop floor.
+        //
+        // What she actually has to do first is leave, so that is what it
+        // says. The room knows its own way out.
+        const room = this.interior;
+        if (room) {
+          return room.room === cue.building ? false : this.pointTheWay(marks, room.exit);
+        }
         const building = this.buildings.find((one) => one.id === cue.building);
         if (!building) return false;
-        return this.pointTheWay(marks, { col: building.doorCol, row: building.doorRow });
+        // The doorstep, not the door itself. The door cell is *in the wall*
+        // — it is part of the footprint the building blocks — so nothing
+        // can walk to it, `wayTo` finds no path, and the arrow quietly
+        // falls back to the bearing it keeps for that case. A bearing is a
+        // line, and a line laid over a village reads as pointing a tile or
+        // two off the thing it means, which is what a playtest saw.
+        //
+        // The square below the door is where the game already sends anybody
+        // going in — it is the `returnTo` every interior remembers — so
+        // pointing there both finds a path and names the tile she has to
+        // stand on.
+        return this.pointTheWay(marks, {
+          col: building.doorCol,
+          row: building.doorRow + 1,
+        });
       }
       case "attendant":
         return point(this.attendantCell);
@@ -9570,7 +9599,20 @@ export class GameScene extends Phaser.Scene {
       this.markTooFar(animal.col, animal.row);
       return;
     }
-    if (animal.mood !== AnimalMood.Asking) {
+    const wants = animal.craves;
+    // Just fed, and still pleased about it. Feeding it again inside the same
+    // smile would spend a second crop for no second smile.
+    if (animal.mood === AnimalMood.Glad) {
+      this.showThought(animal);
+      return;
+    }
+    if (this.inventory.count(wants) <= 0) {
+      if (animal.mood === AnimalMood.Asking) {
+        // What she has none of, over her head. The bubble over the animal is
+        // already saying which crop; this says the basket is empty of it.
+        this.showRefusalOnPlayer(cropIcon(wants));
+        return;
+      }
       // What it likes, for a beat. Silence on a tap reads as the game having
       // missed the tap, and an empty cloud — which is what stood here — read
       // as an animal that has nothing to do with anything. The crop says
@@ -9579,13 +9621,21 @@ export class GameScene extends Phaser.Scene {
       this.puffThought(animal);
       return;
     }
-    const wants = animal.craves;
-    if (this.inventory.count(wants) <= 0) {
-      // What she has none of, over her head. The bubble over the animal is
-      // already saying which crop; this says the basket is empty of it.
-      this.showRefusalOnPlayer(cropIcon(wants));
-      return;
-    }
+    // Holding what it craves is enough, and it did not use to be.
+    //
+    // **A creature offered the one thing it likes does not refuse it**, and
+    // the rule that it could was invisible: five of a village's seven
+    // animals are quiet at any moment, and a quiet one tapped drew a cloud
+    // with the crop in it. That cloud and the asking cloud differ by a
+    // question mark — see `thoughtFor` — so a child holding a sunflower saw
+    // a sunflower over the rabbit, tapped, and nothing happened. Reported
+    // from a playtest as simply not being able to give it the flower, which
+    // is exactly what it was.
+    //
+    // The asking cycle still decides when an animal *asks*. What it no
+    // longer decides is whether food she is already carrying is any good,
+    // which is a rule about the animal's mood standing in front of a
+    // child's own generosity.
     this.inventory.remove(wants, 1);
     animal.fedAt = this.time.now;
     animal.mood = AnimalMood.Glad;
@@ -10577,7 +10627,24 @@ export class GameScene extends Phaser.Scene {
       const art = parts.furniture.find((piece) => piece.name === pieceArt(placed.piece));
       const x = offsetX + at.x;
       const y = offsetY + at.y - parts.piece_rise_px;
-      const depth = depthFor((placed.row - inside.origin.row + size.rows) * TILE_SIZE);
+      // A thing that can be walked on sorts on the row it *lies* on rather
+      // than the row it ends on, which is the whole of "a rug is under
+      // your feet".
+      //
+      // Depth here is the pixel y of a sprite's bottom edge, so a rug and
+      // somebody standing on it had the same number — and a tie is decided
+      // by whatever order the two happened to be added in. A playtest saw
+      // exactly that: walking across a carpet put the child *behind* it,
+      // sometimes.
+      //
+      // Only for pieces that do not block, and that is the line the rule
+      // stops at: a wardrobe is a thing you walk *round*, and one drawn
+      // under the player would be a player standing in front of the wall
+      // she is meant to be hidden by. `pieceBlocks` is the same answer the
+      // room's own collision asks for, so the two cannot disagree.
+      const flat = !pieceBlocks(parts, placed.piece);
+      const bottom = (placed.row - inside.origin.row + size.rows) * TILE_SIZE;
+      const depth = depthFor(flat ? bottom - size.rows * TILE_SIZE : bottom);
       // A piece that moves is drawn as a sprite and played; everything else
       // is one picture. Only the stove moves — a fire that stood still would
       // not read as a fire — and it is drawn *here*, from the arrangement,

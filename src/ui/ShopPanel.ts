@@ -48,6 +48,25 @@ const SOLD: readonly { item: ItemType; icon: string }[] = [
     icon: materialIcon(material),
   })),
 ];
+
+/**
+ * Her side of the counter, in pages.
+ *
+ * **The list outgrew the parchment, the way the shelves did before it.** It
+ * was seven things; the airship's tiers took the materials from two to nine
+ * and a playtest found fifteen rows running off the bottom of a tablet. The
+ * rows already shrink to fit, which is what hid it for a while, and then
+ * they hit `ROW_MIN_H` and simply went over the edge.
+ *
+ * Cut the same size as a shelf and turned by the same tabs, because the
+ * child has already learned that control on the other half of this counter
+ * — a second way of paging, three inches away from the first, would be a
+ * new thing to learn in the middle of a shop.
+ */
+const SELL_PAGES: readonly (readonly { item: ItemType; icon: string }[])[] = Array.from(
+  { length: Math.ceil(SOLD.length / MOST_PER_SHELF) },
+  (_, page) => SOLD.slice(page * MOST_PER_SHELF, (page + 1) * MOST_PER_SHELF),
+);
 import type { Rng } from "../world/rng";
 import {
   type Buyable,
@@ -162,6 +181,9 @@ export class ShopPanel extends Panel {
    */
   private readonly tabs: Button[] = [];
   private shelf = 0;
+  /** Her side's own tabs, and which page of it is out. See `SELL_PAGES`. */
+  private readonly sellTabs: Button[] = [];
+  private sellPage = 0;
   private readonly headings: Phaser.GameObjects.Text[] = [];
 
   // Counter: the quantity picker and the coin pad, shared by both games.
@@ -253,8 +275,24 @@ export class ShopPanel extends Panel {
     // Everything she comes back with, crops and cleared materials alike:
     // both are hers, both are the store's price, and a wood pile she could
     // not sell would be a thing the world gave her for nothing.
-    for (const { item, icon } of SOLD) {
-      this.sellRows.push(this.button(uiTextureKey(icon), () => this.startSell(item)));
+    // One row per *position* rather than one per thing, which is the trick
+    // the buy side already uses: the row is re-pointed at whatever stands
+    // there on the page that is out, so the handler has to ask at the time
+    // of the tap rather than close over an item.
+    for (let at = 0; at < MOST_PER_SHELF; at++) {
+      const placeholder = SOLD[at]?.icon;
+      this.sellRows.push(
+        this.button(placeholder === undefined ? null : uiTextureKey(placeholder), () => {
+          const thing = this.onSellPage()[at];
+          if (thing) this.startSell(thing.item);
+        }),
+      );
+    }
+    for (const [at, page] of SELL_PAGES.entries()) {
+      const first = page[0];
+      this.sellTabs.push(
+        this.button(first ? uiTextureKey(first.icon) : null, () => this.showSellPage(at)),
+      );
     }
     // Everything she sells, a shelf at a time. It was one column, on the
     // argument that a child looking for a chair should not have to know
@@ -483,6 +521,7 @@ export class ShopPanel extends Panel {
   private allButtons(): Button[] {
     return [
       ...this.sellRows,
+      ...this.sellTabs,
       ...this.buyRows,
       this.fewer,
       this.more,
@@ -961,7 +1000,11 @@ export class ShopPanel extends Panel {
     // The taller of the two columns, and her side now carries a row of tabs
     // above its stock — so the budget is the shelf, plus the tabs, against
     // the basket's list.
-    const rows = Math.max(SOLD.length, MOST_PER_SHELF + 1);
+    // Both columns are a page of stock under a row of tabs now, so the
+    // budget is one page and not the whole list. That is the fix: fifteen
+    // rows never fitted, and shrinking them to try was what put the last of
+    // them under the footer.
+    const rows = MOST_PER_SHELF + 1;
     const room = rect.top + rect.height - PAD - SMALL_SIZE - 12 - firstY;
     const rowH = Math.max(ROW_MIN_H, Math.min(ROW_H, Math.floor(room / rows) - ROW_GAP));
     // Two lines of type in a shorter row need shorter type, or the price
@@ -981,20 +1024,58 @@ export class ShopPanel extends Panel {
       .setVisible(true)
       .setPosition(rightX, headingY);
 
-    for (const [index, { item }] of SOLD.entries()) {
-      const row = this.sellRows[index];
-      if (!row) continue;
-      const held = this.inventory.count(item);
+    // Her tabs first, in the same rhythm as his, so the two halves of the
+    // counter are the same shape.
+    const sellTabW = Math.min(
+      TAB_MAX_W,
+      Math.floor((columnW - TAB_GAP * (SELL_PAGES.length - 1)) / Math.max(1, SELL_PAGES.length)),
+    );
+    const sellTabY = firstY + sellTabW / 2 - TAB_GAP;
+    // Only when there is more than one page. A single tab is a control that
+    // cannot do anything, and a shop that grew a widget for no reason.
+    const paged = SELL_PAGES.length > 1;
+    for (const [at, tab] of this.sellTabs.entries()) {
+      if (!paged) {
+        this.hide(tab);
+        continue;
+      }
+      this.placeTab(tab, leftX + sellTabW / 2 + at * (sellTabW + TAB_GAP), sellTabY, sellTabW);
+      tab.box.setStrokeStyle(2, INK_HEX, at === this.sellPage ? 1 : 0.35);
+      tab.icon?.setAlpha(at === this.sellPage ? 1 : 0.4);
+      this.show(tab);
+    }
+
+    const sellTop = paged ? sellTabY + sellTabW / 2 + TAB_GAP * 2 : firstY;
+    const selling = this.onSellPage();
+    for (const [index, row] of this.sellRows.entries()) {
+      const thing = selling[index];
+      // A short page leaves rows over, and they are hidden rather than
+      // drawn empty — the buy side's rule, for the buy side's reason: an
+      // outlined box with nothing in it reads as a thing that failed to
+      // load.
+      if (!thing) {
+        this.hide(row);
+        continue;
+      }
+      const held = this.inventory.count(thing.item);
+      // The picture before the placing, because `place` scales the icon to
+      // the row out of the texture's own size — the same ordering the buy
+      // rows depend on.
+      row.icon?.setTexture(uiTextureKey(thing.icon));
       this.place(
         row,
         leftX + columnW / 2,
-        firstY + (rowH + ROW_GAP) * index + rowH / 2,
+        sellTop + (rowH + ROW_GAP) * index + rowH / 2,
         columnW,
         rowH,
       );
       row.label.setFontSize(rowSize);
       row.label.setText(
-        this.words.cropRow(item, held, CURRENCY.format(sellPriceOf(item, this.cropPrice))),
+        this.words.cropRow(
+          thing.item,
+          held,
+          CURRENCY.format(sellPriceOf(thing.item, this.cropPrice)),
+        ),
       );
       row.label.setColor(held > 0 ? INK : INK_DIM);
       row.icon?.setAlpha(held > 0 ? 1 : 0.35);
@@ -1365,6 +1446,17 @@ export class ShopPanel extends Panel {
    * the counter on the left. A shelf is where a thing is kept, not a mode
    * the shop is in — which is why this does not leave the menu.
    */
+  /** What stands on her side right now. The mirror of `onShelf`. */
+  private onSellPage(): readonly { item: ItemType; icon: string }[] {
+    return SELL_PAGES[this.sellPage] ?? [];
+  }
+
+  private showSellPage(at: number): void {
+    if (at === this.sellPage || !SELL_PAGES[at]) return;
+    this.sellPage = at;
+    this.render();
+  }
+
   private showShelf(at: number): void {
     if (at === this.shelf || !SHELVES[at]) return;
     this.shelf = at;

@@ -157,13 +157,21 @@ describe("the animals of the village", () => {
    * the only way to a quiet animal that a script can rely on: their clocks
    * are their own, but a fed one is quiet for ten minutes on the dot.
    *
-   * And the basket is untouched, which is the other half of it. Saying what
-   * an animal likes must not become a way of feeding one that is not asking
-   * — otherwise a child clears the village in one lap and there is nothing
-   * left in it.
+   * **The basket used to be untouched here, and now it is not.** The rule
+   * was that only an asking animal could be fed, so that saying what one
+   * likes could not become a way of feeding it. A playtest walked into what
+   * that costs: five of a village's seven animals are quiet at any moment,
+   * a quiet one draws the crop it likes, and the crop it likes differs from
+   * the crop it is *asking for* by a question mark. A child stood in front
+   * of a rabbit holding a sunflower, saw a sunflower over its head, tapped,
+   * and nothing happened.
+   *
+   * So a held crop is enough now. What survives of the old rule is the half
+   * that was always right and is checked below: an animal she has nothing
+   * for still says what it likes rather than nothing, and spends nothing.
    */
   test(
-    "and one that is not asking says what it likes, rather than nothing",
+    "and one that is not asking takes what it likes, or says what it likes",
     async () => {
       await play({ seams: FROZEN }, async (game) => {
         const beast = await beside(game);
@@ -179,8 +187,32 @@ describe("the animals of the village", () => {
           thinking: [],
         });
 
-        // Tapped again: the crop it likes, on its own. The question mark is
-        // the ask, and it is not asking.
+        // Tapped again while she still has one: it takes it. This is the
+        // report — a creature offered the thing it likes does not refuse.
+        expect(full).toBeGreaterThan(0);
+        await game.tapCell(beast.col, beast.row);
+        await game.settle(400);
+        const taken = (await game.seam<Beast[]>("animals")).find((one) => one.id === beast.id);
+        expect({ mood: taken?.mood, held: await game.held(beast.craves) }).toEqual({
+          mood: "glad",
+          held: full - 1,
+        });
+
+        // And with an empty basket it goes back to simply saying what it
+        // likes, which is the half of the old rule worth keeping: a cloud
+        // with the crop in it, the question mark absent because it is not
+        // asking, and nothing spent.
+        //
+        // Emptied by feeding rather than by a seam, so what is being tested
+        // is the same path a child walks.
+        for (let left = await game.held(beast.craves); left > 0; left--) {
+          await game.settle(ANIMAL_GLAD_MS + 800);
+          await game.tapCell(beast.col, beast.row);
+          await game.settle(400);
+        }
+        expect(await game.held(beast.craves)).toBe(0);
+
+        await game.settle(ANIMAL_GLAD_MS + 800);
         // Read straight after the tap. The cloud is a beat rather than a
         // mood — it fades and puts `thinking` back to what the animal is
         // actually thinking, which is nothing — and a tap already carries
@@ -191,7 +223,7 @@ describe("the animals of the village", () => {
           thinking: tapped?.thinking,
           mood: tapped?.mood,
           held: await game.held(beast.craves),
-        }).toEqual({ thinking: ["food"], mood: "quiet", held: full });
+        }).toEqual({ thinking: ["food"], mood: "quiet", held: 0 });
       });
     },
     5 * MINUTES,
