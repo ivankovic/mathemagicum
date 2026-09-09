@@ -16,6 +16,7 @@ import {
   pairTable,
   widthOf,
 } from "./numberLine";
+import { type PlaceRound, asksPlace, placeLine, placeRound } from "./place";
 
 /**
  * The addition spell: column addition, worked on a number line.
@@ -358,9 +359,31 @@ export interface AdditionCast {
   readonly given: number;
   /** Set when this rung asks for a bare sum; null when it asks for a line. */
   readonly bare: BareSum | null;
+  /**
+   * Set when this cast asks what a digit is worth instead of a sum.
+   *
+   * A third form, and the first that is not arithmetic at all — see
+   * `place.ts`. It runs on the same one-box line a bare sum does, so
+   * everything between here and the keypad is unchanged; what differs is
+   * what the parchment draws and how wide the box is.
+   */
+  readonly place?: PlaceRound | null;
 }
 
-export function additionCastFor(rng: Rng, rung: Rung): AdditionCast {
+export function additionCastFor(rng: Rng, rung: Rung, at?: number, always = false): AdditionCast {
+  // What a digit is worth, sometimes, where the rung is high enough to have
+  // digits worth asking about.
+  //
+  // **A share of casts rather than a rung of its own**, which is the shape
+  // the ladder asked for: it is not harder than the sum beside it, it is a
+  // different question about the same number, and a rung that only ever
+  // asked it would be a rung where the addition stopped. One cast in three
+  // — often enough to be a part of playing, seldom enough that the spell is
+  // still the spell.
+  if (at !== undefined && asksPlace(rung, at) && (always || randInt(rng, 0, 2) === 0)) {
+    const round = placeRound(rng, rung);
+    return { problem: placeLine(round), given: 0, bare: null, place: round };
+  }
   if (rung.bare === undefined) {
     return { problem: makeAdditionProblem(rng, rung), given: rung.given, bare: null };
   }

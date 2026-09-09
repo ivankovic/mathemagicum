@@ -104,9 +104,24 @@ export function placeLine(round: PlaceRound): NumberLine {
  */
 export const PLACE_FROM = 7;
 
-/** Whether this rung asks it at all. */
+/**
+ * Whether this rung asks it at all.
+ *
+ * **Never on a rung that already has a form of its own.** A rung is a
+ * number line unless it says otherwise, and the ones that say otherwise —
+ * the counted ones at the bottom, the written ones where a sum does not
+ * carry, and the pair at the very top where the scaffold comes off — each
+ * say it for a reason that took a paragraph to arrive at. Putting a third
+ * question into those would not be variety, it would be the top of the
+ * ladder sometimes not being the top of the ladder: two scenarios failed
+ * exactly that way, one asking for six jumps and getting one box, the
+ * other asking the hardest rung for a bare sum and being handed a digit.
+ *
+ * So this shares only with the plain line, which is the form that has
+ * nothing riding on being the only thing a rung does.
+ */
 export function asksPlace(rung: Rung, at: number): boolean {
-  return at >= PLACE_FROM && rung.places >= 3;
+  return at >= PLACE_FROM && rung.places >= 3 && rung.bare === undefined && !rung.counted;
 }
 
 /**
@@ -133,4 +148,23 @@ export function placeRound(rng: Rng, rung: Rung): PlaceRound {
     digit,
     zeros: width - 1 - at,
   };
+}
+
+/**
+ * The question as it is written on the parchment.
+ *
+ * `4[3]72 → 300`, and `4[3]72 → ?` while it is being asked. The brackets
+ * are the lit digit and the arrow is "is worth".
+ *
+ * **No words, in any language.** A digit's value is the same sentence
+ * everywhere, which is the reason `bareSumText` is shared too — and the
+ * reason this is a shape rather than a phrase in `phrases.ts`. The brackets
+ * are also a floor rather than the whole highlight: the parchment draws the
+ * lit digit in its own colour, and this is what survives being read back as
+ * one line of type.
+ */
+export function placeAsk(round: PlaceRound, filled: string): string {
+  const digits = digitsOfNumber(round.number);
+  const written = digits.map((one, at) => (at === round.at ? `[${one}]` : String(one))).join("");
+  return `${written} → ${filled}`;
 }

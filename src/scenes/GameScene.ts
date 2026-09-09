@@ -90,6 +90,7 @@ import {
 } from "../spells/hourglass";
 import { logicHint, logicRungAt } from "../spells/logic";
 import { HARDEST_ARRAY_RUNG, arrayProblemFor, arrayRungAt } from "../spells/multiplication";
+import type { PlaceRound } from "../spells/place";
 import {
   HARDEST_PORTAL_RUNG,
   type PortalJourney,
@@ -3555,7 +3556,7 @@ export class GameScene extends Phaser.Scene {
     // and the player walks off the moment the popup closes.
     this.joystick?.release();
     const rung = this.additionRung;
-    const cast = additionCastFor(this.spellRng, rung);
+    const cast = additionCastFor(this.spellRng, rung, this.additionRungAt, this.dev.alwaysPlace);
     this.askSum(
       cast.problem,
       cast.given,
@@ -3565,6 +3566,7 @@ export class GameScene extends Phaser.Scene {
       },
       cast.bare,
       rung,
+      cast.place ?? null,
     );
   }
 
@@ -3642,6 +3644,7 @@ export class GameScene extends Phaser.Scene {
       },
       cast.bare,
       rung,
+      cast.place ?? null,
     );
     return true;
   }
@@ -4582,7 +4585,7 @@ export class GameScene extends Phaser.Scene {
     // addition one does. That used to say "nobody has asked for it".
     const cast: AdditionCast =
       action === PatchAction.Grow
-        ? additionCastFor(this.spellRng, rung)
+        ? additionCastFor(this.spellRng, rung, this.additionRungAt, this.dev.alwaysPlace)
         : subtractionCastFor(this.spellRng, rung);
     this.askSum(
       cast.problem,
@@ -4593,6 +4596,7 @@ export class GameScene extends Phaser.Scene {
       },
       cast.bare,
       rung,
+      cast.place ?? null,
     );
   }
 
@@ -5546,6 +5550,7 @@ export class GameScene extends Phaser.Scene {
       },
       cast.bare,
       rung,
+      cast.place ?? null,
     );
   }
 
@@ -5582,6 +5587,7 @@ export class GameScene extends Phaser.Scene {
       },
       cast.bare,
       rung,
+      cast.place ?? null,
     );
     return true;
   }
@@ -5683,6 +5689,17 @@ export class GameScene extends Phaser.Scene {
   /** The addition rung the sums come from: the dev seam's while `?rung=` holds one, else the child's. */
   private get additionRung(): Rung {
     return rungAt(this.ladders.held("rung"));
+  }
+
+  /**
+   * Which rung that is, as a number.
+   *
+   * The place-value question is asked by *index* and not by anything on the
+   * rung itself — see `PLACE_FROM` — because what decides it is which bands
+   * can reach the rung, and a band is a pair of indices.
+   */
+  private get additionRungAt(): number {
+    return this.ladders.held("rung");
   }
 
   /**
@@ -6855,12 +6872,13 @@ export class GameScene extends Phaser.Scene {
     onDone: (result: CastResult) => void,
     bare: BareSum | null,
     rung: Rung,
+    place: PlaceRound | null = null,
   ): void {
-    if (rung.counted && bare === null) {
+    if (rung.counted && bare === null && place === null) {
       this.countingPopup.open(problem, this.spellRng, onDone);
       return;
     }
-    this.spellPopup.open(problem, given, onDone, bare);
+    this.spellPopup.open(problem, given, onDone, bare, place);
   }
 
   /**
@@ -8077,8 +8095,8 @@ export class GameScene extends Phaser.Scene {
       // Counting up to a number on a line, which is what the growth spell
       // walks and what a tally does to a heap.
       const rung = this.additionRung;
-      const cast = additionCastFor(this.spellRng, rung);
-      this.askSum(cast.problem, cast.given, wokenBySpell, cast.bare, rung);
+      const cast = additionCastFor(this.spellRng, rung, this.additionRungAt, this.dev.alwaysPlace);
+      this.askSum(cast.problem, cast.given, wokenBySpell, cast.bare, rung, cast.place ?? null);
       return;
     }
     if (spell === Spell.Clearing) {
@@ -8087,7 +8105,7 @@ export class GameScene extends Phaser.Scene {
       // opens on a tree, because it is the same sum.
       const rung = this.additionRung;
       const cast = subtractionCastFor(this.spellRng, rung);
-      this.askSum(cast.problem, cast.given, wokenBySpell, cast.bare, rung);
+      this.askSum(cast.problem, cast.given, wokenBySpell, cast.bare, rung, cast.place ?? null);
       return;
     }
     if (spell === Spell.Array) {
@@ -12395,6 +12413,7 @@ export class GameScene extends Phaser.Scene {
           // scenario can tell the two forms apart — which it otherwise
           // could not: a bare cast runs on a one-jump line, and a one-jump
           // line is also what the gentlest rung in the game sets.
+          place: this.spellPopup?.placeRound ?? null,
           bare: (() => {
             const sum = this.spellPopup?.bareSum;
             // Spread with the flag made explicit rather than optional: a

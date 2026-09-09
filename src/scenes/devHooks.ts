@@ -204,6 +204,14 @@ export interface DevOptions {
   /** `?vennRung=` — which set diagram the funnel puts on the parchment. */
   readonly vennRung: number | null;
   /**
+   * `?place` — ask what a digit is worth on every cast that could.
+   *
+   * It is one cast in three otherwise, which is right for playing and
+   * useless for a scenario: a test that casts until it gets lucky is a test
+   * that fails on a generator change for a reason nobody can read.
+   */
+  readonly alwaysPlace: boolean;
+  /**
    * Spells to count as already taught.
    *
    * `?learned=all`, or a comma-separated list. The portal spell is learned
@@ -388,6 +396,7 @@ export function parseDevOptions(search: string): DevOptions {
     symmetryRung: number("symmetryRung"),
     logicRung: number("logicRung"),
     vennRung: number("vennRung"),
+    alwaysPlace: params.has("place"),
     learned: names(params.get("learned"), ALL_SPELLS),
     flowers: names(params.get("flowers"), FLOWER_TYPES),
     guided: names(params.get("guided"), GUIDES),
@@ -658,6 +667,13 @@ export interface DevHandle {
     addend: number;
     stops: readonly number[];
     index: number;
+    /** Set when the sheet asks what a digit is worth. See `place.ts`. */
+    readonly place: {
+      readonly number: number;
+      readonly at: number;
+      readonly digit: number;
+      readonly zeros: number;
+    } | null;
     readonly bare: {
       readonly start: number;
       readonly addend: number;

@@ -193,3 +193,20 @@ describe("typing a written answer", () => {
     expect(isSolved(submit(state))).toBe(false);
   });
 });
+
+describe("and never where a rung already has a form", () => {
+  test("not on a written rung, and not on a counted one", () => {
+    // A rung is a number line unless it says otherwise, and the ones that
+    // say otherwise each say it for a reason. A third question inside those
+    // is the top of the ladder sometimes not being the top of the ladder.
+    for (const [at, rung] of RUNGS.entries()) {
+      if (rung.bare === undefined && !rung.counted) continue;
+      expect({ at, asks: asksPlace(rung, at) }).toEqual({ at, asks: false });
+    }
+  });
+
+  test("but on plenty of plain ones, so it is really asked", () => {
+    const asked = RUNGS.filter((rung, at) => asksPlace(rung, at));
+    expect(asked.length).toBeGreaterThanOrEqual(4);
+  });
+});

@@ -37,6 +37,7 @@ interface Line {
   stops: number[];
   index: number;
   /** Set only at the rungs that ask a sum with no number line under it. */
+  place: { number: number; at: number; digit: number; zeros: number } | null;
   bare: {
     start: number;
     addend: number;
@@ -77,6 +78,24 @@ async function castGrowth(game: Game): Promise<Line> {
   return line;
 }
 
+/**
+ * A cast that is a number line, however many tries that takes.
+ *
+ * A share of casts at these rungs now ask what a digit is worth instead —
+ * a different question at the same rung. The scenarios below are about the
+ * line, so they dismiss anything else and cast again, which is what a child
+ * does without noticing she is doing it.
+ */
+async function castLine(game: Game): Promise<Line> {
+  for (let go = 0; go < 12; go++) {
+    const line = await castGrowth(game);
+    if (!line.place) return line;
+    await game.press("Escape");
+    await game.settle(400);
+  }
+  throw new Error("twelve casts and never a number line");
+}
+
 describe("six-digit sums", () => {
   /**
    * The whole of the hardest band, cast and finished.
@@ -93,8 +112,13 @@ describe("six-digit sums", () => {
   test(
     "six jumps, all of them answerable",
     async () => {
+      // No `?place`: the point of this rung is the longest line the
+      // parchment ever draws, and a share of casts up here now ask what a
+      // digit is worth instead — a different question at the same rung, and
+      // not the one being tested. Cast until the line comes, which is what
+      // a child does.
       await play({ seams: `&learned=all&hour=12&rung=${LONGEST_LINE_RUNG}` }, async (game) => {
-        const line = await castGrowth(game);
+        const line = await castLine(game);
         const jumps = jumpsOf(line);
         expect(jumps).toHaveLength(6);
         // Six digits on both sides, which is what the band is for.
@@ -307,5 +331,62 @@ describe("a take-away written down", () => {
       });
     },
     5 * MINUTES,
+  );
+});
+
+/**
+ * What a digit is worth, asked on a real parchment.
+ *
+ * One cast in three at the rungs that ask it, so this casts until it gets
+ * one rather than trusting a seed — a fixed seed would be a scenario that
+ * passes until the generator is touched and then fails for a reason nobody
+ * can read.
+ *
+ * What it is really guarding is the *drawing*. This question runs on the
+ * same degenerate one-jump line a bare sum does, whose single jump is the
+ * answer — so a parchment that forgot to put its number line away writes
+ * `+50` in an arc above a box asking what the five in 358 is worth. That
+ * is not a thing a unit test can see, and it is exactly what the first
+ * build did.
+ */
+describe("what a digit is worth", () => {
+  test(
+    "shows the number, lights one digit, and takes its value",
+    async () => {
+      // `?place` pins the question. It is one cast in three when a child
+      // plays, which is right for playing and useless here: a scenario that
+      // casts until it gets lucky fails on a generator change for a reason
+      // nobody can read.
+      await play({ seams: "&learned=all&hour=12&crops=9&rung=9&place" }, async (game) => {
+        await game.tap("seeds");
+        await game.tap(seedButton(PlantType.Carrot));
+        await game.tapNear(0, 1);
+        await game.settle(500);
+
+        await game.tap("spellbook");
+        await game.tap(runeButton(Spell.Growth));
+        await game.tapNear(0, 1);
+        await game.settle(700);
+        const asked = await game.seam<Line | null>("spell");
+        const place = asked?.place;
+        if (!place || !asked) throw new Error("the growth spell did not ask about a digit");
+
+        // The lit digit is really in the number, in the place claimed.
+        const digits = [...String(place.number)].map(Number);
+        expect(digits).toHaveLength(place.zeros + place.at + 1);
+        expect(digits[place.at]).toBe(place.digit);
+        // Three digits at least: the question means nothing below that.
+        expect(digits.length).toBeGreaterThanOrEqual(3);
+
+        // One box, and its answer is the digit followed by its zeros — not
+        // the digit, which is the whole of what is being taught.
+        expect(asked.stops).toHaveLength(1);
+        expect(asked.stops[0]).toBe(place.digit * 10 ** place.zeros);
+
+        await game.solveNumberLine();
+        expect(await game.seam<Line | null>("spell")).toBeNull();
+      });
+    },
+    6 * MINUTES,
   );
 });

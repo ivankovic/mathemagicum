@@ -21,6 +21,7 @@ import {
   submit,
   typeDigit,
 } from "../spells/addition";
+import { type PlaceRound, digitsOfNumber, placeAsk } from "../spells/place";
 import { type CloseChip, Panel } from "./Panel";
 import { PANEL_PAD as PAD } from "./ParchmentPanel";
 import type { UiIndex } from "./assets";
@@ -63,6 +64,12 @@ const PANEL_MAX_H = 430;
 const PANEL_MIN_W = 280;
 const PANEL_MIN_H = 300;
 
+/** How wide the biggest number on this ladder is, in digits. */
+const PLACE_DIGITS = 6;
+/** The number, drawn big enough that one digit standing out is the question. */
+const DIGIT_SIZE = 40;
+/** The guide's cyan, which is what this game already means by "this one". */
+const LIT_INK = "#18c8e0";
 const TITLE_SIZE = TYPE.spellTitle;
 const LABEL_SIZE = TYPE.body;
 const BOX_SIZE = 17;
@@ -136,8 +143,15 @@ export class SpellPopup extends Panel {
    * carry.
    */
   private bare: BareSum | null = null;
+  private place: PlaceRound | null = null;
+  private readonly digitTexts: Phaser.GameObjects.Text[] = [];
 
   /** The bare sum being asked, or null on a number line. A dev seam. */
+  /** The place-value round on the sheet, if that is what it is asking. */
+  get placeRound(): PlaceRound | null {
+    return this.place;
+  }
+
   get bareSum(): BareSum | null {
     return this.bare;
   }
@@ -190,6 +204,15 @@ export class SpellPopup extends Panel {
     this.title = this.own(this.text("", TITLE_SIZE, INK).setOrigin(0.5, 0));
     this.hint = this.own(this.text("", HINT_SIZE, INK_DIM).setOrigin(0.5, 0));
     this.startLabel = this.own(this.text("", LABEL_SIZE, INK).setOrigin(0.5, 0));
+    // The number, one digit at a time, for the place-value question.
+    //
+    // A row of separate labels rather than one string, because the whole
+    // question is *which digit* — and a single Text cannot colour one
+    // character of itself. Six is the widest number the ladder ever writes;
+    // they are hidden for every other kind of cast.
+    for (let at = 0; at < PLACE_DIGITS; at++) {
+      this.digitTexts.push(this.own(this.text("", DIGIT_SIZE, INK).setOrigin(0.5, 0.5)));
+    }
 
     for (let i = 0; i < PLACES; i++) {
       this.jumpLabels.push(this.own(this.text("", LABEL_SIZE, INK).setOrigin(0.5, 1)));
@@ -265,9 +288,14 @@ export class SpellPopup extends Panel {
     given: number,
     onDone: (result: CastResult) => void,
     bare: BareSum | null = null,
+    place: PlaceRound | null = null,
   ): void {
     this.bare = bare;
-    this.state = beginCast(problem, given);
+    this.place = place;
+    // The box is as wide as the *writing* when the answer is written: the
+    // digit and its zeros. See `asWritten`, and `place.ts` for why a nought
+    // may be spelled either way.
+    this.state = beginCast(problem, given, place ? place.zeros + 1 : undefined);
     this.finish = onDone;
     this.paper.setVisible(true);
     for (const part of this.parts) part.setVisible(true);
@@ -417,7 +445,11 @@ export class SpellPopup extends Panel {
     // because the line underneath is already showing where it is going.
     this.title
       .setText(
-        this.bare ? bareSumText(this.bare, "?") : `${problem.start} ${sign} ${movedBy(problem)}`,
+        this.place
+          ? ""
+          : this.bare
+            ? bareSumText(this.bare, "?")
+            : `${problem.start} ${sign} ${movedBy(problem)}`,
       )
       .setPosition(cx, top + PAD);
 
@@ -490,8 +522,39 @@ export class SpellPopup extends Panel {
     // against a phone — is shared, and what differs is one picture. The
     // division spell got a panel of its own because it is a different
     // *spell*; this is the same spell with its scaffold taken away.
-    if (this.bare) {
+    // The place-value question takes the same one-box sheet as a bare sum,
+    // and it *must*: it runs on the same degenerate line, whose single jump
+    // is the answer — so a drawn line writes `+50` across the parchment
+    // above a box asking what the five is worth. The bare rungs were
+    // guarded against exactly this; this is the same trap one form along.
+    if (this.bare || this.place) {
       this.startLabel.setVisible(false);
+      // The number across the top, with the one being asked about lit.
+      //
+      // Drawn rather than written into the title, because the whole
+      // question is *which digit* and a single line of type cannot say so.
+      // The lit one is the guide's own cyan — the colour this game already
+      // uses for "here, this one" — and it is bigger as well as brighter,
+      // so it survives being looked at by somebody who cannot yet tell two
+      // shades of gold apart.
+      const round = this.place;
+      const digits = round ? digitsOfNumber(round.number) : [];
+      const step = DIGIT_SIZE * 0.72;
+      const left = cx - ((digits.length - 1) * step) / 2;
+      for (const [at, label] of this.digitTexts.entries()) {
+        const digit = digits[at];
+        if (digit === undefined) {
+          label.setVisible(false);
+          continue;
+        }
+        const lit = at === round?.at;
+        label
+          .setText(String(digit))
+          .setFontSize(lit ? DIGIT_SIZE + 8 : DIGIT_SIZE)
+          .setColor(lit ? LIT_INK : INK)
+          .setPosition(left + at * step, contentTop + DIGIT_SIZE / 2)
+          .setVisible(true);
+      }
       for (let i = 0; i < PLACES; i++) {
         this.jumpLabels[i]?.setVisible(false);
         const inUse = i === 0;
@@ -515,6 +578,7 @@ export class SpellPopup extends Panel {
     }
 
     this.startLabel.setVisible(true);
+    for (const label of this.digitTexts) label.setVisible(false);
     this.ink.lineStyle(2, INK_HEX, 1);
     this.ink.lineBetween(lineLeft - 10, lineY, lineRight + 10, lineY);
     // Ticks, so the points read as places on a line rather than as free
@@ -595,6 +659,14 @@ export class SpellPopup extends Panel {
   }
 
   private hintLine(state: CastState): string {
+    const place = this.place;
+    if (place) {
+      // The number with its lit digit read back, and then the answer in
+      // place of the question. No words: what a digit is worth is the same
+      // sentence in every language, which is why `placeAsk` is a shape
+      // rather than a phrase.
+      return isSolved(state) ? placeAsk(place, String(state.solved.at(-1))) : placeAsk(place, "?");
+    }
     const bare = this.bare;
     if (bare) {
       // Solved, the equation is written out whole with the answer in the gap
