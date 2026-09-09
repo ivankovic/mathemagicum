@@ -3,6 +3,7 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { FixtureType } from "../src/world/fixtures";
+import { SHELVED } from "../src/world/jobs";
 import { MACHINE_TYPES, recipeFor } from "../src/world/machines";
 import { PHONE, crateButton, crateGroup, play, shutDown, takeFromCrate } from "./harness";
 
@@ -29,6 +30,11 @@ afterAll(shutDown);
 // done — see `world/jobs.ts` — and this file is about the clouds on the
 // machines, not about which of them the crate is offering yet.
 const AT_HOME = "&hour=12&materials=60&freezeNpcs&learned=all&jobs=all";
+
+/** The machines a child can actually meet in the crate. See `SHELVED`. */
+const ON_THE_SHELF = MACHINE_TYPES.filter(
+  (machine) => !(SHELVED as readonly string[]).includes(machine),
+);
 
 describe("asking what a thing is", () => {
   test(
@@ -123,7 +129,12 @@ describe("asking what a thing is", () => {
     "and every machine's cloud opens its own",
     async () => {
       await play({ seams: AT_HOME }, async (game) => {
-        for (const machine of MACHINE_TYPES) {
+        // Every machine the crate draws. A shelved one is still a machine —
+        // the world can hold one and a save can load one — and it has no
+        // button in the crate, so it has no cloud on a button either.
+        // Asking for its cloud failed on a missing button and read as "the
+        // blueprint has nothing to say".
+        for (const machine of ON_THE_SHELF) {
           expect(await game.tap("crate")).toBe(true);
           await game.settle(250);
           // Only if it is there: after the first machine the crate is
@@ -139,7 +150,7 @@ describe("asking what a thing is", () => {
         // And the recipe every page is drawn from is two materials, which is
         // every recipe in the game — a machine is wood and stone, because a
         // recipe in one material is a number and a recipe in two is a plan.
-        for (const machine of MACHINE_TYPES) expect(recipeFor(machine)).toHaveLength(2);
+        for (const machine of ON_THE_SHELF) expect(recipeFor(machine)).toHaveLength(2);
       });
     },
     5 * MINUTES,
