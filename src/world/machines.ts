@@ -595,6 +595,30 @@ export function accepts(machine: MachineType, item: ItemType): boolean {
 }
 
 /**
+ * One thing this machine would eat, to show a child who has brought none.
+ *
+ * The picture for a refusal, and only that. `report`'s rule is that a
+ * refusal about *what she is carrying* is the thing she has none of,
+ * crossed out over her head — so a machine that will not take what is in
+ * the basket has to be able to name what it would have taken.
+ *
+ * **Null is an answer and not a gap.** A machine that wants "anything" and
+ * got nothing is a child with an empty basket, and there is no one picture
+ * for that; the cross on its own is what this game already says there. A
+ * press is null for a different reason with the same shape: it takes any
+ * of seven ingredients, and picking one of them to draw would be pointing
+ * at whichever happened to be first in a table.
+ *
+ * The crop is the first in `PLANT_TYPES` — the carrot, which is the crop
+ * the game teaches first and the one a child has always seen. Any crop
+ * would do, because a machine that wants a crop wants *any* crop: this
+ * refusal only ever fires when she is carrying none of them at all.
+ */
+export function mouthful(machine: MachineType): ItemType | null {
+  return WORK[machine].wants === "a crop" ? (PLANT_TYPES[0] ?? null) : null;
+}
+
+/**
  * Whether this machine would put this in its bin rather than pass it on.
  *
  * A sieve bins what is not the thing it was shown; an inverter bins the

@@ -19,6 +19,7 @@ import {
   fullestCrate,
   machinesFromSave,
   machinesToSave,
+  mouthful,
   newMachine,
   pressable,
   pressing,
@@ -875,5 +876,41 @@ describe("the machines that decide", () => {
   test("a blueprint takes nothing and does nothing", () => {
     expect(feed(woken, WOOD, 1, MachineType.Blueprint)).toBeNull();
     expect(advance(woken, ROUND * 10, MachineType.Blueprint)).toBe(woken);
+  });
+});
+
+describe("what a machine says it is short of", () => {
+  test("names a crop for the machine that eats crops", () => {
+    const wanted = mouthful(MachineType.Hothouse);
+    expect(wanted).not.toBeNull();
+    // Any crop would do — a hothouse takes all of them — so what is asked
+    // here is that the picture is one of the things it would actually have
+    // accepted, rather than that it is the carrot in particular.
+    expect(accepts(MachineType.Hothouse, wanted as ItemType)).toBe(true);
+  });
+
+  test("and names nothing for the ones that take anything", () => {
+    // Not an omission. A machine that takes anything and was offered
+    // nothing is an empty basket, and there is no one picture of that — the
+    // bare cross is what the game says there, the same as for a spell with
+    // no crop to cast on.
+    for (const machine of MACHINE_TYPES) {
+      if (WORK[machine].wants === "a crop") continue;
+      expect(mouthful(machine)).toBeNull();
+    }
+  });
+
+  test("and never the division rune, which is what it used to say", () => {
+    // The refusal at a machine's mouth was the sharing rune for every
+    // machine in the game, which was true when a machine *was* a sorter and
+    // nonsense by the time there were eleven — reported from a playthrough
+    // as a division sign over a hothouse. What replaced it is a thing, so
+    // this holds the door shut: whatever a machine names, it is something it
+    // would have taken.
+    for (const machine of MACHINE_TYPES) {
+      const wanted = mouthful(machine);
+      if (wanted === null) continue;
+      expect(accepts(machine, wanted)).toBe(true);
+    }
   });
 });

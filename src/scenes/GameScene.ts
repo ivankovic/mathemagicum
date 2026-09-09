@@ -357,6 +357,7 @@ import {
   isMachine,
   machinesFromSave,
   machinesToSave,
+  mouthful,
   newMachine,
   recipeFor,
   takeShare,
@@ -8148,13 +8149,19 @@ export class GameScene extends Phaser.Scene {
       if (!wouldTake(state, item, machine)) continue;
       if (!best || count > best.count) best = { item, count };
     }
+    // What it would have taken, crossed out — not a rune. This said the
+    // division rune for years, which was true of the sorter and of nothing
+    // else: it dates from when a machine *was* a sorter. A playthrough put
+    // it as *tapping a hothouse pops up the division rune with a red x over
+    // my head*, and there is no division anywhere near a hothouse. See
+    // `mouthful` for why some machines answer with the cross alone.
     if (!best) {
-      this.showRefusalOnPlayer(UiAsset.RuneDivide);
+      this.refuseAtMouth(machine);
       return;
     }
     const fed = feed(state, best.item, best.count, machine);
     if (!fed) {
-      this.showRefusalOnPlayer(UiAsset.RuneDivide);
+      this.refuseAtMouth(machine);
       return;
     }
     this.inventory.remove(best.item, best.count);
@@ -8162,6 +8169,19 @@ export class GameScene extends Phaser.Scene {
     this.playGesture(PLANT); // she bends to tip it in, same as planting
     this.refreshCarried();
     this.autosave();
+  }
+
+  /**
+   * Say no at a machine's mouth, in the one picture that helps.
+   *
+   * A crop for the machine that eats crops, and the cross on its own for the
+   * ones that take anything — because a machine that takes anything and was
+   * offered nothing is an empty basket, which is what the bare cross already
+   * means everywhere else in this game.
+   */
+  private refuseAtMouth(machine: MachineType): void {
+    const wanted = mouthful(machine);
+    this.showRefusalOnPlayer(wanted ? iconForItem(wanted) : undefined);
   }
 
   /**
