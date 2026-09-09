@@ -3,7 +3,13 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { UNKNOWNS } from "../src/spells/addition";
-import { HARDEST_RUNG, LONGEST_LINE_RUNG, SHARED_TOP_RUNG, rungAt } from "../src/spells/difficulty";
+import {
+  HARDEST_RUNG,
+  LONGEST_LINE_RUNG,
+  RUNGS,
+  SHARED_TOP_RUNG,
+  rungAt,
+} from "../src/spells/difficulty";
 import { Spell } from "../src/spells/spellbook";
 import { PlantType } from "../src/world/plants";
 import { type Game, play, runeButton, seedButton, shutDown } from "./harness";
@@ -193,6 +199,52 @@ describe("the sum with no line under it", () => {
         await game.settle(300);
         const hint = await game.seam<string>("spellHint");
         expect(hint).not.toContain(answer);
+      });
+    },
+    5 * MINUTES,
+  );
+});
+
+/**
+ * And the same sum written down, far lower on the ladder.
+ *
+ * The written form used to live on the top two rungs only, which meant
+ * three of the four bands never reached it — `BANDS` are index pairs and
+ * every one but the widest ends below them. It now sits on the rung of each
+ * size that does not carry, which is the whole of the rule: the line is
+ * where carrying is taught, and the written form is where the sum
+ * underneath it is one she can already do.
+ *
+ * Driven through the game rather than asserted off the table, because what
+ * changed is which *parchment* a middling rung opens — and a table can say
+ * `bare` while the panel goes on drawing a number line.
+ */
+describe("a sum written down, in the middle of the ladder", () => {
+  const WRITTEN = RUNGS.findIndex((rung) => rung.bare !== undefined && rung.places <= 3);
+
+  test(
+    "asks one box on a rung that is nothing like the top",
+    async () => {
+      expect(WRITTEN).toBeGreaterThan(0);
+      await play({ seams: `&learned=all&hour=12&rung=${WRITTEN}` }, async (game) => {
+        const cast = await castGrowth(game);
+        const bare = cast.bare;
+        if (!bare) throw new Error("a middling rung drew a line where it should write the sum");
+
+        expect(bare.start + bare.addend).toBe(bare.total);
+        expect(UNKNOWNS as readonly string[]).toContain(bare.unknown);
+        // One box, and a small sum: this is the point of putting the form
+        // down here at all. Six digits would be the top rung wearing a
+        // lower number.
+        expect(cast.stops).toHaveLength(1);
+        expect(bare.total).toBeLessThan(1000);
+        // And it does not carry — the rule that makes it safe this low.
+        // Asked of the sum rather than of the table, so a generator that
+        // ignored the rung would be caught here.
+        expect((bare.start % 10) + (bare.addend % 10)).toBeLessThan(10);
+
+        await game.solveNumberLine();
+        expect(await game.seam<Line | null>("spell")).toBeNull();
       });
     },
     5 * MINUTES,

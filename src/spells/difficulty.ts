@@ -144,11 +144,31 @@ export const RUNGS: readonly Rung[] = [
   { places: 1, crossing: false, given: 0, counted: true }, //  3 + 4, in counters
   { places: 1, crossing: true, given: 0, counted: true }, //   7 + 5, in counters
   { places: 2, crossing: false, given: 1 }, // 34 + 25, ones done
-  { places: 2, crossing: false, given: 0 }, // 34 + 25
+  // Written out, the way anybody writes a sum.
+  //
+  // **The rule for where this form goes: the line teaches carrying, and the
+  // written form goes where a size does not carry yet.** A bare sum is one
+  // box whatever its size — that is what makes it placeable this low at all
+  // — so what it costs a child is reading the notation, not holding a
+  // column in her head. Putting it on the no-carry rung of each size means
+  // she meets `34 + 25 = ?` when the sum underneath it is one she can
+  // already do, and meets carrying on the scaffold that was built to show
+  // it.
+  //
+  // It used to live only on the top two rungs, which meant only the widest
+  // band ever saw it: `BANDS` are index pairs, and three of the four end
+  // below sixteen. A child on the second band could play the whole game and
+  // never once be shown a sum written down.
+  //
+  // `Any` rather than `Total`, because hiding the total every time is a
+  // different exercise from hiding a term — see `BareForm` — and the
+  // undoing kind is the half worth having. Two casts in three ask it.
+  { places: 2, crossing: false, given: 0, bare: BareForm.Any }, // 34 + ? = 59
   { places: 2, crossing: true, given: 1 }, //  27 + 45, ones done
   { places: 2, crossing: true, given: 0 }, //  27 + 45
   { places: 3, crossing: false, given: 1 }, // 142 + 236, ones done
-  { places: 3, crossing: false, given: 0 }, // 142 + 236
+  // The same again a size up, and for the same reason. See the rung above.
+  { places: 3, crossing: false, given: 0, bare: BareForm.Any }, // 142 + ? = 378
   { places: 3, crossing: true, given: 1 }, //  347 + 265, ones done
   { places: 3, crossing: true, given: 0 }, //  347 + 265 — the game as it was
   // Past three places the ladder changes shape, and deliberately.

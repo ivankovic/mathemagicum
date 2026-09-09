@@ -76,20 +76,50 @@ describe("the ladder", () => {
   });
 
   /**
-   * And the line never comes off in the middle of the ladder.
+   * Which form a rung takes, and that it is never arbitrary.
    *
-   * Bare is the *top*, and everything above the first bare rung is bare too.
-   * A `bare` that appeared, went away and came back would be a child shown a
-   * number line, then not, then one again — the game looking random at
-   * exactly the point where it is asking the most of them.
+   * **This replaced a stricter rule, deliberately, and the reasoning is
+   * worth keeping because somebody will want to put it back.** The old rule
+   * was that bare is the *top*: once the line came off it stayed off, on
+   * the argument that a child shown a line, then not, then one again is a
+   * child watching the game behave at random.
+   *
+   * That argument is right about randomness and wrong about this ladder,
+   * and it could not survive the thing it was blocking: `BANDS` are index
+   * pairs, and every band but the widest ends below the rungs that had
+   * `bare`, so "bare only at the top" meant three difficulties out of four
+   * in which a sum was never once written down.
+   *
+   * What replaces it is not "anywhere" but a rule a child can feel: **the
+   * written form is where the sum does not carry, and the line is where it
+   * does.** She is never asked to read a new notation and hold a column in
+   * her head in the same step, and whenever the arithmetic gets harder the
+   * scaffold is there. The top pair is the exception it always was, by
+   * which point the notation is the old thing and the size is the new one.
+   *
+   * So the invariant is still checkable, and it is checked: the form
+   * follows the carry, not the mood.
    */
-  test("the line comes off once, at the top, and stays off", () => {
-    const first = RUNGS.findIndex((rung) => rung.bare !== undefined);
-    expect(first).toBeGreaterThan(0);
+  test("the form follows the carry rather than the rung number", () => {
+    const line = rungAt(LONGEST_LINE_RUNG);
+    let written = 0;
     for (const [at, rung] of RUNGS.entries()) {
-      expect({ at, bare: rung.bare !== undefined }).toEqual({ at, bare: at >= first });
+      if (rung.bare === undefined) continue;
+      written++;
+      const atTheTop = rung.places === line.places;
+      // Below the top pair: written means it does not carry, and every
+      // non-carrying unscaffolded rung of that size is written. Both
+      // directions, so the rule cannot be satisfied by having no rungs.
+      if (!atTheTop) expect({ at, crossing: rung.crossing }).toEqual({ at, crossing: false });
     }
-    expect(LONGEST_LINE_RUNG).toBe(first - 1);
+    expect(written).toBeGreaterThan(2);
+    // And every rung that carries below the top pair still draws a line,
+    // which is the half that stops this drifting into "bare everywhere".
+    for (const [at, rung] of RUNGS.entries()) {
+      if (rung.places === line.places || !rung.crossing) continue;
+      expect({ at, bare: rung.bare }).toEqual({ at, bare: undefined });
+    }
+    expect(LONGEST_LINE_RUNG).toBe(RUNGS.length - 3);
   });
 
   // What every player had before any of this existed, and what a saved
@@ -130,11 +160,11 @@ describe("the ladder", () => {
    * table is arranged to avoid, and it would be easy to do by accident while
    * adding a third bare rung later.
    */
-  test("the bare rungs take the line off without changing the sum", () => {
+  test("the bare rungs at the top take the line off without changing the sum", () => {
     const line = rungAt(LONGEST_LINE_RUNG);
-    const bare = RUNGS.filter((rung) => rung.bare !== undefined);
-    expect(bare.map((rung) => rung.bare)).toEqual([BareForm.Total, BareForm.Any]);
-    for (const rung of bare) {
+    const top = RUNGS.filter((rung) => rung.bare !== undefined && rung.places === line.places);
+    expect(top.map((rung) => rung.bare)).toEqual([BareForm.Total, BareForm.Any]);
+    for (const rung of top) {
       expect({ places: rung.places, crossing: rung.crossing }).toEqual({
         places: line.places,
         crossing: line.crossing,
@@ -144,17 +174,63 @@ describe("the ladder", () => {
   });
 
   /**
-   * And nothing below that point is bare.
+   * Where the written form may and may not go.
    *
-   * The half worth asserting, because it is the half a mistake would take.
-   * The number line *is* how this game teaches addition — it is the whole
-   * method, drawn — and a `bare` that slipped down the ladder would hand a
-   * six-year-old `7 + 5 = ?` with nothing to count along and no way to see
-   * why the answer is the answer.
+   * This replaced a blanket rule that nothing below the top of the ladder
+   * could be bare, and the reason that rule existed is still true and still
+   * asserted here — the number line *is* how this game teaches addition,
+   * and a `bare` that slipped all the way down would hand a six-year-old
+   * `7 + 5 = ?` with nothing to count along. What changed is that the rule
+   * was doing its job by being far too strong: it also kept the written
+   * form away from every child who was ready for it, since `BANDS` are
+   * index pairs and three of the four end below the rungs that had it.
+   *
+   * So the protection is stated exactly instead of approximately.
    */
-  test("and nothing at or below the shared top rung is", () => {
+  test("never asks a child who is still counting to read one", () => {
     for (const [at, rung] of RUNGS.entries()) {
-      if (at <= SHARED_TOP_RUNG) expect({ at, bare: rung.bare }).toEqual({ at, bare: undefined });
+      // The counted rungs are the bottom of the ladder — a box of things
+      // moved by hand. A written equation there is the failure the old rule
+      // was written to prevent.
+      if (rung.counted) expect({ at, bare: rung.bare }).toEqual({ at, bare: undefined });
+    }
+  });
+
+  test("and the gentlest band never reaches one at all", () => {
+    // What "exempt the lowest difficulty" means, as arithmetic rather than
+    // as an intention: every rung the first band spans, checked.
+    const gentlest = BANDS[0];
+    if (!gentlest) throw new Error("there are no bands");
+    for (let rung = gentlest.from; rung <= gentlest.to; rung++) {
+      expect({ rung, bare: rungAt(rung).bare }).toEqual({ rung, bare: undefined });
+    }
+  });
+
+  test("while every band above it can", () => {
+    // The other half, and the one that was actually broken: a child on the
+    // second band could play the whole game and never once be shown a sum
+    // written down, because the only bare rungs were at the very top.
+    for (const [at, band] of BANDS.entries()) {
+      if (at === 0) continue;
+      const reachable = [];
+      for (let rung = band.from; rung <= band.to; rung++) {
+        if (rungAt(rung).bare !== undefined) reachable.push(rung);
+      }
+      expect({ band: at, any: reachable.length > 0 }).toEqual({ band: at, any: true });
+    }
+  });
+
+  test("and the written form never carries: the line is where that is taught", () => {
+    // The rule that makes it safe to put this low. A bare sum is one box
+    // whatever its size, so what it costs is reading the notation — and
+    // asking a child to carry in her head *and* read a new notation in the
+    // same step is the two-things-at-once this table exists to avoid. The
+    // exception is the top pair, which is six-digit carrying by design: by
+    // then the notation is old.
+    const line = rungAt(LONGEST_LINE_RUNG);
+    for (const [at, rung] of RUNGS.entries()) {
+      if (rung.bare === undefined || rung.places === line.places) continue;
+      expect({ at, crossing: rung.crossing }).toEqual({ at, crossing: false });
     }
   });
 
