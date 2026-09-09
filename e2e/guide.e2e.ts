@@ -4,6 +4,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { Spell } from "../src/spells/spellbook";
 import { GUIDES, Guide } from "../src/ui/guide";
+import { FixtureType } from "../src/world/fixtures";
 import { type Game, play, runeButton, shutDown } from "./harness";
 
 const MINUTES = 60_000;
@@ -195,6 +196,50 @@ describe("the guide", () => {
         await game.press("p");
         const seen = await reaches(game, Guide.Plant, 1);
         expect(near(seen.marks.ring, (await game.ui())["seeds.0"])).toBe(true);
+      });
+    },
+    2 * MINUTES,
+  );
+
+  /**
+   * And it never points at a button the crate is not drawing.
+   *
+   * Reported from a playthrough as *I have the blue tutorial circle around
+   * the objects, but if I tap it it doesn't go anywhere* — and no tap could
+   * have made it go anywhere. Holding a thing and the crate showing it are
+   * two different facts, and everything counting the crate treated them as
+   * one. A shelved machine separates them: a save can hold a blueprint, and
+   * the crate has not drawn one since it was shelved.
+   *
+   * What that produced was a dead end rather than a wrong mark. The errand
+   * started, opened the crate, opened the group — and then the step wanting
+   * *this thing* had no button to glow, so `glow` fell back to the crate,
+   * which is a button that toggles. Watched: the ring came back to the crate
+   * and stayed there over four taps, on the same step every time.
+   *
+   * Both halves are asked, because the fix could be had by breaking the
+   * other one: an errand that never starts for anything would pass the first
+   * assertion and be useless.
+   */
+  test(
+    "and does not send her after a thing the crate will not draw",
+    async () => {
+      const DONE = "&guided=plant,grow,pick,sell,learn,grove";
+      await play({ seams: `${STILL}${DONE}`, firstTime: true }, async (game) => {
+        // The blueprint is placeable — the world can hold one, and a save
+        // can load one — and shelved, so no button is drawn for it.
+        await game.give(FixtureType.Blueprint, 1);
+        await game.settle(900);
+        expect((await guide(game)).running).toBe(null);
+
+        // And a thing the crate does draw still starts the errand, which is
+        // what says the guard is about the button rather than about the
+        // crate being empty.
+        await game.give(FixtureType.Fence, 3);
+        await game.settle(900);
+        const seen = await guide(game);
+        expect(seen.running).toBe(Guide.Place);
+        expect(near(seen.marks.ring, (await game.ui()).crate)).toBe(true);
       });
     },
     2 * MINUTES,

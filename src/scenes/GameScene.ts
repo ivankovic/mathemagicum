@@ -3413,8 +3413,14 @@ export class GameScene extends Phaser.Scene {
           name: group,
           shown: () => this.crateGroup === null,
           // How many things are in this group, so a group with nothing in it
-          // says so before it is opened rather than after.
-          count: () => thingsIn(group).reduce((sum, thing) => sum + this.crateHeld(thing), 0),
+          // says so before it is opened rather than after. What it will
+          // *show*, for the same reason: a badge reading one over a group
+          // that opens on nothing is the same lie one step earlier.
+          count: () =>
+            thingsIn(group).reduce(
+              (sum, thing) => sum + (this.crateShows(thing) ? this.crateHeld(thing) : 0),
+              0,
+            ),
           act: () => this.openCrateGroup(group),
         })),
         ...PLACEABLE_FIXTURES.map((fixture) => ({
@@ -3457,8 +3463,10 @@ export class GameScene extends Phaser.Scene {
         },
       ],
       count: () =>
-        PLACEABLE_FIXTURES.reduce((sum, f) => sum + this.inventory.count(f), 0) +
-        DECOR_TYPES.reduce((sum, piece) => sum + this.decorHeld(piece), 0),
+        PLACEABLE_FIXTURES.reduce(
+          (sum, f) => sum + (this.crateShows(f) ? this.inventory.count(f) : 0),
+          0,
+        ) + DECOR_TYPES.reduce((sum, piece) => sum + this.decorHeld(piece), 0),
       // Out of a group before out of the crate. See `IconTrayOptions.back`.
       back: () => {
         if (this.crateGroup === null) return false;
@@ -6490,9 +6498,17 @@ export class GameScene extends Phaser.Scene {
       // four teachers are found the way they always were.
       spellToLearn: !knowsSpell([...this.profile.learned, ...this.dev.learned], Spell.Portal),
       woodStanding: this.woodStillStanding().length,
+      // What the crate will show, not what the basket holds: this is what
+      // decides whether the errand about putting a thing down is worth
+      // starting at all, and an errand about an undrawn button is one the
+      // child cannot finish.
       thingsInCrate: CRATE_GROUPS.reduce(
         (sum, group) =>
-          sum + thingsIn(group).reduce((held, thing) => held + this.crateHeld(thing), 0),
+          sum +
+          thingsIn(group).reduce(
+            (held, thing) => held + (this.crateShows(thing) ? this.crateHeld(thing) : 0),
+            0,
+          ),
         0,
       ),
       sleepingMachines: this.sleepingMachines().length,
@@ -6775,7 +6791,10 @@ export class GameScene extends Phaser.Scene {
   private firstThingInCrate(): CrateThing | null {
     for (const group of CRATE_GROUPS) {
       for (const thing of thingsIn(group)) {
-        if (this.crateHeld(thing) > 0) return thing;
+        // Shown as well as held. A thing the crate will not draw is a thing
+        // no child can tap, and pointing at one is the whole of the bug
+        // `crateShows` was written for.
+        if (this.crateHeld(thing) > 0 && this.crateShows(thing)) return thing;
       }
     }
     return null;
@@ -8389,6 +8408,30 @@ export class GameScene extends Phaser.Scene {
   /** Whether the crate shows this: everything but a machine a job has not yet earned. */
   private crateOffers(fixture: FixtureType): boolean {
     return !isMachine(fixture) || offered(this.jobsDone).includes(fixture);
+  }
+
+  /**
+   * Whether the crate will actually draw a button for this.
+   *
+   * `crateOffers` asked about a fixture; this asks about a *thing*, which is
+   * what everything counting the crate holds. Furniture and the coil are
+   * always drawn, so the only question is the machines' — see there.
+   *
+   * It exists because holding a thing and the crate showing it are two
+   * different facts, and everything that counted the crate treated them as
+   * one. A shelved machine is the case that separates them: a save can hold
+   * a blueprint, and the crate has not drawn one since it was shelved. The
+   * guide then started an errand about a button that is not there, glowed
+   * the crate instead because that is what `glow` falls back to, and stayed
+   * there — reported from a playthrough as *the blue tutorial circle is
+   * around the objects, but if I tap it it doesn't go anywhere*. It did not,
+   * and no tap could have made it: the step it was waiting on was arming a
+   * thing that could not be tapped.
+   */
+  private crateShows(thing: CrateThing): boolean {
+    if ((DECOR_TYPES as readonly string[]).includes(thing)) return true;
+    if (thing === CRATE_WIRE) return true;
+    return this.crateOffers(thing as FixtureType);
   }
 
   /** The garden's lines, as a job reads them: every machine and every wire. */
