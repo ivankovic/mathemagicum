@@ -262,6 +262,15 @@ const MATERIAL_FORMS: Record<MaterialType, HrNoun> = {
   // would call the squared timber a press turns out.
   [MaterialType.Beam]: { one: "balvan", acc: "balvan", few: "balvana", many: "balvana" },
   [MaterialType.Cord]: { one: "konop", acc: "konop", few: "konopa", many: "konopa" },
+  [MaterialType.Canvas]: { one: "platno", acc: "platno", few: "platna", many: "platna" },
+  [MaterialType.Rigging]: { one: "snast", acc: "snast", few: "snasti", many: "snasti" },
+  [MaterialType.Panel]: { one: "ploha", acc: "plohu", few: "plohe", many: "ploha" },
+  [MaterialType.Truss]: { one: "rešetka", acc: "rešetku", few: "rešetke", many: "rešetki" },
+  [MaterialType.Envelope]: { one: "balon", acc: "balon", few: "balona", many: "balona" },
+  // "Koš" and not "gondola", which is the same word as the English one and
+  // would trip the rule that no two languages say the same thing.
+  [MaterialType.Gondola]: { one: "koš", acc: "koš", few: "koša", many: "koševa" },
+  [MaterialType.Vane]: { one: "krmilo", acc: "krmilo", few: "krmila", many: "krmila" },
 };
 
 const PLANTS: Record<PlantType, Noun> = Object.fromEntries(

@@ -528,6 +528,35 @@ export const PRESSINGS: Readonly<Record<string, MaterialType>> = {
   "stone+wood": MaterialType.Beam,
   // Rope, twisted out of straw and stem.
   "sunflower+wheat": MaterialType.Cord,
+  // And then the airship, one pressing at a time.
+  //
+  // **The repetition is the design and not a shortage of ideas.** Five
+  // tiers means a child carrying things between presses by hand does the
+  // same walk over and over, and the way out of that walk is to *wire the
+  // presses together* — which is the thing this garden has been teaching
+  // since the first funnel. The grind is the question; the line that
+  // answers it is the reward. A tree shallow enough to hand-carry would
+  // leave the machines as a decoration.
+  //
+  // Cloth, off the one crop that wants sand.
+  "cactus+cord": MaterialType.Canvas,
+  // Timber lashed with rope: the two first-tier materials against each
+  // other, which is the first pressing whose both halves were pressed.
+  "beam+cord": MaterialType.Rigging,
+  // Cloth stretched on a frame, and then panels trussed together. These two
+  // are the middle of the tree and they are what makes it a *tree* rather
+  // than a list: a truss wants a panel and a rigging, and a panel wants a
+  // canvas, so by here a single part is standing on four earlier pressings
+  // and the whole garden has to be running to keep one press fed.
+  "beam+canvas": MaterialType.Panel,
+  "panel+rigging": MaterialType.Truss,
+  // And the three parts of the airship, each five pressings from anything
+  // she can pick up off the ground.
+  "canvas+truss": MaterialType.Envelope,
+  // The basket, which is the one part still wanting plain wood: what she
+  // stands in should be made of the thing she recognises.
+  "truss+wood": MaterialType.Gondola,
+  "cord+truss": MaterialType.Vane,
 };
 
 /** The two kinds, as the key `PRESSINGS` is written in. */

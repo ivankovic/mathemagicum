@@ -166,6 +166,13 @@ const MATERIALS: Record<MaterialType, Noun> = {
   // Balken.
   [MaterialType.Beam]: noun({ bare: "Balken", gender: "m", plural: "Balken" }),
   [MaterialType.Cord]: noun({ bare: "Seil", gender: "n", plural: "Seile" }),
+  [MaterialType.Canvas]: noun({ bare: "Segeltuch", gender: "n", plural: "Segeltuche" }),
+  [MaterialType.Rigging]: noun({ bare: "Takelage", gender: "f", plural: "Takelagen" }),
+  [MaterialType.Panel]: noun({ bare: "Segelfeld", gender: "n", plural: "Segelfelder" }),
+  [MaterialType.Truss]: noun({ bare: "Fachwerk", gender: "n", plural: "Fachwerke" }),
+  [MaterialType.Envelope]: noun({ bare: "Hülle", gender: "f", plural: "Hüllen" }),
+  [MaterialType.Gondola]: noun({ bare: "Gondel", gender: "f", plural: "Gondeln" }),
+  [MaterialType.Vane]: noun({ bare: "Steuerruder", gender: "n", plural: "Steuerruder" }),
 };
 
 const FURNITURE: Record<DecorType, Noun> = {

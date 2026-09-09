@@ -174,6 +174,57 @@ const MATERIALS: Record<MaterialType, Noun> = {
     none: "no cord",
     plural: "cords",
   },
+  // Cloth and rigging are uncountable, like stone and unlike a beam: a
+  // child has *some canvas*, not four canvases.
+  [MaterialType.Canvas]: {
+    bare: "canvas",
+    indefinite: "canvas",
+    definite: "the canvas",
+    none: "no canvas",
+    plural: "canvas",
+  },
+  [MaterialType.Rigging]: {
+    bare: "rigging",
+    indefinite: "rigging",
+    definite: "the rigging",
+    none: "no rigging",
+    plural: "rigging",
+  },
+  [MaterialType.Panel]: {
+    bare: "panel",
+    indefinite: "a panel",
+    definite: "the panel",
+    none: "no panels",
+    plural: "panels",
+  },
+  [MaterialType.Truss]: {
+    bare: "truss",
+    indefinite: "a truss",
+    definite: "the truss",
+    none: "no trusses",
+    plural: "trusses",
+  },
+  [MaterialType.Envelope]: {
+    bare: "envelope",
+    indefinite: "an envelope",
+    definite: "the envelope",
+    none: "no envelopes",
+    plural: "envelopes",
+  },
+  [MaterialType.Gondola]: {
+    bare: "gondola",
+    indefinite: "a gondola",
+    definite: "the gondola",
+    none: "no gondolas",
+    plural: "gondolas",
+  },
+  [MaterialType.Vane]: {
+    bare: "vane",
+    indefinite: "a vane",
+    definite: "the vane",
+    none: "no vanes",
+    plural: "vanes",
+  },
   [MaterialType.Stone]: {
     bare: "stone",
     indefinite: "stone",

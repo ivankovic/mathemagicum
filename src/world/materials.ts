@@ -37,6 +37,28 @@ export const MaterialType = {
   Beam: "beam",
   /** Rope, twisted out of straw and stem. The other half of a vessel. */
   Cord: "cord",
+  /**
+   * Cloth, woven from cactus fibre and rope.
+   *
+   * The first material of the second half, and the one that finally gives
+   * the cactus something to be. Four of the six crops fed nothing at all
+   * until this; the cactus is the only one that wants sand, so the tier
+   * that starts the airship is also the one that sends a child to a part of
+   * the world she had no reason to walk to.
+   */
+  Canvas: "canvas",
+  /** Timber lashed with rope: both of the first two made things at once. */
+  Rigging: "rigging",
+  /** Cloth stretched on a frame: the first piece with a shape of its own. */
+  Panel: "panel",
+  /** Panels trussed together — the skeleton everything else hangs off. */
+  Truss: "truss",
+  /** The gasbag in its net. The biggest single thing she ever makes. */
+  Envelope: "envelope",
+  /** The basket she stands in. */
+  Gondola: "gondola",
+  /** The fin that steers it. */
+  Vane: "vane",
 } as const;
 
 export type MaterialType = (typeof MaterialType)[keyof typeof MaterialType];
@@ -65,7 +87,17 @@ export const MATERIAL_TYPES: readonly MaterialType[] = Object.values(MaterialTyp
  */
 export const GATHERED_MATERIALS: readonly MaterialType[] = [MaterialType.Wood, MaterialType.Stone];
 
-export const MADE_MATERIALS: readonly MaterialType[] = [MaterialType.Beam, MaterialType.Cord];
+export const MADE_MATERIALS: readonly MaterialType[] = [
+  MaterialType.Beam,
+  MaterialType.Cord,
+  MaterialType.Canvas,
+  MaterialType.Rigging,
+  MaterialType.Panel,
+  MaterialType.Truss,
+  MaterialType.Envelope,
+  MaterialType.Gondola,
+  MaterialType.Vane,
+];
 
 /** Whether the world gave this up, as opposed to a machine having made it. */
 export function isGathered(material: string): boolean {

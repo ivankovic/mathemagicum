@@ -292,6 +292,41 @@
       "width": 32,
       "height": 32
     },
+    "material-canvas": {
+      "file": "material_canvas.png",
+      "width": 32,
+      "height": 32
+    },
+    "material-rigging": {
+      "file": "material_rigging.png",
+      "width": 32,
+      "height": 32
+    },
+    "material-panel": {
+      "file": "material_panel.png",
+      "width": 32,
+      "height": 32
+    },
+    "material-truss": {
+      "file": "material_truss.png",
+      "width": 32,
+      "height": 32
+    },
+    "material-envelope": {
+      "file": "material_envelope.png",
+      "width": 32,
+      "height": 32
+    },
+    "material-gondola": {
+      "file": "material_gondola.png",
+      "width": 32,
+      "height": 32
+    },
+    "material-vane": {
+      "file": "material_vane.png",
+      "width": 32,
+      "height": 32
+    },
     "flower-tulip": {
       "file": "flower_tulip.png",
       "width": 32,
