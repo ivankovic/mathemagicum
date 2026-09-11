@@ -27,8 +27,12 @@
  * result is one bit wide.
  */
 
-const files = [...new Bun.Glob("e2e/*.e2e.ts").scanSync(".")].sort();
-if (files.length === 0) throw new Error("no scenario files in e2e/");
+const every = [...new Bun.Glob("e2e/*.e2e.ts").scanSync(".")].sort();
+if (every.length === 0) throw new Error("no scenario files in e2e/");
+const files = shard(every, process.env.E2E_SHARD);
+if (files.length < every.length) {
+  console.error(`this is shard ${process.env.E2E_SHARD}: ${files.length} of ${every.length} files`);
+}
 
 // Built once, here, for all of them. The scenarios are served the built site
 // rather than a dev server — see `serve` — and twenty files each spending ten
@@ -56,3 +60,28 @@ if (failed.length > 0) {
   process.exit(1);
 }
 console.error(`\nall ${files.length} scenario files passed`);
+
+/**
+ * The files this runner is responsible for, when the suite is split across
+ * several: `E2E_SHARD=2/3` is the second of three.
+ *
+ * The whole suite in one job crossed CI's forty-five-minute cap on
+ * 2026-09-09 and stayed over it for three pushes running, each shown as
+ * *cancelled* rather than as a failure anybody would read — the last runs
+ * that finished at all had taken forty. So `ci.yml` runs it as a matrix,
+ * and this picks a shard's share.
+ *
+ * Every n-th file rather than a contiguous block: the list is sorted by
+ * name, which says nothing about how long a file takes, and dealing them
+ * out round-robin spreads the slow ones about as evenly as anything short
+ * of timing them would. Unset, or `1/1`, means all of them.
+ */
+function shard(all: readonly string[], spec: string | undefined): string[] {
+  if (spec === undefined || spec === "") return [...all];
+  const match = /^([1-9]\d*)\/([1-9]\d*)$/.exec(spec);
+  if (!match) throw new Error(`E2E_SHARD should look like 2/3, not ${JSON.stringify(spec)}`);
+  const index = Number(match[1]);
+  const count = Number(match[2]);
+  if (index > count) throw new Error(`E2E_SHARD=${spec}: there is no shard ${index} of ${count}`);
+  return all.filter((_, at) => at % count === index - 1);
+}

@@ -36,13 +36,21 @@ jobs:
       - name: Build
         run: bun run build
 
-  # The browser suite, in a job of its own.
+  # The browser suite, in jobs of its own.
   #
   # Separate rather than four more lines on the job above, and the split is
   # the point: the checks up there are seconds and gate everything, and this
-  # one drives forty-odd scenario files — a hundred and thirty-some browser
-  # scenarios between them — and takes minutes. Failing fast on a type error
-  # should not wait behind a harbour being generated.
+  # one drives fifty-odd scenario files — a hundred and seventy-some browser
+  # scenarios between them — and takes the best part of an hour. Failing
+  # fast on a type error should not wait behind a harbour being generated.
+  #
+  # And in three jobs rather than one, since 2026-09-11. The suite grew past
+  # the cap below on 2026-09-09 and stayed there for three pushes, and a job
+  # that hits its cap is shown as *cancelled* — which nobody reads as a
+  # failure, so nobody read it. Each job takes every third file (`E2E_SHARD`
+  # in `e2e/run.ts`) and all three run even if one fails, because a red
+  # shard that hides the other two is the one-bit result `run.ts` argues
+  # against.
   #
   # It earns the minutes. The unit suite is fifteen hundred tests and every
   # one of them passed on a build that could not boot — `PagedPanel` asks its
@@ -54,8 +62,14 @@ jobs:
   # nobody reads.
   scenarios:
     runs-on: ubuntu-latest
-    # Twenty on a good day; the cap is there so a hung browser cannot burn an
-    # hour of the runner rather than as a target.
+    name: scenarios (${{ matrix.shard }} of 3)
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    # Fifteen or twenty a shard on a good day; the cap is there so a hung
+    # browser cannot burn an hour of the runner rather than as a target. If
+    # it is being hit again, the answer is another shard, not a bigger cap.
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -94,3 +108,5 @@ jobs:
 
       - name: Scenarios
         run: bun run e2e
+        env:
+          E2E_SHARD: ${{ matrix.shard }}/3
