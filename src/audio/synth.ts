@@ -22,10 +22,15 @@ import type { Sounded, Struck } from "./score";
 /**
  * How loud the music is when it is on.
  *
- * The mix leaves the generator peaking at about three quarters of full
- * scale, so this is not headroom — it is that background music sits *behind*
- * a game, and a tune mixed to the level of the thing it is under is a tune
+ * The mix leaves the generator peaking at a little over half of full scale,
+ * so this is not headroom — it is that background music sits *behind* a
+ * game, and a tune mixed to the level of the thing it is under is a tune
  * that gets switched off.
+ *
+ * (It peaked at three quarters before the melody moved from an eighth-duty
+ * pulse to a square. The average level is what it was — the square's gain
+ * came down to match — but a thin pulse is all peak and a square is not,
+ * so the number here did not need to move when the timbre did.)
  *
  * A half was the first guess and a playtest called it slightly too loud, so
  * it came down about two and a half decibels. Not further: the complaint was

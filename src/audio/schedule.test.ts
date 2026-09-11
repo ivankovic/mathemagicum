@@ -13,8 +13,18 @@ const GROVE = readScore(
 
 const LOOP = loopSeconds(GROVE);
 
+/**
+ * One struck note, as a string a set can hold.
+ *
+ * The voice is part of the name. Nothing in the format stops two voices
+ * striking the same pitch at the same moment — a bass doubling the root of
+ * the chord above it did exactly that, for a while — and that is not a note
+ * played twice. A key that left the voice out reported it as one.
+ */
 function struck(from: number, to: number): string[] {
-  return notesDue(GROVE, from, to).map((due) => `${due.at.toFixed(6)}@${due.note.midi}`);
+  return notesDue(GROVE, from, to).map(
+    (due) => `${due.voice.name}:${due.at.toFixed(6)}@${due.note.midi}`,
+  );
 }
 
 describe("what is due to be played", () => {
@@ -58,8 +68,8 @@ describe("what is due to be played", () => {
     const before = struck(0, boundary);
     const after = struck(boundary, LOOP);
     expect(before.length + after.length).toBe(first.length);
-    expect(before.some((one) => one.startsWith(boundary.toFixed(6)))).toBe(false);
-    expect(after.some((one) => one.startsWith(boundary.toFixed(6)))).toBe(true);
+    expect(before.some((one) => one.includes(`:${boundary.toFixed(6)}@`))).toBe(false);
+    expect(after.some((one) => one.includes(`:${boundary.toFixed(6)}@`))).toBe(true);
   });
 
   test("tiling the whole tune with windows plays every note once", () => {
