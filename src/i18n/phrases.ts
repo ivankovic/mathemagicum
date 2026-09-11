@@ -225,6 +225,8 @@ export interface Phrases {
   debugBasket: string;
   debugLearn: string;
   debugGuides: string;
+  /** The machine guides only, keeping the rest — see `MACHINE_GUIDES`. */
+  debugMachines: string;
   /** What a row says when it is on, and when it is off. */
   debugOn: string;
   debugOff: string;

@@ -3,6 +3,7 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  EARNED_BY_ERRAND,
   JOBS,
   JOB_SPECS,
   Job,
@@ -115,9 +116,9 @@ describe("the jobs after the bell", () => {
     expect(JOB_SPECS[Job.Parity].progress({ machines: [even], wires: [] })).toBe(6);
     const latch = at("1,1", MachineType.Latch, stateWith({ crates: [3, 3, 3] }));
     expect(JOB_SPECS[Job.Hold].progress({ machines: [latch], wires: [] })).toBe(6);
-    // The blueprint's own job, kept working while the machine is shelved:
-    // what is switched off is getting hold of one, not the code that would
-    // count its stampings, so putting it back is one line in `SHELVED`.
+    // The blueprint's own job, which kept working while the machine was shelved:
+    // what was switched off was getting hold of one, not the code that
+    // counts its stampings — which is why putting it back was one line.
     const drawn = at("1,1", MachineType.Blueprint, stateWith({ rung: 2 }));
     expect(JOB_SPECS[Job.Twice].progress({ machines: [drawn], wires: [] })).toBe(1);
   });
@@ -133,14 +134,21 @@ describe("what the crate offers", () => {
     expect(offered([Job.Either, Job.Ring])).toContain(MachineType.Inverter);
     expect(offered([Job.Either, Job.Ring])).not.toContain(MachineType.Seesaw);
     expect(offered([Job.Either, Job.Ring, Job.Else, Job.Parity])).toContain(MachineType.Latch);
-    // And with every job done, every machine that is not shelved. The
-    // blueprint is never offered, however much she has finished — which is
-    // the difference between a machine waiting for a job and one that is
-    // not in the game yet.
+    // The blueprint is not hers to give, however many jobs are done: it is
+    // earned up the mountain, and the crate offers it only once the scene
+    // says the climb is lit. Named, it is offered whatever the jobs say.
     expect(offered([...JOBS])).not.toContain(MachineType.Blueprint);
-    expect([...offered([...JOBS])].sort()).toEqual(
+    expect(offered([], [MachineType.Blueprint])).toContain(MachineType.Blueprint);
+    expect([...offered([...JOBS], [...EARNED_BY_ERRAND])].sort()).toEqual(
       [...MACHINE_TYPES].filter((one) => !SHELVED.includes(one)).sort(),
     );
+  });
+
+  test("a machine an errand earns is one no job unlocks, and is not shelved", () => {
+    for (const machine of EARNED_BY_ERRAND) {
+      expect(SHELVED).not.toContain(machine);
+      for (const job of JOBS) expect(JOB_SPECS[job].unlocks).not.toBe(machine);
+    }
   });
 
   test("reads the jobs done back from a save, dropping what it does not know", () => {

@@ -60,10 +60,11 @@ export const JOBS: readonly Job[] = [
   Job.Else,
   Job.Parity,
   Job.Hold,
-  // `Job.Twice` is not here: it asks for a blueprint to be stamped and the
-  // blueprint is shelved, so it is a job nobody could finish. Its spec is
-  // left below rather than deleted, because putting it back is meant to be
-  // the same edit as taking it out.
+  // The blueprint's. It was out of this list while the blueprint was on the
+  // shelf, and went back in the day the blueprint came off it — the machine
+  // is earned up the mountain rather than here, but the *test* of it is
+  // still hers: the same line built twice.
+  Job.Twice,
 ];
 
 /** What the scene can see of the garden's lines. */
@@ -182,10 +183,10 @@ export const JOB_SPECS: Readonly<Record<Job, JobSpec>> = {
         PASSED_WANTED,
         Math.max(0, ...line.machines.filter((one) => one.type === MachineType.Latch).map(held)),
       ),
-    // Nothing, while the blueprint is shelved. The jobs sheet draws a glad
-    // mark where there is no machine to earn — see `showEarned` — so a last
-    // job that hands nothing over still reads as finished rather than
-    // broken.
+    // Nothing: the machine the next job needs is the blueprint, and that is
+    // the astronomer's to give — see `EARNED_BY_ERRAND`. The jobs sheet
+    // draws a glad mark where there is no machine to earn, so a job that
+    // hands nothing over still reads as finished rather than broken.
     unlocks: null,
   },
   [Job.Twice]: {
@@ -234,23 +235,41 @@ export function nextJob(done: readonly string[]): Job | null {
  * jobs' own code and every save that already has one standing in a garden.
  * It simply cannot be got hold of.
  *
- * The blueprint is here because it is the odd one out of the eleven. It is
- * not a machine — it makes nothing and does no arithmetic — it is a drawing
- * of the other machines, which makes it the one whose minigame is not about
- * an operation at all, and it wants thinking about on its own rather than
- * being the last item on a list.
+ * Empty now. The blueprint sat here for a while, because it is the odd one
+ * out of the eleven — not an operation but a drawing of the others — and
+ * its question wanted thinking about on its own. The thought was that the
+ * mirror spell's parchment, which asks a child to make one half of a
+ * picture match the other, is that question exactly; the spell went and
+ * the parchment came here. The shelf stays, for the next machine that
+ * needs it.
  */
-export const SHELVED: readonly MachineType[] = [MachineType.Blueprint];
+export const SHELVED: readonly MachineType[] = [];
 
 /**
- * Which machines the crate may offer, given the jobs done.
+ * Machines earned by an errand that is not one of the mechanic's, and so
+ * offered only when the scene says that errand is done.
+ *
+ * The blueprint is the astronomer's: light the five posts up the climb to
+ * the dome and the crate offers one. Without this list the rule below would
+ * put it in the crate on day one, since no *job* unlocks it — which is the
+ * same trap `SHELVED` exists for, from the other side.
+ */
+export const EARNED_BY_ERRAND: readonly MachineType[] = [MachineType.Blueprint];
+
+/**
+ * Which machines the crate may offer, given the jobs done and whatever the
+ * other errands have earned.
  *
  * Every machine no job unlocks is offered from the start; a machine some
  * job unlocks waits for it. Read from the specs rather than listed, so a
  * job added with an `unlocks` gates its machine without a second edit.
- * Shelved machines are offered by nothing — see `SHELVED`.
+ * Shelved machines are offered by nothing — see `SHELVED` — and a machine
+ * another errand earns waits to be named in `earned`.
  */
-export function offered(done: readonly string[]): readonly MachineType[] {
+export function offered(
+  done: readonly string[],
+  earned: readonly MachineType[] = [],
+): readonly MachineType[] {
   const gated = new Map<MachineType, Job>();
   for (const job of JOBS) {
     const spec = JOB_SPECS[job];
@@ -258,6 +277,7 @@ export function offered(done: readonly string[]): readonly MachineType[] {
   }
   return Object.values(MachineType).filter((machine) => {
     if (SHELVED.includes(machine)) return false;
+    if (EARNED_BY_ERRAND.includes(machine)) return earned.includes(machine);
     const by = gated.get(machine);
     return by === undefined || done.includes(by);
   });

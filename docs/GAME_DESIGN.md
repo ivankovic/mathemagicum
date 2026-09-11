@@ -517,7 +517,7 @@ hands. That is the argument for multiplication as plainly as this game can
 make it, and no sentence in it is read to a five-year-old.
 
 Which is also why the times spell learned to **plant**. It could grow a
-patch, clear one, pick one, copy one and build one, and the one thing it
+patch, clear one, pick one and build one, and the one thing it
 could not do was sow — so the tree's beds would have been sixteen taps before
 the spell was worth casting at all. Planting is free and asks no arithmetic,
 so a planted rectangle's whole price is the multiplication.
@@ -733,8 +733,10 @@ grew — while the hours were spent, because a cast that landed is a cast. So
 the spell refuses before the parchment opens and says what is missing. A
 question whose correct answer pays nothing is worse than no question.
 
-**It is earned**, from the astronomer in the dome, by lighting the path up the
-mountain.
+**It was earned** from the astronomer in the dome, by lighting the path up
+the mountain, and has since moved to the clockmaker in the city, where the
+thing that tells everybody the time stands. The climb is still hers to ask
+for; what it earns now is the blueprint — see the machines.
 
 ##### The astronomer's task — light the way up
 
@@ -747,7 +749,9 @@ to have walked up there.
 
 The climb to the dome has **five lamp posts** up its left-hand side, and they
 start dark. Speak to the astronomer and she asks for them to be lit; put a
-lamp on each; speak to her again and she teaches the hourglass.
+lamp on each; speak to her again and the crate offers the blueprint. (It
+taught the hourglass first, then the mirror spell; both have gone from
+her, the one to the clockmaker and the other out of the game.)
 
 **She supplies the lamps.** They are eight crops each in the store — forty
 harvests for five, which is eighty number lines and a quest about *money*
@@ -2964,10 +2968,29 @@ given again when its moment comes: he is the one who explains this game,
 and "show me again" means all of it.
 
 **What has no guide.** The spells with a teacher — the portal, the
-hourglass, the mirror, the array and the share — are shown by the person who
+hourglass, the array and the share — are shown by the person who
 gives them. The wheel over a bench is two pictures and nothing else, and an
 arrow at one of them would be the game choosing for her. A door needs no
 arrow; she can see the door.
+
+**The machines are a line of guides, because a machine is a line of
+actions.** Reported from a playthrough: *I am trying to build the machines
+and I have no idea what I am supposed to do.* It was not that any one step
+was hard. The crate showed a picture of a sorter in a group nobody had
+opened, the only guide about machines was the arrow over one already
+standing and asleep, and everything after that — the mouth, the crates
+under it, the coil — was a tap on a thing that looked like scenery. So the
+whole line is pointed at now, one guide to a step so that each starts at its
+own moment: *building* when her basket could pay for one the crate offers
+(the crate, the makers, the machine, the square); *waking* when it stands
+there asleep; *feeding* when an awake machine's mouth is empty and she is
+carrying something it takes; *taking* when it has something in a crate,
+which is where she ends up holding a thing a machine made and is the point
+of the rest; and *wiring* when two awake machines stand within a wire's
+reach of each other and nothing joins them — the crate, the makers, the
+coil, one machine, the other. Nothing is said, as before. Each is given
+once, so a child who has built one machine is not walked through the crate
+again for the second; the coil is pointed at when the second is standing.
 
 **Scripts are spared it.** A glow on the pouch is a difference in every
 screenshot, and a guide finishing writes to the child's progress, which is a
@@ -2975,6 +2998,13 @@ save changing under a scenario about saves. `?guided=all` counts every guide
 as given; the harness sends it unless a scenario says it wants to meet the
 game as a child does, and the one scenario that does is the one about the
 guide.
+
+**And the debug sheet can give the machines again on their own.** The row
+that shows the tutorial again forgets every guide, which is right for a
+younger sibling and wrong for the child stuck at the sorter: she can plant
+and sell, and starting from the pouch would be twenty minutes of pointing at
+things she knows before the first thing she does not. The row under it
+forgets only the machine guides.
 
 ### The map in the tower
 
@@ -3320,7 +3350,28 @@ the job before it, and each two materials of which one a press made:
   pays every machine's recipe out of the basket, because a drawing that
   built for free would be conjuring. What it saves is the wiring, which is
   what a function saves. The job is one stamping: the same line built
-  twice. It is the last thing the mechanic has to teach.
+  twice. It is the last thing the mechanic has to teach — but not hers to
+  give, see below.
+
+**The blueprint is woken by the fold, and earned up the mountain.** The
+first five of these were woken by the logic spell, and the blueprint was
+meant to be too, and was shelved instead: it is not an operation but a
+drawing of the others, and asking it a question about gates was asking it
+the wrong question. Meanwhile the mirror spell — taught by the astronomer,
+its parchment a grid with a line through it and the squares that make both
+sides match, its effect the same verb on the world: take the ground from
+there and put it here — turned out to be a spell nobody wanted. Moving
+ground is not a thing a child asks for. What a child does ask for is the
+same *line of machines* again, somewhere else, and that is what a
+blueprint does. So the parchment moved onto the blueprint and the spell
+went: the blueprint asks its own question when it is tapped asleep, the
+way the funnel asks for the union, with no rune in the book and nothing to
+be taught first. The astronomer's climb, which used to pay the spell, pays
+the machine instead — once every post is lit the crate offers a blueprint
+— so the observatory is still worth the walk and the blueprint is still
+behind an errand rather than in the crate on day one. The mechanic's last
+job tests it, as before. Ground a child moved with the old spell stays
+moved: the save keeps the list, and nothing writes to it any more.
 
 **The generator is at version five** for this: the city has a garage in
 it, in the first block that is not a shop and is wide enough, and every

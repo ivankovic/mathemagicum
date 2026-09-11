@@ -5,7 +5,12 @@ import { type Rng, randInt } from "../world/rng";
 import { CLEAN_TO_CLIMB, type Recent, STUMBLES_TO_EASE } from "./difficulty";
 
 /**
- * The mirror spell: colour the squares that make the picture match.
+ * The fold: colour the squares that make the picture match.
+ *
+ * It was the mirror spell's parchment, and it is the blueprint's question
+ * now — the machine that builds the same line twice is woken by making one
+ * half of a picture match the other. Nothing below knows which; a grid is
+ * a grid.
  *
  * A grid, a few squares already coloured in, and a line ruled through it.
  * What the child does is colour the squares that are missing — the ones that

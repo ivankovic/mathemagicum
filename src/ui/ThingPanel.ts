@@ -4,12 +4,29 @@
 import type Phaser from "phaser";
 import type { Phrases } from "../i18n/phrases";
 import type { FixtureType } from "../world/fixtures";
-import { type MachineType, SPARK, isMachine, recipeFor } from "../world/machines";
+import { MachineType, SPARK, isMachine, recipeFor } from "../world/machines";
 import { PagedPanel } from "./PagedPanel";
 import type { PanelRect } from "./ParchmentPanel";
-import { type UiIndex, itemIcon, materialIcon, uiTextureKey } from "./assets";
+import { UiAsset, type UiIndex, itemIcon, materialIcon, uiTextureKey } from "./assets";
 import { INK_DIM } from "./parchment";
 import { RUNE_OF } from "./runes";
+
+/**
+ * The picture of what wakes a machine: its spell's rune, or its own
+ * question's picture for the two that ask one no spell asks.
+ *
+ * The blueprint asks the fold, and the fold has a picture — it was a rune
+ * once. The funnel asks the union, which has none: two rings that cross are
+ * drawn on the parchment itself, and a small copy of them would be a third
+ * drawing to keep in step with two. So a funnel stands alone here, which is
+ * at least honest — it used to stand beside the logic rune, a spell it never
+ * asks for.
+ */
+function questionOf(machine: MachineType): string | null {
+  const spell = SPARK[machine];
+  if (spell !== null) return RUNE_OF[spell];
+  return machine === MachineType.Blueprint ? UiAsset.RuneMirror : null;
+}
 
 /**
  * What a thing is, and what it costs — opened from the little cloud on its
@@ -114,10 +131,10 @@ export class ThingPanel extends PagedPanel<Page> {
     if (!thing) return;
     const middle = (top + bottom) / 2;
     if (page === "does") {
-      // The thing itself, and the rune that wakes it — which is a picture
-      // rather than a word on purpose. Anything that is not a machine has
-      // nothing to be woken by, so it stands alone.
-      const rune = isMachine(thing) ? RUNE_OF[SPARK[thing as MachineType]] : null;
+      // The thing itself, and the question that wakes it — which is a
+      // picture rather than a word on purpose. Anything that is not a
+      // machine has nothing to be woken by, so it stands alone.
+      const rune = isMachine(thing) ? questionOf(thing) : null;
       this.drawIcons(rect, middle, rune ? [itemIcon(thing), rune] : [itemIcon(thing)]);
       return;
     }

@@ -50,6 +50,8 @@ export interface DebugControls {
   readonly learnEverything: () => void;
   /** Show the tutorial again, from the top. See `debugGuides`. */
   readonly replayGuides: () => void;
+  /** Show the machine guides again, and only those. See `debugMachines`. */
+  readonly replayMachineGuides: () => void;
 }
 
 /**
@@ -85,7 +87,7 @@ const SMALL_SIZE = TYPE.tiny;
 const BUTTON_H = 34;
 const BUTTON_GAP = 10;
 /** How many rows the debug face draws. See renderDebug. */
-const DEBUG_ROWS = 8;
+const DEBUG_ROWS = 9;
 
 /** Where the two buttons go. Stated here so a script need not guess. */
 export const SOURCE_URL = "https://github.com/ivankovic/mathemagicum";
@@ -165,8 +167,8 @@ export class AboutPanel extends Panel {
     this.note = this.own(this.text("", BODY_SIZE, INK).setOrigin(0.5, 0).setAlign("left"));
 
     this.hint = this.own(this.text("", SMALL_SIZE, INK_DIM).setOrigin(0.5, 0));
-    // Seven, which is what `debugRows` draws. Made once here rather than as
-    // the sheet is drawn: a row built during a render is a row that flickers
+    // As many as `renderDebug` draws. Made once here rather than as the
+    // sheet is drawn: a row built during a render is a row that flickers
     // the first time the panel is opened.
     for (let n = 0; n < DEBUG_ROWS; n++) this.rows.push(this.button(() => {}));
 
@@ -347,6 +349,13 @@ export class AboutPanel extends Panel {
             value: this.given.guides,
             act: () => this.give("guides"),
           },
+          // After the whole tutorial, and numbered after it, so the script
+          // that taps the eighth row for the whole thing goes on tapping it.
+          {
+            label: this.words.debugMachines,
+            value: this.given.machines,
+            act: () => this.give("machines"),
+          },
         ]
       : [];
 
@@ -391,15 +400,16 @@ export class AboutPanel extends Panel {
   }
 
   /** What each hand-over row says: its own name, until it has been used. */
-  private given = { purse: "", basket: "", learn: "", guides: "" };
+  private given = { purse: "", basket: "", learn: "", guides: "", machines: "" };
 
-  private give(which: "purse" | "basket" | "learn" | "guides"): void {
+  private give(which: "purse" | "basket" | "learn" | "guides" | "machines"): void {
     const at = this.controls;
     if (!at) return;
     if (which === "purse") at.fillPurse();
     if (which === "basket") at.fillBasket();
     if (which === "learn") at.learnEverything();
     if (which === "guides") at.replayGuides();
+    if (which === "machines") at.replayMachineGuides();
     this.given = { ...this.given, [which]: this.words.debugDone };
   }
 

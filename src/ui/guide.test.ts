@@ -10,10 +10,17 @@ import {
   GuideRun,
   type GuideView,
   type GuideWorld,
+  MACHINE_GUIDES,
   readGuided,
 } from "./guide";
 
-const QUIET: GuideView = { trayOpen: null, crateGroupOpen: false, armed: null, indoors: null };
+const QUIET: GuideView = {
+  trayOpen: null,
+  crateGroupOpen: false,
+  armed: null,
+  wireFrom: false,
+  indoors: null,
+};
 
 const GARDEN: GuideWorld = {
   outdoors: true,
@@ -22,6 +29,10 @@ const GARDEN: GuideWorld = {
   cropsInBasket: 0,
   thingsInCrate: 0,
   sleepingMachines: 0,
+  machinesToBuild: 0,
+  hungryMachines: 0,
+  fullMachines: 0,
+  wirePairs: 0,
   spellToLearn: false,
   woodStanding: 0,
 };
@@ -176,6 +187,122 @@ describe("the rest, in the order the loop goes", () => {
     guide.forgetAll();
     guide.tick(GARDEN, QUIET);
     expect(guide.current?.guide).toBe(Guide.Plant);
+  });
+});
+
+describe("the machines, in the order a line is made", () => {
+  const before = [Guide.Plant, Guide.Grow, Guide.Pick, Guide.Sell, Guide.Learn, Guide.Place];
+
+  test("building waits until she can pay for one, then walks the crate to the square", () => {
+    const { run: guide } = run(before);
+    guide.tick(GARDEN, QUIET);
+    expect(guide.current).toBe(null);
+    guide.tick({ ...GARDEN, machinesToBuild: 1 }, QUIET);
+    expect(guide.current).toEqual({ guide: Guide.Build, step: 0 });
+    expect(guide.cue()).toEqual({ kind: "button", name: "crate" });
+    guide.note(Deed.OpenedCrate);
+    expect(guide.cue()).toEqual({ kind: "crate-makers" });
+    guide.note(Deed.OpenedGroup);
+    expect(guide.cue()).toEqual({ kind: "crate-machine" });
+    // A fence taken out of the crate is not a machine made.
+    guide.note(Deed.ArmedThing);
+    expect(guide.cue()).toEqual({ kind: "crate-machine" });
+    guide.note(Deed.BuiltMachine);
+    expect(guide.cue()).toEqual({ kind: "ahead" });
+    guide.note(Deed.Placed);
+    expect(guide.finished).toContain(Guide.Build);
+  });
+
+  // Skipped one step at a time, as every guide is: the crate open, the makers
+  // open, and a machine lit over her head is the square in front of her.
+  const HOLDING_ONE: GuideView = {
+    ...QUIET,
+    trayOpen: "crate",
+    crateGroupOpen: true,
+    armed: "machine",
+  };
+
+  test("a machine already in her hands is the crate already walked", () => {
+    const { run: guide } = run(before);
+    guide.tick({ ...GARDEN, machinesToBuild: 1 }, HOLDING_ONE);
+    expect(guide.cue()).toEqual({ kind: "ahead" });
+  });
+
+  test("and placing counts a machine in her hands as a thing in them", () => {
+    const { run: guide } = run(before.filter((one) => one !== Guide.Place));
+    guide.tick({ ...GARDEN, thingsInCrate: 1 }, HOLDING_ONE);
+    expect(guide.current?.guide).toBe(Guide.Place);
+    expect(guide.cue()).toEqual({ kind: "ahead" });
+  });
+
+  test("then waking, feeding and taking, each when its moment comes", () => {
+    const { run: guide } = run([...before, Guide.Build]);
+    guide.tick({ ...GARDEN, sleepingMachines: 1 }, QUIET);
+    expect(guide.cue()).toEqual({ kind: "sleeping-machine" });
+    guide.note(Deed.Woke);
+    expect(guide.finished).toContain(Guide.Wake);
+    // Nothing to feed it with yet.
+    guide.tick(GARDEN, QUIET);
+    expect(guide.current).toBe(null);
+    guide.tick({ ...GARDEN, hungryMachines: 1 }, QUIET);
+    expect(guide.cue()).toEqual({ kind: "hungry-machine" });
+    guide.note(Deed.Fed);
+    expect(guide.finished).toContain(Guide.Feed);
+    // And the thing it made, which is where the errand was going.
+    guide.tick({ ...GARDEN, fullMachines: 1 }, QUIET);
+    expect(guide.cue()).toEqual({ kind: "full-machine" });
+    guide.note(Deed.Took);
+    expect(guide.finished).toContain(Guide.Take);
+  });
+
+  test("the wire waits for two machines, and points at one end and then the other", () => {
+    const { run: guide } = run([...before, Guide.Build, Guide.Wake, Guide.Feed, Guide.Take]);
+    guide.tick(GARDEN, QUIET);
+    expect(guide.current).toBe(null);
+    guide.tick({ ...GARDEN, wirePairs: 1 }, QUIET);
+    expect(guide.cue()).toEqual({ kind: "button", name: "crate" });
+    guide.note(Deed.OpenedCrate);
+    expect(guide.cue()).toEqual({ kind: "crate-makers" });
+    guide.note(Deed.OpenedGroup);
+    expect(guide.cue()).toEqual({ kind: "crate-coil" });
+    guide.note(Deed.ArmedWire);
+    expect(guide.cue()).toEqual({ kind: "wire-from" });
+    guide.note(Deed.WiredFrom);
+    expect(guide.cue()).toEqual({ kind: "wire-to" });
+    guide.note(Deed.Wired);
+    expect(guide.finished).toContain(Guide.Wire);
+  });
+
+  test("a coil already holding one end skips to the other", () => {
+    const { run: guide } = run([...before, Guide.Build, Guide.Wake, Guide.Feed, Guide.Take]);
+    guide.tick(
+      { ...GARDEN, wirePairs: 1 },
+      { ...QUIET, trayOpen: "crate", crateGroupOpen: true, armed: "wire", wireFrom: true },
+    );
+    expect(guide.cue()).toEqual({ kind: "wire-to" });
+  });
+
+  test("the wire is not offered before the machines it joins, nor in front of a full crate", () => {
+    // A child who can build, wake and take is a child with a line waiting
+    // to be finished; the wire comes after those in the list, so with all
+    // of them ready at once it is the machine she is pointed at first.
+    const { run: guide } = run(before);
+    guide.tick({ ...GARDEN, wirePairs: 1, fullMachines: 1, machinesToBuild: 1 }, QUIET);
+    expect(guide.current?.guide).toBe(Guide.Build);
+  });
+
+  test("forgetting the machine guides keeps the rest, and puts down a running one", () => {
+    const { run: guide } = run(GUIDES);
+    guide.forget(MACHINE_GUIDES);
+    expect([...guide.finished].sort()).toEqual([...before, Guide.Grove].sort());
+    guide.tick({ ...GARDEN, sleepingMachines: 1 }, QUIET);
+    expect(guide.current?.guide).toBe(Guide.Wake);
+    // Half way through, forgotten again: the run is put down rather than
+    // carried on into a second finish.
+    guide.forget(MACHINE_GUIDES);
+    expect(guide.current).toBe(null);
+    guide.tick(GARDEN, QUIET);
+    expect(guide.current).toBe(null);
   });
 });
 

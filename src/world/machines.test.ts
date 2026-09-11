@@ -59,10 +59,18 @@ describe("a machine that has not been woken", () => {
     expect(advance(asleep, 10_000, SORTER)).toEqual(asleep);
   });
 
-  test("and every machine names the spell that wakes it", () => {
+  test("and every machine names the spell that wakes it, or says it asks its own", () => {
     for (const machine of MACHINE_TYPES) {
-      expect({ machine, spell: SPARK[machine] }).toEqual({ machine, spell: expect.any(String) });
+      const spell = SPARK[machine];
+      expect({ machine, named: spell === null || SPELLS.includes(spell) }).toEqual({
+        machine,
+        named: true,
+      });
     }
+    // The two that ask a question no spell asks: the union, and the fold.
+    expect(MACHINE_TYPES.filter((machine) => SPARK[machine] === null).sort()).toEqual(
+      [MachineType.Funnel, MachineType.Blueprint].sort(),
+    );
     // The sorter divides, so division is what wakes it. A machine woken by
     // some *other* spell would be a toll rather than a demonstration.
     expect(SPARK[MachineType.Sorter]).toBe(Spell.Share);
@@ -594,15 +602,13 @@ describe("a tally counting up to its mark", () => {
     expect(new Set(MACHINE_TYPES.map((machine) => WORK[machine].verb)).size).toBe(
       MACHINE_TYPES.length,
     );
-    for (const machine of MACHINE_TYPES) {
-      expect({ machine, spark: SPELLS.includes(SPARK[machine]) }).toEqual({ machine, spark: true });
-    }
-    // And between them they still cover all four operations — and now the
-    // logic that the machines which *decide* are woken by, which is the
-    // thing the old assertion was really guarding: no machine is sparked by
-    // a spell that has nothing to do with what it does.
+    // Between them they still cover all four operations — and the logic
+    // that the machines which *decide* are woken by, which is the thing the
+    // old assertion was really guarding: no machine is sparked by a spell
+    // that has nothing to do with what it does. The two that ask their own
+    // question are not in any spellbook, and say so with a null.
     expect(new Set(MACHINE_TYPES.map((machine) => SPARK[machine]))).toEqual(
-      new Set([Spell.Growth, Spell.Clearing, Spell.Array, Spell.Share, Spell.Logic]),
+      new Set([Spell.Growth, Spell.Clearing, Spell.Array, Spell.Share, Spell.Logic, null]),
     );
   });
 });

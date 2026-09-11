@@ -72,6 +72,7 @@ function sample(p: Phrases): Record<string, string> {
     vennHint: p.vennHint,
     debugLearn: p.debugLearn,
     debugGuides: p.debugGuides,
+    debugMachines: p.debugMachines,
     debugOn: p.debugOn,
     debugOff: p.debugOff,
     debugDone: p.debugDone,

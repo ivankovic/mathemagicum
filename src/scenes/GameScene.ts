@@ -163,7 +163,15 @@ import {
   materialIcon,
   uiTextureKey,
 } from "../ui/assets";
-import { type Cue, Deed, type Guide, GuideRun, type GuideView, type GuideWorld } from "../ui/guide";
+import {
+  type Cue,
+  Deed,
+  type Guide,
+  GuideRun,
+  type GuideView,
+  type GuideWorld,
+  MACHINE_GUIDES,
+} from "../ui/guide";
 import { NEWS_BEATS } from "../ui/news";
 import { FACE, INK, INK_DIM } from "../ui/parchment";
 import { RUNE_OF } from "../ui/runes";
@@ -226,7 +234,7 @@ import type { CityLayout } from "../world/city";
 import {
   CRATE_GROUPS,
   CRATE_WIRE,
-  type CrateGroup,
+  CrateGroup,
   type CrateThing,
   faceOf,
   groupOf,
@@ -345,6 +353,7 @@ import type { Inventory, ItemType } from "../world/inventory";
 import { JOB_SPECS, type LineView, RINGS_WANTED, nextJob, offered } from "../world/jobs";
 import { LandmarkType, landmarkAnimKey, landmarkFor, landmarkSheetKey } from "../world/landmarks";
 import {
+  MACHINE_TYPES,
   MINUTES_PER_ROUND,
   type MachineState,
   type MachineType,
@@ -352,6 +361,7 @@ import {
   SPARK,
   advance as advanceMachine,
   build,
+  canBuild as canBuildMachine,
   feed,
   fullestCrate,
   isMachine,
@@ -376,6 +386,7 @@ import { markedPlaces } from "../world/minimap";
 import { NAMED_PEOPLE, nameCast } from "../world/names";
 import type { PlacedObject } from "../world/objects";
 import { LAMP_POSTS, type Observatory, lampsLit, postsFree } from "../world/observatory";
+import { type PaintedTiles, readPainted } from "../world/paintedGround";
 import { findPath } from "../world/pathfinding";
 import {
   type Crop,
@@ -428,13 +439,6 @@ import {
 } from "../world/spriteSidecar";
 import { TerrainType } from "../world/terrain";
 import { DUAL_ORIGIN, TERRAIN_ATLAS_KEY, frameName, variationFor } from "../world/terrainAtlas";
-import {
-  CopyRefusal,
-  type PaintedTiles,
-  type Painting,
-  planCopy,
-  readPainted,
-} from "../world/terrainCopy";
 import {
   ALL_HOURS,
   type OpeningHours,
@@ -761,7 +765,6 @@ const SPELL_RUNES: Record<PatchAction, string> = {
   [PatchAction.Clear]: UiAsset.RuneMinus,
   [PatchAction.Build]: UiAsset.RuneAdd,
   [PatchAction.Pick]: UiAsset.RuneDivide,
-  [PatchAction.Copy]: UiAsset.RuneMirror,
 };
 
 /** The marker drawn over ground the player has marked out. */
@@ -1474,30 +1477,14 @@ export class GameScene extends Phaser.Scene {
   /** Every flower on screen, by the cell it stands on. */
   private readonly flowerSprites = new Map<string, Phaser.GameObjects.Sprite>();
   /**
-   * Ground the mirror spell has moved, by the tile it moved it onto.
+   * Ground a child moved, by the tile it was moved onto.
    *
-   * Kept here rather than diffed out of the grid on every save: terrain is a
-   * quarter of a million tiles and this spell is the only thing that paints,
-   * so it can say what it did instead of the save working it out.
+   * The mirror spell used to paint this, and it has gone; nothing in the
+   * game paints ground any more. The list is kept because the gardens it
+   * rearranged are still somebody's gardens — read in from the save and
+   * written straight back, so a hill a child moved stays moved.
    */
   private readonly painted = new Map<string, TerrainType>();
-  /**
-   * The source square the mirror spell is waiting to copy, if she has picked
-   * one. The spell wants two taps — from here, to there — and this is the
-   * half-way point between them.
-   */
-  private mirrorFrom: readonly GridPoint[] | null = null;
-  /**
-   * The rectangle the times spell drew, when the copy is a block.
-   *
-   * Null for a single square. What it decides is whether a multiplication is
-   * asked after the mirror's own puzzle: the times spell always asks the
-   * spell it is multiplying first and its own sum second, and this is how
-   * the copy knows it is being multiplied at all.
-   */
-  private mirrorPatch: Patch | null = null;
-  /** The copy the mirror's puzzle is standing in front of, once planned. */
-  private mirrorPaint: readonly Painting[] | null = null;
   /** Which colour the seed pouch will plant next, per flower. */
   private flowerLook: Partial<Record<FlowerType, number>> = {};
   private symmetryPopup?: SymmetryPopup;
@@ -3893,15 +3880,11 @@ export class GameScene extends Phaser.Scene {
    * the rectangle is drawn, which is before any sum has been asked.
    */
   private openSpellChoice(): void {
-    // Copying is offered outdoors and only to a child who has been taught
-    // the mirror spell: it is that spell's effect, and the times spell is
-    // what makes it a block rather than a square. Indoors there is no ground
-    // to move — a floor is a floor — so it is not on the menu there.
+    // Indoors there is nothing to plant or grow — a floor is a floor — so
+    // the menu there is the plus rune and the minus rune and nothing else.
     const outdoors = this.interior?.plan
       ? [PatchAction.Build, PatchAction.Clear]
-      : this.knowsMirror
-        ? [PatchAction.Plant, PatchAction.Grow, PatchAction.Clear, PatchAction.Copy]
-        : [PatchAction.Plant, PatchAction.Grow, PatchAction.Clear];
+      : [PatchAction.Plant, PatchAction.Grow, PatchAction.Clear];
     // Kept so the menu's buttons can be named for what they do. See
     // `uiPositions`.
     this.patchChoices = outdoors;
@@ -4115,7 +4098,6 @@ export class GameScene extends Phaser.Scene {
     this.disarm();
     if (held.kind === "spell") {
       if (held.spell === Spell.Growth) this.growthCastAt(at);
-      else if (held.spell === Spell.Mirror) this.mirrorTapAt(at);
       else if (held.spell === Spell.Logic) this.logicCastAt(at);
       else this.clearingCastAt(at);
       return;
@@ -4484,10 +4466,6 @@ export class GameScene extends Phaser.Scene {
    * built from the patch, so an action with nothing to do was never offered.
    */
   private patchIsWorthCasting(patch: Patch, action: PatchAction): boolean {
-    // Every square of ground can be copied, so there is nothing here to
-    // find nothing in. Whether it will *go* where she puts it is a question
-    // about the far end, and it is asked there.
-    if (action === PatchAction.Copy) return true;
     const offer = this.patchOffers(patch).find((each) => each.action === action);
     if (offer && offer.cells.length > 0) return true;
     // Indoors there are two ways to have nothing to do, and they want
@@ -4521,19 +4499,6 @@ export class GameScene extends Phaser.Scene {
   private beginPatchCast(patch: Patch, action: PatchAction): void {
     if (!this.patchIsWorthCasting(patch, action)) return;
     this.joystick?.release();
-    // Copying needs one thing none of the others do: somewhere to put it.
-    // So it steps out here to ask, and comes back in at `castOnce` with the
-    // far corner chosen — after which it is an ordinary patch cast, the
-    // mirror's puzzle first and the multiplication second, like every other
-    // action on this menu.
-    if (action === PatchAction.Copy) {
-      this.mirrorFrom = patchCells(patch);
-      this.mirrorPatch = patch;
-      this.stopMarking();
-      // Lit and waiting for the far corner, exactly as a single square is.
-      this.armSpell(Spell.Mirror, UiAsset.RuneMirror);
-      return;
-    }
     // **The spell once, then the multiplication.** A child casts the thing
     // they are about to do many times over, once, by hand — and only then is
     // asked how many times. That order is the spell's whole argument:
@@ -4575,10 +4540,6 @@ export class GameScene extends Phaser.Scene {
     // as plainly as this game can make it: sixteen squares for one answer.
     if (action === PatchAction.Plant) {
       done(true);
-      return;
-    }
-    if (action === PatchAction.Copy) {
-      this.openMirrorPuzzle(done);
       return;
     }
     if (action === PatchAction.Build) {
@@ -4721,14 +4682,6 @@ export class GameScene extends Phaser.Scene {
       }
       // One for the lot, as with the seeds above.
       if (done > 0) sound().effect(Sfx.Harvest);
-    } else if (action === PatchAction.Copy) {
-      // Planned before either parchment opened, and held since: the ground
-      // it was measured against has not moved, and re-planning here would
-      // be measuring a second time and hoping for the same answer.
-      const paint = this.mirrorPaint ?? [];
-      this.paintGround(paint);
-      done += paint.length;
-      this.mirrorPaint = null;
     } else if (action === PatchAction.Build) {
       // Worked out once, in the coordinates that hold now, and laid in one
       // go. Laying them one at a time would move the origin under the patch
@@ -5301,105 +5254,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * The mirror spell: take the ground from there and put it here.
+   * The fold: a grid, a line through it, and the squares that make both
+   * sides match. The blueprint's own question.
    *
-   * The same verb as the puzzle it asks. A child who has just made one half
-   * of a picture match the other makes one half of the *world* match
-   * another, which is the design's rule that a spell's effect mirrors its
-   * mathematics — kept for the fifth spell as it was for the first four.
-   *
-   * Two taps, and this is the only spell that wants two: *from* and *to*.
-   * Everything else in the game acts on one square, so there is no existing
-   * shape to borrow; what there is instead is the arming, which already
-   * means "lit and waiting for a tap", and it simply waits twice.
+   * It was the mirror spell's, and the spell moved ground about — the same
+   * verb on the world as on the parchment. Nobody wanted ground moved. What
+   * a child does want copied is a *line of machines*, and that is what a
+   * blueprint does, so the question went where the verb was actually
+   * useful: make this half match that half, and then the drawing makes one
+   * garden match another.
    */
-  private castMirrorSpell(): void {
-    if (this.modalOpen) return;
-    if (!this.knowsMirror) {
-      this.spellTray?.setOpen(false);
-      this.showWhereToLearn(Spell.Mirror);
-      return;
-    }
-    // Both, and the second one matters: a child who chose *copy* off the
-    // times menu, marked out a block and then thought better of it and
-    // reached for the mirror rune itself would otherwise still be carrying
-    // the block — and would be asked a multiplication about a rectangle she
-    // had walked away from, for a copy of one square.
-    this.mirrorFrom = null;
-    this.mirrorPatch = null;
-    this.armSpell(Spell.Mirror, UiAsset.RuneMirror);
-  }
-
-  /**
-   * One tap of the mirror spell: the first says from, the second says to.
-   *
-   * The rune stays lit between them, which is what says the spell is still
-   * asking. A child who taps once and wanders off has changed nothing.
-   */
-  private mirrorTapAt(at: GridPoint): void {
-    if (!this.mirrorFrom) {
-      // The ground she is copying. Refused here rather than at the far end,
-      // so a child pointing at the sea is told so before she has chosen
-      // anywhere to put it.
-      if (!this.worldGrid.inBounds(at.col, at.row)) return;
-      const check = planCopy(this.worldGrid, [at], { col: at.col + 1, row: at.row });
-      if (!check.ok && check.why === CopyRefusal.NotGround) {
-        this.markRefusal(at.col, at.row);
-        return;
-      }
-      this.mirrorFrom = [at];
-      // Lit again, because the spell has not been spent — it has been half
-      // answered, and the ring round her has to stay up for the second half.
-      this.armSpell(Spell.Mirror, UiAsset.RuneMirror);
-      this.markSource(at);
-      return;
-    }
-    this.openMirrorFor(this.mirrorFrom, at);
-  }
-
-  /**
-   * The puzzle, and the copy that follows it if she gets it right.
-   *
-   * Planned before the parchment opens rather than after it closes: a child
-   * who has just coloured in a whole grid and is then told the ground would
-   * not go there has been made to work for nothing.
-   */
-  private openMirrorFor(source: readonly GridPoint[], anchor: GridPoint): void {
-    const plan = planCopy(this.worldGrid, source, anchor);
-    if (!plan.ok) {
-      this.markRefusal(plan.at.col, plan.at.row);
-      // The source stays chosen, so a near miss costs one more tap rather
-      // than the whole spell.
-      return;
-    }
-    const patch = this.mirrorPatch;
-    this.mirrorFrom = null;
-    this.mirrorPatch = null;
-    this.mirrorPaint = plan.paint;
-    this.disarm();
-    this.joystick?.release();
-    if (!patch) {
-      // One square: the mirror's own puzzle and nothing else.
-      this.openMirrorPuzzle((worked) => {
-        if (worked) this.paintGround(plan.paint);
-        this.mirrorPaint = null;
-      });
-      return;
-    }
-    // A block: the spell once, and then how many times — which is the order
-    // every other action on the times menu is asked in, and the whole of
-    // what that spell is for.
-    this.castOnce(PatchAction.Copy, (worked) => {
-      if (!worked) {
-        this.mirrorPaint = null;
-        return;
-      }
-      this.askTheMultiplication(patch, PatchAction.Copy);
-    });
-  }
-
-  /** The mirror's grid, and whether she finished it. */
-  private openMirrorPuzzle(done: (worked: boolean) => void): void {
+  private askTheFold(done: (worked: boolean) => void): void {
     const rung = symmetryRungAt(this.ladders.held("symmetryRung"));
     this.symmetryPopup?.open(this.spellRng, rung, (result) => {
       this.ladders.note("symmetryRung", result);
@@ -5407,76 +5272,13 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** A ring round the square she is copying, while the spell waits. */
-  private markSource(at: GridPoint): void {
-    const feet = this.toFeet(at.col, at.row);
-    const ring = this.world(
-      this.add
-        .rectangle(feet.x, feet.y - TILE_SIZE / 2, TILE_SIZE, TILE_SIZE)
-        .setStrokeStyle(3, PATCH_EDGE, 1)
-        .setFillStyle(PATCH_EDGE, 0.15)
-        .setDepth(feet.y),
-    );
-    this.tweens.add({
-      targets: ring,
-      alpha: 0,
-      duration: ARMED_PULSE_MS * 4,
-      onComplete: () => ring.destroy(),
-    });
-  }
-
-  /** What the mirror spell has moved, for the save. */
+  /** Ground a child moved, for the save. */
   private paintedTiles(): PaintedTiles {
     return [...this.painted].flatMap((entry) => {
       const [col, row] = entry[0].split(",").map(Number);
       if (col === undefined || row === undefined) return [];
       return [[col, row, entry[1]] as const];
     });
-  }
-
-  /**
-   * Put the ground down, and make the world show it.
-   *
-   * Two halves, and the second is the one that is not obvious. Terrain is
-   * baked into chunk-sized textures, and the atlas ships a finished tile for
-   * every way four *corners* can meet — so changing one square changes the
-   * picture of the squares around it too. Dropping the textures that cover
-   * them is what redraws it: they are rebuilt from the grid on the next
-   * frame, which is the same path a chunk walked into from off screen takes.
-   */
-  private paintGround(paint: readonly { at: GridPoint; terrain: TerrainType }[]): void {
-    if (paint.length === 0) return;
-    for (const { at, terrain } of paint) {
-      this.worldGrid.setTerrain(at.col, at.row, terrain);
-      this.painted.set(tileKey(at.col, at.row), terrain);
-    }
-    // One square wider on every side, because a corner is shared with the
-    // neighbours: a tile whose own terrain did not change is still drawn
-    // differently once the ground beside it has.
-    const cols = paint.map((one) => one.at.col);
-    const rows = paint.map((one) => one.at.row);
-    this.redrawGround({
-      minCol: Math.min(...cols) - 1,
-      minRow: Math.min(...rows) - 1,
-      maxCol: Math.max(...cols) + 1,
-      maxRow: Math.max(...rows) + 1,
-    });
-    this.autosave();
-  }
-
-  /** Throw away the baked ground over a range, so it is drawn again. */
-  private redrawGround(range: {
-    minCol: number;
-    minRow: number;
-    maxCol: number;
-    maxRow: number;
-  }): void {
-    this.chunks.forgetGround(range, this.worldGrid);
-  }
-
-  /** Whether this child has climbed to the dome and been taught. */
-  private get knowsMirror(): boolean {
-    return knowsSpell([...this.profile.learned, ...this.dev.learned], Spell.Mirror);
   }
 
   /** Whether this child has climbed to the dome and been taught. */
@@ -6512,6 +6314,10 @@ export class GameScene extends Phaser.Scene {
         0,
       ),
       sleepingMachines: this.sleepingMachines().length,
+      machinesToBuild: this.machinesToBuild().length,
+      hungryMachines: this.hungryMachines().length,
+      fullMachines: this.fullMachines().length,
+      wirePairs: this.wirePairs().length,
     };
     this.guideWorldSeen = { at: now, world };
     return world;
@@ -6530,13 +6336,18 @@ export class GameScene extends Phaser.Scene {
             ? "growth"
             : held.kind === "spell" && held.spell === Spell.Array
               ? "array"
-              : held.kind === "fixture" || held.kind === "decor"
-                ? "thing"
-                : "other";
+              : held.kind === "fixture" && isMachine(held.fixture)
+                ? "machine"
+                : held.kind === "fixture" || held.kind === "decor"
+                  ? "thing"
+                  : held.kind === "wire"
+                    ? "wire"
+                    : "other";
     return {
       trayOpen,
       crateGroupOpen: this.crateGroup !== null,
       armed,
+      wireFrom: held?.kind === "wire" && held.from !== null,
       indoors: this.interior ? this.enteredBuilding : null,
     };
   }
@@ -6635,6 +6446,45 @@ export class GameScene extends Phaser.Scene {
       }
       case "sleeping-machine":
         return point(this.nearest(this.sleepingMachines()));
+      case "crate-makers":
+        return this.crateTray?.isOpen ? glow(`crate.${CrateGroup.Makers}`, "crate") : glow("crate");
+      case "crate-machine": {
+        // The first one she can pay for, in the crate's own order. While the
+        // makers are shut, their button; while the crate is, the crate.
+        const machine = this.machinesToBuild()[0];
+        if (!this.crateTray?.isOpen) return glow("crate");
+        return machine && this.crateGroup === CrateGroup.Makers
+          ? glow(`crate.${machine}`, "crate")
+          : glow(`crate.${CrateGroup.Makers}`, "crate");
+      }
+      case "crate-coil":
+        if (!this.crateTray?.isOpen) return glow("crate");
+        return this.crateGroup === CrateGroup.Makers
+          ? glow(`crate.${CRATE_WIRE}`, "crate")
+          : glow(`crate.${CrateGroup.Makers}`, "crate");
+      case "hungry-machine":
+        return point(this.nearest(this.hungryMachines()));
+      case "full-machine":
+        return point(this.nearest(this.fullMachines()));
+      case "wire-from": {
+        // Without the coil in her hands there is nothing to tap a machine
+        // with, so the arrow goes back to the coil: she put it down, or a
+        // fat finger on bare ground kept it and she does not know she still
+        // has it. Either way the way on is the same button.
+        const held = this.armed;
+        if (held?.kind !== "wire") return this.drawCue({ kind: "crate-coil" }, marks);
+        return point(this.wirePairs()[0]?.from ?? null);
+      }
+      case "wire-to": {
+        const held = this.armed;
+        if (held?.kind !== "wire") return this.drawCue({ kind: "crate-coil" }, marks);
+        const from = held.from;
+        if (!from) return point(this.wirePairs()[0]?.from ?? null);
+        const pair = this.wirePairs().find(
+          (one) => one.from.col === from.col && one.from.row === from.row,
+        );
+        return point(pair?.to ?? null);
+      }
       case "wood":
         return point(this.nearest(this.woodStillStanding()));
       case "great-tree":
@@ -6796,6 +6646,104 @@ export class GameScene extends Phaser.Scene {
       if (off <= GUIDE_MACHINE_REACH) found.push({ col, row });
     }
     return found;
+  }
+
+  /**
+   * The machines the crate offers that she could build right now.
+   *
+   * Offered *and* affordable, and none of that kind already in her hands:
+   * the errand to build one is pointed at a button, and a button that would
+   * answer with a thought bubble about wood and stone is not an errand she
+   * can finish. What a machine costs is still taught — by the cloud on the
+   * slot, whenever she taps it early — but the guide waits for the moment
+   * the tap will work.
+   */
+  private machinesToBuild(): MachineType[] {
+    if (this.interior) return [];
+    return MACHINE_TYPES.filter(
+      (machine) =>
+        this.crateOffers(machine) &&
+        this.inventory.count(machine) === 0 &&
+        canBuildMachine(this.inventory, machine),
+    );
+  }
+
+  /** Every awake machine near her, with its state, as the machine guides read the garden. */
+  private awakeMachinesNear(): { at: GridPoint; type: MachineType; state: MachineState }[] {
+    if (this.interior) return [];
+    const found: { at: GridPoint; type: MachineType; state: MachineState }[] = [];
+    for (const key of this.placedFixtures.keys()) {
+      const type = this.machineAt(key);
+      if (!type || !this.crateShows(type)) continue;
+      const state = this.machines.get(key);
+      if (!state?.awake) continue;
+      const at = tileOf(key);
+      if (!at) continue;
+      const off = Math.max(Math.abs(at.col - this.playerCol), Math.abs(at.row - this.playerRow));
+      if (off <= GUIDE_MACHINE_REACH) found.push({ at, type, state });
+    }
+    return found;
+  }
+
+  /**
+   * The awake machines near her with nothing in the mouth, that would take
+   * something she is carrying.
+   *
+   * Both halves, because the errand is a tap on the machine and the tap
+   * tips in the biggest heap it will take: a machine that would take nothing
+   * she has answers the tap with a cross, and an arrow at a cross is an
+   * arrow at the wrong thing.
+   */
+  private hungryMachines(): GridPoint[] {
+    const carried = [...this.inventory.entries()]
+      .filter(([, count]) => count > 0)
+      .map(([item]) => item);
+    return this.awakeMachinesNear()
+      .filter(
+        ({ type, state }) =>
+          state.heap === 0 &&
+          state.otherHeap === 0 &&
+          carried.some((item) => wouldTake(state, item, type)),
+      )
+      .map(({ at }) => at);
+  }
+
+  /** The machines near her with something made, or binned, waiting to be taken out. */
+  private fullMachines(): GridPoint[] {
+    return this.awakeMachinesNear()
+      .filter(({ state }) => state.crates.some((count) => count > 0) || state.bin > 0)
+      .map(({ at }) => at);
+  }
+
+  /**
+   * Pairs of awake machines near her a wire could join and has not.
+   *
+   * Sorted so the first pair is the one worth stringing: a machine with
+   * something in its crates first, because a wire off an empty machine
+   * carries nothing and a child watching it would learn that wires do
+   * nothing. Then by how far she has to walk. The guide draws its arrows
+   * from the first pair, so this order is the order the errand is given in.
+   */
+  private wirePairs(): { from: GridPoint; to: GridPoint }[] {
+    const machines = this.awakeMachinesNear();
+    const pairs: { from: GridPoint; to: GridPoint; full: boolean; steps: number }[] = [];
+    for (const source of machines) {
+      for (const sink of machines) {
+        if (source === sink || !canString(source.at, sink.at)) continue;
+        const from = tileKey(source.at.col, source.at.row);
+        const to = tileKey(sink.at.col, sink.at.row);
+        if (this.wires.some((wire) => wire.from === from && wire.to === to)) continue;
+        pairs.push({
+          from: source.at,
+          to: sink.at,
+          full: source.state.crates.some((count) => count > 0),
+          steps:
+            Math.abs(source.at.col - this.playerCol) + Math.abs(source.at.row - this.playerRow),
+        });
+      }
+    }
+    pairs.sort((a, b) => Number(b.full) - Number(a.full) || a.steps - b.steps);
+    return pairs.map(({ from, to }) => ({ from, to }));
   }
 
   /** The first thing in the crate she has one of, in the crate's own order. */
@@ -6971,11 +6919,13 @@ export class GameScene extends Phaser.Scene {
    *
    * She used to teach the hourglass, and the errand was argued for on those
    * grounds: light the path so the place that cares about the hour can be
-   * reached. That spell has gone to the clockmaker in the city, where the
-   * thing that tells everybody the time actually stands. What she teaches
-   * now is the fold, which suits her better — an observatory is where you
-   * are shown that a shape has an order to it, and hers is the only lesson
-   * in the game that is about a figure rather than a quantity.
+   * reached. That spell went to the clockmaker in the city, where the thing
+   * that tells everybody the time actually stands. Then she taught the
+   * mirror, and the mirror has gone too — nobody wanted ground moved. What
+   * the climb earns now is the **blueprint**: once every post is lit the
+   * crate offers it, the way the mechanic's jobs make it offer the gates.
+   * It suits her: a blueprint is a drawing of how things stand, and an
+   * observatory is where a child is shown that things have an order.
    *
    * **She supplies the lamps.** They are eight crops each in the store —
    * forty harvests for five, which is eighty number lines and a quest about
@@ -6991,14 +6941,10 @@ export class GameScene extends Phaser.Scene {
     const observatory = this.observatory;
     if (!observatory) return;
     const lit = lampsLit(this.worldGrid, observatory);
-    if (lit >= observatory.posts.length) {
-      const learned = learnSpell(this.profile.learned, Spell.Mirror);
-      if (learned !== this.profile.learned) {
-        this.saveProfileChange({ learned });
-        this.spellTray?.refresh();
-        this.showEarned(UiAsset.RuneMirror);
-      }
-    } else {
+    // Nothing is handed over when the climb is lit: the lit posts are the
+    // record, and the crate reads them — see `blueprintEarned`. What she
+    // does is say so, on the sheet below.
+    if (lit < observatory.posts.length) {
       // Topped up to the posts a lamp could go on, never beyond them.
       // Against the dark ones instead, a post with a fence on it would be a
       // post she could never light and a lamp handed over on every visit for
@@ -7028,9 +6974,26 @@ export class GameScene extends Phaser.Scene {
         token: itemIcon(FixtureType.Lamp),
         needed: observatory.posts.length,
         done: lit,
-        reward: UiAsset.RuneMirror,
+        reward: itemIcon(FixtureType.Blueprint),
       },
       () => {},
+    );
+  }
+
+  /**
+   * Whether the climb to the dome is lit, which is what puts the blueprint
+   * in the crate.
+   *
+   * Read off the world every time rather than remembered, on the same terms
+   * as the errand itself: the lit posts are the record. `?lamps=lit` counts
+   * them all lit for a scenario about the blueprint, which would otherwise
+   * have to walk up a mountain with five lamps first.
+   */
+  private get blueprintEarned(): boolean {
+    if (this.dev.lampsLit) return true;
+    const observatory = this.observatory;
+    return (
+      observatory !== null && lampsLit(this.worldGrid, observatory) >= observatory.posts.length
     );
   }
 
@@ -7217,10 +7180,9 @@ export class GameScene extends Phaser.Scene {
       positions[`bloom.${index}`] = at;
     }
     // Named for the action rather than numbered, because what is on this
-    // menu depends on where she is standing and what she has been taught:
-    // indoors it is build-or-clear, outdoors it is grow-or-clear, and the
-    // mirror adds a third. `patch.2` meant copying only for a child who had
-    // met the astronomer.
+    // menu depends on where she is standing: indoors it is build-or-clear,
+    // outdoors it is plant, grow or clear. A number would name a different
+    // button in each room.
     for (const [index, at] of (this.patchMenu?.buttonPositions() ?? []).entries()) {
       positions[`patch.${this.patchChoices[index] ?? index}`] = at;
     }
@@ -8047,6 +8009,7 @@ export class GameScene extends Phaser.Scene {
         this.machines.set(key, taken.state);
         this.inventory.add(item, taken.count);
         this.showResult(iconForItem(item), col, row);
+        this.noteDeed(Deed.Took);
         this.refreshCarried();
         this.autosave();
       }
@@ -8061,6 +8024,7 @@ export class GameScene extends Phaser.Scene {
       this.machines.set(key, tipped.state);
       this.inventory.add(rejects, tipped.count);
       this.showResult(iconForItem(rejects), col, row);
+      this.noteDeed(Deed.Took);
       this.refreshCarried();
       this.autosave();
       return;
@@ -8094,16 +8058,22 @@ export class GameScene extends Phaser.Scene {
     // funnel without first walking to the city — and what a funnel wants
     // shown is *its* idea, not a rune. So the ones that have moved off the
     // spell ask their own question, and knowing it is what waking is.
-    if (machine === FixtureType.Funnel) {
-      // Two mouths and one spout is the union, and the union is drawn as
-      // two rings that cross.
-      this.vennPopup?.open(this.ladders.held("vennRung"), this.spellRng, (result: CastResult) => {
-        this.ladders.note("vennRung", result);
-        woken(FixtureType.Funnel)(result);
-      });
+    const spell = SPARK[machine];
+    if (spell === null) {
+      if (machine === FixtureType.Funnel) {
+        // Two mouths and one spout is the union, and the union is drawn as
+        // two rings that cross.
+        this.vennPopup?.open(this.ladders.held("vennRung"), this.spellRng, (result) => {
+          this.ladders.note("vennRung", result);
+          woken(FixtureType.Funnel)(result);
+        });
+        return;
+      }
+      // The blueprint: make one half of the picture match the other, which
+      // is what its drawing then does to a garden.
+      this.askTheFold((solved) => woken(UiAsset.RuneMirror)({ solved }));
       return;
     }
-    const spell: Spell = SPARK[machine];
     if (!knowsSpell([...this.profile.learned, ...this.dev.learned], spell)) {
       this.showWhereToLearn(spell);
       return;
@@ -8197,6 +8167,7 @@ export class GameScene extends Phaser.Scene {
     this.inventory.remove(best.item, best.count);
     this.machines.set(key, fed);
     this.playGesture(PLANT); // she bends to tip it in, same as planting
+    this.noteDeed(Deed.Fed);
     this.refreshCarried();
     this.autosave();
   }
@@ -8416,9 +8387,11 @@ export class GameScene extends Phaser.Scene {
     return [...this.profile.jobs, ...this.dev.jobs];
   }
 
-  /** Whether the crate shows this: everything but a machine a job has not yet earned. */
+  /** Whether the crate shows this: everything but a machine an errand has not yet earned. */
   private crateOffers(fixture: FixtureType): boolean {
-    return !isMachine(fixture) || offered(this.jobsDone).includes(fixture);
+    if (!isMachine(fixture)) return true;
+    const earned = this.blueprintEarned ? [FixtureType.Blueprint] : [];
+    return offered(this.jobsDone, earned).includes(fixture);
   }
 
   /**
@@ -8719,6 +8692,7 @@ export class GameScene extends Phaser.Scene {
   /** Take up a coil. Nothing is spent: what a wire costs is the machines. */
   private armWire(): void {
     this.arm({ kind: "wire", from: null }, uiTextureKey(itemIcon(CRATE_WIRE as never)));
+    this.noteDeed(Deed.ArmedWire);
   }
 
   /**
@@ -8747,6 +8721,7 @@ export class GameScene extends Phaser.Scene {
     if (!held.from) {
       this.showResult(UiAsset.MarkYes, at.col, at.row);
       this.arm({ kind: "wire", from: at }, uiTextureKey(itemIcon(CRATE_WIRE as never)));
+      this.noteDeed(Deed.WiredFrom);
       return;
     }
     if (!canString(held.from, at)) {
@@ -8762,6 +8737,7 @@ export class GameScene extends Phaser.Scene {
       this.wires.push(wire);
     }
     this.showResult(UiAsset.MarkYes, at.col, at.row);
+    this.noteDeed(Deed.Wired);
     this.drawWires();
     this.autosave();
     this.checkJobs();
@@ -9860,7 +9836,6 @@ export class GameScene extends Phaser.Scene {
       array: () => this.castArraySpell(),
       share: () => this.castShareSpell(),
       hourglass: () => this.castHourglass(),
-      mirror: () => this.castMirrorSpell(),
       logic: () => this.castLogicSpell(),
     };
     casts[spell]();
@@ -11206,6 +11181,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.inventory.add(fixture, 1);
     this.refreshCarried();
+    this.noteDeed(Deed.BuiltMachine);
     return true;
   }
 
@@ -12962,6 +12938,22 @@ export class GameScene extends Phaser.Scene {
         // per child is one a parent cannot show a younger sibling.
         this.saveProfileChange({ guided: [] });
         this.guide = new GuideRun([...this.dev.guided], (guide) => this.rememberGuided(guide));
+        this.guideWorldSeen = null;
+      },
+      replayMachineGuides: () => {
+        // The machines only, keeping the rest: the grown-up asking for this
+        // has a child who can plant and sell and is stuck in front of a
+        // sorter, and starting from the pouch again would be twenty minutes
+        // of pointing at things she knows before the first thing she does
+        // not. The same forget-and-start-again as the row above, for the
+        // same reason — the run holds its own list.
+        const kept = this.profile.guided.filter(
+          (guide) => !(MACHINE_GUIDES as readonly string[]).includes(guide),
+        );
+        this.saveProfileChange({ guided: kept });
+        this.guide = new GuideRun([...kept, ...this.dev.guided], (guide) =>
+          this.rememberGuided(guide),
+        );
         this.guideWorldSeen = null;
       },
       learnEverything: () => {

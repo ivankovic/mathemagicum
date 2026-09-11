@@ -49,7 +49,14 @@ export const UiAsset = {
    * object that is only ever about that.
    */
   RuneHourglass: "rune-hourglass",
-  /** The mirror spell: a shape and the fold down the middle of it. */
+  /**
+   * The fold: a shape and the line down the middle of it.
+   *
+   * It was the mirror spell's rune, and the spell has gone; the parchment
+   * it opened is the blueprint's own question now, and this is the picture
+   * of that question — on the sheet that says what a blueprint is, and
+   * rising over her head when one wakes.
+   */
   RuneMirror: "rune-mirror",
   /** The logic spell: a knife switch, thrown on. */
   RuneLogic: "rune-logic",

@@ -57,6 +57,13 @@ export interface DevOptions {
   readonly seed: number | null;
   /** Holds the villagers on their home tiles, so their positions are knowable. */
   readonly freezeNpcs: boolean;
+  /**
+   * `?lampsLit` — every post on the climb to the dome counts as lit, so the
+   * crate offers the blueprint. A scenario about the blueprint would
+   * otherwise have to carry five lamps up a mountain first, which is a test
+   * of the astronomer's errand and not of the drawing.
+   */
+  readonly lampsLit: boolean;
   /** Coins to start with, so a test of the shop need not first farm for them. */
   readonly coins: number;
   /**
@@ -193,7 +200,7 @@ export interface DevOptions {
   readonly rung: number | null;
   readonly clockRung: number | null;
   /**
-   * `?symmetryRung=` — which shape the mirror spell puts on the parchment.
+   * `?symmetryRung=` — which shape the fold puts on the blueprint's parchment.
    *
    * The one ladder no band touches, so this is the only way to reach the
    * arrowhead without folding twenty shapes to climb to it.
@@ -376,6 +383,7 @@ export function parseDevOptions(search: string): DevOptions {
     // `?freezeNpcs=true`, and a script that writes `=0` meaning off would be
     // wrong in a way nothing tells it about.
     freezeNpcs: params.has("freezeNpcs"),
+    lampsLit: params.has("lampsLit"),
     coins: Math.max(0, number("coins") ?? 0),
     crops: Math.max(0, number("crops") ?? 0),
     hungry: params.has("hungry"),
@@ -1020,7 +1028,7 @@ export interface DevHandle {
     readonly planted: readonly { flower: string; look: number; col: number; row: number }[];
   };
   /**
-   * The grid on the mirror parchment.
+   * The grid on the fold parchment, which is the blueprint's question.
    *
    * The only spell whose answer is a tap on a *picture*: no box to type into
    * and no button with a name. `given` is the picture she was handed and

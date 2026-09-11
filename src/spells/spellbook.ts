@@ -38,8 +38,6 @@ export const Spell = {
   Share: "share",
   /** Telling the time. Winds the world's clock to wherever you point it. */
   Hourglass: "hourglass",
-  /** Folding a shape in half: the first geometry about a whole figure. */
-  Mirror: "mirror",
   /**
    * Which things get through, and whether the lamp lights: Boolean logic,
    * in swatches and switches. Wakes the machines that decide.
@@ -56,7 +54,12 @@ export const SPELLS: readonly Spell[] = [
   Spell.Array,
   Spell.Share,
   Spell.Hourglass,
-  Spell.Mirror,
+  // The mirror used to sit here, between the hourglass and the logic: fold a
+  // shape in half, and then move the ground from there to here. Nobody
+  // wanted ground moved. The parchment is still in the game and is now the
+  // blueprint's own question — see `SPARK` in `world/machines.ts` — since a
+  // drawing that builds the same line twice is the one thing a child *does*
+  // want copied. A save that learned the mirror reads back without it.
   Spell.Logic,
 ];
 
@@ -89,11 +92,8 @@ export const TAUGHT_BY: Partial<Record<Spell, string>> = {
   // longer the astronomer's: hers is up a mountain, and the child who wants
   // to know what o'clock it is is standing in the plaza.
   [Spell.Hourglass]: "clockmaker",
-  // Up the mountain, in the dome. The astronomer keeps the one instrument
-  // in the game that is about *shape* rather than about quantity, and she
-  // is the teacher furthest from the village by construction — so what she
-  // teaches ought to be the thing least like the arithmetic below.
-  [Spell.Mirror]: "astronomer",
+  // The astronomer is not here: what her climb earns is a machine, not a
+  // spell — see `blueprintEarned` in the scene.
   // In the garage in the city. She mends the machines, and the spell she
   // teaches is the one that wakes the ones that decide — the press, the
   // funnel and the bell — which is the first spell here that is not
@@ -132,7 +132,6 @@ export const TAUGHT_BESIDE: Partial<Record<Spell, string>> = {
   // the headland is what a harbour looks like from a long way off.
   [Spell.Share]: "lighthouse",
   [Spell.Hourglass]: "clock-tower",
-  [Spell.Mirror]: "observatory",
   [Spell.Logic]: "garage",
 };
 

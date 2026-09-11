@@ -360,6 +360,7 @@ export const EN: Phrases = {
   debugBasket: "Fill the basket",
   debugLearn: "Learn everything, go everywhere",
   debugGuides: "Show the tutorial again",
+  debugMachines: "Show the machine tutorial again",
   debugOn: "on",
   debugOff: "off",
   debugDone: "done",
@@ -395,8 +396,8 @@ export const EN: Phrases = {
     left > 0
       ? `The path to my door is dark. Set a lamp on every post — ${left} still to light.`
       : "Every post is lit. Come up after dark and I will show you the sky.",
-  lampsBargain: "Do that and the mirror is yours.",
-  lampsEarned: "The mirror is yours.",
+  lampsBargain: "Do that and the crate will offer you a blueprint.",
+  lampsEarned: "The blueprint is yours. Look in the crate.",
 
   starChartTitle: "The night over the valley",
   starChartCaption: "The stars as they stand at midnight, drawn by hand.",
@@ -433,9 +434,9 @@ export const EN: Phrases = {
       ring: "Do that and the crate will offer you a trapdoor.",
       else: "Do that and the crate will offer you a seesaw.",
       parity: "Do that and the crate will offer you a strongbox.",
-      // The blueprint is shelved, so this promises the thing that is
-      // actually next: her jobs end here and the airship begins.
-      hold: "Do that and she has taught you everything. Then you build the airship.",
+      // The next job needs a blueprint, and that is the astronomer's to
+      // give: it says where to go rather than what the crate will offer.
+      hold: "Do that, and the last job needs a blueprint — light the climb to the observatory for one.",
       twice:
         "Do that and you have built the same line twice, which is the last thing she has to teach.",
     })[job] ?? "",

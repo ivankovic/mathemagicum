@@ -715,7 +715,7 @@ export function readProgress(value: unknown, bandNumber: number): Progress {
     clockRung: clockRungInBand(band, Number(record.clockRung ?? clockFloor(band))),
     // A child saved before the glass could wind the clock has not wound it.
     clockOffset: readOffset(record.clockOffset),
-    // A child saved before the astronomer taught folding has never folded.
+    // A child saved before the blueprint asked for a fold has never folded.
     symmetryRung: readSymmetryRung(record.symmetryRung),
     // A child saved before the mechanic taught anything has never lit a lamp.
     logicRung: readLogicRung(record.logicRung),

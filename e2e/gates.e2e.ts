@@ -176,10 +176,9 @@ describe("the rest of the tree", () => {
     8 * MINUTES,
   );
 
-  // Skipped while the blueprint is shelved, and skipped *by asking* rather
-  // than by being commented out: the day it goes back in `SHELVED` this
-  // scenario starts running again on its own, which a commented-out test
-  // does not. See `world/jobs.ts`.
+  // Skipped only while the blueprint is on the shelf, and skipped *by
+  // asking* rather than by being commented out, so that taking it off the
+  // shelf starts this scenario running again on its own. See `world/jobs.ts`.
   const drawing = (SHELVED as readonly string[]).includes(FixtureType.Blueprint) ? test.skip : test;
   drawing(
     "a blueprint draws the line beside it and builds it again where it is stamped",
@@ -187,16 +186,17 @@ describe("the rest of the tree", () => {
       // More crops than wood, so the funnel — which is handed the biggest
       // heap she is carrying — eats carrots and leaves the wood for the
       // blueprint's paper. Every job but the last counted as done, so the
-      // last is the one the stamping finishes.
+      // last is the one the stamping finishes; and the climb to the dome
+      // counted as lit, which is what puts a blueprint in the crate.
       await play(
         {
           seams:
-            "&materials=40&made=12&crops=90&hour=12&freezeNpcs&learned=all&jobs=either,ring,else,parity,hold",
+            "&materials=40&made=12&crops=90&hour=12&freezeNpcs&learned=all&lampsLit&jobs=either,ring,else,parity,hold",
         },
         async (game) => {
           // A line of one: a funnel, woken and fed, beside her.
           const funnel = await running(game, FixtureType.Funnel);
-          // The blueprint beside it, woken: it draws the funnel.
+          // The blueprint beside it, woken with the fold: it draws the funnel.
           expect(await takeFromCrate(game, FixtureType.Blueprint)).toBe(true);
           await game.settle(400);
           const easel = await game.squareBeside();
@@ -204,7 +204,7 @@ describe("the rest of the tree", () => {
           await game.settle(500);
           await game.tapCell(easel.col, easel.row);
           await game.settle(400);
-          await game.solveLogic();
+          await game.solveSymmetry();
           await game.settle(400);
           const drawings =
             await game.seam<Record<string, { machines: { type: string }[] }>>("blueprints");

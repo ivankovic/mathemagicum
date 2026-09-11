@@ -78,7 +78,7 @@ describe("the crate's two levels", () => {
       // `jobs=all`: the bell is held back until the mechanic's first job is
       // done — see `world/jobs.ts` — and a thing held back on purpose is not
       // the invisible, unreachable thing this scenario guards against.
-      await play({ seams: "&hour=12&materials=40&freezeNpcs&jobs=all" }, async (game) => {
+      await play({ seams: "&hour=12&materials=40&freezeNpcs&jobs=all&lampsLit" }, async (game) => {
         // The things, not their clouds: a machine's button has a `.tell`
         // beside it that says what the machine is, and that is a second
         // button in the tray rather than a second thing in the crate — see

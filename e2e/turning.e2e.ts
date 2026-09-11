@@ -30,7 +30,7 @@ afterAll(shutDown);
 // `jobs=all` because the crate holds the bell back until the mechanic's first
 // job is done — see `world/jobs.ts` — and this file is about turning, not
 // about what the crate offers.
-const GARDEN = "&hour=12&freezeNpcs&learned=all&jobs=all";
+const GARDEN = "&hour=12&freezeNpcs&learned=all&jobs=all&lampsLit";
 
 /** A few benches to put down, without walking her to the shop for them. */
 function withBenches(game: Game): Promise<void> {

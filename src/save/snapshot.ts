@@ -7,9 +7,9 @@ import { flowerParts } from "../world/flowers";
 import type { WorldGrid } from "../world/grid";
 import { ITEM_TYPES, type ItemType } from "../world/inventory";
 import type { PlacedObject } from "../world/objects";
+import { type PaintedTiles, readPainted } from "../world/paintedGround";
 import { PLANT_STAGES, PLANT_TYPES, type PlantStage, type PlantType } from "../world/plants";
 import type { GameSession } from "../world/session";
-import { type PaintedTiles, readPainted } from "../world/terrainCopy";
 import type { GridPoint } from "../world/topdown";
 
 /**
@@ -171,14 +171,17 @@ export interface WorldSnapshot {
   /** Generated objects the player took away, by the tile they stood on. */
   readonly cleared: readonly (readonly [number, number])[];
   /**
-   * Ground the mirror spell moved: the tile, and what it is now.
+   * Ground a child moved: the tile, and what it is now.
    *
    * A list of what changed rather than a difference against the world as
    * generated, which is what everything else here is. Terrain is a quarter
    * of a million tiles and comparing them all to find the four she painted
-   * would be a quarter of a million comparisons on every autosave — and the
-   * mirror spell is the only thing in the game that paints, so it can simply
-   * say what it did.
+   * would be a quarter of a million comparisons on every autosave.
+   *
+   * The mirror spell wrote these and the spell has gone, so nothing writes
+   * a new entry now; what is here is read in and written back unchanged,
+   * because the gardens it rearranged are still somebody's gardens. See
+   * `world/paintedGround.ts`.
    */
   readonly painted?: PaintedTiles;
   /**

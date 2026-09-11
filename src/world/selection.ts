@@ -196,17 +196,6 @@ export const PatchAction = {
    */
   Build: "build",
   /**
-   * Copy the whole block somewhere else, ground and all.
-   *
-   * The mirror spell's effect, taken from one square to a rectangle of them.
-   * It is here rather than being a mode of the mirror spell for the reason
-   * building is here: from the child's side this is a *choice about a
-   * patch*, and what the times spell contributes is the block — doing a
-   * thing to many squares without doing it many times, which is the whole
-   * of what multiplication is for.
-   */
-  Copy: "copy",
-  /**
    * Pick every ripe thing in it, in one cast.
    *
    * The division spell's, and the only patch action that is not the times

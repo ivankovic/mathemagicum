@@ -40,16 +40,16 @@ describe("being told where to go", () => {
     async () => {
       await play({ seams: "&hour=12&freezeNpcs" }, async (game) => {
         await game.tap("spellbook");
-        await game.tap(runeButton(Spell.Mirror));
+        await game.tap(runeButton(Spell.Logic));
 
         const thought = await game.seam<{ icons: string[]; crossed: boolean } | null>("thought");
         if (!thought) throw new Error("the unlearned rune said nothing");
         expect(thought.crossed).toBe(false);
-        const sight = TAUGHT_BESIDE[Spell.Mirror];
-        if (!sight) throw new Error("the mirror spell has nowhere to be learned");
+        const sight = TAUGHT_BESIDE[Spell.Logic];
+        if (!sight) throw new Error("the logic spell has nowhere to be learned");
         expect(thought.icons).toEqual([sight, UiAsset.MarkQuestion]);
         // Not the rune she just tapped, which is the thing she already knows.
-        expect(thought.icons).not.toContain(RUNE_OF[Spell.Mirror]);
+        expect(thought.icons).not.toContain(RUNE_OF[Spell.Logic]);
       });
     },
     5 * MINUTES,

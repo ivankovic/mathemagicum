@@ -11,6 +11,7 @@ describe("parseDevOptions", () => {
     expect(parseDevOptions("")).toEqual({
       seed: null,
       freezeNpcs: false,
+      lampsLit: false,
       coins: 0,
       crops: 0,
       hungry: false,
@@ -155,6 +156,7 @@ describe("parseDevOptions", () => {
     expect(parseDevOptions("?seed=7&freezeNpcs&coins=40&lang=de")).toEqual({
       seed: 7,
       freezeNpcs: true,
+      lampsLit: false,
       coins: 40,
       crops: 0,
       hungry: false,

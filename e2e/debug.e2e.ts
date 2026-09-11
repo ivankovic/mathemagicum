@@ -44,9 +44,9 @@ describe("turning the seams on", () => {
         await game.tap("about.title");
         await game.settle(500);
         buttons = Object.keys(await game.ui());
-        // Eight rows, and the links have gone: it is a different sheet now
+        // Nine rows, and the links have gone: it is a different sheet now
         // rather than the same one with things added underneath.
-        expect(buttons.filter((name) => name.startsWith("debug."))).toHaveLength(8);
+        expect(buttons.filter((name) => name.startsWith("debug."))).toHaveLength(9);
         expect(buttons).not.toContain("source");
 
         // And back again, because a gesture that cannot be undone by whoever
@@ -99,7 +99,7 @@ describe("turning the seams on", () => {
         await game.reload();
         await toTheSheet(game);
         // Opened straight onto the debug face, without the gesture.
-        expect(Object.keys(await game.ui()).filter((n) => n.startsWith("debug."))).toHaveLength(8);
+        expect(Object.keys(await game.ui()).filter((n) => n.startsWith("debug."))).toHaveLength(9);
       });
     },
     5 * MINUTES,

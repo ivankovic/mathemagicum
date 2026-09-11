@@ -333,7 +333,7 @@ export const MINUTES_PER_ROUND = 20;
  * after that is silent, which is the whole difference between a machine and
  * a spell.
  */
-export const SPARK: Readonly<Record<MachineType, Spell>> = {
+export const SPARK: Readonly<Record<MachineType, Spell | null>> = {
   [MachineType.Sorter]: Spell.Share,
   // Rows and columns, for the machine that turns one into three.
   [MachineType.Hothouse]: Spell.Array,
@@ -354,12 +354,22 @@ export const SPARK: Readonly<Record<MachineType, Spell>> = {
   // learns and not of what it *does*, which is wait for both. Both is AND,
   // and the logic spell is the one whose parchment asks it.
   [MachineType.Press]: Spell.Logic,
-  [MachineType.Funnel]: Spell.Logic,
+  // **Null is a machine that asks its own question**, with no spell to be
+  // taught first. A funnel wants to be shown the union — two rings that
+  // cross — and that is a picture, not a rune in anybody's book. It said
+  // `Logic` here for a while to keep this table total, and the sheet that
+  // says what a funnel is drew the logic rune beside it on the strength of
+  // that: a rune it never asks for. So the table says what is true.
+  [MachineType.Funnel]: null,
   [MachineType.Bell]: Spell.Logic,
   [MachineType.Inverter]: Spell.Logic,
   [MachineType.Seesaw]: Spell.Logic,
   [MachineType.Latch]: Spell.Logic,
-  [MachineType.Blueprint]: Spell.Logic,
+  // The fold: a grid with a line through it, and the squares that make one
+  // half match the other. It was the mirror spell's parchment, and it is the
+  // right question for a drawing that builds the same line twice — the
+  // verb a blueprint does to a garden is the verb the puzzle asks on paper.
+  [MachineType.Blueprint]: null,
 };
 
 /**

@@ -311,6 +311,7 @@ export const DE: Phrases = {
   debugBasket: "Korb füllen",
   debugLearn: "Alles lernen, überall hinkommen",
   debugGuides: "Die Einführung nochmal zeigen",
+  debugMachines: "Die Maschinen-Einführung nochmal zeigen",
   debugOn: "An",
   debugOff: "Aus",
   debugDone: "Fertig",
@@ -346,8 +347,8 @@ export const DE: Phrases = {
     left > 0
       ? `Der Weg zu meiner Tür ist dunkel. Stell auf jeden Pfosten eine Laterne — ${left} ${left === 1 ? "fehlt" : "fehlen"} noch.`
       : "Jeder Pfosten brennt. Komm nach Einbruch der Dunkelheit herauf, dann zeige ich dir den Himmel.",
-  lampsBargain: "Tu das, und der Spiegel gehört dir.",
-  lampsEarned: "Der Spiegel gehört dir.",
+  lampsBargain: "Tu das, und die Kiste bietet dir einen Bauplan an.",
+  lampsEarned: "Der Bauplan gehört dir. Schau in die Kiste.",
 
   starChartTitle: "Die Nacht über dem Tal",
   starChartCaption: "Die Sterne, wie sie um Mitternacht stehen, von Hand gezeichnet.",
@@ -384,7 +385,7 @@ export const DE: Phrases = {
       ring: "Tu das, und die Kiste bietet dir eine Falltür an.",
       else: "Tu das, und die Kiste bietet dir eine Wippe an.",
       parity: "Tu das, und die Kiste bietet dir eine Truhe an.",
-      hold: "Tu das, und sie hat dir alles beigebracht. Dann baust du das Luftschiff.",
+      hold: "Tu das, und für die letzte Aufgabe brauchst du einen Bauplan — erleuchte dafür den Aufstieg zur Sternwarte.",
       twice:
         "Tu das, und du hast dieselbe Reihe zweimal gebaut — das Letzte, was sie dir beibringen kann.",
     })[job] ?? "",

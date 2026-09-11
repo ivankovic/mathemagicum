@@ -357,8 +357,8 @@ export function seedButton(seed: PlantType | FlowerType): string {
  * And the patch menu's, by what the button does.
  *
  * The one menu whose *contents* change: indoors it is build-or-clear,
- * outdoors grow-or-clear, and a child who has met the astronomer gets
- * copying as a third. `patch.2` meant copying only for that last child.
+ * outdoors plant, grow or clear. `patch.2` named a different button in
+ * each, which is why they are named for what they do.
  *
  * A crop is a legal answer here because the menu asks twice — the spell,
  * and then, if it was planting, which seed. Same menu, same names.
@@ -1401,7 +1401,7 @@ export class Game {
    * `stopped()`: once the parchment is down, the scene has already been told.
    */
   private async closed(
-    parchment: "bricks" | "spell" | "array" | "share" | "logic" | "venn",
+    parchment: "bricks" | "spell" | "array" | "share" | "logic" | "venn" | "symmetry",
     tail = 150,
   ): Promise<void> {
     await this.ask(`the ${parchment} parchment to close`, (page) =>
@@ -1465,6 +1465,36 @@ export class Game {
       await this.press("Enter");
     }
     await this.closed("share");
+  }
+
+  /**
+   * Answer the fold: colour every square the grid still wants.
+   *
+   * The one parchment with nothing to type. Every other one ends in a
+   * number going into a box; this one ends in taps on a picture, and what
+   * makes it drivable is that the picture is published — the squares it was
+   * given, the squares it still wants and where it is drawn — so this taps
+   * the squares the *game* worked out rather than ones it guessed. The
+   * blueprint's question; see `world/machines.ts`.
+   */
+  async solveSymmetry(): Promise<void> {
+    interface Grid {
+      wanted: string[];
+      board: { left: number; top: number; step: number; cell: number } | null;
+    }
+    const grid = await this.seam<Grid | null>("symmetry");
+    if (!grid?.board) return;
+    const board = grid.board;
+    for (const key of grid.wanted) {
+      const [col, row] = key.split(",").map(Number);
+      if (col === undefined || row === undefined) continue;
+      await this.tab.mouse.click(
+        board.left + col * board.step + board.cell / 2,
+        board.top + row * board.step + board.cell / 2,
+      );
+      await this.settle(200);
+    }
+    await this.closed("symmetry");
   }
 
   /**

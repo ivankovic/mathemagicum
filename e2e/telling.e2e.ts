@@ -29,7 +29,7 @@ afterAll(shutDown);
 // `jobs=all`: the crate holds the bell back until the mechanic's first job is
 // done — see `world/jobs.ts` — and this file is about the clouds on the
 // machines, not about which of them the crate is offering yet.
-const AT_HOME = "&hour=12&materials=60&freezeNpcs&learned=all&jobs=all";
+const AT_HOME = "&hour=12&materials=60&freezeNpcs&learned=all&jobs=all&lampsLit";
 
 /** The machines a child can actually meet in the crate. See `SHELVED`. */
 const ON_THE_SHELF = MACHINE_TYPES.filter(

@@ -32,7 +32,7 @@ import {
 } from "./parchment";
 
 /**
- * The parchment the mirror spell is worked on.
+ * The parchment the fold is worked on: the blueprint's question.
  *
  * A grid, a line ruled through the middle of it, and some squares already
  * coloured. Tapping a square colours it; the cast finishes when the picture

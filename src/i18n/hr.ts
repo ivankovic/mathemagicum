@@ -502,6 +502,7 @@ export const HR: Phrases = {
   debugBasket: "Napuni košaru",
   debugLearn: "Nauči sve, idi svugdje",
   debugGuides: "Ponovno prikaži upute",
+  debugMachines: "Ponovno prikaži upute za strojeve",
   debugOn: "uključeno",
   debugOff: "isključeno",
   debugDone: "gotovo",
@@ -546,8 +547,8 @@ export const HR: Phrases = {
     left > 0
       ? `Put do mojih vrata je mračan. Na svaki stup ide svjetiljka, a nedostaje ih još ${left}.`
       : "Svi stupovi gore. Dođi kad padne mrak i pokazat ću ti nebo.",
-  lampsBargain: "Učini to i zrcalo je tvoje.",
-  lampsEarned: "Zrcalo je tvoje.",
+  lampsBargain: "Učini to i sanduk će ti ponuditi nacrt.",
+  lampsEarned: "Nacrt je tvoj. Pogledaj u sanduk.",
 
   starChartTitle: "Noć nad dolinom",
   starChartCaption: "Zvijezde kako stoje u ponoć, nacrtane rukom.",
@@ -584,7 +585,7 @@ export const HR: Phrases = {
       ring: "Učini to i sanduk će ti ponuditi zaklopku.",
       else: "Učini to i sanduk će ti ponuditi klackalicu.",
       parity: "Učini to i sanduk će ti ponuditi škrinju.",
-      hold: "Učini to i naučila te je sve. Onda gradiš zračni brod.",
+      hold: "Učini to, a za zadnji posao treba ti nacrt — osvijetli uspon do zvjezdarnice za njega.",
       twice: "Učini to i sagradila si isti niz dvaput — to je zadnje što te ima naučiti.",
     })[job] ?? "",
   jobEarned: "Gotovo. Pitaj je opet za sljedeći.",

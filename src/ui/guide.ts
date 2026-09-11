@@ -71,8 +71,16 @@ export const Guide = {
   Sell: "sell",
   /** The crate, a group, a thing, the square in front of her. */
   Place: "place",
+  /** The crate, the makers, a machine she can afford, the square in front of her. */
+  Build: "build",
   /** A machine that is asleep. */
   Wake: "wake",
+  /** An awake machine with an empty mouth, while she carries something it takes. */
+  Feed: "feed",
+  /** A machine with something in a crate, which is the thing it made. */
+  Take: "take",
+  /** The crate, the makers, the coil, one machine, then another. */
+  Wire: "wire",
   /** The tower over the post office, and the man at the top of it. */
   Learn: "learn",
   /** The great tree's errand: the wood, the tree, and the spell it pays with. */
@@ -92,10 +100,34 @@ export const GUIDES: readonly Guide[] = [
   // top of the tower is what the next errand needs.
   Guide.Learn,
   Guide.Place,
+  // The machines, in the order a line is made: build one, wake it, feed it,
+  // take what it made; and join two, once there are two. Each starts when
+  // its moment comes and not before, so a child who has built one machine
+  // is not pointed at the coil until a second is standing.
+  Guide.Build,
   Guide.Wake,
+  Guide.Feed,
+  Guide.Take,
+  Guide.Wire,
   // Last, because it is the only one that is not offered in the village: it
   // starts when she is standing in the wood, whenever that turns out to be.
   Guide.Grove,
+];
+
+/**
+ * The guides that make up the machine tutorial, for showing again on their
+ * own.
+ *
+ * The sheet's row for the whole tutorial forgets every guide, and a parent
+ * who wants to show a child the machines a second time does not want to
+ * walk them through the pouch again to get there.
+ */
+export const MACHINE_GUIDES: readonly Guide[] = [
+  Guide.Build,
+  Guide.Wake,
+  Guide.Feed,
+  Guide.Take,
+  Guide.Wire,
 ];
 
 /**
@@ -129,8 +161,20 @@ export const Deed = {
   /** The trade was agreed and paid for. */
   Sold: "sold",
   Placed: "placed",
+  /** A machine was made out of what the world gave up, and is in her hands. */
+  BuiltMachine: "built-machine",
   /** A machine was woken with a sum. */
   Woke: "woke",
+  /** A heap she was carrying went into a machine's mouth. */
+  Fed: "fed",
+  /** Something a machine made, or binned, came out into her basket. */
+  Took: "took",
+  /** The coil is lit over her head, with neither end named. */
+  ArmedWire: "armed-wire",
+  /** The first tap of a wire: the machine it comes off. */
+  WiredFrom: "wired-from",
+  /** The second tap: the wire is strung. */
+  Wired: "wired",
   /** She climbed the tower over the post office. */
   ClimbedTower: "climbed-tower",
   /** A teacher gave her a spell she did not have. */
@@ -178,6 +222,20 @@ export type Cue =
   | { readonly kind: "sell-row" }
   /** The nearest machine that is asleep. */
   | { readonly kind: "sleeping-machine" }
+  /** The makers' group in the crate, or the crate itself while it is shut. */
+  | { readonly kind: "crate-makers" }
+  /** The first machine in the crate she can afford, once the makers are open. */
+  | { readonly kind: "crate-machine" }
+  /** The coil, once the makers are open. */
+  | { readonly kind: "crate-coil" }
+  /** The nearest awake machine with an empty mouth that would take what she carries. */
+  | { readonly kind: "hungry-machine" }
+  /** The nearest machine with something in a crate or its bin. */
+  | { readonly kind: "full-machine" }
+  /** The machine a wire should come off, or the coil while she has not got it. */
+  | { readonly kind: "wire-from" }
+  /** The machine the wire in her hands should feed, or the coil if she put it down. */
+  | { readonly kind: "wire-to" }
   /** The nearest square of the great tree's wood still standing. */
   | { readonly kind: "wood" }
   /** The great tree, once its wood is down and it has something to give. */
@@ -197,8 +255,16 @@ export interface GuideView {
   readonly trayOpen: string | null;
   /** Whether the crate is showing one group's things rather than the groups. */
   readonly crateGroupOpen: boolean;
-  /** What is lit over her head. */
-  readonly armed: "seed" | "growth" | "array" | "thing" | "other" | null;
+  /**
+   * What is lit over her head.
+   *
+   * A machine is told from a thing because building one is its own errand,
+   * and a coil from everything else because it is the one armed thing that
+   * takes two taps: `wireFrom` says whether the first has landed.
+   */
+  readonly armed: "seed" | "growth" | "array" | "thing" | "machine" | "wire" | "other" | null;
+  /** Whether the coil over her head already has hold of one end. */
+  readonly wireFrom: boolean;
   /** The building she is in, or null out of doors. */
   readonly indoors: string | null;
 }
@@ -216,6 +282,19 @@ export interface GuideWorld {
   readonly cropsInBasket: number;
   readonly thingsInCrate: number;
   readonly sleepingMachines: number;
+  /**
+   * Machines the crate offers that her basket could pay for right now, while
+   * she is holding none. Nought until she has been up the hills for the
+   * stone, which is what makes this a guide that starts when it is worth it
+   * rather than one pointing at a slot that would only refuse her.
+   */
+  readonly machinesToBuild: number;
+  /** Awake machines near her with an empty mouth, that would take something she carries. */
+  readonly hungryMachines: number;
+  /** Machines near her with something in a crate or a bin, waiting to be taken out. */
+  readonly fullMachines: number;
+  /** Pairs of awake machines near her within a wire's reach of each other, not yet joined. */
+  readonly wirePairs: number;
   /** Whether there is still a spell waiting to be given to her. */
   readonly spellToLearn: boolean;
   /** Squares of the great tree's wood still standing, nought away from it. */
@@ -327,7 +406,45 @@ export const GUIDE_SPECS: Record<Guide, GuideSpec> = {
       {
         cue: { kind: "crate-thing" },
         until: Deed.ArmedThing,
-        already: (view) => view.armed === "thing",
+        already: (view) => view.armed === "thing" || view.armed === "machine",
+      },
+      { cue: { kind: "ahead" }, until: Deed.Placed },
+    ],
+  },
+  // The machines. Watched: a child with a garden full of carrots and a
+  // basket full of timber had no idea what she was supposed to do, and it
+  // was not that the machines were hard — it was that nothing anywhere
+  // pointed at them. The crate showed a picture of a sorter in a group she
+  // had never opened, and everything after it — the sum, the mouth, the
+  // crates underneath — was a tap on a thing that looked like scenery.
+  //
+  // So the errand is the whole line, in the order a line is made, one guide
+  // to a step so that each starts at its own moment: the machine when she
+  // can pay for one, the waking when it stands there asleep, the feeding
+  // when she has something in her basket it eats, the taking when it has
+  // made something — which is where a child ends up with a thing a machine
+  // made, and the whole reason for the rest. The wire is last and needs two
+  // machines standing, because that is what a wire is for.
+  [Guide.Build]: {
+    when: (world) => world.outdoors && world.machinesToBuild > 0,
+    steps: [
+      {
+        cue: { kind: "button", name: "crate" },
+        until: Deed.OpenedCrate,
+        already: (view) => view.trayOpen === "crate",
+      },
+      {
+        cue: { kind: "crate-makers" },
+        until: Deed.OpenedGroup,
+        already: (view) => view.trayOpen === "crate" && view.crateGroupOpen,
+      },
+      // Tapping the picture is what builds it: there is no workshop. The
+      // deed is the build rather than the arming, so a fence taken out of
+      // the crate instead does not count as a machine made.
+      {
+        cue: { kind: "crate-machine" },
+        until: Deed.BuiltMachine,
+        already: (view) => view.armed === "machine",
       },
       { cue: { kind: "ahead" }, until: Deed.Placed },
     ],
@@ -335,6 +452,43 @@ export const GUIDE_SPECS: Record<Guide, GuideSpec> = {
   [Guide.Wake]: {
     when: (world) => world.outdoors && world.sleepingMachines > 0,
     steps: [{ cue: { kind: "sleeping-machine" }, until: Deed.Woke }],
+  },
+  [Guide.Feed]: {
+    when: (world) => world.outdoors && world.hungryMachines > 0,
+    steps: [{ cue: { kind: "hungry-machine" }, until: Deed.Fed }],
+  },
+  [Guide.Take]: {
+    when: (world) => world.outdoors && world.fullMachines > 0,
+    steps: [{ cue: { kind: "full-machine" }, until: Deed.Took }],
+  },
+  [Guide.Wire]: {
+    when: (world) => world.outdoors && world.wirePairs > 0,
+    steps: [
+      {
+        cue: { kind: "button", name: "crate" },
+        until: Deed.OpenedCrate,
+        already: (view) => view.trayOpen === "crate",
+      },
+      {
+        cue: { kind: "crate-makers" },
+        until: Deed.OpenedGroup,
+        already: (view) => view.trayOpen === "crate" && view.crateGroupOpen,
+      },
+      {
+        cue: { kind: "crate-coil" },
+        until: Deed.ArmedWire,
+        already: (view) => view.armed === "wire",
+      },
+      // Two taps, and an arrow for each: the machine the wire comes off,
+      // then the one it feeds. A coil put down part way is pointed back at
+      // by the scene — see `wire-to` — rather than by a step going back.
+      {
+        cue: { kind: "wire-from" },
+        until: Deed.WiredFrom,
+        already: (view) => view.armed === "wire" && view.wireFrom,
+      },
+      { cue: { kind: "wire-to" }, until: Deed.Wired },
+    ],
   },
   [Guide.Grove]: {
     when: (world) => world.woodStanding > 0,
@@ -491,6 +645,16 @@ export class GuideRun {
   /** Forget every guide, so each is given again when its moment comes. */
   forgetAll(): void {
     this.finishedGuides.clear();
+    this.running = null;
+  }
+
+  /**
+   * Forget some of them, and put down whichever is running: a guide that
+   * was half way through when it was forgotten would otherwise carry on and
+   * be marked finished a second time.
+   */
+  forget(guides: readonly Guide[]): void {
+    for (const guide of guides) this.finishedGuides.delete(guide);
     this.running = null;
   }
 

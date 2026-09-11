@@ -208,8 +208,10 @@ describe("the guide", () => {
    * the objects, but if I tap it it doesn't go anywhere* — and no tap could
    * have made it go anywhere. Holding a thing and the crate showing it are
    * two different facts, and everything counting the crate treated them as
-   * one. A shelved machine separates them: a save can hold a blueprint, and
-   * the crate has not drawn one since it was shelved.
+   * one. A machine not yet earned separates them: a save can hold a
+   * blueprint, and the crate does not draw one until the climb to the dome
+   * is lit. (It was a *shelved* blueprint when this was found; the shelf is
+   * empty now and the errand does the same job for this test.)
    *
    * What that produced was a dead end rather than a wrong mark. The errand
    * started, opened the crate, opened the group — and then the step wanting
@@ -227,7 +229,7 @@ describe("the guide", () => {
       const DONE = "&guided=plant,grow,pick,sell,learn,grove";
       await play({ seams: `${STILL}${DONE}`, firstTime: true }, async (game) => {
         // The blueprint is placeable — the world can hold one, and a save
-        // can load one — and shelved, so no button is drawn for it.
+        // can load one — and not yet earned, so no button is drawn for it.
         await game.give(FixtureType.Blueprint, 1);
         await game.settle(900);
         expect((await guide(game)).running).toBe(null);
