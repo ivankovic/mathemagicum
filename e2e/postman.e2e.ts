@@ -42,9 +42,17 @@ interface Post {
 
 const post = (game: Game) => game.seam<Post>("post");
 
-/** Wait until he has got wherever he is going, or say what he was doing. */
+/**
+ * Wait until he has got wherever he is going, or say what he was doing.
+ *
+ * Half a minute. The walk from the post office to her garden is well under
+ * ten seconds on an idle machine, and this used to allow about that — and
+ * a suite run under memory pressure caught him three tiles short of her,
+ * still walking, with the seam reporting exactly that. A budget that only
+ * covers the walk on a good day is a test of the machine, not of him.
+ */
 async function delivered(game: Game, what: string): Promise<Post> {
-  for (let tries = 0; tries < 40; tries++) {
+  for (let tries = 0; tries < 120; tries++) {
     const seen = await post(game);
     if (seen.sheet) return seen;
     await game.settle(250);

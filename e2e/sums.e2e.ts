@@ -184,33 +184,36 @@ describe("the sum with no line under it", () => {
   test(
     "asks a whole equation, takes one answer, and closes",
     async () => {
-      await play({ seams: `&learned=all&hour=12&rung=${HARDEST_RUNG}` }, async (game) => {
-        const cast = await castGrowth(game);
-        const bare = cast.bare;
-        if (!bare) throw new Error("the hardest rung did not ask a bare sum");
+      await play(
+        { seams: `&learned=all&hour=12&freezeNpcs&rung=${HARDEST_RUNG}` },
+        async (game) => {
+          const cast = await castGrowth(game);
+          const bare = cast.bare;
+          if (!bare) throw new Error("the hardest rung did not ask a bare sum");
 
-        // The three numbers make a true sum, whichever of them is hidden.
-        expect(bare.start + bare.addend).toBe(bare.total);
-        expect(UNKNOWNS as readonly string[]).toContain(bare.unknown);
-        // Six digits on both sides: taking the line off did not shrink the
-        // sum, which is the discipline the ladder is arranged on.
-        expect(bare.start).toBeGreaterThanOrEqual(100_000);
-        expect(bare.total).toBeLessThan(1_000_000);
+          // The three numbers make a true sum, whichever of them is hidden.
+          expect(bare.start + bare.addend).toBe(bare.total);
+          expect(UNKNOWNS as readonly string[]).toContain(bare.unknown);
+          // Six digits on both sides: taking the line off did not shrink the
+          // sum, which is the discipline the ladder is arranged on.
+          expect(bare.start).toBeGreaterThanOrEqual(100_000);
+          expect(bare.total).toBeLessThan(1_000_000);
 
-        // One box, not six. The cast runs on a degenerate one-jump line
-        // whose only stop is whatever term was hidden.
-        expect(cast.stops).toHaveLength(1);
-        const answer =
-          bare.unknown === "total"
-            ? bare.total
-            : bare.unknown === "addend"
-              ? bare.addend
-              : bare.start;
-        expect(cast.stops[0]).toBe(answer);
+          // One box, not six. The cast runs on a degenerate one-jump line
+          // whose only stop is whatever term was hidden.
+          expect(cast.stops).toHaveLength(1);
+          const answer =
+            bare.unknown === "total"
+              ? bare.total
+              : bare.unknown === "addend"
+                ? bare.addend
+                : bare.start;
+          expect(cast.stops[0]).toBe(answer);
 
-        await game.solveNumberLine();
-        expect(await game.seam<Line | null>("spell")).toBeNull();
-      });
+          await game.solveNumberLine();
+          expect(await game.seam<Line | null>("spell")).toBeNull();
+        },
+      );
     },
     5 * MINUTES,
   );
@@ -227,18 +230,21 @@ describe("the sum with no line under it", () => {
   test(
     "and a wrong answer is not answered for her",
     async () => {
-      await play({ seams: `&learned=all&hour=12&rung=${HARDEST_RUNG}` }, async (game) => {
-        const cast = await castGrowth(game);
-        if (!cast.bare) throw new Error("the hardest rung did not ask a bare sum");
-        const answer = String(cast.stops[0]);
+      await play(
+        { seams: `&learned=all&hour=12&freezeNpcs&rung=${HARDEST_RUNG}` },
+        async (game) => {
+          const cast = await castGrowth(game);
+          if (!cast.bare) throw new Error("the hardest rung did not ask a bare sum");
+          const answer = String(cast.stops[0]);
 
-        // A wrong answer, so the parchment offers what help it has.
-        await game.type(1);
-        await game.press("Enter");
-        await game.settle(300);
-        const hint = await game.seam<string>("spellHint");
-        expect(hint).not.toContain(answer);
-      });
+          // A wrong answer, so the parchment offers what help it has.
+          await game.type(1);
+          await game.press("Enter");
+          await game.settle(300);
+          const hint = await game.seam<string>("spellHint");
+          expect(hint).not.toContain(answer);
+        },
+      );
     },
     5 * MINUTES,
   );
@@ -265,7 +271,7 @@ describe("a sum written down, in the middle of the ladder", () => {
     "asks one box on a rung that is nothing like the top",
     async () => {
       expect(WRITTEN).toBeGreaterThan(0);
-      await play({ seams: `&learned=all&hour=12&rung=${WRITTEN}` }, async (game) => {
+      await play({ seams: `&learned=all&hour=12&freezeNpcs&rung=${WRITTEN}` }, async (game) => {
         const cast = await castGrowth(game);
         const bare = cast.bare;
         if (!bare) throw new Error("a middling rung drew a line where it should write the sum");
@@ -306,38 +312,41 @@ describe("a take-away written down", () => {
   test(
     "asks one box, with a minus in it, and closes on the answer",
     async () => {
-      await play({ seams: `&learned=all&hour=12&crops=5&rung=${WRITTEN}` }, async (game) => {
-        // Something to clear, first: the rune is refused on bare ground,
-        // and a refusal looks exactly like a parchment that failed to open.
-        await game.tap("seeds");
-        await game.tap(seedButton(PlantType.Carrot));
-        await game.tapNear(0, 1);
-        await game.settle(500);
+      await play(
+        { seams: `&learned=all&hour=12&freezeNpcs&crops=5&rung=${WRITTEN}` },
+        async (game) => {
+          // Something to clear, first: the rune is refused on bare ground,
+          // and a refusal looks exactly like a parchment that failed to open.
+          await game.tap("seeds");
+          await game.tap(seedButton(PlantType.Carrot));
+          await game.tapNear(0, 1);
+          await game.settle(500);
 
-        // Clearing it: the ordinary way the rune is cast, at a rung that
-        // now writes the sum instead of drawing it.
-        await game.tap("spellbook");
-        await game.tap(runeButton(Spell.Clearing));
-        await game.tapNear(0, 1);
-        await game.settle(700);
+          // Clearing it: the ordinary way the rune is cast, at a rung that
+          // now writes the sum instead of drawing it.
+          await game.tap("spellbook");
+          await game.tap(runeButton(Spell.Clearing));
+          await game.tapNear(0, 1);
+          await game.settle(700);
 
-        const line = await game.seam<Line | null>("spell");
-        if (!line) throw new Error("the clearing rune opened nothing");
-        const bare = line.bare;
-        if (!bare) throw new Error("a written rung drew a line for the clearing spell");
+          const line = await game.seam<Line | null>("spell");
+          if (!line) throw new Error("the clearing rune opened nothing");
+          const bare = line.bare;
+          if (!bare) throw new Error("a written rung drew a line for the clearing spell");
 
-        // Written as a take-away, which is the whole of what changed.
-        expect(bare.takingAway).toBe(true);
-        // The same triple either way round, and never below nothing.
-        expect(bare.total - bare.addend).toBe(bare.start);
-        expect(bare.start).toBeGreaterThanOrEqual(0);
-        expect(UNKNOWNS as readonly string[]).toContain(bare.unknown);
-        // One box, whichever term it is.
-        expect(line.stops).toHaveLength(1);
+          // Written as a take-away, which is the whole of what changed.
+          expect(bare.takingAway).toBe(true);
+          // The same triple either way round, and never below nothing.
+          expect(bare.total - bare.addend).toBe(bare.start);
+          expect(bare.start).toBeGreaterThanOrEqual(0);
+          expect(UNKNOWNS as readonly string[]).toContain(bare.unknown);
+          // One box, whichever term it is.
+          expect(line.stops).toHaveLength(1);
 
-        await game.solveNumberLine();
-        expect(await game.seam<Line | null>("spell")).toBeNull();
-      });
+          await game.solveNumberLine();
+          expect(await game.seam<Line | null>("spell")).toBeNull();
+        },
+      );
     },
     5 * MINUTES,
   );
@@ -366,35 +375,38 @@ describe("what a digit is worth", () => {
       // plays, which is right for playing and useless here: a scenario that
       // casts until it gets lucky fails on a generator change for a reason
       // nobody can read.
-      await play({ seams: "&learned=all&hour=12&crops=9&rung=9&place" }, async (game) => {
-        await game.tap("seeds");
-        await game.tap(seedButton(PlantType.Carrot));
-        await game.tapNear(0, 1);
-        await game.settle(500);
+      await play(
+        { seams: "&learned=all&hour=12&freezeNpcs&crops=9&rung=9&place" },
+        async (game) => {
+          await game.tap("seeds");
+          await game.tap(seedButton(PlantType.Carrot));
+          await game.tapNear(0, 1);
+          await game.settle(500);
 
-        await game.tap("spellbook");
-        await game.tap(runeButton(Spell.Growth));
-        await game.tapNear(0, 1);
-        await game.settle(700);
-        const asked = await game.seam<Line | null>("spell");
-        const place = asked?.place;
-        if (!place || !asked) throw new Error("the growth spell did not ask about a digit");
+          await game.tap("spellbook");
+          await game.tap(runeButton(Spell.Growth));
+          await game.tapNear(0, 1);
+          await game.settle(700);
+          const asked = await game.seam<Line | null>("spell");
+          const place = asked?.place;
+          if (!place || !asked) throw new Error("the growth spell did not ask about a digit");
 
-        // The lit digit is really in the number, in the place claimed.
-        const digits = [...String(place.number)].map(Number);
-        expect(digits).toHaveLength(place.zeros + place.at + 1);
-        expect(digits[place.at]).toBe(place.digit);
-        // Three digits at least: the question means nothing below that.
-        expect(digits.length).toBeGreaterThanOrEqual(3);
+          // The lit digit is really in the number, in the place claimed.
+          const digits = [...String(place.number)].map(Number);
+          expect(digits).toHaveLength(place.zeros + place.at + 1);
+          expect(digits[place.at]).toBe(place.digit);
+          // Three digits at least: the question means nothing below that.
+          expect(digits.length).toBeGreaterThanOrEqual(3);
 
-        // One box, and its answer is the digit followed by its zeros — not
-        // the digit, which is the whole of what is being taught.
-        expect(asked.stops).toHaveLength(1);
-        expect(asked.stops[0]).toBe(place.digit * 10 ** place.zeros);
+          // One box, and its answer is the digit followed by its zeros — not
+          // the digit, which is the whole of what is being taught.
+          expect(asked.stops).toHaveLength(1);
+          expect(asked.stops[0]).toBe(place.digit * 10 ** place.zeros);
 
-        await game.solveNumberLine();
-        expect(await game.seam<Line | null>("spell")).toBeNull();
-      });
+          await game.solveNumberLine();
+          expect(await game.seam<Line | null>("spell")).toBeNull();
+        },
+      );
     },
     6 * MINUTES,
   );

@@ -544,7 +544,15 @@ export async function play(opening: Opening, act: (game: Game) => Promise<void>)
   });
   page.on("pageerror", (error) => complaints.push(`page error: ${error.message}`));
   page.on("console", (message) => {
-    if (message.type() === "error") complaints.push(`console: ${message.text().slice(0, 200)}`);
+    if (message.type() !== "error") return;
+    // The one console error that is the machine's and not the game's. A
+    // headless browser has no sound card, and under load its WebAudio
+    // renderer sometimes says so — seen once at the end of a five-minute
+    // file, on a scenario that had already done everything it set out to
+    // do. The game's own audio failures arrive as page errors, which this
+    // does not touch.
+    if (message.text().startsWith(AUDIO_DEVICE_COMPLAINT)) return;
+    complaints.push(`console: ${message.text().slice(0, 200)}`);
   });
 
   const game = new Game(page);
@@ -736,6 +744,9 @@ async function pictured(page: Page, opening: Opening, whyNot: unknown): Promise<
   }
   return new Error(`${String(whyNot)}${note}`, { cause: whyNot });
 }
+
+/** The console error a headless browser prints when it has no audio device to render to. */
+const AUDIO_DEVICE_COMPLAINT = "The AudioContext encountered an error from the audio device";
 
 /**
  * What each page has complained about, reachable from anywhere that has one.
