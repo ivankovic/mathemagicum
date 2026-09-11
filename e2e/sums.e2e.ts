@@ -117,23 +117,26 @@ describe("six-digit sums", () => {
       // digit is worth instead — a different question at the same rung, and
       // not the one being tested. Cast until the line comes, which is what
       // a child does.
-      await play({ seams: `&learned=all&hour=12&rung=${LONGEST_LINE_RUNG}` }, async (game) => {
-        const line = await castLine(game);
-        const jumps = jumpsOf(line);
-        expect(jumps).toHaveLength(6);
-        // Six digits on both sides, which is what the band is for.
-        expect(line.start).toBeGreaterThanOrEqual(100_000);
-        expect(line.stops.at(-1)).toBeLessThan(1_000_000);
-        // Ones, tens, hundreds, thousands, ten thousands, hundred thousands —
-        // and not one of them a jump of nothing.
-        for (const [at, jump] of jumps.entries()) {
-          expect({ at, ok: jump > 0 && jump % 10 ** at === 0 }).toEqual({ at, ok: true });
-        }
+      await play(
+        { seams: `&learned=all&hour=12&freezeNpcs&rung=${LONGEST_LINE_RUNG}` },
+        async (game) => {
+          const line = await castLine(game);
+          const jumps = jumpsOf(line);
+          expect(jumps).toHaveLength(6);
+          // Six digits on both sides, which is what the band is for.
+          expect(line.start).toBeGreaterThanOrEqual(100_000);
+          expect(line.stops.at(-1)).toBeLessThan(1_000_000);
+          // Ones, tens, hundreds, thousands, ten thousands, hundred thousands —
+          // and not one of them a jump of nothing.
+          for (const [at, jump] of jumps.entries()) {
+            expect({ at, ok: jump > 0 && jump % 10 ** at === 0 }).toEqual({ at, ok: true });
+          }
 
-        await game.solveNumberLine();
-        // Finished: the parchment closes only when every box is right.
-        expect(await game.seam<Line | null>("spell")).toBeNull();
-      });
+          await game.solveNumberLine();
+          // Finished: the parchment closes only when every box is right.
+          expect(await game.seam<Line | null>("spell")).toBeNull();
+        },
+      );
     },
     5 * MINUTES,
   );
@@ -148,15 +151,21 @@ describe("six-digit sums", () => {
   test(
     "and three-digit sums are still three jumps",
     async () => {
-      await play({ seams: `&learned=all&hour=12&rung=${SHARED_TOP_RUNG}` }, async (game) => {
-        const line = await castGrowth(game);
-        expect(jumpsOf(line)).toHaveLength(3);
-        expect(line.start).toBeGreaterThanOrEqual(100);
-        expect(line.stops.at(-1)).toBeLessThan(1000);
-        expect(rungAt(SHARED_TOP_RUNG).places).toBe(3);
-        await game.solveNumberLine();
-        expect(await game.seam<Line | null>("spell")).toBeNull();
-      });
+      await play(
+        { seams: `&learned=all&hour=12&freezeNpcs&rung=${SHARED_TOP_RUNG}` },
+        async (game) => {
+          // Cast past the digit question, as above: this rung asks it one
+          // cast in three, and a single cast that happens to draw it is a
+          // one-jump line, which is not the generator being wrong.
+          const line = await castLine(game);
+          expect(jumpsOf(line)).toHaveLength(3);
+          expect(line.start).toBeGreaterThanOrEqual(100);
+          expect(line.stops.at(-1)).toBeLessThan(1000);
+          expect(rungAt(SHARED_TOP_RUNG).places).toBe(3);
+          await game.solveNumberLine();
+          expect(await game.seam<Line | null>("spell")).toBeNull();
+        },
+      );
     },
     5 * MINUTES,
   );
