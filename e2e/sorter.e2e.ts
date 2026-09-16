@@ -77,23 +77,39 @@ describe("the first machine that does something", () => {
         expect(woken).toHaveLength(1);
         expect(woken[0]).toMatchObject({ awake: true, holding: null, heap: 0 });
 
-        // A second tap tips in the biggest heap she is carrying. No sum: this
-        // is the whole point of the design, and a second parchment here would
-        // make the machine a spell with a worse interface.
+        // A second tap offers the biggest heap she is carrying and asks how
+        // many of it. No sum: this is the whole point of the design, and a
+        // second parchment here would make the machine a spell with a worse
+        // interface. The question opens at the whole heap, so a child who
+        // wants it all in is one tap from it.
         //
         // *Which* heap is not written down here, because the machine decides
-        // — the biggest, since choosing would be a menu and a menu is what
-        // this interaction is trying not to be. She is carrying wood and
-        // stone in different amounts, so pinning it to one of them would be
-        // pinning the tie-break rather than the behaviour.
+        // — the biggest. She is carrying wood and stone in different
+        // amounts, so pinning it to one of them would be pinning the
+        // tie-break rather than the behaviour.
         await game.tapCell(at.col, at.row);
+        await game.settle(500);
+        const asked = await game.seam<{ count: number; most: number } | null>("mouth");
+        if (!asked) throw new Error("the sorter did not ask how many");
+        expect(asked.count).toBe(asked.most);
+        expect(asked.most).toBeGreaterThanOrEqual(SHARES + 2);
+        // Two fewer, and the tick: how much goes in is hers to say. A
+        // playtest lost a whole forest of timber into one hopper before it
+        // was.
+        await game.tap("mouth.fewer");
+        await game.tap("mouth.fewer");
+        await game.settle(200);
+        expect((await game.seam<{ count: number } | null>("mouth"))?.count).toBe(asked.most - 2);
+        await game.tap("mouth.yes");
         await game.settle(500);
         const fed = (await machines(game))[0];
         if (!fed?.holding) throw new Error("the sorter took nothing at all");
-        expect(fed.heap).toBeGreaterThanOrEqual(SHARES);
+        expect(fed.heap).toBe(asked.most - 2);
         expect(fed.crates).toEqual([0, 0, 0]);
-        // And it came out of the basket rather than being conjured.
-        expect(await game.held(fed.holding)).toBe(0);
+        // And it came out of the basket rather than being conjured, with the
+        // two she kept back still in it.
+        expect(await game.held(fed.holding)).toBe(2);
+        expect(await game.seam<unknown>("mouth")).toBe(null);
       });
     },
     5 * MINUTES,
@@ -118,8 +134,7 @@ describe("the first machine that does something", () => {
         await game.settle(400);
         await game.solveShare();
         await game.settle(400);
-        await game.tapCell(at.col, at.row);
-        await game.settle(400);
+        await game.feed(at);
 
         const filled = (await machines(game))[0];
         const heap = filled?.heap ?? 0;
@@ -193,8 +208,7 @@ describe("the first machine that does something", () => {
         await game.settle(400);
         await game.solveShare();
         await game.settle(400);
-        await game.tapCell(at.col, at.row);
-        await game.settle(500);
+        await game.feed(at);
 
         const filled = (await machines(game))[0];
         if (!filled?.holding) throw new Error("the sorter took nothing at all");

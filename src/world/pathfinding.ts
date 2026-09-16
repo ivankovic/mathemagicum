@@ -27,9 +27,22 @@ function posKey(p: GridPos): string {
 // uniform cost — BFS is exact and plenty fast for a map this size, no need
 // for A*. Returns the steps to take (excluding start), or null if the goal
 // is unreachable or itself impassable. Returns [] if already at the goal.
-export function findPath(grid: WorldGrid, start: GridPos, goal: GridPos): GridPos[] | null {
+//
+// `within` keeps the search inside a square of that many tiles round the
+// start, for a caller who only wants to know whether something *near* can
+// be walked to: without it, an unreachable goal is a flood of everything
+// reachable, which on a big world is most of the map.
+export function findPath(
+  grid: WorldGrid,
+  start: GridPos,
+  goal: GridPos,
+  within = Number.POSITIVE_INFINITY,
+): GridPos[] | null {
   if (!grid.isPassable(goal.col, goal.row)) return null;
   if (samePos(start, goal)) return [];
+  if (Math.max(Math.abs(goal.col - start.col), Math.abs(goal.row - start.row)) > within) {
+    return null;
+  }
 
   const cameFrom = new Map<string, GridPos>();
   const visited = new Set<string>([posKey(start)]);
@@ -46,6 +59,9 @@ export function findPath(grid: WorldGrid, start: GridPos, goal: GridPos): GridPo
       // `canStep` rather than `isPassable`: a villager who only asked
       // whether a tile could be stood on would walk up a cliff.
       if (visited.has(key) || !grid.canStep(current, next)) continue;
+      if (Math.max(Math.abs(next.col - start.col), Math.abs(next.row - start.row)) > within) {
+        continue;
+      }
       visited.add(key);
       cameFrom.set(key, current);
       queue.push(next);

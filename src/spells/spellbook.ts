@@ -135,6 +135,37 @@ export const TAUGHT_BESIDE: Partial<Record<Spell, string>> = {
   [Spell.Logic]: "garage",
 };
 
+/**
+ * Which of the five places each taught spell is taught in.
+ *
+ * A third table beside `TAUGHT_BY` and `TAUGHT_BESIDE`, and the argument
+ * against a third table is the one `runes.ts` makes about a second: another
+ * place for the pairing to be wrong. It earns that because *which region* is
+ * a different fact from *who* and from *what you can see from outside*, and
+ * neither of the other two can answer the question the map on the tower wall
+ * asks — **is there anything left for me over there.** The geometer is a
+ * person and the post office is a building; neither is a dot on a map of the
+ * world.
+ *
+ * Names rather than an imported type, exactly as `TAUGHT_BESIDE` keeps
+ * building roles as names: this file has no imports and is the better for it.
+ * They are `PlaceName`s, and the test below holds them to that.
+ *
+ * The city holds two, which is why the map reads this as a list per place
+ * rather than one picture each. Nothing else does.
+ *
+ * A test also holds this to `TAUGHT_BY`: a spell that gained a teacher and no
+ * place would be a place on the map that had quietly stopped saying it had
+ * something to give.
+ */
+export const TAUGHT_AT: Partial<Record<Spell, string>> = {
+  [Spell.Portal]: "village",
+  [Spell.Array]: "enchantedForest",
+  [Spell.Share]: "harbour",
+  [Spell.Hourglass]: "bigCity",
+  [Spell.Logic]: "bigCity",
+};
+
 export function knowsSpell(learned: Iterable<string>, spell: Spell): boolean {
   if (KNOWN_FROM_THE_START.includes(spell)) return true;
   for (const known of learned) if (known === spell) return true;

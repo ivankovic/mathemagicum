@@ -165,6 +165,8 @@ export const Deed = {
   BuiltMachine: "built-machine",
   /** A machine was woken with a sum. */
   Woke: "woke",
+  /** A machine asked how many of a heap she was carrying it should take. */
+  Offered: "offered",
   /** A heap she was carrying went into a machine's mouth. */
   Fed: "fed",
   /** Something a machine made, or binned, came out into her basket. */
@@ -230,6 +232,8 @@ export type Cue =
   | { readonly kind: "crate-coil" }
   /** The nearest awake machine with an empty mouth that would take what she carries. */
   | { readonly kind: "hungry-machine" }
+  /** The tick on the machine's *how many* row — or the machine again, if she tapped away from it. */
+  | { readonly kind: "mouth-yes" }
   /** The nearest machine with something in a crate or its bin. */
   | { readonly kind: "full-machine" }
   /** The machine a wire should come off, or the coil while she has not got it. */
@@ -265,6 +269,8 @@ export interface GuideView {
   readonly armed: "seed" | "growth" | "array" | "thing" | "machine" | "wire" | "other" | null;
   /** Whether the coil over her head already has hold of one end. */
   readonly wireFrom: boolean;
+  /** Whether a machine is asking how many, with its row open over its mouth. */
+  readonly asking: boolean;
   /** The building she is in, or null out of doors. */
   readonly indoors: string | null;
 }
@@ -455,7 +461,17 @@ export const GUIDE_SPECS: Record<Guide, GuideSpec> = {
   },
   [Guide.Feed]: {
     when: (world) => world.outdoors && world.hungryMachines > 0,
-    steps: [{ cue: { kind: "hungry-machine" }, until: Deed.Fed }],
+    // Two taps now rather than one: the machine asks how many, and the tick
+    // is what tips it in. A child who closes the question by tapping away
+    // is pointed at the machine again — see the scene's `mouth-yes`.
+    steps: [
+      {
+        cue: { kind: "hungry-machine" },
+        until: Deed.Offered,
+        already: (view) => view.asking,
+      },
+      { cue: { kind: "mouth-yes" }, until: Deed.Fed },
+    ],
   },
   [Guide.Take]: {
     when: (world) => world.outdoors && world.fullMachines > 0,

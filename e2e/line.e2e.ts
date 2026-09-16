@@ -100,8 +100,7 @@ describe("machines joined into a line", () => {
         await game.settle(200);
         expect(await game.held("wood")).toBeGreaterThan(9);
 
-        await game.tapCell(at.col, at.row);
-        await game.settle(500);
+        await game.feed(at);
         const fed = (await machines(game))[0];
         expect(fed).toMatchObject({ holding: "carrot", heap: 9 });
         expect(await game.held("carrot")).toBe(0);
@@ -156,8 +155,7 @@ describe("machines joined into a line", () => {
         // then there is none left to build the second machine out of.
         await game.give("carrot", 99);
         await game.settle(200);
-        await game.tapCell(from.col, from.row);
-        await game.settle(400);
+        await game.feed(from);
 
         // And a hothouse beside it, woken and empty.
         const to = await aMachineBeside(game, FixtureType.Hothouse);
@@ -251,8 +249,7 @@ describe("machines joined into a line", () => {
         // Shown one thing by the first heap that goes in, and never asked
         // again. She is carrying more stone than anything, so stone is what
         // it learns — which is the machine deciding, not the scenario.
-        await game.tapCell(at.col, at.row);
-        await game.settle(400);
+        await game.feed(at);
         const shown = (await machines(game))[0];
         if (!shown?.holding) throw new Error("the sieve took nothing at all");
         const passes = shown.holding;
@@ -291,8 +288,7 @@ describe("machines joined into a line", () => {
           await game.tapCell(at.col, at.row);
           await game.settle(300);
         }
-        await game.tapCell(at.col, at.row);
-        await game.settle(400);
+        await game.feed(at);
         await game.windClock(12);
         await game.settle(1500);
 
@@ -347,8 +343,7 @@ describe("machines joined into a line", () => {
 
         // The first heap sets the mark and goes straight through, since it
         // is by definition enough. Shown once, never asked again.
-        await game.tapCell(at.col, at.row);
-        await game.settle(400);
+        await game.feed(at);
         const shown = (await machines(game))[0];
         if (!shown?.holding) throw new Error("the tally took nothing at all");
         await game.windClock(12);
@@ -379,8 +374,7 @@ describe("machines joined into a line", () => {
           [shown.holding, 2] as const,
         );
         await game.settle(200);
-        await game.tapCell(at.col, at.row);
-        await game.settle(400);
+        await game.feed(at);
         expect((await machines(game))[0]).toMatchObject({ heap: 2 });
 
         await game.windClock(12);

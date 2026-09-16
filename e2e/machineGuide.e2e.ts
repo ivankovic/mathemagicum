@@ -146,8 +146,17 @@ describe("the machine tutorial", () => {
         await wake(game, second);
         expect((await guide(game)).running).toBe(Guide.Feed);
 
-        // Fed: the biggest heap she carries goes in, and the errand is done.
+        // Tapped: the machine asks how many, and the ring moves to the
+        // tick. A child who tapped away from the question would be pointed
+        // at the machine again, which is the same cue with nothing to glow.
         await game.tapCell(first.col, first.row);
+        await game.settle(500);
+        seen = await reaches(game, Guide.Feed, 1);
+        expect(seen.cue).toEqual({ kind: "mouth-yes" });
+        expect(near(seen.marks.ring, (await game.ui())["mouth.yes"])).toBe(true);
+
+        // Fed: the heap goes in on the tick, and the errand is done.
+        await game.tap("mouth.yes");
         await game.settle(500);
         const machines = await game.seam<Machine[]>("machines");
         expect(machines.some((one) => one.awake && one.heap > 0)).toBe(true);

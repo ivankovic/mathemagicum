@@ -53,9 +53,9 @@ async function running(game: Game, machine: FixtureType): Promise<{ col: number;
   await game.settle(400);
   const woken = (await machines(game)).find((one) => one.where === `${at.col},${at.row}`);
   expect(woken?.awake).toBe(true);
-  // Awake: the next tap tips in the biggest heap she is carrying.
-  await game.tapCell(at.col, at.row);
-  await game.settle(400);
+  // Awake: the next tap offers the biggest heap she is carrying, and the
+  // tick tips it in.
+  await game.feed(at);
   return at;
 }
 

@@ -12,6 +12,25 @@ const base = process.env.VITE_BASE ?? "./";
 
 export default defineConfig({
   base,
+  // Listen on every interface, not just loopback, so the game can be opened
+  // from a phone or a tablet on the same network — which is the only way to
+  // find out how the trays and the parchments behave under a thumb, and the
+  // only way to hear the synthesised music through a speaker that is not
+  // this one. `bun run dev` then prints a Network: line with the address to
+  // type; `bunx --bun vite --host localhost` still overrides it for a run
+  // that should stay private — note that `--host false` does *not*: Vite
+  // takes the word as a hostname, fails to resolve it, and then reports
+  // port after port as "in use" until you stop it.
+  server: {
+    host: true,
+    // Vite refuses requests whose Host header is a name it was not told
+    // about (its answer to DNS rebinding), and the default exemption covers
+    // bare IP addresses only. A LAN IP therefore already works; an mDNS
+    // name like `core.local`, which is what a phone is actually given, does
+    // not. A leading dot matches the suffix, so this admits any `*.local`
+    // and nothing beyond the house.
+    allowedHosts: [".local"],
+  },
   build: {
     target: "es2022",
   },

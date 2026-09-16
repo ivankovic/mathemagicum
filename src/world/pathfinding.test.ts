@@ -50,6 +50,18 @@ describe("findPath", () => {
     }
   });
 
+  test("keeps a bounded search inside its square, and finds what is within it", () => {
+    // The only way round the wall is a detour four squares wide; a search
+    // held to two squares round the start cannot take it, one held to four
+    // can. A goal inside the square is found the same as ever.
+    const grid = gridFromRows(["GGGGG", "WWWWG", "GGGGG"]);
+    expect(findPath(grid, { col: 0, row: 0 }, { col: 0, row: 2 }, 2)).toEqual(null);
+    expect(findPath(grid, { col: 0, row: 0 }, { col: 0, row: 2 }, 4)).not.toBeNull();
+    expect(findPath(grid, { col: 0, row: 0 }, { col: 2, row: 0 }, 2)).toHaveLength(2);
+    // And a goal outside the square is not searched for at all.
+    expect(findPath(grid, { col: 0, row: 0 }, { col: 4, row: 0 }, 2)).toEqual(null);
+  });
+
   test("returns null for an out-of-bounds goal", () => {
     const grid = gridFromRows(["GGG", "GGG", "GGG"]);
     expect(findPath(grid, { col: 0, row: 0 }, { col: 99, row: 99 })).toEqual(null);

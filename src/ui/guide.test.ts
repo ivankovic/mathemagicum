@@ -19,6 +19,7 @@ const QUIET: GuideView = {
   crateGroupOpen: false,
   armed: null,
   wireFrom: false,
+  asking: false,
   indoors: null,
 };
 
@@ -246,6 +247,9 @@ describe("the machines, in the order a line is made", () => {
     expect(guide.current).toBe(null);
     guide.tick({ ...GARDEN, hungryMachines: 1 }, QUIET);
     expect(guide.cue()).toEqual({ kind: "hungry-machine" });
+    // The machine asks how many, and the tick is the deed.
+    guide.note(Deed.Offered);
+    expect(guide.cue()).toEqual({ kind: "mouth-yes" });
     guide.note(Deed.Fed);
     expect(guide.finished).toContain(Guide.Feed);
     // And the thing it made, which is where the errand was going.

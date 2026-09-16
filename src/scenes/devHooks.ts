@@ -449,6 +449,18 @@ export interface DevHandle {
    */
   readonly mapOpen: () => boolean;
   /**
+   * The pictures the world map is showing beside the five places: what each
+   * still has for her, and nothing where a place has nothing left.
+   *
+   * The map drew where everywhere was and never whether any of it was worth
+   * the walk, which left the observatory — the one anchor with no spell and
+   * no guide pointing at it — completely silent while holding a hard
+   * prerequisite for finishing the game. These are texture keys, in map
+   * order, and they are the only way a script can read a tinted picture on a
+   * sheet of parchment.
+   */
+  readonly mapOwes: () => string[];
+  /**
    * The wall of bricks on the parchment, or null when none is open.
    *
    * Hands over the answer as well as the question, which the other spells'
@@ -519,6 +531,19 @@ export interface DevHandle {
    * cannot tell "the rune went out" from "the tap missed".
    */
   readonly armed: () => string | null;
+  /**
+   * The picture actually hanging over her head, by its texture key, or null.
+   *
+   * Not the same question as `armed`, and the gap between the two is where a
+   * bug lived: marking out ground raises a rune without arming anything, so
+   * `armed` is null for the whole of the array spell and the sharing spell
+   * while a rune pulses over her the entire time. Which rune it is was
+   * unaskable, and the sharing spell wore the multiplication one for as long
+   * as the two shared a method — a child casting division told, over her own
+   * head, that she was multiplying. A script cannot read a picture; this is
+   * how it asks.
+   */
+  readonly armedRune: () => string | null;
   /**
    * The square she is pointing at, or null when she is not pointing at one.
    *
@@ -613,6 +638,8 @@ export interface DevHandle {
   }[];
   /** Every length of wire, and whether it is carrying. See `wires.ts`. */
   readonly wires: () => { from: string; to: string; moved: number }[];
+  /** The machine's *how many* row while one is asking, or null. */
+  readonly mouth: () => { count: number; most: number } | null;
   /** Which end of a wire she has hold of, or null. */
   readonly wiring: () => { col: number; row: number } | null;
   readonly sea: () => {
@@ -975,6 +1002,24 @@ export interface DevHandle {
       readonly trail: number;
     };
     readonly done: readonly string[];
+    /**
+     * What the guides can see of the interface right now.
+     *
+     * Every `already` predicate is a question about this, so a value the
+     * scene can never produce is a step that can never be skipped and, when
+     * the same value is what a deed is noted from, a guide that can never
+     * move. The array spell was exactly that: `armed` could not say "array",
+     * because that spell opens a menu rather than lighting a rune, and the
+     * tree's errand waited for it.
+     */
+    readonly view: {
+      readonly trayOpen: string | null;
+      readonly crateGroupOpen: boolean;
+      readonly armed: string | null;
+      readonly wireFrom: boolean;
+      readonly asking: boolean;
+      readonly indoors: string | null;
+    };
   };
   /**
    * The city's ramparts: where its gateways are, and how many stones it has.

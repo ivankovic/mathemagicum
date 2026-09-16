@@ -131,6 +131,7 @@ import { CountingPopup } from "../ui/CountingPopup";
 import { GeometryLessonPanel } from "../ui/GeometryLessonPanel";
 import { GroveLessonPanel } from "../ui/GroveLessonPanel";
 import { GuideMarks } from "../ui/GuideMarks";
+import { HeapPicker } from "../ui/HeapPicker";
 import { IconTray, type IconTrayOptions } from "../ui/IconTray";
 import { IntroPanel } from "../ui/IntroPanel";
 import { LessonPanel } from "../ui/LessonPanel";
@@ -174,6 +175,7 @@ import {
 } from "../ui/guide";
 import { NEWS_BEATS } from "../ui/news";
 import { FACE, INK, INK_DIM } from "../ui/parchment";
+import { owedAt } from "../ui/placeMarks";
 import { RUNE_OF } from "../ui/runes";
 import { type Given, flies, stageNow, stagesDone, stillWanted } from "../world/airship";
 import type { AreaPlacement } from "../world/anchors";
@@ -359,6 +361,7 @@ import {
   type MachineType,
   SHARES,
   SPARK,
+  WORK,
   advance as advanceMachine,
   build,
   canBuild as canBuildMachine,
@@ -1451,6 +1454,8 @@ export class GameScene extends Phaser.Scene {
    * search for it would run every frame for as long as she stood still.
    */
   private guideRoute: { from: string; to: string; path: GridPoint[] | null } | null = null;
+  /** Which squares she can walk beside from the square she is on. See `canWalkBeside`. */
+  private besideSeen: { from: string; at: number; known: Map<string, boolean> } | null = null;
   private newsPanel?: NewsPanel;
   private mapPanel?: MapPanel;
   /** One picture, held up close, for the things that are only pictures. */
@@ -1521,6 +1526,16 @@ export class GameScene extends Phaser.Scene {
   private wheelFresh = false;
   /** Where she stood when the ring opened. A step off it is a change of mind. */
   private wheelOpenedAt: GridPoint | null = null;
+  /**
+   * The row a machine asks *how many* with, over its mouth.
+   *
+   * A tap on an awake machine used to tip the whole heap in. See `tipIn`
+   * for why it asks now, and `HeapPicker` for the asking. Its own fresh
+   * flag and standing square, for exactly the reasons the ring has them.
+   */
+  private mouth?: HeapPicker;
+  private mouthFresh = false;
+  private mouthOpenedAt: GridPoint | null = null;
   /**
    * The move she is in the middle of, or null.
    *
@@ -2279,6 +2294,11 @@ export class GameScene extends Phaser.Scene {
       world.grid,
       world.anchors,
       () => this.whereOnTheMap(),
+      // What each place still has for her. The blueprint is the astronomer's
+      // and is the reason this is not simply "spells she has not learned":
+      // the dome is the one anchor that pays in a machine, and it was also
+      // the one place on this map with nothing to say — see `owedAt`.
+      (place) => owedAt(place, (spell) => this.knows(spell), this.blueprintEarned),
       (object) => this.ui(object),
     );
     this.picturePanel = new PicturePanel(this, uiIndex, MODAL_DEPTH, (object) => this.ui(object));
@@ -2329,6 +2349,12 @@ export class GameScene extends Phaser.Scene {
     );
     this.decorMenu = new PatchMenu<DecorItem>(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
     this.wheel = new ActionWheel<ThingAction>(this, TOUCH_UI_DEPTH, (object) => this.ui(object));
+    this.mouth = new HeapPicker(
+      this,
+      TOUCH_UI_DEPTH,
+      (object) => this.ui(object),
+      uiTextureKey(UiAsset.MarkYes),
+    );
     this.flowerMenu = new PatchMenu<PlantedFlower>(this, TOUCH_UI_DEPTH, (object) =>
       this.ui(object),
     );
@@ -2515,6 +2541,18 @@ export class GameScene extends Phaser.Scene {
           return;
         }
       }
+      // The machine's question is answered or walked away from on the same
+      // terms as the ring's.
+      if (this.mouth?.isOpen) {
+        if (this.mouthFresh) {
+          this.mouthFresh = false;
+          return;
+        }
+        if (!this.tappedTheInterface(over)) {
+          this.closeMouth();
+          return;
+        }
+      }
       // The array spell owns the pointer while it is armed: a tap marks a
       // corner instead of steering, walking, or being answered by whatever
       // happens to be standing on the tile.
@@ -2569,6 +2607,7 @@ export class GameScene extends Phaser.Scene {
         // second finger that turned it into a pinch never reached the
         // handler above, and the flag must not outlive the tap it is about.
         this.wheelFresh = false;
+        this.mouthFresh = false;
         this.pinch.end(pointer.id);
         this.joystick?.end(pointer);
       });
@@ -2596,7 +2635,14 @@ export class GameScene extends Phaser.Scene {
       // hold still. See `FROZEN_TIDE`.
       this.traffic?.sail(this.frozen ? FROZEN_TIDE : this.worldNow() / 60_000);
       this.teacherMarks?.show(
-        [...this.teachersOnScreen(), ...this.woodToClear()],
+        [
+          ...this.teachersOnScreen(),
+          ...this.woodToClear(),
+          // A third kind of thing that is about a rune, and the only one of
+          // the three that is in her own garden rather than out in the
+          // world — see `machinesAwaitingTheirSpell`.
+          ...this.machinesAwaitingTheirSpell(),
+        ],
         (spell) => !this.knows(spell),
       );
       this.chunks.cullScenery();
@@ -2680,6 +2726,10 @@ export class GameScene extends Phaser.Scene {
     const opened = this.wheelOpenedAt;
     if (opened && (opened.col !== this.playerCol || opened.row !== this.playerRow)) {
       this.closeWheel();
+    }
+    const asked = this.mouthOpenedAt;
+    if (asked && (asked.col !== this.playerCol || asked.row !== this.playerRow)) {
+      this.closeMouth();
     }
 
     if (!this.isMoving) {
@@ -3826,6 +3876,15 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.joystick?.release();
+    // Whatever was lit before this is put out, and put out *here* rather
+    // than where the marking begins: the menu is two taps away from it, and
+    // for those two taps `marking` is still null while `armed` is not. The
+    // pointer gives the world to a lit rune whenever nothing is being marked
+    // out, so a finger that lands beside the little menu — which is most of
+    // the screen — used to cast the plus spell on that square while the
+    // child was still deciding what to multiply. The stale square left over
+    // it was the visible half of the same bug.
+    this.disarm();
     // **What, before where.** The choice used to come after the ground was
     // marked, off a menu that also said how many squares were in it — which
     // is the answer to the multiplication about to be asked. Asking first
@@ -3998,10 +4057,33 @@ export class GameScene extends Phaser.Scene {
     this.marking = aimed
       ? { from: aimed, patch: patchBetween(aimed, aimed, this.worldGrid), action }
       : { from: null, patch: null, action };
+    // And anything lit before it, for the three callers that do not come
+    // through the spell menu. Before the rune goes up, because putting a
+    // rune out destroys whichever one is standing.
+    this.disarm();
     // The rune hangs over her head for as long as the spell is armed. It is
     // the whole of "mark out the ground": a spell that is waiting for a tap
     // and says nothing is a spell that looks like it did not fire.
-    this.raiseArmedRune(uiTextureKey(UiAsset.RuneTimes));
+    //
+    // Times for the array spell, and that is right for every action on its
+    // menu: plant, grow, clear and build are all *what is being multiplied*,
+    // which is what the plus and minus pictures on the menu itself say.
+    // Picking is the odd one, because it is not that spell at all — it is
+    // sharing, reusing the same rectangle — and it wore the times rune for
+    // as long as the two shared this method. A child casting division was
+    // told, over her own head, that she was multiplying.
+    this.raiseArmedRune(
+      uiTextureKey(action === PatchAction.Pick ? UiAsset.RuneDivide : UiAsset.RuneTimes),
+    );
+    // And *this* is where the array spell counts as lit, which is the only
+    // moment it could be. It is never armed the way the other spells are:
+    // `armSpell` is called for growing, clearing and logic and never for
+    // this one, because tapping its rune opens a menu rather than lighting
+    // anything. So the deed used to have no way of happening at all, and the
+    // tree's errand — which waits for it before pointing at the beds — stood
+    // pointing at the spellbook for ever. Not the tap that opens the menu:
+    // the choice off it, which is the thing that actually starts the spell.
+    if (action !== PatchAction.Pick) this.noteDeed(Deed.ArmedArray);
     // Out, so the whole reach is on screen. On anything desktop-shaped this
     // does nothing at all; on a phone it is the difference between drawing a
     // rectangle and drawing a line — see `markingZoom`.
@@ -4660,9 +4742,17 @@ export class GameScene extends Phaser.Scene {
         done++;
       }
     } else if (action === PatchAction.Clear) {
-      for (const at of this.session.clearableIn(patch)) {
-        this.clearAt(at.col, at.row);
+      const cells = this.session.clearableIn(patch);
+      for (const at of cells) {
+        this.clearAt(at.col, at.row, true);
         done++;
+      }
+      // Once for the lot of them: the bend, the basket, and the look at the
+      // grove that every single clearing takes. See `clearAt`.
+      if (cells.length > 0) {
+        this.playGesture(PLANT);
+        this.refreshCarried();
+        this.time.delayedCall(0, () => this.checkGrove());
       }
       // And the machines, at the patch's own reach rather than a pointing
       // one: she drew the rectangle round them, and the rectangle is how far
@@ -5446,13 +5536,22 @@ export class GameScene extends Phaser.Scene {
     if (save) this.autosave();
   }
 
-  /** Lift what stood there out of the world, sprite and all. */
-  private clearAt(col: number, row: number): void {
+  /**
+   * Lift what stood there out of the world, sprite and all.
+   *
+   * `batched` is for a patch: the things done *once per cast* — the bend,
+   * the trays, the look at the grove — are left to the caller, which does
+   * them once for the lot. Eighty trees in one rectangle used to mean
+   * eighty walks of the thicket and two hundred and forty tray refreshes
+   * in a single frame, which a playtest saw as the game catching its
+   * breath.
+   */
+  private clearAt(col: number, row: number, batched = false): void {
     // The tree's light goes out when the last bed is filled, and clearing
     // wood is one of the two things that can get there. Asked here rather
     // than every frame: `groveProgress` walks the thicket and sixteen
     // squares, which is nothing once and something sixty times a second.
-    this.time.delayedCall(0, () => this.checkGrove());
+    if (!batched) this.time.delayedCall(0, () => this.checkGrove());
     const cleared = this.session.clearAt(col, row);
     if (!cleared) return;
     if (cleared.kind === "crop") {
@@ -5463,7 +5562,7 @@ export class GameScene extends Phaser.Scene {
       this.cropSprites.get(key)?.destroy();
       this.cropSprites.delete(key);
       this.playEffect(EffectType.Minus, col, row);
-      this.playGesture(PLANT); // the same bend; she is reaching for the ground
+      if (!batched) this.playGesture(PLANT); // the same bend; she is reaching for the ground
       return;
     }
     const object = cleared.object;
@@ -5476,10 +5575,13 @@ export class GameScene extends Phaser.Scene {
     const paid = yieldOf(sceneryKind(object.type));
     if (paid) {
       this.inventory.add(paid.material, paid.count);
-      this.refreshCarried();
+      if (!batched) this.refreshCarried();
       // One icon per thing gained, rising off the square it came from, so a
-      // child can *count* what a conifer was worth rather than be told.
-      for (let n = 0; n < paid.count; n++) {
+      // child can *count* what a conifer was worth rather than be told. In
+      // a patch, one per square: nobody counts a forest, and a rectangle of
+      // eighty trees each throwing three is a screen nobody can see through.
+      const shown = batched ? 1 : paid.count;
+      for (let n = 0; n < shown; n++) {
         this.time.delayedCall(n * MATERIAL_STAGGER_MS, () =>
           this.showResult(materialIcon(paid.material), col, row),
         );
@@ -5784,10 +5886,23 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showRefusalOnPlayer(icon?: string): void {
-    const x = this.player.x;
     // Just clear of her hat rather than as high as the sprite is tall: a mark
     // floating a body's length above her head reads as belonging to the sky.
-    const y = this.player.y - TILE_SIZE - RESULT_ICON / 2;
+    this.showRefusal(
+      this.player.x,
+      this.player.y - TILE_SIZE - RESULT_ICON / 2,
+      this.player.depth + 1,
+      icon,
+    );
+  }
+
+  /** The same refusal, over a square rather than over her: a machine saying what it wants. */
+  private showRefusalAt(col: number, row: number, icon: string): void {
+    const feet = this.toFeet(col, row);
+    this.showRefusal(feet.x, feet.y - TILE_SIZE - RESULT_ICON / 2, feet.y + 1, icon);
+  }
+
+  private showRefusal(x: number, y: number, depth: number, icon?: string): void {
     const parts: Phaser.GameObjects.GameObject[] = [];
     const mark = this.add.graphics();
     const half = RESULT_ICON * 0.5;
@@ -5803,7 +5918,7 @@ export class GameScene extends Phaser.Scene {
       mark.lineBetween(half, -half, -half, half);
     }
     parts.push(mark);
-    const shown = this.world(this.add.container(x, y, parts).setDepth(this.player.depth + 1));
+    const shown = this.world(this.add.container(x, y, parts).setDepth(depth));
     this.tweens.add({
       targets: shown,
       y: y - RESULT_RISE / 2,
@@ -6327,27 +6442,33 @@ export class GameScene extends Phaser.Scene {
   private guideView(): GuideView {
     const trayOpen = Object.entries(this.trays()).find(([, tray]) => tray?.isOpen)?.[0] ?? null;
     const held = this.armed;
-    const armed: GuideView["armed"] =
-      held === null
+    // Marking out ground *is* the array spell being lit, and it is the only
+    // shape that spell ever takes: it is never in `armed`, so reading this
+    // off `armed` alone could only ever answer null. Asked first, because
+    // marking and a lit rune cannot both be going on — each puts the other
+    // out — so there is nothing here to order against.
+    const marking = this.marking !== null && this.marking.action !== PatchAction.Pick;
+    const armed: GuideView["armed"] = marking
+      ? "array"
+      : held === null
         ? null
         : held.kind === "seed"
           ? "seed"
           : held.kind === "spell" && held.spell === Spell.Growth
             ? "growth"
-            : held.kind === "spell" && held.spell === Spell.Array
-              ? "array"
-              : held.kind === "fixture" && isMachine(held.fixture)
-                ? "machine"
-                : held.kind === "fixture" || held.kind === "decor"
-                  ? "thing"
-                  : held.kind === "wire"
-                    ? "wire"
-                    : "other";
+            : held.kind === "fixture" && isMachine(held.fixture)
+              ? "machine"
+              : held.kind === "fixture" || held.kind === "decor"
+                ? "thing"
+                : held.kind === "wire"
+                  ? "wire"
+                  : "other";
     return {
       trayOpen,
       crateGroupOpen: this.crateGroup !== null,
       armed,
       wireFrom: held?.kind === "wire" && held.from !== null,
+      asking: this.mouth?.isOpen ?? false,
       indoors: this.interior ? this.enteredBuilding : null,
     };
   }
@@ -6375,6 +6496,12 @@ export class GameScene extends Phaser.Scene {
       marks.pointAt(this.screenOf(cell.col, cell.row));
       return true;
     };
+    // A machine is pointed at the way a door is: along the path to it, with
+    // the arrow kept on the screen. An arrow hung over a square ten tiles
+    // off is an arrow off the edge of a phone, and a playtest with two
+    // hothouses was pointed at the one it could not see.
+    const walkTo = (cell: GridPoint | null): boolean =>
+      cell ? this.pointTheWay(marks, cell) : false;
     switch (cue.kind) {
       case "button":
         return glow(cue.name);
@@ -6445,7 +6572,7 @@ export class GameScene extends Phaser.Scene {
         return carrying ? glow(`shop.sell.${carrying}`) : false;
       }
       case "sleeping-machine":
-        return point(this.nearest(this.sleepingMachines()));
+        return walkTo(this.nearest(this.sleepingMachines()));
       case "crate-makers":
         return this.crateTray?.isOpen ? glow(`crate.${CrateGroup.Makers}`, "crate") : glow("crate");
       case "crate-machine": {
@@ -6463,9 +6590,15 @@ export class GameScene extends Phaser.Scene {
           ? glow(`crate.${CRATE_WIRE}`, "crate")
           : glow(`crate.${CrateGroup.Makers}`, "crate");
       case "hungry-machine":
-        return point(this.nearest(this.hungryMachines()));
+        return walkTo(this.nearest(this.hungryMachines()));
+      case "mouth-yes":
+        // The tick while the machine is asking; the machine again if she
+        // tapped away from the question, because the way on is to ask it
+        // again.
+        if (this.mouth?.isOpen) return glow("mouth.yes");
+        return walkTo(this.nearest(this.hungryMachines()));
       case "full-machine":
-        return point(this.nearest(this.fullMachines()));
+        return walkTo(this.nearest(this.fullMachines()));
       case "wire-from": {
         // Without the coil in her hands there is nothing to tap a machine
         // with, so the arrow goes back to the coil: she put it down, or a
@@ -6473,17 +6606,17 @@ export class GameScene extends Phaser.Scene {
         // has it. Either way the way on is the same button.
         const held = this.armed;
         if (held?.kind !== "wire") return this.drawCue({ kind: "crate-coil" }, marks);
-        return point(this.wirePairs()[0]?.from ?? null);
+        return walkTo(this.wirePairs()[0]?.from ?? null);
       }
       case "wire-to": {
         const held = this.armed;
         if (held?.kind !== "wire") return this.drawCue({ kind: "crate-coil" }, marks);
         const from = held.from;
-        if (!from) return point(this.wirePairs()[0]?.from ?? null);
+        if (!from) return walkTo(this.wirePairs()[0]?.from ?? null);
         const pair = this.wirePairs().find(
           (one) => one.from.col === from.col && one.from.row === from.row,
         );
-        return point(pair?.to ?? null);
+        return walkTo(pair?.to ?? null);
       }
       case "wood":
         return point(this.nearest(this.woodStillStanding()));
@@ -6569,12 +6702,61 @@ export class GameScene extends Phaser.Scene {
     const known = this.guideRoute;
     if (known && known.from === from && known.to === to) return known.path;
     const here = { col: this.playerCol, row: this.playerRow };
-    const goal = this.grid.isPassable(target.col, target.row)
-      ? target
-      : { col: target.col, row: target.row + 1 };
-    const path = findPath(this.grid, here, goal);
+    // A square nothing can stand on — a door in a wall, a machine — is
+    // reached by standing beside it. The square below first, which is the
+    // doorstep every building sends her to, and then the other three, so a
+    // machine with a fence along its foot is still found from the side.
+    let path: GridPoint[] | null = null;
+    for (const goal of this.standingRoom(target)) {
+      path = findPath(this.grid, here, goal);
+      if (path) break;
+    }
     this.guideRoute = { from, to, path };
     return path;
+  }
+
+  /** Where to stand for a square: the square itself if it can be stood on, else each side of it. */
+  private standingRoom(target: GridPoint): GridPoint[] {
+    if (this.grid.isPassable(target.col, target.row)) return [target];
+    return [
+      { col: target.col, row: target.row + 1 },
+      { col: target.col - 1, row: target.row },
+      { col: target.col + 1, row: target.row },
+      { col: target.col, row: target.row - 1 },
+    ].filter((at) => this.grid.isPassable(at.col, at.row));
+  }
+
+  /**
+   * Whether she can walk up to a square from where she stands.
+   *
+   * The guide's question about a machine, asked before pointing at it: a
+   * playtest had two hothouses and was pointed at the one she could not
+   * get to. Bounded to the guide's own reach, so a machine on the far side
+   * of a fence costs a search of a few hundred squares rather than a flood
+   * of the whole world; and remembered by the square she is on, because the
+   * machine cues are drawn every frame and the answer only changes when she
+   * moves.
+   */
+  private canWalkBeside(target: GridPoint): boolean {
+    const from = tileKey(this.playerCol, this.playerRow);
+    const now = this.time.now;
+    let seen = this.besideSeen;
+    // And forgotten after half a second even standing still, the same
+    // breath `guideWorld` takes: a fence she puts down without moving
+    // changes the answer.
+    if (!seen || seen.from !== from || now - seen.at > 500) {
+      seen = { from, at: now, known: new Map() };
+      this.besideSeen = seen;
+    }
+    const to = tileKey(target.col, target.row);
+    const known = seen.known.get(to);
+    if (known !== undefined) return known;
+    const here = { col: this.playerCol, row: this.playerRow };
+    const can = this.standingRoom(target).some(
+      (goal) => findPath(this.grid, here, goal, GUIDE_MACHINE_REACH + 4) !== null,
+    );
+    seen.known.set(to, can);
+    return can;
   }
 
   /**
@@ -6643,7 +6825,7 @@ export class GameScene extends Phaser.Scene {
       const [col, row] = key.split(",").map(Number);
       if (col === undefined || row === undefined) continue;
       const off = Math.max(Math.abs(col - this.playerCol), Math.abs(row - this.playerRow));
-      if (off <= GUIDE_MACHINE_REACH) found.push({ col, row });
+      if (off <= GUIDE_MACHINE_REACH && this.canWalkBeside({ col, row })) found.push({ col, row });
     }
     return found;
   }
@@ -6680,7 +6862,9 @@ export class GameScene extends Phaser.Scene {
       const at = tileOf(key);
       if (!at) continue;
       const off = Math.max(Math.abs(at.col - this.playerCol), Math.abs(at.row - this.playerRow));
-      if (off <= GUIDE_MACHINE_REACH) found.push({ at, type, state });
+      // Near, and reachable: one she cannot walk up to is one the guide
+      // must not send her to.
+      if (off <= GUIDE_MACHINE_REACH && this.canWalkBeside(at)) found.push({ at, type, state });
     }
     return found;
   }
@@ -6789,7 +6973,9 @@ export class GameScene extends Phaser.Scene {
   private noteArmed(what: Armed): void {
     if (what.kind === "seed") this.noteDeed(Deed.ArmedSeed);
     else if (what.kind === "spell" && what.spell === Spell.Growth) this.noteDeed(Deed.ArmedGrowth);
-    else if (what.kind === "spell" && what.spell === Spell.Array) this.noteDeed(Deed.ArmedArray);
+    // The array spell is not in this list and cannot be: nothing ever arms
+    // it, because its rune opens a menu instead. Its deed is noted where the
+    // menu is answered — see `beginMarking`.
     else if (what.kind === "fixture" || what.kind === "decor") this.noteDeed(Deed.ArmedThing);
   }
 
@@ -7190,6 +7376,10 @@ export class GameScene extends Phaser.Scene {
     // the ring is: the question *use it or take it*, asked in two pictures.
     for (const [action, at] of Object.entries(this.wheel?.buttonPositions() ?? {})) {
       positions[`wheel.${action}`] = at;
+    }
+    // The machine's question: fewer, more, and the tick.
+    for (const [name, at] of Object.entries(this.mouth?.buttonPositions() ?? {})) {
+      positions[`mouth.${name}`] = at;
     }
     if (this.optionsPanel?.isOpen) Object.assign(positions, this.optionsPanel.buttonPositions());
     // The about sheet's, which nothing could reach until its heading became
@@ -7832,6 +8022,7 @@ export class GameScene extends Phaser.Scene {
     for (const tray of Object.values(this.trays())) tray?.setOpen(false);
     this.flowerMenu?.close();
     this.closeWheel();
+    this.closeMouth();
     // And the array spell's marker, if one is half drawn. State surviving a
     // transition is this codebase's recurring bug — scenery across a portal,
     // a tray behind a popup, the great tree's own cell — and a rectangle
@@ -8126,26 +8317,30 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Tip the biggest heap of one thing she is carrying into the mouth.
+   * Offer the biggest heap of one thing she is carrying to the mouth, and
+   * ask how much of it goes in.
    *
-   * The biggest rather than a chosen one, because choosing is a menu and a
-   * menu is the thing this interaction is trying not to be. A child with
-   * twelve wood and three stone taps a sorter and the wood goes in, which is
-   * what they meant: the reason to walk to a machine is the heap you are
-   * carrying, and it is nearly always the big one.
+   * The biggest rather than a chosen one: a child with twelve wood and
+   * three stone taps a sorter and it is the wood that is offered, which is
+   * what they meant — the reason to walk to a machine is the heap you are
+   * carrying, and it is nearly always the big one. Only what this machine
+   * will take, so the biggest heap she is carrying is the biggest heap *it
+   * wants*; a hothouse beside a child with fifty wood and six carrots is
+   * asking for the carrots. One question, asked of the machine rather than
+   * worked out here — a press has two mouths, and a rule written here would
+   * only ever have offered the first.
+   *
+   * **How much is hers to say.** The tap used to tip the lot in, on the
+   * argument that choosing is a menu. A playtest overturned it: a child
+   * who had cleared eighty trees tapped a machine with the whole forest in
+   * her basket and lost it into one hopper. So the tap opens the machine's
+   * one question — a row over its mouth with the thing, a number, and a
+   * tick — and the heap goes in when she says so. See `HeapPicker`.
    */
   private tipIn(key: string, state: MachineState, machine: MachineType): void {
     let best: { item: ItemType; count: number } | null = null;
     for (const [item, count] of this.inventory.entries()) {
       if (count <= 0) continue;
-      // Only what this machine will take, so the biggest heap she is
-      // carrying is the biggest heap *it wants* — a hothouse beside a child
-      // with fifty wood and six carrots is asking for the carrots.
-      // One question, asked of the machine rather than worked out here. This
-      // was two lines that between them said "what it accepts, and what is
-      // already in its mouth" — true of a machine with one mouth, and quietly
-      // wrong for a press, which has two and would only ever have been
-      // offered the first.
       if (!wouldTake(state, item, machine)) continue;
       if (!best || count > best.count) best = { item, count };
     }
@@ -8159,12 +8354,40 @@ export class GameScene extends Phaser.Scene {
       this.refuseAtMouth(machine);
       return;
     }
-    const fed = feed(state, best.item, best.count, machine);
+    const at = tileOf(key);
+    if (!at) return;
+    const offered = best;
+    const feet = this.toFeet(at.col, at.row);
+    this.mouth?.openAt(
+      this.screenOfPoint(feet.x, feet.y - TILE_SIZE / 2),
+      uiTextureKey(iconForItem(offered.item)),
+      offered.count,
+      (count) => {
+        this.mouthOpenedAt = null;
+        this.feedMachine(key, machine, offered.item, count);
+      },
+    );
+    this.mouthFresh = true;
+    this.mouthOpenedAt = { col: this.playerCol, row: this.playerRow };
+    this.noteDeed(Deed.Offered);
+  }
+
+  /**
+   * Tip this many of this into the mouth, now that she has said how many.
+   *
+   * Asked of the machine and the basket again rather than trusted from the
+   * moment the question opened: a wire may have filled the mouth while she
+   * was deciding, and the basket is whatever it is now.
+   */
+  private feedMachine(key: string, machine: MachineType, item: ItemType, count: number): void {
+    const state = this.machines.get(key) ?? newMachine();
+    const wanted = Math.min(Math.trunc(count), this.inventory.count(item));
+    const fed = wanted > 0 ? feed(state, item, wanted, machine) : null;
     if (!fed) {
       this.refuseAtMouth(machine);
       return;
     }
-    this.inventory.remove(best.item, best.count);
+    this.inventory.remove(item, wanted);
     this.machines.set(key, fed);
     this.playGesture(PLANT); // she bends to tip it in, same as planting
     this.noteDeed(Deed.Fed);
@@ -8737,10 +8960,36 @@ export class GameScene extends Phaser.Scene {
       this.wires.push(wire);
     }
     this.showResult(UiAsset.MarkYes, at.col, at.row);
+    this.warnIfWireIsStuck(held.from, at, machine);
     this.noteDeed(Deed.Wired);
     this.drawWires();
     this.autosave();
     this.checkJobs();
+  }
+
+  /**
+   * Say so, over the far end, when a wire just strung cannot carry.
+   *
+   * The wire is kept — she may be about to fix the reason — but a line
+   * that will never move and one that has not moved *yet* look the same
+   * for the twenty minutes a round takes, and a playtest strung a sorter
+   * full of timber to a hothouse and waited for nothing. So the far
+   * machine says what it would take, the way it does when she taps it
+   * with the wrong heap: the crop with a bar across it, over its mouth.
+   * A machine still asleep is its own answer, and the guide's.
+   */
+  private warnIfWireIsStuck(from: GridPoint, to: GridPoint, sink: MachineType): void {
+    const source = this.machines.get(tileKey(from.col, from.row));
+    const maker = this.machineAt(tileKey(from.col, from.row));
+    const held = this.machines.get(tileKey(to.col, to.row)) ?? newMachine();
+    if (!source || !maker || !held.awake) return;
+    // What will come down the wire: what the crates hold, or what the mouth
+    // will turn into — a hothouse that has not dealt yet still sends timber.
+    const made =
+      source.made ?? (source.holding === null ? null : (WORK[maker].gives ?? source.holding));
+    if (made === null || wouldTake(held, made, sink)) return;
+    const wanted = mouthful(sink) ?? made;
+    this.showRefusalAt(to.col, to.row, iconForItem(wanted));
   }
 
   /**
@@ -8916,6 +9165,12 @@ export class GameScene extends Phaser.Scene {
     this.wheel?.close();
     this.wheelFresh = false;
     this.wheelOpenedAt = null;
+  }
+
+  private closeMouth(): void {
+    this.mouth?.close();
+    this.mouthFresh = false;
+    this.mouthOpenedAt = null;
   }
 
   /**
@@ -9778,6 +10033,68 @@ export class GameScene extends Phaser.Scene {
       });
     }
     return marks;
+  }
+
+  /**
+   * The machine standing asleep in her garden that is waiting on a spell she
+   * has not been given, wearing the rune that would wake it.
+   *
+   * **The same case as the wood, word for word.** A square of thicket is not
+   * somebody who can be asked, so it is marked while it stands; a sleeping
+   * sorter is not either. Both are things in the world that are *about* a
+   * rune, and the game already has one way of saying that.
+   *
+   * **Why it is worth saying at all.** The crate offers a sorter and a
+   * hothouse from the first minute, and the sorter wants the sharing spell
+   * and the hothouse wants the array spell — the quay and the old forest,
+   * which are a long walk and, for most children, several afternoons away.
+   * So the machine tutorial can hand a child a machine she cannot wake, and
+   * until now the only thing that said so was a cloud she got by tapping it.
+   * A machine that says what it is waiting for, without being asked, turns
+   * the worst-timed thing in the game into the reason to go somewhere: she
+   * has the question standing in her own garden, and the answer is at the
+   * lighthouse.
+   *
+   * This is deliberately *not* a fix for the ordering itself. Whether the
+   * machine guides should start later is a separate and still-open question
+   * — see `docs/STORY.md` — and this is the version that is right either
+   * way, because a machine waiting on a spell is worth marking whenever it
+   * happens.
+   *
+   * **The nearest one only.** Every waiting machine wearing a rune would be
+   * a garden of pleading objects, which is the shape of a chore list rather
+   * than of an invitation. `sleepingMachines` has already dropped the ones
+   * she cannot walk up to, for the reason the playtest with two hothouses
+   * found: a mark on a thing across a river is a mark at nothing.
+   */
+  private machinesAwaitingTheirSpell(): Standing[] {
+    const waiting: GridPoint[] = [];
+    for (const at of this.sleepingMachines()) {
+      const type = this.machineAt(tileKey(at.col, at.row));
+      if (!type) continue;
+      // `null` in SPARK is a machine that asks its own question rather than
+      // a spell's — the funnel's venn and the blueprint's fold — and those
+      // are never owed to anybody, so there is nothing to point at.
+      const spell = SPARK[type];
+      if (!spell || this.knows(spell)) continue;
+      waiting.push(at);
+    }
+    const at = this.nearest(waiting);
+    if (!at) return [];
+    const type = this.machineAt(tileKey(at.col, at.row));
+    const spell = type ? SPARK[type] : null;
+    if (!spell) return [];
+    const feet = this.toFeet(at.col, at.row);
+    return [
+      {
+        // Keyed by the square and not by the kind: two sleeping sorters in
+        // one garden would otherwise share a mark, and the pool would move
+        // the one mark between them every frame.
+        part: `machine:${at.col},${at.row}`,
+        feet: { col: at.col, row: at.row, x: feet.x, y: feet.y },
+        rune: RUNE_OF[spell],
+      },
+    ];
   }
 
   /** Every square of the tree's wood still up, in world order. */
@@ -11304,6 +11621,7 @@ export class GameScene extends Phaser.Scene {
     if (!parts) return;
     // The thing the ring was about is about to be redrawn, or is gone.
     this.closeWheel();
+    this.closeMouth();
     // The grid too: what blocks the way changed, and a chair that had been
     // moved would go on blocking the square it left.
     const door = growableDoor(parts);
@@ -11613,6 +11931,7 @@ export class GameScene extends Phaser.Scene {
     const interior = this.interior;
     if (!interior) return;
     this.closeWheel();
+    this.closeMouth();
     interior.canvas?.destroy();
     for (const fire of interior.fires) fire.destroy();
     for (const standing of interior.decor) standing.destroy();
@@ -12340,7 +12659,14 @@ export class GameScene extends Phaser.Scene {
       // screen that it worked: the panel is a picture of a world that is
       // also on screen behind it.
       mapOpen: () => this.mapPanel?.isOpen === true,
+      // And what it is saying about the five places while it is up: which of
+      // them still has something for her. Drawn rather than written, so a
+      // script cannot read it any other way.
+      mapOwes: () => this.mapPanel?.owedShowing() ?? [],
       armed: () => armedTag(this.armed),
+      // And the picture over her head, which marking raises without arming
+      // anything — so this is lit for stretches where `armed` says null.
+      armedRune: () => this.armedRune?.texture.key ?? null,
       // And the square it will land on, which is not the same question: the
       // rune says a spell is waiting, this says where it is pointed.
       aimed: () => this.session.aimed,
@@ -12426,6 +12752,14 @@ export class GameScene extends Phaser.Scene {
           to: wire.to,
           moved: this.wireCarried.get(wireKey(wire.from, wire.to)) ?? 0,
         })),
+      /**
+       * The machine's *how many* row, while one is asking: what it says and
+       * the most it will say. Null when no machine is asking.
+       */
+      mouth: () => {
+        const mouth = this.mouth;
+        return mouth?.isOpen ? { count: mouth.count, most: mouth.limit } : null;
+      },
       /** Which end of a wire she has hold of, part way through stringing one. */
       wiring: () => {
         const held = this.armed;
@@ -12807,6 +13141,12 @@ export class GameScene extends Phaser.Scene {
         cue: this.guide?.cue() ?? null,
         marks: this.guideMarks?.showing() ?? { ring: null, arrow: null, trail: 0 },
         done: this.profile.guided,
+        // What the guides are reading off the interface this frame. Every
+        // `already` predicate in `GUIDE_SPECS` is a question about this, and
+        // a predicate that can never be true is a step that can never be
+        // skipped — which is how "armed the times rune" came to be a state
+        // the scene could not report.
+        view: this.guideView(),
       }),
       counting: () => {
         const counter = this.countingPopup?.counter;

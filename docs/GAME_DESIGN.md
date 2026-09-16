@@ -3244,6 +3244,44 @@ a shelf. A machine is placeable and is not for sale, so the two lists have
 come apart — left alone, the first machine landed on the village shelf
 priced at infinity, which is a button that can only refuse.
 
+**How much goes in is hers to say.** For a long time a tap on an awake
+machine tipped in the whole of the biggest heap she was carrying, on the
+argument that choosing is a menu and a menu was the thing that interaction
+was trying not to be. A playtest overturned it: a child cleared eighty trees
+with one cast of the times rune, walked up to a machine with the whole
+forest in her basket, and lost it into one hopper. So the tap now asks the
+machine's one question — a row over its mouth with the thing, a number and a
+tick — and the heap goes in when she says so. It opens at *all of it*, because
+the child who wants everything in is still the common case and for her the
+answer is one more tap; the child who wants nine of two hundred holds the
+minus down and watches the number run, in ones and then in tens. Numerals
+are allowed here for the reason they are allowed on a parchment: a count is
+the subject, not a sentence about it. *Which* heap is still the machine's
+choice — the biggest it will take — because the reason to walk to a machine
+is the heap you are carrying. The tutorial's feeding errand gained a second
+step for it: the machine, then the tick. See `src/ui/HeapPicker.ts`.
+
+**The guide points at a machine she can walk to, along the way to it.** With
+two hothouses in the garden, the arrow went to the nearer one as the crow
+flies — which was the one behind a fence, and off the edge of a phone
+screen. Machines are now offered to the guide only if there is a path to a
+square beside them, and pointed at the way a door is: the trail of dots
+along the path, and the arrow kept on the screen.
+
+**A wire that cannot carry says so when it is strung.** A sorter full of
+timber wired to a hothouse is a line that will never move, and for the
+twenty minutes a round takes it looks exactly like a line that has not moved
+*yet*. So the far machine answers the second tap the way it answers a tap
+with the wrong heap: the crop it wants, with a bar across it, over its mouth.
+The wire is kept, since she may be about to fix the reason.
+
+**Eighty trees in one rectangle is one cast, not eighty.** The things a
+single clearing does once — the bend, the basket's trays, the look at the
+grove — used to be done per square of a patch, which for a big rectangle
+was eighty walks of the thicket and two hundred and forty tray refreshes in
+a frame. They are done once for the lot now, and a patch throws one icon per
+square rather than one per log: nobody counts a forest.
+
 ### Machines that decide, and the mechanic who wakes them
 
 **Every machine is an operation, and the gates are the operations that are

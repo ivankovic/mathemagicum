@@ -90,8 +90,7 @@ describe("the machine that takes two things at once", () => {
 
         // The first tap fills one funnel with the biggest heap she is
         // carrying that the press can use.
-        await game.tapCell(at.col, at.row);
-        await game.settle(400);
+        await game.feed(at);
         const half = (await machines(game))[0];
         if (!half?.holding) throw new Error("the press took nothing at all");
         expect(half.heap).toBeGreaterThan(0);
@@ -104,8 +103,7 @@ describe("the machine that takes two things at once", () => {
 
         // The second tap is the one the old `tipIn` could never have made:
         // a different kind, into the funnel that is still empty.
-        await game.tapCell(at.col, at.row);
-        await game.settle(400);
+        await game.feed(at);
         const both = (await machines(game))[0];
         if (!both?.other) throw new Error("the press would not take a second kind by hand");
         expect(both.other).not.toBe(both.holding);
@@ -156,8 +154,7 @@ describe("the machine that takes two things at once", () => {
         await game.settle(400);
         await game.solveLogic();
         await game.settle(400);
-        await game.tapCell(at.col, at.row);
-        await game.settle(400);
+        await game.feed(at);
 
         const fed = (await machines(game))[0];
         const heap = fed?.heap ?? 0;

@@ -1043,6 +1043,21 @@ export class Game {
   }
 
   /**
+   * Tip a heap into an awake machine: tap it, and say yes to how many.
+   *
+   * A machine asks before it takes — a row over its mouth with the thing,
+   * a number and a tick, opened at the whole heap — so feeding is two taps
+   * now, and every scenario that feeds one wants the same two. The tick
+   * is tapped by the name the scene gives it, the way every button is.
+   */
+  async feed(at: { col: number; row: number }): Promise<void> {
+    await this.tapCell(at.col, at.row);
+    await this.settle(400);
+    if (!(await this.tap("mouth.yes"))) throw new Error("the machine did not ask how many");
+    await this.settle(400);
+  }
+
+  /**
    * Drag a coin from a pile onto the counter.
    *
    * The shop's paying half is the one thing in this game that is not a tap:
