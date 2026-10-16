@@ -169,7 +169,9 @@ describe("a child in a game", () => {
   test("brings their own progress and leaves their face alone", () => {
     const store = memory();
     const game = newGame(store, 0.11, CLOCK);
-    const played: Profile = { ...mia(), learned: [Spell.Portal], rung: 6 };
+    // One above the floor of the band she is in, so a rung that came back
+    // clamped would not pass for one that came back as it was.
+    const played: Profile = { ...mia(), learned: [Spell.Portal], rung: mia().rung + 1 };
     const saved = withProgress(game, played, CLOCK + 10);
     writeGame(store, saved);
 
@@ -177,7 +179,7 @@ describe("a child in a game", () => {
     if (!back) throw new Error("the game did not come back");
     const there = profileIn(back, splitOff(played));
     expect(there.learned).toEqual([Spell.Portal]);
-    expect(there.rung).toBe(6);
+    expect(there.rung).toBe(played.rung);
     expect(there.name).toBe("Mia");
   });
 

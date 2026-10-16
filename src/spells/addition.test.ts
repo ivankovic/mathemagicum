@@ -23,7 +23,7 @@ import {
   submit,
   typeDigit,
 } from "./addition";
-import { BareForm, HARDEST_RUNG, RUNGS, SHARED_TOP_RUNG, rungAt } from "./difficulty";
+import { BareForm, HARDEST_RUNG, RUNGS, type Rung, SHARED_TOP_RUNG, rungAt } from "./difficulty";
 
 const SEEDS = Array.from({ length: 200 }, (_, i) => i * 7919 + 3);
 
@@ -268,6 +268,9 @@ describe("hints", () => {
 
 describe("problems at every difficulty", () => {
   const rungs = RUNGS.map((rung, index) => [index, rung] as const);
+  // The rungs whose start is as wide as the addend. The `within` ones are
+  // wider by design and have their own describe below.
+  const square = rungs.filter(([, rung]) => rung.within === undefined);
 
   test("a problem has exactly as many jumps as its rung has places", () => {
     for (const [index, rung] of rungs) {
@@ -295,7 +298,7 @@ describe("problems at every difficulty", () => {
   });
 
   test("both numbers have the rung's number of digits", () => {
-    for (const [index, rung] of rungs) {
+    for (const [index, rung] of square) {
       for (let seed = 0; seed < 40; seed++) {
         const p = makeAdditionProblem(createRng(seed), rung);
         expect({ index, ok: String(p.start).length === rung.places }).toEqual({ index, ok: true });
@@ -309,7 +312,7 @@ describe("problems at every difficulty", () => {
   // keeps the number line the width the parchment draws. At one place there
   // is no such thing: crossing a ten *is* 7 + 5 = 12.
   test("the answer stays as wide as the numbers, except when bridging ten", () => {
-    for (const [index, rung] of rungs) {
+    for (const [index, rung] of square) {
       const most = 10 ** rung.places - 1;
       const allowed = rung.crossing && rung.places === 1 ? most * 2 : most;
       for (let seed = 0; seed < 40; seed++) {
@@ -367,7 +370,7 @@ describe("problems at every difficulty", () => {
   // first time and simply meant the player never saw a large first number —
   // and `startDigit + addendDigit <= 9` makes it far worse.
   test("the starting number is spread across its range, not crushed low", () => {
-    for (const [index, rung] of rungs) {
+    for (const [index, rung] of square) {
       const low = rung.places === 1 ? 1 : 10 ** (rung.places - 1);
       const high = 10 ** rung.places - 1;
       const starts = Array.from(
@@ -396,8 +399,60 @@ describe("problems at every difficulty", () => {
   });
 });
 
+describe("the steps from counters to a hundred", () => {
+  const within = RUNGS.filter((rung) => rung.within !== undefined);
+  const draw = (rung: Rung) =>
+    Array.from({ length: 300 }, (_, seed) => makeAdditionProblem(createRng(seed * 31 + 7), rung));
+
+  // The playtest this ladder was rebuilt for: `7 + 5` in counters, then
+  // straight to `34 + 25`. A one-place jump onto a two-place number is the
+  // step between, and only the start grows.
+  test("a two-place start and a one-place jump, below the end of the line", () => {
+    expect(within.length).toBeGreaterThan(0);
+    for (const rung of within) {
+      for (const p of draw(rung)) {
+        expect(p.jumps).toHaveLength(1);
+        expect(p.start).toBeGreaterThanOrEqual(10);
+        expect(p.addend).toBeGreaterThanOrEqual(1);
+        expect(p.addend).toBeLessThanOrEqual(9);
+        expect(p.start + p.addend).toBeLessThan(rung.within as number);
+      }
+    }
+  });
+
+  test("within twenty is the teens, and nothing crosses a ten there", () => {
+    const teens = within.find((rung) => rung.within === 20) as Rung;
+    for (const p of draw(teens)) {
+      expect(p.start).toBeLessThan(20);
+      expect((p.start % 10) + p.addend).toBeLessThanOrEqual(9);
+    }
+  });
+
+  test("within a hundred, the tens are anywhere and crossing comes after", () => {
+    const flat = within.find((rung) => rung.within === 100 && !rung.crossing) as Rung;
+    const crossing = within.find((rung) => rung.within === 100 && rung.crossing) as Rung;
+    expect(RUNGS.indexOf(crossing)).toBe(RUNGS.indexOf(flat) + 1);
+    const flats = draw(flat);
+    expect(flats.every((p) => (p.start % 10) + p.addend <= 9)).toBe(true);
+    expect(Math.min(...flats.map((p) => p.start))).toBeLessThan(30);
+    expect(Math.max(...flats.map((p) => p.start))).toBeGreaterThan(70);
+    expect(draw(crossing).some((p) => (p.start % 10) + p.addend > 9)).toBe(true);
+  });
+
+  test("they sit between the counters and the first two-place line", () => {
+    const first = RUNGS.findIndex((rung) => rung.within !== undefined);
+    const last = RUNGS.findLastIndex((rung) => rung.within !== undefined);
+    expect(RUNGS[first - 2]?.counted).toBe(true);
+    expect(RUNGS[first - 1]?.counted).toBeUndefined();
+    expect(RUNGS[first - 1]?.places).toBe(1);
+    expect(RUNGS[last + 1]?.places).toBe(2);
+    expect(RUNGS[last + 1]?.given).toBe(1);
+  });
+});
+
 describe("a partly worked problem", () => {
-  const rung = rungAt(2); // two places, first jump given
+  // Two places, first jump given: 34 + 25 with the ones done.
+  const rung = RUNGS.find((step) => step.places === 2 && step.given === 1) as Rung;
 
   test("starts on the box after the ones it was given", () => {
     const problem = makeAdditionProblem(createRng(3), rung);

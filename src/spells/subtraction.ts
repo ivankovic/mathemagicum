@@ -17,9 +17,11 @@ import {
   countWithin,
   digitsOf,
   drawPair,
+  drawWithin,
   nthWithin,
   pairTable,
   widthOf,
+  withinPairs,
 } from "./numberLine";
 
 /**
@@ -125,6 +127,27 @@ export function nthStartForTest(
   return nthStart(places, crossing, amount, digitsOf(amount, places), k);
 }
 
+/**
+ * The pairs a `within` rung sets, coming down: a two-place start below the
+ * line's end, a one-place amount, and something left. Not borrowing means
+ * the ones digit covers what is taken, so the tens never move — `17 − 4`,
+ * the mirror of `13 + 4`. Borrowing may land in single figures, `12 − 5`,
+ * which is the mirror of `7 + 5`.
+ */
+function withinFor(within: number, crossing: boolean) {
+  const key = `${within}:${crossing}`;
+  const cached = withinCache.get(key);
+  if (cached) return cached;
+  const pairs = withinPairs(
+    within,
+    (start, taken) => start - taken >= 1 && (crossing || start % 10 >= taken),
+  );
+  withinCache.set(key, pairs);
+  return pairs;
+}
+
+const withinCache = new Map<string, ReturnType<typeof withinPairs>>();
+
 /** How many pairs a rung can draw from. Used by the tests, and worth asking. */
 export function pairCountFor(places: number, crossing: boolean): number {
   return pairsFor(places, crossing).total;
@@ -143,6 +166,10 @@ export function makeSubtractionProblem(
   rng: Rng,
   rung: Rung = rungAt(HARDEST_RUNG),
 ): SubtractionProblem {
+  if (rung.within !== undefined) {
+    const { start, amount } = drawWithin(rng, withinFor(rung.within, rung.crossing));
+    return subtractionFor(start, amount, rung.places);
+  }
   const { amount, digits, k } = drawPair(rng, pairsFor(rung.places, rung.crossing), rung.places);
   const start = nthStart(rung.places, rung.crossing, amount, digits, k);
   return subtractionFor(start, amount, rung.places);

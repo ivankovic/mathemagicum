@@ -77,6 +77,12 @@ export function lessonFor(rung: Rung): AdditionProblem {
   };
   const addend = cut(WIDEST_ADDEND);
   let start = cut(WIDEST_START);
+  if (rung.within !== undefined) {
+    // A two-place start under a one-place jump, so the start keeps its tens:
+    // `48 + 4`, or a teen where the line ends at twenty.
+    start = Number(String(WIDEST_START).slice(-2));
+    if (start >= rung.within) start = 10 + (start % 10);
+  }
   if (!rung.crossing) {
     // A worked example that carries, shown to a child whose own sums never
     // do, demonstrates a step they have not been asked for and cannot check.

@@ -2218,6 +2218,25 @@ because a partly solved problem should look like a problem you are part-way
 through, not like one with pieces missing. The design already asked for this:
 teachers "train a spell with partially solved problems."
 
+**From counters to a hundred, one thing at a time.** The gentlest band used
+to go from `7 + 5` counted out in a box straight to `34 + 25` on a number
+line: a new picture, numbers up to a hundred and two jumps instead of one,
+all in a single step. A playtest watched a child reach it, get annoyed and
+leave. There are four rungs in between now, and they are the steps a school
+takes: `7 + 5` again but drawn on the line, then sums within twenty
+(`13 + 4`), then a one-place number added to any two-place one (`34 + 5`),
+then the same crossing a ten (`38 + 5`). Only then does a second jump
+arrive, with the first one already made. Each step makes one thing harder.
+
+Putting rungs in renumbers the ladder, and the rung number is in every save.
+A save now says which numbering it was written in, and one that does not is
+read in the old one, so a child comes back to the same sum they left. There
+is one exception, and it is the child this was done for: a child in the
+gentlest band who had already reached `34 + 25` is put back on the first new
+step instead. The other spells' ladders are scaled against the sums ladder,
+and the new rungs are left out of that, so nothing moves on the clock, the
+map or the times table.
+
 **Four sample sums, not four ages.** Somebody picks a band when a player is
 made, and the tiles show `5 + 2`, `50 + 27`, `56 + 16`, `504 + 274` rather
 than ages or the words "easy" and "hard". A parent can pick by looking and so

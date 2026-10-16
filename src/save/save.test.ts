@@ -7,8 +7,17 @@ import { describe, expect, test } from "bun:test";
 const CLOCK = new Date(2026, 0, 5, 9, 0, 0, 0).getTime();
 import { DEFAULT_AVATAR } from "../avatar/style";
 import { LANGUAGES, Language, type SettingsStore } from "../settings";
-import { DEFAULT_BAND, HARDEST_RUNG, bandAt, bandOn } from "../spells/difficulty";
+import {
+  DEFAULT_BAND,
+  HARDEST_RUNG,
+  RUNGS,
+  SHARED_TOP_RUNG,
+  bandAt,
+  bandOn,
+  rungAt,
+} from "../spells/difficulty";
 import { HARDEST_ARRAY_RUNG } from "../spells/multiplication";
+import { HARDEST_PORTAL_RUNG } from "../spells/portal";
 import { Facing } from "../world/characters";
 import { FLOWER_TYPES, type FlowerType, flowerObject, flowerParts } from "../world/flowers";
 import { WorldGrid } from "../world/grid";
@@ -21,6 +30,7 @@ import {
   MAX_PROFILES,
   NAME_MAX,
   type Profile,
+  SUMS_LADDER,
   byRecency,
   canAddProfile,
   createProfile,
@@ -158,6 +168,7 @@ describe("the list of players", () => {
     debug: false,
     band: DEFAULT_BAND,
     rung: HARDEST_RUNG,
+    sumsLadder: SUMS_LADDER,
     portalRung: 0,
     arrayRung: 0,
     shareRung: 0,
@@ -202,6 +213,57 @@ describe("the list of players", () => {
   });
 });
 
+describe("a save from before the sums ladder was renumbered", () => {
+  // Four rungs went in between `7 + 5` in counters and `34 + 25`. A save
+  // that does not say which numbering it is in is from before, and its rung
+  // is read in the old one.
+  const fromBefore = (band: number, rung: number) => {
+    const { sumsLadder, ...older } = createProfile(
+      [],
+      { name: "Mia", avatar: DEFAULT_AVATAR, language: Language.English, band },
+      1000,
+    );
+    return readProfile(JSON.parse(JSON.stringify({ ...older, rung })));
+  };
+
+  test("a child on the same sum comes back to the same sum", () => {
+    // Old 2 was `34 + 25` with the ones done, and 6 the top of the second
+    // band; old 9 was `347 + 265`, where the default band ends.
+    expect(rungAt(fromBefore(1, 2)?.rung ?? -1)).toEqual(RUNGS[6] as never);
+    expect(fromBefore(1, 6)?.rung).toBe(10);
+    expect(fromBefore(DEFAULT_BAND, 9)?.rung).toBe(SHARED_TOP_RUNG);
+    expect(fromBefore(3, 15)?.rung).toBe(19);
+  });
+
+  test("below the new rungs nothing moves", () => {
+    expect(fromBefore(0, 0)?.rung).toBe(0);
+    expect(fromBefore(0, 1)?.rung).toBe(1);
+  });
+
+  // The child this was done for: in the gentlest band, at the top of it,
+  // having gone from counters to `34 + 25` in one step. She is put on the
+  // first of the new steps rather than left where the sums lost her.
+  test("a gentlest-band child at the old top starts the new steps", () => {
+    const rung = fromBefore(0, 2)?.rung ?? -1;
+    expect(rung).toBe(2);
+    expect(rungAt(rung).counted).toBeUndefined();
+    expect(rungAt(rung).places).toBe(1);
+  });
+
+  test("a save that says it is in today's numbering is read as it is", () => {
+    const today = {
+      ...createProfile(
+        [],
+        { name: "Mia", avatar: DEFAULT_AVATAR, language: Language.English, band: 0 },
+        1000,
+      ),
+      rung: 4,
+    };
+    expect(today.sumsLadder).toBe(SUMS_LADDER);
+    expect(readProfile(JSON.parse(JSON.stringify(today)))?.rung).toBe(4);
+  });
+});
+
 describe("what the portal spell remembers about a child", () => {
   const made = () =>
     createProfile(
@@ -220,8 +282,10 @@ describe("what the portal spell remembers about a child", () => {
   // good at sums straight into squaring numbers.
   test("the portal starts at the bottom of the band, apart from the sums", () => {
     const mia = made();
-    expect(mia.portalRung).toBe(bandAt(1).from);
-    expect(mia.portalRung).toBe(mia.rung);
+    // On the portal's own ladder. It was `band.from` for as long as the two
+    // ladders happened to be the same length, and stopped being the same
+    // number the day rungs went in under `34 + 25`.
+    expect(mia.portalRung).toBe(bandOn(bandAt(1), HARDEST_PORTAL_RUNG).from);
     // And they move independently from there.
     const later = { ...mia, rung: 9 };
     expect(readProfile(JSON.parse(JSON.stringify(later)))?.portalRung).toBe(mia.portalRung);
@@ -290,8 +354,16 @@ describe("what the portal spell remembers about a child", () => {
   test("a save from before the spell starts it at the band's floor", () => {
     const { portalRung, reached, ...older } = made();
     const read = readProfile(JSON.parse(JSON.stringify(older)));
-    expect(read?.portalRung).toBe(bandAt(1).from);
+    expect(read?.portalRung).toBe(bandOn(bandAt(1), HARDEST_PORTAL_RUNG).from);
     expect(read?.reached).toEqual(["village"]);
+  });
+
+  // And a portal rung read back is fenced on the portal's ladder, not the
+  // sums'. The second band opens on rung two of the portal and rung six of
+  // the sums, and a child who had climbed to three stays on three.
+  test("a saved portal rung is fenced on the portal's own ladder", () => {
+    const climbed = { ...made(), portalRung: 3 };
+    expect(readProfile(JSON.parse(JSON.stringify(climbed)))?.portalRung).toBe(3);
   });
 
   // The anchors are a fixed set, so a name that is not one of them can only

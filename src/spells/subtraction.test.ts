@@ -14,7 +14,7 @@ import {
   submit,
   typeDigit,
 } from "./addition";
-import { BareForm, RUNGS, rungAt } from "./difficulty";
+import { BareForm, RUNGS, SHARED_TOP_RUNG, rungAt } from "./difficulty";
 import {
   type SubtractionProblem,
   makeBareSubtraction,
@@ -27,7 +27,7 @@ import {
 
 const DRAWS = 300;
 
-function drawAll(rung = rungAt(9)): SubtractionProblem[] {
+function drawAll(rung = rungAt(SHARED_TOP_RUNG)): SubtractionProblem[] {
   return Array.from({ length: DRAWS }, (_, seed) =>
     makeSubtractionProblem(createRng(seed + 1), rung),
   );
@@ -143,11 +143,42 @@ describe("what the rung changes", () => {
   // weighting by amount would push every problem into the high end, because
   // a large subtrahend leaves almost nowhere to start from.
   test("it draws from across the range, not just the top of it", () => {
-    const starts = drawAll(rungAt(6)).map((p) => p.start);
+    const threePlaces = RUNGS.find((rung) => rung.places === 3) as never;
+    const starts = drawAll(threePlaces).map((p) => p.start);
     const low = starts.filter((s) => s < 400).length;
     const high = starts.filter((s) => s >= 700).length;
     expect(low).toBeGreaterThan(DRAWS / 10);
     expect(high).toBeGreaterThan(DRAWS / 10);
+  });
+});
+
+describe("the steps from counters to a hundred, coming down", () => {
+  const within = RUNGS.filter((rung) => rung.within !== undefined);
+
+  test("a two-place start, a one-place amount, and something left", () => {
+    for (const rung of within) {
+      for (const p of drawAll(rung as never)) {
+        expect(p.jumps).toHaveLength(1);
+        expect(p.start).toBeGreaterThanOrEqual(10);
+        expect(p.start).toBeLessThan(rung.within as number);
+        expect(p.taken).toBeLessThanOrEqual(9);
+        expect(p.stops[0]).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+
+  // `17 − 4`, the mirror of `13 + 4`: the tens never move.
+  test("without borrowing the tens stay where they were", () => {
+    for (const rung of within.filter((step) => !step.crossing)) {
+      for (const p of drawAll(rung as never)) {
+        expect(Math.floor((p.stops[0] as number) / 10)).toBe(Math.floor(p.start / 10));
+      }
+    }
+  });
+
+  test("with borrowing, some of them do", () => {
+    const crossing = within.find((rung) => rung.crossing) as never;
+    expect(drawAll(crossing).some((p) => p.taken > p.start % 10)).toBe(true);
   });
 });
 
@@ -175,7 +206,7 @@ describe("the parchment reads it as a line like any other", () => {
   });
 
   test("a whole cast can be answered with the growth spell's own machinery", () => {
-    const problem = makeSubtractionProblem(createRng(4), rungAt(9));
+    const problem = makeSubtractionProblem(createRng(4), rungAt(SHARED_TOP_RUNG));
     let cast = beginCast(problem);
     for (const stop of problem.stops) {
       for (const digit of String(stop)) cast = typeDigit(cast, Number(digit));

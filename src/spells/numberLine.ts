@@ -238,3 +238,38 @@ function runningTotals(weights: readonly number[]): Float64Array {
   }
   return running;
 }
+
+/**
+ * Every pair a `within` rung may set, listed, and one of them drawn.
+ *
+ * Listed rather than counted, because these rungs are small enough to list:
+ * a two-place start and a one-place jump is at most nine hundred pairs, and
+ * the closed-form counting above exists for six-place numbers. Drawn
+ * uniformly over the pairs, for the reason the table above is weighted — an
+ * evenly drawn jump would crowd the starts — and each spell says which pairs
+ * are its own.
+ *
+ * The start is always two places wide. A one-place start here would be a
+ * sum from the rungs below, set again on a rung that is meant to be a step
+ * up from them.
+ */
+export function withinPairs(
+  within: number,
+  accepts: (start: number, amount: number) => boolean,
+): readonly (readonly [number, number])[] {
+  const pairs: [number, number][] = [];
+  for (let start = 10; start < within; start++) {
+    for (let amount = 1; amount <= 9; amount++) {
+      if (accepts(start, amount)) pairs.push([start, amount]);
+    }
+  }
+  return pairs;
+}
+
+export function drawWithin(
+  rng: Rng,
+  pairs: readonly (readonly [number, number])[],
+): { start: number; amount: number } {
+  const [start, amount] = pairs[randInt(rng, 0, pairs.length - 1)] as readonly [number, number];
+  return { start, amount };
+}

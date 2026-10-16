@@ -11,6 +11,7 @@ import { HARDEST_SHARE_RUNG } from "../spells/division";
 import { HARDEST_CLOCK_RUNG } from "../spells/hourglass";
 import { HARDEST_LOGIC_RUNG } from "../spells/logic";
 import { HARDEST_ARRAY_RUNG } from "../spells/multiplication";
+import { HARDEST_PORTAL_RUNG } from "../spells/portal";
 import { readLearned } from "../spells/spellbook";
 import { HARDEST_SYMMETRY_RUNG } from "../spells/symmetry";
 import { readGuided } from "../ui/guide";
@@ -140,6 +141,14 @@ export interface Progress {
    * so it lives here. See src/spells/difficulty.ts.
    */
   readonly rung: number;
+  /**
+   * Which numbering of the sums ladder `rung` is written in.
+   *
+   * The ladder was renumbered once, when four rungs went in under `34 + 25`
+   * (see `Rung.between`), and a save that does not say which numbering it
+   * used is from before that. See `SUMS_LADDER`.
+   */
+  readonly sumsLadder: number;
   /**
    * Where this child is on the *portal* spell's ladder.
    *
@@ -426,7 +435,8 @@ export function createProfile(
     // otherwise move into somebody else's home.
     house: freeHouse(existing),
     rung: bandAt(wanted.band).from,
-    portalRung: bandAt(wanted.band).from,
+    sumsLadder: SUMS_LADDER,
+    portalRung: portalFloor(bandAt(wanted.band)),
     arrayRung: arrayFloor(bandAt(wanted.band)),
     shareRung: shareFloor(bandAt(wanted.band)),
     clockRung: clockFloor(bandAt(wanted.band)),
@@ -489,7 +499,8 @@ export function freshProgress(bandAt_: number): Progress {
     newsSeen: 0,
     debug: false,
     rung: band.from,
-    portalRung: band.from,
+    sumsLadder: SUMS_LADDER,
+    portalRung: portalFloor(band),
     arrayRung: arrayFloor(band),
     shareRung: shareFloor(band),
     clockRung: clockFloor(band),
@@ -604,6 +615,10 @@ function brickRungInBand(band: Band, rung: number): number {
  * of six, which is what "the bottom of their band" was always supposed to
  * mean.
  */
+function portalFloor(band: Band): number {
+  return bandOn(band, HARDEST_PORTAL_RUNG).from;
+}
+
 function arrayFloor(band: Band): number {
   return bandOn(band, HARDEST_ARRAY_RUNG).from;
 }
@@ -676,6 +691,41 @@ export function readProfile(value: unknown): Profile | null {
 }
 
 /**
+ * Which numbering of the sums ladder this build writes.
+ *
+ * One was the ten rungs from `3 + 4` to `347 + 265` and the six-digit ones
+ * above them. Two is the same with four rungs put in between `7 + 5` and
+ * `34 + 25`, because going from one to the other in a single step was where
+ * a playtest lost a child. See `Rung.between`.
+ */
+export const SUMS_LADDER = 2;
+
+/**
+ * A saved sums rung, in today's numbering.
+ *
+ * A save without `sumsLadder` was written against the first numbering, and
+ * every rung from `34 + 25` up is four higher now. The two below it are
+ * where they were. So a child is put back on the same sum she left —
+ * with one exception, and it is the child this was done for.
+ *
+ * In the gentlest band `34 + 25` was the top, reached in one step from
+ * counters. A child standing there had climbed past four rungs that did
+ * not exist yet, and left where she is she would only ever see them by
+ * getting two sums wrong in a row. She goes back to the first of them
+ * instead, which is the sums she was counting out, drawn on a line.
+ */
+function onSumsLadder(raw: unknown, ladder: unknown, band: Band): number {
+  const rung = Number(raw);
+  if (ladder !== undefined || !Number.isFinite(rung)) return rung;
+  if (rung < FIRST_MOVED) return rung;
+  return band.from < FIRST_MOVED ? FIRST_MOVED : rung + MOVED_BY;
+}
+
+/** The first rung the second numbering moved, and how far. */
+const FIRST_MOVED = 2;
+const MOVED_BY = 4;
+
+/**
  * A child's progress read back, field by field, against their band.
  *
  * Shared by the players index, where an old row holds both halves of a
@@ -700,10 +750,18 @@ export function readProgress(value: unknown, bandNumber: number): Progress {
     // A child saved before there was a choice was playing the hardest sums
     // the game had, because that was the only setting there was. Anything
     // else here would quietly restyle their game on the way in.
-    rung: rungInBand(band, Number(record.rung ?? band.to)),
+    rung: rungInBand(
+      band,
+      record.rung === undefined ? band.to : onSumsLadder(record.rung, record.sumsLadder, band),
+    ),
+    sumsLadder: SUMS_LADDER,
     // A child saved before the portal existed starts it at the bottom of
     // their own band, exactly as a new child does — they have never cast it.
-    portalRung: rungInBand(band, Number(record.portalRung ?? band.from)),
+    portalRung: rungInBand(
+      band,
+      Number(record.portalRung ?? portalFloor(band)),
+      HARDEST_PORTAL_RUNG,
+    ),
     // A child saved before the great tree existed starts it at the bottom of
     // their own band, exactly as a new child does — they have never cast it.
     arrayRung: arrayRungInBand(band, Number(record.arrayRung ?? arrayFloor(band))),

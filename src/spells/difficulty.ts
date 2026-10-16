@@ -125,11 +125,40 @@ export interface Rung {
    * bottom, for a child who cannot read one yet. The box starts with the
    * line's own start in it and she moves the line's own jump — see
    * `spells/counting.ts`. No new arithmetic, and deliberately not: the rung
-   * indices in this table are written into every saved profile as `band` and
-   * `rung`, so a new easiest rung would renumber the ladder under every
-   * child who has already played.
+   * indices in this table are written into every saved profile as `rung`,
+   * so a new rung renumbers the ladder under every child who has already
+   * played. That has been done once, with a migration — see `between` — and
+   * a flag was the cheaper way to say this.
    */
   readonly counted?: boolean;
+  /**
+   * Set on the rungs whose start is two places wide and whose jump is one:
+   * `13 + 4`, `34 + 5`, `38 + 5`. Every number on the line is below this.
+   *
+   * The ladder used to go from `7 + 5` in counters straight to `34 + 25` on
+   * a number line, which is three steps in one — a new picture, numbers up
+   * to a hundred, and two jumps instead of one — and a playtest watched a
+   * child meet it, get annoyed and leave. These are the steps in between,
+   * and they are the ones a school takes: sums within twenty, then within a
+   * hundred with a one-place number added, then the same crossing a ten.
+   *
+   * `places` still counts the jumps, which is what everything that draws a
+   * line reads it as, so on these rungs it is one. What is two places wide
+   * is only the start, and that is all this changes.
+   */
+  readonly within?: number;
+  /**
+   * Set on a rung that was put between two of the ladder's first ten.
+   *
+   * The other spells' ladders are scaled onto this one — see `bandOn` — and
+   * they were scaled against those ten. The steps from `7 + 5` up to
+   * `34 + 25` are steps in *adding*; there is no matching step between two
+   * clock readings, and scaling the clock against a longer ladder would
+   * move every child's fence on it for a change nobody made to the clock.
+   * So a rung marked here is skipped when the other ladders are measured,
+   * and they are where they were.
+   */
+  readonly between?: boolean;
 }
 
 /**
@@ -143,6 +172,17 @@ export interface Rung {
 export const RUNGS: readonly Rung[] = [
   { places: 1, crossing: false, given: 0, counted: true }, //  3 + 4, in counters
   { places: 1, crossing: true, given: 0, counted: true }, //   7 + 5, in counters
+  // From counters to a hundred, one thing at a time. See `within`.
+  //
+  // First the picture changes and nothing else: the sums she has just been
+  // counting out, drawn as a jump along a line. Then the numbers grow, but
+  // the jump does not: past ten, then past twenty, then across a ten, which
+  // is `7 + 5` again with tens in front of it. Only after all of that does a
+  // second jump arrive, and it arrives with the first one already made.
+  { places: 1, crossing: true, given: 0, between: true }, // 7 + 5, on the line
+  { places: 1, crossing: false, given: 0, within: 20, between: true }, // 13 + 4
+  { places: 1, crossing: false, given: 0, within: 100, between: true }, // 34 + 5
+  { places: 1, crossing: true, given: 0, within: 100, between: true }, // 38 + 5
   { places: 2, crossing: false, given: 1 }, // 34 + 25, ones done
   // Written out, the way anybody writes a sum.
   //
@@ -309,9 +349,12 @@ export interface Band {
  * One-fifty is two coins, which is where counting starts.
  */
 export const BANDS: readonly Band[] = [
-  { from: 0, to: 2, cropPrice: 150, opensEveryPlace: true },
-  { from: 2, to: 6, cropPrice: 250, opensEveryPlace: false },
-  { from: 6, to: SHARED_TOP_RUNG, cropPrice: 350, opensEveryPlace: false },
+  // The gentlest band climbs from counters to `34 + 25` and it takes seven
+  // rungs to do it — the four `between` ones are all here. It used to take
+  // three, and the third was a hundred.
+  { from: 0, to: 6, cropPrice: 150, opensEveryPlace: true },
+  { from: 6, to: 10, cropPrice: 250, opensEveryPlace: false },
+  { from: 10, to: SHARED_TOP_RUNG, cropPrice: 350, opensEveryPlace: false },
   // Up to six digits, which is as far as this goes.
   //
   // The one band that is not about a new *kind* of sum. Everything below it
@@ -403,8 +446,22 @@ export function rungAt(index: number): Rung {
 export function bandOn(band: Band, hardest: number = HARDEST_RUNG): Band {
   if (hardest === HARDEST_RUNG) return band;
   const stands = band.from >= SHARED_TOP_RUNG ? (BANDS[DEFAULT_BAND] as Band) : band;
-  const onto = (rung: number) => Math.round((rung * hardest) / SHARED_TOP_RUNG);
+  const onto = (rung: number) =>
+    Math.round((sharedStep(rung) * hardest) / sharedStep(SHARED_TOP_RUNG));
   return { ...band, from: onto(stands.from), to: onto(stands.to) };
+}
+
+/**
+ * Where a rung sits on the ladder the other spells are scaled against: its
+ * place among the rungs that are not `between`.
+ *
+ * Those were the whole ladder once, and every other spell's fence was
+ * measured against them. Counting only them keeps every one of those fences
+ * exactly where it was when the steps under `34 + 25` were put in — see
+ * `Rung.between`.
+ */
+function sharedStep(rung: number): number {
+  return RUNGS.slice(1, rung + 1).filter((step) => !step.between).length;
 }
 
 /**

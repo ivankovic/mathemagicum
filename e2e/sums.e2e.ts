@@ -96,6 +96,34 @@ async function castLine(game: Game): Promise<Line> {
   throw new Error("twelve casts and never a number line");
 }
 
+/**
+ * The steps between counters and `34 + 25`, which a playtest found missing.
+ *
+ * A two-place start and one jump: the parchment draws a line from a number
+ * it never used to start a one-jump line on, and the box has to take two
+ * digits. Cast at the step that crosses a ten, which is the hardest of
+ * them, and found by what it is rather than by its number.
+ */
+describe("sums within a hundred, one jump at a time", () => {
+  test(
+    "a two-place start and a one-place jump, drawn and answered",
+    async () => {
+      const at = RUNGS.findIndex((rung) => rung.within === 100 && rung.crossing);
+      await play({ seams: `&learned=all&hour=12&freezeNpcs&rung=${at}` }, async (game) => {
+        const line = await castGrowth(game);
+        expect(line.place).toBeNull();
+        expect(line.bare).toBeNull();
+        expect(jumpsOf(line)).toHaveLength(1);
+        expect(line.start).toBeGreaterThanOrEqual(10);
+        expect(line.stops[0]).toBeLessThan(100);
+        await game.solveNumberLine();
+        expect(await game.seam<Line | null>("spell")).toBeNull();
+      });
+    },
+    5 * MINUTES,
+  );
+});
+
 describe("six-digit sums", () => {
   /**
    * The whole of the hardest band, cast and finished.
@@ -376,7 +404,7 @@ describe("what a digit is worth", () => {
       // casts until it gets lucky fails on a generator change for a reason
       // nobody can read.
       await play(
-        { seams: "&learned=all&hour=12&freezeNpcs&crops=9&rung=9&place" },
+        { seams: `&learned=all&hour=12&freezeNpcs&crops=9&rung=${SHARED_TOP_RUNG}&place` },
         async (game) => {
           await game.tap("seeds");
           await game.tap(seedButton(PlantType.Carrot));

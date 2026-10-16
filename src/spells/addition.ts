@@ -12,9 +12,11 @@ import {
   countWithin,
   digitsOf,
   drawPair,
+  drawWithin,
   nthWithin,
   pairTable,
   widthOf,
+  withinPairs,
 } from "./numberLine";
 import { type PlaceRound, asksPlace, placeLine, placeRound } from "./place";
 
@@ -166,6 +168,25 @@ function nthStart(
 /** Every pair this spell may set, per rung. See `pairTable`. */
 const pairsFor = pairTable(startsFor);
 
+/**
+ * The pairs a `within` rung sets: a two-place start, a one-place addend, and
+ * a total still below the line's end. Not crossing means the ones do not
+ * reach ten, which is the same rule `noCarry` has for its ones place.
+ */
+function withinFor(within: number, crossing: boolean) {
+  const key = `${within}:${crossing}`;
+  const cached = withinCache.get(key);
+  if (cached) return cached;
+  const pairs = withinPairs(
+    within,
+    (start, addend) => start + addend < within && (crossing || (start % 10) + addend <= 9),
+  );
+  withinCache.set(key, pairs);
+  return pairs;
+}
+
+const withinCache = new Map<string, ReturnType<typeof withinPairs>>();
+
 /** How many pairs a rung can draw from. Worth asking, and worth testing. */
 export function additionPairCount(places: number, crossing: boolean): number {
   return pairsFor(places, crossing).total;
@@ -179,6 +200,10 @@ export function additionPairCount(places: number, crossing: boolean): number {
  * on a number line that is simply shorter.
  */
 export function makeAdditionProblem(rng: Rng, rung: Rung = rungAt(HARDEST_RUNG)): AdditionProblem {
+  if (rung.within !== undefined) {
+    const { start, amount } = drawWithin(rng, withinFor(rung.within, rung.crossing));
+    return problemFor(start, amount, rung.places);
+  }
   const {
     amount: addend,
     digits,

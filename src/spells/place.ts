@@ -3,7 +3,7 @@
 
 import { type Rng, randInt } from "../world/rng";
 import { type NumberLine, bareLine } from "./addition";
-import type { Rung } from "./difficulty";
+import { BANDS, type Band, type Rung } from "./difficulty";
 
 /**
  * What a digit is worth: the question underneath every sum in this game.
@@ -96,13 +96,12 @@ export function placeLine(round: PlaceRound): NumberLine {
  * How many digits a number needs before this is worth asking, and where on
  * the ladder that puts it.
  *
- * Rung seven and up, which is the lowest rung the second band cannot reach:
- * `BANDS` overlap by one, and the gentler band's top rung is six. So this
- * is the exact index that means "the two hardest difficulties and nobody
- * else" — stated as a number here rather than left as a comment on a table,
- * because it is a fact about the bands and it will move when they do.
+ * The lowest rung the second band cannot reach: `BANDS` overlap by one, so
+ * this is the exact index that means "the two hardest difficulties and
+ * nobody else". Read off the bands rather than written as a number, which
+ * it was until the ladder was renumbered under it.
  */
-export const PLACE_FROM = 7;
+export const PLACE_FROM = (BANDS[1] as Band).to + 1;
 
 /**
  * Whether this rung asks it at all.

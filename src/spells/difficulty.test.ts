@@ -56,7 +56,12 @@ describe("the ladder", () => {
     // such or the rung reads as a repeat of the one below. `Any` is harder
     // again than `Total`, because hiding the first term asks the child to
     // *undo* the addition rather than to do it.
+    //
+    // Counters are more help than any line, and a rung that keeps the sums
+    // and takes the counters away is a step — the first of the ones put in
+    // under `34 + 25`.
     const helpGiven = (rung: (typeof RUNGS)[number]): number => {
+      if (rung.counted) return 9;
       if (rung.bare === BareForm.Any) return -2;
       if (rung.bare === BareForm.Total) return -1;
       return rung.given;
@@ -67,7 +72,13 @@ describe("the ladder", () => {
       if (!under || !over) throw new Error("no rung");
       expect({ at, ok: over.places >= under.places }).toEqual({ at, ok: true });
       if (over.places === under.places) {
+        // How far the line reaches at one jump: `within` where the start has
+        // outgrown the jump, the jump's own width everywhere else. A longer
+        // reach is the one thing that grew, so it is a step on its own.
+        const reach = (rung: (typeof RUNGS)[number]) => rung.within ?? 10 ** rung.places;
+        expect({ at, ok: reach(over) >= reach(under) }).toEqual({ at, ok: true });
         const harder =
+          reach(over) > reach(under) ||
           (over.crossing && !under.crossing) ||
           (over.crossing === under.crossing && helpGiven(over) < helpGiven(under));
         expect({ at, harder }).toEqual({ at, harder: true });
@@ -513,6 +524,62 @@ describe("where a new player starts", () => {
   });
 });
 
+describe("the rungs put in under 34 + 25", () => {
+  // The other ladders were measured against the sums ladder's first ten
+  // rungs, and four new ones on the sums ladder are not a reason for a
+  // child's fence on the clock to move. Every band, every other ladder,
+  // exactly where it was.
+  test("move no fence on any other ladder", () => {
+    const before = [
+      { from: 0, to: 2 },
+      { from: 2, to: 6 },
+      { from: 6, to: 9 },
+    ];
+    for (const hardest of [HARDEST_PORTAL_RUNG, HARDEST_ARRAY_RUNG, HARDEST_CLOCK_RUNG]) {
+      for (const [at, was] of before.entries()) {
+        const fence = bandOn(bandAt(at), hardest);
+        const onto = (rung: number) => Math.round((rung * hardest) / 9);
+        expect({ hardest, at, from: fence.from, to: fence.to }).toEqual({
+          hardest,
+          at,
+          from: onto(was.from),
+          to: onto(was.to),
+        });
+      }
+    }
+  });
+
+  test("are all in the gentlest band, and only there", () => {
+    const between = RUNGS.flatMap((rung, at) => (rung.between ? [at] : []));
+    expect(between.length).toBe(4);
+    for (const at of between) {
+      expect(at).toBeGreaterThanOrEqual(bandAt(0).from);
+      expect(at).toBeLessThan(bandAt(0).to);
+      expect(at).toBeLessThan(bandAt(1).from);
+    }
+  });
+
+  // The playtest: from counters to a hundred in one step. Each step now
+  // makes one thing harder — the picture, how far the line reaches, a carry,
+  // or how many jumps — and never two. A carry may go away as the second
+  // jump arrives; that is help, not a second thing to learn.
+  test("each step from counters to two jumps makes one thing harder", () => {
+    const top = bandAt(0).to;
+    const reach = (rung: (typeof RUNGS)[number]) => rung.within ?? 10 ** rung.places;
+    for (let at = 1; at <= top; at++) {
+      const under = RUNGS[at - 1] as (typeof RUNGS)[number];
+      const over = RUNGS[at] as (typeof RUNGS)[number];
+      const changed = [
+        Boolean(under.counted) && !over.counted,
+        reach(over) > reach(under) && under.places === over.places,
+        over.crossing && !under.crossing,
+        over.places > under.places,
+      ].filter(Boolean).length;
+      expect({ at, changed }).toEqual({ at, changed: 1 });
+    }
+  });
+});
+
 describe("the fence at the edges of the band", () => {
   const band = bandAt(0);
   const clean = (count: number) => Array.from({ length: count }, () => true);
@@ -595,22 +662,29 @@ describe("the fence at the edges of the band", () => {
   });
 
   /**
-   * On a ladder that reaches as far as the bands do, the fence is the band.
+   * On the sums ladder the fence is the band, and on the portal's it is the
+   * band as it was before the sums ladder grew.
    *
-   * No rounding and no drift: those are the rungs a person picked. True of
-   * the addition ladder by definition, and of the portal's — which is
-   * exactly as long as the addition ladder used to be, and is the ladder
-   * `SHARED_TOP_RUNG` is really describing.
+   * No rounding and no drift: those are the rungs a person picked. The
+   * portal's ladder is exactly as long as the addition ladder was before
+   * four rungs went in under `34 + 25`, and those four are skipped when the
+   * other ladders are measured — see `Rung.between` — so on the portal the
+   * bands are still the windows they always were.
    *
    * The six-digit band is the exception, and the only one. Nothing on the
    * portal's map is a six-digit measurement, so that band stands in for the
    * hardest one that the shorter ladder can express — see `bandOn`.
    */
   test("on a ladder that reaches as far as the bands, the fence is the band", () => {
-    for (const chosen of BANDS) {
+    const before = [
+      { from: 0, to: 2 },
+      { from: 2, to: 6 },
+      { from: 6, to: 9 },
+    ];
+    for (const [at, chosen] of BANDS.entries()) {
       expect(bandOn(chosen, HARDEST_RUNG)).toEqual(chosen);
       if (chosen.from >= SHARED_TOP_RUNG) continue;
-      expect(bandOn(chosen, HARDEST_PORTAL_RUNG)).toEqual(chosen);
+      expect(bandOn(chosen, HARDEST_PORTAL_RUNG)).toEqual({ ...chosen, ...before[at] });
     }
     // The window, not the whole band: what a crop is quoted at belongs to
     // the band a person picked and travels with the child, not with the
