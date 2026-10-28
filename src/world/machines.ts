@@ -35,11 +35,10 @@ import { PLANT_TYPES } from "./plants";
  * design breaks it. A machine that asked a question every time it ran would
  * be a second spell with a worse interface — and then there is no reason to
  * have machines at all, because everything they offer a child already has.
- * So the sorter *does* division where it can be watched: one heap in at the
- * top, equal shares out at the bottom, the remainder left visibly in the
- * mouth. Nobody is quizzed. A child who learned `÷` by casting it has built
- * a thing that divides for them from now on, which is the reward for having
- * understood it.
+ * So the hothouse *does* multiplication where it can be watched: one crop in
+ * at the mouth, three wood out into the crates. Nobody is quizzed. A child
+ * who learned `×` by casting it has built a thing that multiplies for them
+ * from now on, which is the reward for having understood it.
  *
  * **What gates a machine is the spell on the way in.** Twice over: it has to
  * be woken once, by the spell whose arithmetic it does — see `SPARK` — and
@@ -52,23 +51,16 @@ import { PLANT_TYPES } from "./plants";
 /** Which fixtures are machines. Every one of these is built, never sold. */
 export const MachineType = {
   /**
-   * A hopper, a wheel and three crates.
-   *
-   * The first, and chosen first because it is a picture of its own
-   * arithmetic: one heap in at the top, equal shares out at the bottom. It
-   * also had the least new machinery behind it — the share spell's parchment
-   * already existed and needed a reason to be opened, and waking a sorter is
-   * that reason.
-   */
-  Sorter: FixtureType.Sorter,
-  /**
    * A glass frame with three shoots coming up in it.
    *
-   * The second, and the pair to the sorter. A sorter *deals* — it divides a
-   * heap you already had into equal parts, and nothing leaves it that did
-   * not go in. This one *turns*: a crop goes in and timber comes out, which
-   * is the difference between the two verbs and the reason there are two
-   * machines rather than one with a setting.
+   * The first, and the one that *makes* rather than moves: a crop goes in
+   * and timber comes out. Almost everything after it passes the same thing
+   * on and decides only where it goes; this, and the press, are where
+   * something new comes from.
+   *
+   * There used to be a sorter before it, which dealt a heap into three equal
+   * piles. It made nothing and decided nothing a sieve or a seesaw does not
+   * decide better, so it went — see `RETIRED`.
    *
    * It is also the answer to a question the garden did not have one for.
    * Growing was a thing a child did once per square and then sold the
@@ -79,7 +71,7 @@ export const MachineType = {
   /**
    * A slanted mesh with a chute and a bin under it.
    *
-   * The third, and the one that decides rather than makes. A wire only
+   * The second, and the one that decides rather than makes. A wire only
    * carries — every choice belongs to a machine standing where a child can
    * see it — so *this* is where a line is gated: shown one thing, it passes
    * that and drops everything else into its bin.
@@ -91,8 +83,8 @@ export const MachineType = {
   /**
    * A bucket on a pivot with a scale up the side of it.
    *
-   * The fourth, and the last of the four operations: the sorter divides, the
-   * hothouse multiplies, the sieve takes away, and this one counts up. It
+   * The third, and the last of the operations: the hothouse multiplies, the
+   * sieve takes away, and this one counts up. It
    * holds what it is given until it reaches the mark and then tips the lot.
    *
    * What it makes possible is **"at least"**. Everything before it says how
@@ -104,7 +96,7 @@ export const MachineType = {
   /**
    * Two funnels over a bed, and an iron beam that comes down on it.
    *
-   * The fifth, and the first with **two mouths**. Every machine before it
+   * The fourth, and the first with **two mouths**. Every machine before it
    * takes one kind at a time, and `MachineState.holding` says why: a heap of
    * one thing dealt three ways is a division a child can see, and a mixture
    * dealt three ways is a mess. This one is the exception, and it is worth
@@ -127,7 +119,7 @@ export const MachineType = {
   /**
    * Two mouths and one spout.
    *
-   * The sixth, and the first that **decides rather than counts** — the
+   * The fifth, and the first that **decides rather than counts** — the
    * press's opposite. A press waits for both of its mouths; this takes
    * whatever arrives at either and sends it on down the one spout, and it
    * never waits. That is *either*, which is OR, and a child who has watched
@@ -145,7 +137,7 @@ export const MachineType = {
   /**
    * A bell in a gallows, on the line.
    *
-   * The seventh, and the one that **says something rather than making
+   * The sixth, and the one that **says something rather than making
    * anything**: it rings once for each thing that passes through it, and
    * passes the thing on unchanged. It is the garden's own way of telling a
    * child that a line *worked* — a bell at the end of a line is a line she
@@ -156,7 +148,7 @@ export const MachineType = {
   /**
    * A box on legs with a trapdoor in its top.
    *
-   * The eighth, and the sieve inside out: shown one thing, it drops *that*
+   * The seventh, and the sieve inside out: shown one thing, it drops *that*
    * through the trap into its bin and lets everything else slide off the
    * side. That is NOT, and the first *else* a child meets — the sieve says
    * "this one", and this says "anything but this one".
@@ -165,7 +157,7 @@ export const MachineType = {
   /**
    * A plank on a post, tipping one way and then the other.
    *
-   * The ninth, and the one that alternates: the first thing goes down one
+   * The eighth, and the one that alternates: the first thing goes down one
    * end, the plank tips, the next goes down the other. Odd to the crates
    * and even to the bin, which is parity, and is XOR as a child meets it —
    * either end and never both at once.
@@ -174,7 +166,7 @@ export const MachineType = {
   /**
    * A strongbox with a lid.
    *
-   * The tenth, and the one that remembers: it holds whatever it is given
+   * The ninth, and the one that remembers: it holds whatever it is given
    * all day and lets it all out at night. Everything else here passes a
    * thing on the moment it can; this keeps it until a signal, which is
    * what a variable is.
@@ -183,7 +175,7 @@ export const MachineType = {
   /**
    * An easel with a drawing on it.
    *
-   * The eleventh, and not a machine at all: a drawing of the machines
+   * The tenth, and not a machine at all: a drawing of the machines
    * standing round it and the wires between them, made the moment it is
    * woken. Tapped, it is picked up like a coil, and tapped down somewhere
    * else it builds the same line there — paying each machine's recipe out
@@ -209,7 +201,7 @@ export type Recipe = Readonly<Partial<Record<MaterialType, number>>>;
  * What each costs, in what the world gives up.
  *
  * **Sized against a walk, not against a wallet.** A conifer is three wood
- * and a boulder is two stone, so a sorter is about five trees and three
+ * and a boulder is two stone, so a hothouse is about three trees and six
  * rocks — an afternoon in a wood, which a five-hundred-cell world has
  * thirteen thousand scattered objects to supply. Small enough that a child
  * who wants one can have one; large enough that they will have cast the
@@ -223,12 +215,10 @@ export type Recipe = Readonly<Partial<Record<MaterialType, number>>>;
  * to something other than what will grow on it.
  */
 export const RECIPES: Readonly<Record<MachineType, Recipe>> = {
-  [MachineType.Sorter]: { [MaterialType.Wood]: 15, [MaterialType.Stone]: 6 },
-  // More stone and less wood than the sorter, and the shape of that is the
-  // point rather than the size: this one is mostly glass and a glasshouse is
-  // sand and fire, so it is the machine that sends a child up the hills.
-  // Two machines with the same shopping list would be two machines that were
-  // the same errand.
+  // More stone than wood, and the shape of that is the point rather than the
+  // size: this one is mostly glass and a glasshouse is sand and fire, so it
+  // is the machine that sends a child up the hills. Two machines with the
+  // same shopping list would be two machines that were the same errand.
   [MachineType.Hothouse]: { [MaterialType.Wood]: 8, [MaterialType.Stone]: 12 },
   // The cheapest of the three, and it should be: a sieve is a frame with a
   // mesh in it, and it is the machine a child needs *two* of before either
@@ -238,9 +228,9 @@ export const RECIPES: Readonly<Record<MachineType, Recipe>> = {
   // and a little stone. It is also the second cheapest, because a line wants
   // one wherever it wants a number.
   [MachineType.Tally]: { [MaterialType.Wood]: 9, [MaterialType.Stone]: 3 },
-  // The dearest of the five, and it should be: it is a frame, two hoppers
+  // The dearest of the four, and it should be: it is a frame, two hoppers
   // and an iron beam, and it is the machine a child builds when they have
-  // already understood the other four. It is also the one whose own recipe
+  // already understood the other three. It is also the one whose own recipe
   // is a proportion — two wood for every stone — which is the sum it spends
   // its life doing, paid once on the way in.
   [MachineType.Press]: { [MaterialType.Wood]: 20, [MaterialType.Stone]: 10 },
@@ -265,6 +255,38 @@ export const RECIPES: Readonly<Record<MachineType, Recipe>> = {
   // what it builds is paid for again every time it is stamped down.
   [MachineType.Blueprint]: { [MaterialType.Wood]: 6, [MaterialType.Cord]: 2 },
 };
+
+/**
+ * Machines that were in the game and are not any more, by the name a save
+ * wrote them under, with what each one cost.
+ *
+ * **Taken out, not shelved.** `SHELVED` in `jobs.ts` is for a machine that
+ * is still in the code and simply cannot be got hold of; one of these is
+ * gone — no type, no drawing, no work — so a save is the only place it can
+ * still turn up, standing in a garden or carried in a basket.
+ *
+ * **Paid back in what it was made of.** It was built out of wood and stone
+ * a child cleared one sum at a time, and the rule `putTheWorldBack` keeps for
+ * a thing that has nowhere to stand is that she loses the layout and never
+ * the things. Handing back the machine itself is not possible — there is no
+ * such machine — so she gets its recipe, and whatever was inside it.
+ *
+ * Kept as a table rather than a line in the scene so the next machine taken
+ * out is one entry here and nothing else.
+ */
+export const RETIRED: Readonly<Record<string, Recipe>> = {
+  // A hopper, a wheel and three crates: a heap dealt into three equal piles.
+  // It made nothing, and a sieve or a seesaw decides where a thing goes
+  // better than dealing it out blind.
+  sorter: { [MaterialType.Wood]: 15, [MaterialType.Stone]: 6 },
+};
+
+/** What a retired machine was made of, as pairs, or nothing if it never was one. */
+export function retiredRecipe(name: string): readonly (readonly [MaterialType, number])[] {
+  const recipe = Object.hasOwn(RETIRED, name) ? RETIRED[name] : undefined;
+  if (!recipe) return [];
+  return Object.entries(recipe).map(([material, count]) => [material as MaterialType, count]);
+}
 
 /** What a machine is made of, as pairs, in a stable order. */
 export function recipeFor(machine: MachineType): readonly (readonly [MaterialType, number])[] {
@@ -304,17 +326,18 @@ export function build(held: Inventory, machine: MachineType): boolean {
 // --- what a machine is doing ------------------------------------------------
 
 /**
- * How many ways a sorter deals.
+ * How many crates a machine fills, and how many a hothouse turns one crop
+ * into.
  *
- * Three, because the drawing has three crates under it and the drawing is
- * the promise. A child can count the boxes before they ever tip anything in,
- * and a machine that dealt four ways would be lying in the one place this
+ * Three, because the drawings have three crates under them and the drawing
+ * is the promise. A child can count the boxes before they ever tip anything
+ * in, and a machine that filled four would be lying in the one place this
  * game cannot afford to: the picture *is* the explanation of the arithmetic.
  */
 export const SHARES = 3;
 
 /**
- * How long one round of dealing takes, in minutes of work.
+ * How long one round of work takes, in minutes.
  *
  * A round is one thing into every crate — see `advance`. Twenty minutes is
  * slow enough that standing over it is not the way to use it and fast enough
@@ -334,7 +357,6 @@ export const MINUTES_PER_ROUND = 20;
  * a spell.
  */
 export const SPARK: Readonly<Record<MachineType, Spell | null>> = {
-  [MachineType.Sorter]: Spell.Share,
   // Rows and columns, for the machine that turns one into three.
   [MachineType.Hothouse]: Spell.Array,
   // Taking away what does not belong, which is what a sieve does to a heap
@@ -343,11 +365,6 @@ export const SPARK: Readonly<Record<MachineType, Spell | null>> = {
   // Counting up to a number on a line, which is what the growth spell walks
   // and what a tally does to a heap.
   [MachineType.Tally]: Spell.Growth,
-  // Sharing, the same spell that wakes the sorter, and deliberately so: a
-  // ratio *is* a division that has been made permanent. "Two for every one"
-  // and "share these two ways" are the same sum asked from opposite ends,
-  // and a child who has learned one has learned what this machine does. The
-  // rule here is "the spell whose arithmetic it does", not one spell each.
   // The three machines that decide are woken by the spell about deciding.
   // The press used to be the sharing spell's, on the argument that a ratio
   // is a division made permanent — which is true of the *proportion* it
@@ -375,11 +392,12 @@ export const SPARK: Readonly<Record<MachineType, Spell | null>> = {
 /**
  * What each machine does with a round's work, and to what.
  *
- * Two verbs, and the difference between them is the whole reason there are
- * two machines. **Dealing** divides a heap that is already there into the
- * crates, and nothing leaves a sorter that did not go into it. **Turning**
- * changes what a thing is: one crop out of the mouth, three of something
- * else into the crates.
+ * Two kinds of verb, and the difference between them is the one that matters
+ * most here. **Making** changes what a thing is: a hothouse turns one crop
+ * out of the mouth into three of something else in the crates, and a press
+ * turns two things into a third. **Moving** — sifting, counting, merging,
+ * ringing, inverting, tilting, holding — passes on exactly what went in and
+ * decides only where it goes and when.
  *
  * The `gives` is a content decision sitting in one line on purpose. What a
  * hothouse pays and how much of it is a number to argue about over a
@@ -388,7 +406,6 @@ export const SPARK: Readonly<Record<MachineType, Spell | null>> = {
  * and a clearing cast come out level.
  */
 export const Verb = {
-  Deal: "deal",
   Turn: "turn",
   Sift: "sift",
   Count: "count",
@@ -415,18 +432,16 @@ export interface Work {
   /**
    * How many come out of it, into the crates, for one round.
    *
-   * The whole difference between the three verbs, in one number against
-   * `takes`. Dealing takes three and puts three — nothing is made and
-   * nothing is lost, it is the same heap in three piles. Turning takes one
-   * and puts three, which is the multiplication. Sifting takes one and puts
-   * one, because what it does to a heap is decide *where it goes* rather
-   * than how much of it there is.
+   * The difference between making and moving, in one number against
+   * `takes`. Turning takes one and puts three, which is the multiplication.
+   * Sifting takes one and puts one, because what it does to a heap is
+   * decide *where it goes* rather than how much of it there is.
    *
-   * Spread across the crates as evenly as it will go, so dealing still puts
-   * exactly one in each per round and a child can still count the piles.
+   * Spread across the crates as evenly as it will go, so a child can still
+   * count the piles.
    */
   readonly puts: number;
-  /** What comes out, for a machine that turns. Null for one that deals. */
+  /** What comes out, for a machine that turns. Null for one that passes things on. */
   readonly gives: ItemType | null;
   /**
    * What it will take in, and this one is not decoration.
@@ -437,8 +452,8 @@ export interface Work {
    * the whole design rests on: material in the world stays a function of
    * spellwork. It grows things, so it takes things that grow.
    *
-   * A sorter takes anything, because dealing cannot mint: what comes out of
-   * it is what went in, counted into three piles.
+   * A machine that moves things takes anything, because moving cannot mint:
+   * what comes out of it is what went in.
    *
    * A press takes only what appears in some pressing, which is a third
    * answer rather than a stricter version of the first two. The reason is
@@ -452,13 +467,6 @@ export interface Work {
 }
 
 export const WORK: Readonly<Record<MachineType, Work>> = {
-  [MachineType.Sorter]: {
-    verb: Verb.Deal,
-    takes: SHARES,
-    puts: SHARES,
-    gives: null,
-    wants: "anything",
-  },
   [MachineType.Hothouse]: {
     verb: Verb.Turn,
     takes: 1,
@@ -596,8 +604,8 @@ export function pressable(item: ItemType): boolean {
 /** Whether this machine will take this in. See `Work.wants`. */
 export function accepts(machine: MachineType, item: ItemType): boolean {
   // A press only takes what it could press. The others take "anything" and
-  // can afford to: a sorter deals whatever it is given, so a heap of the
-  // wrong thing is still a heap it can hand back. A press would hold it for
+  // can afford to: a sieve passes or bins whatever it is given, so a heap of
+  // the wrong thing is still a heap it can hand back. A press would hold it for
   // ever.
   if (WORK[machine].verb === Verb.Press) return pressable(item);
   if (WORK[machine].wants === "nothing") return false;
@@ -839,14 +847,11 @@ export function feed(
 }
 
 /**
- * Work for this many minutes, and deal what that comes to.
+ * Work for this many minutes, and do what that comes to.
  *
- * **Whole rounds only, and that is the arithmetic.** A round puts one thing
- * into every crate, so a heap of thirteen dealt three ways is four rounds
- * and one left in the mouth — division with its remainder sitting where
- * anybody can see it, rather than division with the remainder explained.
- * Dealing a partial round would empty the mouth and put unequal piles in the
- * crates, which is the one thing a machine called a sorter must not do.
+ * **Whole rounds only.** A round is one batch out of the mouth, so whatever
+ * is short of a batch stays there where anybody can see it, rather than
+ * being half-done and explained.
  *
  * The minutes are minutes the child was *there* for; see the scene. This
  * function does not know what a clock is, which is the point of it being
@@ -1071,9 +1076,8 @@ function pressed(state: MachineState, worked: number, work: Work): MachineState 
 /**
  * Put this many into the crates, as evenly as they will go.
  *
- * Emptiest first, so dealing still puts exactly one in each crate per round
- * and a child can still count three equal piles. It is the same rule for all
- * three verbs — what differs is only how many a round hands it.
+ * Emptiest first, so a child can still count three equal piles. It is the
+ * same rule for every verb — what differs is only how many a round hands it.
  */
 function spread(crates: readonly number[], many: number): number[] {
   const filled = [...crates];
@@ -1090,9 +1094,9 @@ function spread(crates: readonly number[], many: number): number[] {
 /**
  * Take one crate, and say what was in it.
  *
- * One crate rather than all three, because taking one share is the whole use
- * of the thing: a child who tips twelve in and takes one out has four, which
- * is an exact third they did not have to count out by hand.
+ * One crate rather than all three, because the crates are what a child can
+ * see and count: a hothouse that has turned four carrots has twelve wood in
+ * three piles of four, and taking one is taking a pile she can count.
  */
 export function takeShare(
   state: MachineState,
@@ -1100,15 +1104,15 @@ export function takeShare(
 ): { state: MachineState; item: ItemType | null; count: number } {
   const index = Math.trunc(crate);
   const count = state.crates[index] ?? 0;
-  // What comes out is what the machine *made*, and only a machine that deals
-  // makes what it was given. Asking `holding` here was right while there was
+  // What comes out is what the machine *made*, and a machine that passes
+  // things on "makes" what it was given. Asking `holding` here was right while there was
   // one machine, and would have handed back carrots out of a hothouse.
   const made = state.made ?? state.holding;
   if (count <= 0 || made === null) return { state, item: null, count: 0 };
   const crates = state.crates.map((held, at) => (at === index ? 0 : held));
   // The mouth forgets what it was holding once the machine is empty, so the
-  // next thing tipped in can be anything. A sorter that only ever accepted
-  // wood again because it once held wood would be a sorter a child had to
+  // next thing tipped in can be anything. A machine that only ever accepted
+  // wood again because it once held wood would be a machine a child had to
   // remember the history of.
   const empty = crates.every((held) => held <= 0) && state.heap <= 0;
   return {

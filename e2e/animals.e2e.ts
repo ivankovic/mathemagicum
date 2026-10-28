@@ -248,7 +248,7 @@ describe("the animals of the village", () => {
     "and a rectangle drawn round one takes the machine and leaves the animal",
     async () => {
       await play({ seams: WITH_TIMBER }, async (game) => {
-        // A beast with a free square to its right to stand a sorter on, and
+        // A beast with a free square to its right to stand a machine on, and
         // one below it for her to stand on and reach both.
         const village = await game.seam<Beast[]>("animals");
         let chosen: Beast | undefined;
@@ -265,7 +265,7 @@ describe("the animals of the village", () => {
         await game.reload(`${WITH_TIMBER}&at=${beast.col},${beast.row + 1}`);
         await game.settle(900);
 
-        expect(await takeFromCrate(game, FixtureType.Sorter)).toBe(true);
+        expect(await takeFromCrate(game, FixtureType.Hothouse)).toBe(true);
         await game.settle(350);
         await game.tapCell(machine.col, machine.row);
         await game.settle(400);
@@ -291,7 +291,7 @@ describe("the animals of the village", () => {
         // still itself, still on its own square.
         const after = (await game.seam<Beast[]>("animals")).find((one) => one.id === beast.id);
         expect({
-          held: await game.held(FixtureType.Sorter),
+          held: await game.held(FixtureType.Hothouse),
           standing: after ? { col: after.col, row: after.row } : null,
         }).toEqual({ held: 1, standing: { col: beast.col, row: beast.row } });
       });

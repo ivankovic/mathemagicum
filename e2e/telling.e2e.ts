@@ -96,7 +96,7 @@ describe("asking what a thing is", () => {
         expect(await game.tap(crateGroup(FixtureType.Press))).toBe(true);
         await game.settle(300);
         const at = await game.ui();
-        for (const machine of [FixtureType.Press, FixtureType.Sorter]) {
+        for (const machine of [FixtureType.Press, FixtureType.Hothouse]) {
           const cloud = at[`${crateButton(machine)}.tell`];
           expect({ machine, drawn: cloud !== undefined }).toEqual({ machine, drawn: true });
           expect({

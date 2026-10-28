@@ -6,6 +6,7 @@ import { FixtureType } from "../world/fixtures";
 import { flowerParts } from "../world/flowers";
 import type { WorldGrid } from "../world/grid";
 import { ITEM_TYPES, type ItemType } from "../world/inventory";
+import { retiredRecipe } from "../world/machines";
 import type { PlacedObject } from "../world/objects";
 import { type PaintedTiles, readPainted } from "../world/paintedGround";
 import { PLANT_STAGES, PLANT_TYPES, type PlantStage, type PlantType } from "../world/plants";
@@ -189,7 +190,7 @@ export interface WorldSnapshot {
    *
    * Here rather than on the placed object it belongs to, and the placement
    * is the point: `placed` is a *difference against how the world was
-   * generated*, compared by a signature, and what a sorter has in its mouth
+   * generated*, compared by a signature, and what a machine has in its mouth
    * this minute is not a fact about generation. It is also unvalidated on
    * the way in — `isPlacedObject` waves unknown fields through — where this
    * goes through `machinesFromSave` and drops anything mangled.
@@ -536,6 +537,23 @@ export interface Restored {
    * survivable; losing the things is not.
    */
   readonly refused: readonly PlacedObject[];
+  /**
+   * Machines the game no longer has, where they stood.
+   *
+   * Not `refused`: those are things that still exist and go back in the
+   * basket as themselves. One of these has no type to go back as, so the
+   * caller pays out what it was made of — see `RETIRED` in `machines.ts` —
+   * along with whatever its state says was inside it.
+   */
+  readonly retired: readonly RetiredMachine[];
+}
+
+/** A machine that was taken out of the game, found standing in a save. */
+export interface RetiredMachine {
+  /** The name the save wrote it under, which is its key in `RETIRED`. */
+  readonly type: string;
+  readonly col: number;
+  readonly row: number;
 }
 
 export function restoreWorld(
@@ -544,11 +562,17 @@ export function restoreWorld(
   groundMoved = false,
 ): Restored {
   const refused: PlacedObject[] = [];
-  if (!world) return { refused };
+  const retired: RetiredMachine[] = [];
+  if (!world) return { refused, retired };
   for (const [col, row] of readCleared(world.cleared)) {
     if (grid.inBounds(col, row)) grid.removeObjectAt(col, row);
   }
   for (const object of asList(world.placed)) {
+    const gone = retiredMachine(object);
+    if (gone) {
+      retired.push(gone);
+      continue;
+    }
     if (!isPlacedObject(object) || !grid.inBounds(object.col, object.row)) continue;
     // **Refused rather than forced.** A save is a handful of differences
     // against a world the generator builds, and the generator is still being
@@ -586,7 +610,22 @@ export function restoreWorld(
     if (groundMoved && !grid.isPassable(col, row)) continue;
     grid.restoreCrop(col, row, { plant, stage });
   }
-  return { refused };
+  return { refused, retired };
+}
+
+/**
+ * A machine this build no longer has, if that is what this saved object is.
+ *
+ * Checked before `isPlacedObject`, which would drop it for having a type
+ * that is not a fixture — silently, with the wood and stone it cost.
+ * Only the name and the square are needed, so only those are checked.
+ */
+function retiredMachine(value: unknown): RetiredMachine | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { type, col, row } = value as Record<string, unknown>;
+  if (typeof type !== "string" || retiredRecipe(type).length === 0) return null;
+  if (!Number.isInteger(col) || !Number.isInteger(row)) return null;
+  return { type, col: col as number, row: row as number };
 }
 
 /**
@@ -665,14 +704,25 @@ function readCrops(value: unknown): WorldSnapshot["crops"] {
   return out;
 }
 
-/** What she was carrying, read back, dropping anything that is not a thing. */
+/**
+ * What she was carrying, read back, dropping anything that is not a thing.
+ *
+ * A machine the game has since taken out comes back as what it was made of:
+ * picked up into the basket, it was still hers, and the basket is the one
+ * place it can be paid back without a square to stand on.
+ */
 function readItems(value: unknown): PlayerSnapshot["items"] {
   const out: (readonly [ItemType, number])[] = [];
   for (const entry of asList(value)) {
     if (!Array.isArray(entry) || entry.length < 2) continue;
     const [item, count] = entry as [unknown, unknown];
-    if (!(ITEM_TYPES as readonly unknown[]).includes(item)) continue;
     if (!Number.isInteger(count) || (count as number) <= 0) continue;
+    if (typeof item === "string") {
+      for (const [material, each] of retiredRecipe(item)) {
+        out.push([material, each * (count as number)]);
+      }
+    }
+    if (!(ITEM_TYPES as readonly unknown[]).includes(item)) continue;
     out.push([item as ItemType, count as number]);
   }
   return out;

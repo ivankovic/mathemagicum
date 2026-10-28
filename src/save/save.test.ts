@@ -21,6 +21,8 @@ import { HARDEST_PORTAL_RUNG } from "../spells/portal";
 import { Facing } from "../world/characters";
 import { FLOWER_TYPES, type FlowerType, flowerObject, flowerParts } from "../world/flowers";
 import { WorldGrid } from "../world/grid";
+import { RETIRED, retiredRecipe } from "../world/machines";
+import { MaterialType } from "../world/materials";
 import { PLANTED_STAGE, PlantStage, PlantType } from "../world/plants";
 import { createRng } from "../world/rng";
 import { GameSession } from "../world/session";
@@ -798,6 +800,60 @@ describe("a save that no longer fits its world", () => {
     expect(session.purse.coins).toBe(0);
     expect(session.inventory.total).toBe(0);
     expect(session.facing).toBe(Facing.Down);
+  });
+});
+
+/**
+ * A machine the game no longer has, found in a save.
+ *
+ * The sorter was taken out after children had built them. Dropping it as
+ * an unknown type would lose the wood and stone it cost — a morning of
+ * clearing — so it is handed over to be paid back instead.
+ */
+describe("a machine that has been taken out of the game", () => {
+  const grid = () => WorldGrid.empty(6, 6, TerrainType.Grass);
+  const sorter = { ...fence(2, 2), id: "sorter-2-2", type: "sorter", mine: true };
+
+  test("standing in a garden, is handed back to be paid for rather than dropped", () => {
+    const fresh = grid();
+    const { retired, refused } = restoreWorld(fresh, {
+      crops: [],
+      placed: [sorter, fence(3, 3)],
+      cleared: [],
+    });
+    expect(retired).toEqual([{ type: "sorter", col: 2, row: 2 }]);
+    expect(refused).toEqual([]);
+    expect(fresh.getObjectAt(2, 2)).toBeNull();
+    expect(fresh.getObjectAt(3, 3)?.id).toBe("fence-3-3");
+  });
+
+  test("carried in a basket, comes back as what it was made of", () => {
+    const session = sessionOn(grid());
+    const sorters = 2;
+    restorePlayer(session, {
+      col: 1,
+      row: 1,
+      facing: Facing.Down,
+      coins: 0,
+      items: [
+        ["sorter" as never, sorters],
+        [MaterialType.Wood, 4],
+      ],
+    });
+    for (const [material, each] of retiredRecipe("sorter")) {
+      const already = material === MaterialType.Wood ? 4 : 0;
+      expect({ material, count: session.inventory.count(material) }).toEqual({
+        material,
+        count: already + each * sorters,
+      });
+    }
+    expect(session.inventory.count("sorter" as never)).toBe(0);
+  });
+
+  test("and the table says what one cost when it was built", () => {
+    expect(RETIRED.sorter).toEqual({ [MaterialType.Wood]: 15, [MaterialType.Stone]: 6 });
+    expect(retiredRecipe("hothouse")).toEqual([]);
+    expect(retiredRecipe("toString")).toEqual([]);
   });
 });
 

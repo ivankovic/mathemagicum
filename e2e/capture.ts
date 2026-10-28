@@ -77,8 +77,8 @@ await play({ seams: SEAMS }, async (game) => {
   const here = await game.where();
   const free = await freeBeside(game, here);
   if (free.length < 3) throw new Error(`only ${free.length} free squares beside her`);
-  const [fenceAt, sorterAt, houseAt] = free as { col: number; row: number }[];
-  if (!fenceAt || !sorterAt || !houseAt) throw new Error("not enough room");
+  const [fenceAt, sieveAt, houseAt] = free as { col: number; row: number }[];
+  if (!fenceAt || !sieveAt || !houseAt) throw new Error("not enough room");
 
   // A fence she owns, turned before it went down — so the fixture carries
   // both `mine` and a `turn` on a placed object.
@@ -98,19 +98,18 @@ await play({ seams: SEAMS }, async (game) => {
   await game.settle(400);
 
   // Two machines, woken by their own arithmetic, one of them fed.
-  await takeFromCrate(game, FixtureType.Sorter);
+  await takeFromCrate(game, FixtureType.Sieve);
   await game.settle(300);
-  await game.tapCell(sorterAt.col, sorterAt.row);
+  await game.tapCell(sieveAt.col, sieveAt.row);
   await game.settle(400);
-  await game.tapCell(sorterAt.col, sorterAt.row);
+  await game.tapCell(sieveAt.col, sieveAt.row);
   await game.settle(400);
-  await game.solveShare();
+  await game.solveNumberLine();
   await game.settle(400);
-  // More carrots than she has of anything else, or the sorter — which takes
+  // More carrots than she has of anything else, or the sieve — which takes
   // whatever it is given — eats the stone the next machine is built from.
   await game.give("carrot", 250);
-  await game.tapCell(sorterAt.col, sorterAt.row);
-  await game.settle(400);
+  await game.feed(sieveAt);
 
   await takeFromCrate(game, FixtureType.Hothouse);
   await game.settle(300);
@@ -124,7 +123,7 @@ await play({ seams: SEAMS }, async (game) => {
   // And a line between them.
   await takeFromCrate(game, CRATE_WIRE);
   await game.settle(300);
-  await game.tapCell(sorterAt.col, sorterAt.row);
+  await game.tapCell(sieveAt.col, sieveAt.row);
   await game.settle(300);
   await game.tapCell(houseAt.col, houseAt.row);
   await game.settle(400);

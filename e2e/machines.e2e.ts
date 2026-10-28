@@ -24,13 +24,13 @@ afterAll(shutDown);
  *
  * The route is also the part with the interesting failure in it. A machine
  * is the first placeable thing nobody sells, and `SHOP_STOCK` was
- * `PLACEABLE_FIXTURES` itself — so the first version of this put a sorter on
+ * `PLACEABLE_FIXTURES` itself — so the first version of this put a machine on
  * the village shelf at a price of infinity. The unit tests say that cannot
  * happen again; these say a child can actually get one.
  */
 
 /*
- * The sorter is behind the crate's "makers" group now — `takeFromCrate`
+ * The hothouse is behind the crate's "makers" group now — `takeFromCrate`
  * opens it and taps the machine, which is the two taps a child makes.
  */
 
@@ -39,15 +39,15 @@ afterAll(shutDown);
  * square being tapped, and a basket with enough in it to build one machine
  * and not two.
  *
- * Twenty of each is deliberate rather than generous: the sorter wants
- * fifteen wood and six stone, so a build leaves five and fourteen — two
+ * Twenty of each is deliberate rather than generous: the hothouse wants
+ * eight wood and twelve stone, so a build leaves twelve and eight — two
  * different numbers, neither of them nought, which is the only way this
  * scenario can tell "spent the recipe" from "emptied the basket".
  */
 const WITH_TIMBER = "&materials=20&hour=12&freezeNpcs";
 
 /** What the recipe asks for, read from the recipe rather than written down. */
-const COST = new Map(recipeFor(MachineType.Sorter));
+const COST = new Map(recipeFor(MachineType.Hothouse));
 
 /**
  * Three empty squares in a row, near enough to put machines on.
@@ -89,29 +89,29 @@ describe("building a machine", () => {
         const wood = await game.held("wood");
         const stone = await game.held("stone");
         expect(wood).toBeGreaterThanOrEqual(COST.get("wood") ?? 0);
-        expect(await game.held(FixtureType.Sorter)).toBe(0);
+        expect(await game.held(FixtureType.Hothouse)).toBe(0);
 
         // The slot is in the crate before she owns one — the spellbook's
         // dimmed rune, one tray along — and tapping it is what builds it.
-        expect(await takeFromCrate(game, FixtureType.Sorter)).toBe(true);
+        expect(await takeFromCrate(game, FixtureType.Hothouse)).toBe(true);
         await game.settle(400);
 
         // One machine in hand, and the timber gone out of the basket.
-        expect(await game.held(FixtureType.Sorter)).toBe(1);
+        expect(await game.held(FixtureType.Hothouse)).toBe(1);
         expect(await game.held("wood")).toBe(wood - (COST.get("wood") ?? 0));
         expect(await game.held("stone")).toBe(stone - (COST.get("stone") ?? 0));
         // Lit and waiting for a square, exactly as a bought fence is.
-        expect(await game.seam<string | null>("armed")).toContain(FixtureType.Sorter);
+        expect(await game.seam<string | null>("armed")).toContain(FixtureType.Hothouse);
 
         const at = await game.squareBeside();
         await game.tapCell(at.col, at.row);
         await game.settle(500);
-        expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Sorter);
-        expect(await game.held(FixtureType.Sorter)).toBe(0);
+        expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Hothouse);
+        expect(await game.held(FixtureType.Hothouse)).toBe(0);
 
         await game.reload(WITH_TIMBER);
         await game.settle(600);
-        expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Sorter);
+        expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Hothouse);
       });
     },
     5 * MINUTES,
@@ -132,10 +132,10 @@ describe("building a machine", () => {
         expect(await game.held("wood")).toBe(3);
         expect(await game.held("stone")).toBe(3);
 
-        expect(await takeFromCrate(game, FixtureType.Sorter)).toBe(true);
+        expect(await takeFromCrate(game, FixtureType.Hothouse)).toBe(true);
         await game.settle(400);
 
-        expect(await game.held(FixtureType.Sorter)).toBe(0);
+        expect(await game.held(FixtureType.Hothouse)).toBe(0);
         expect(await game.held("wood")).toBe(3);
         expect(await game.held("stone")).toBe(3);
         // And nothing is lit, so the next tap on the ground is a tap on the
@@ -171,14 +171,18 @@ describe("building a machine", () => {
       await play({ seams: "&materials=60&hour=12&freezeNpcs&learned=all" }, async (game) => {
         const row = await threeInARow(game);
         for (const at of row) {
-          expect(await takeFromCrate(game, FixtureType.Sorter)).toBe(true);
+          expect(await takeFromCrate(game, FixtureType.Hothouse)).toBe(true);
           await game.settle(350);
           await game.tapCell(at.col, at.row);
           await game.settle(400);
         }
         const standing = await Promise.all(row.map((at) => game.objectOn(at.col, at.row)));
-        expect(standing).toEqual([FixtureType.Sorter, FixtureType.Sorter, FixtureType.Sorter]);
-        expect(await game.held(FixtureType.Sorter)).toBe(0);
+        expect(standing).toEqual([
+          FixtureType.Hothouse,
+          FixtureType.Hothouse,
+          FixtureType.Hothouse,
+        ]);
+        expect(await game.held(FixtureType.Hothouse)).toBe(0);
 
         // The times spell, then the minus it is multiplying, then the two
         // corners of the block: exactly the order the game asks in.
@@ -199,7 +203,7 @@ describe("building a machine", () => {
         // Every square bare, and all three machines back in the basket.
         expect({
           standing: await Promise.all(row.map((at) => game.objectOn(at.col, at.row))),
-          held: await game.held(FixtureType.Sorter),
+          held: await game.held(FixtureType.Hothouse),
         }).toEqual({ standing: [null, null, null], held: 3 });
       });
     },

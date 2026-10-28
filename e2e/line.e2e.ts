@@ -16,7 +16,7 @@ afterAll(shutDown);
  * Machines joined into a line, which is the half that needs two of them.
  *
  * **Its own file, and that is not tidiness.** These began as four more
- * scenarios in `sorter.e2e.ts`, where the last of them timed out at five
+ * scenarios in what is now `hothouse.e2e.ts`, where the last of them timed out at five
  * minutes while passing in ninety seconds on its own — `harness.ts` says why
  * in as many words: *a dozen scenarios in one process is near the edge on
  * four busy cores*, and these are the heaviest in the suite. Each one winds
@@ -26,20 +26,8 @@ afterAll(shutDown);
  */
 
 /**
- * The first machine that does anything, end to end.
- *
- * `machines.test.ts` proves the dealing in a fraction of a second and every
- * assertion in it is a function call. What a child does is tap a sorter, be
- * shown one sum, tip a heap in and come back to three equal piles — and none
- * of that route is in the model. The waking is a parchment, the tipping
- * reaches into the basket, the dealing is driven by a clock nothing else in
- * the game measures, and the whole of it has to survive being written down.
- *
- * It is also the piece with the quietest failure mode in the game. A
- * machine's state is not an object on the grid, not in the basket, and not
- * on screen beyond three little heaps in three crates: a sorter that had
- * stopped dealing, or one dealing without ever having been woken, looks
- * exactly like one that works.
+ * Noon, a still village, every spell, and enough wood and stone to build
+ * two or three machines.
  */
 const WITH_TIMBER = "&materials=60&hour=12&freezeNpcs&learned=all";
 
@@ -85,7 +73,7 @@ describe("machines joined into a line", () => {
         const at = await aMachineBeside(game, FixtureType.Hothouse);
 
         // Woken by the rows and columns it is about to do three at a time,
-        // not by the sorter's division: each machine is shown its own sum.
+        // not by some other machine's sum: each one is shown its own.
         await game.tapCell(at.col, at.row);
         await game.settle(400);
         expect(await game.seam("array")).not.toBeNull();
@@ -127,7 +115,7 @@ describe("machines joined into a line", () => {
   /**
    * And a wire between the two, which is what makes it a system.
    *
-   * A sorter deals a heap into three and a hothouse eats one crop a round.
+   * A sieve passes what it is shown and a hothouse eats one crop a round.
    * On their own they are two machines a child walks between with a basket;
    * joined, the second is fed by the first and the garden does something
    * while she is standing in it.
@@ -142,17 +130,18 @@ describe("machines joined into a line", () => {
     "and a wire feeds one machine from another",
     async () => {
       await play({ seams: WITH_TIMBER }, async (game) => {
-        // A sorter with carrots in it, dealt and waiting in the crates.
-        const from = await aMachineBeside(game, FixtureType.Sorter);
+        // A sieve with carrots in it, shown carrots and passing them on.
+        const from = await aMachineBeside(game, FixtureType.Sieve);
         await game.tapCell(from.col, from.row);
         await game.settle(400);
-        await game.solveShare();
+        await game.solveNumberLine();
         await game.settle(400);
         // More carrots than she has of anything else, and that matters: a
-        // sorter takes *whatever* it is given — dealing cannot mint, so it
-        // has no reason to be fussy — and it tips in the biggest heap she is
-        // carrying. Given fewer carrots than stone it eats the stone, and
-        // then there is none left to build the second machine out of.
+        // sieve takes *whatever* it is given — passing things on cannot
+        // mint, so it has no reason to be fussy — and it tips in the biggest
+        // heap she is carrying. Given fewer carrots than stone it eats the
+        // stone, and then there is none left to build the second machine
+        // out of.
         await game.give("carrot", 99);
         await game.settle(200);
         await game.feed(from);
@@ -188,8 +177,8 @@ describe("machines joined into a line", () => {
         await game.settle(400);
         expect(await game.seam<Strung[]>("wires")).toHaveLength(1);
 
-        // Now wind the clock: the sorter deals its heap and the wire walks
-        // it along to the hothouse, which turns it into timber.
+        // Now wind the clock: the sieve passes its carrots and the wire walks
+        // them along to the hothouse, which turns them into timber.
         const wood = await game.held("wood");
         await game.windClock(12);
         await game.settle(1500);
@@ -405,10 +394,10 @@ describe("machines joined into a line", () => {
     "and a wire is still there after she goes indoors",
     async () => {
       await play({ seams: WITH_TIMBER }, async (game) => {
-        const from = await aMachineBeside(game, FixtureType.Sorter);
+        const from = await aMachineBeside(game, FixtureType.Sieve);
         await game.tapCell(from.col, from.row);
         await game.settle(400);
-        await game.solveShare();
+        await game.solveNumberLine();
         await game.settle(400);
         const to = await aMachineBeside(game, FixtureType.Hothouse);
         await game.tapCell(to.col, to.row);

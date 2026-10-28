@@ -3,6 +3,7 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { FixtureType } from "../src/world/fixtures";
+import { retiredRecipe } from "../src/world/machines";
 import { type Game, type Handles, play, shutDown, takeFromCrate } from "./harness";
 
 const MINUTES = 60_000;
@@ -114,6 +115,90 @@ describe("coming back after the ground has moved", () => {
         // loss look the same from where she is sitting.
         const cloud = await game.seam<Cloud | null>("thought");
         expect(cloud?.icons).toContain(`item-${FixtureType.Fence}`);
+      });
+    },
+    5 * MINUTES,
+  );
+
+  /**
+   * And a machine the game no longer has comes back as what it was made of.
+   *
+   * The sorter was taken out after children had built them. Read back, its
+   * type is a name this build has never heard of, and the guard on the way
+   * in drops a name like that — which would have taken the fifteen wood and
+   * six stone it cost with it, and the heap she had tipped into it.
+   *
+   * There is no sorter to build any more, so one is made the way a save from
+   * before would have one: a hothouse put down, fed, written to storage, and
+   * then renamed in the file before the game reads it back.
+   */
+  test(
+    "a machine taken out of the game is paid back in wood and stone",
+    async () => {
+      await play({ seams: AT_HOME }, async (game) => {
+        expect(await takeFromCrate(game, FixtureType.Hothouse)).toBe(true);
+        await game.settle(300);
+        const at = await roomBeside(game);
+        await game.tapCell(at.col, at.row);
+        await game.settle(500);
+        await game.tapCell(at.col, at.row);
+        await game.settle(400);
+        await game.solveArray();
+        await game.settle(400);
+        await game.give("carrot", 7);
+        await game.settle(200);
+        await game.feed(at);
+        expect(await game.held("carrot")).toBe(0);
+
+        const wood = await game.held("wood");
+        const stone = await game.held("stone");
+        await game.settle(5000);
+
+        // Renamed before the game has read anything, for the reason the
+        // test above stamps its version this way: the page is still saving.
+        await game.tab.addInitScript(
+          ([col, row]) => {
+            const key = Object.keys(localStorage).find((one) =>
+              one.startsWith("mathemagicum.game."),
+            );
+            if (!key) return;
+            const saved = JSON.parse(localStorage.getItem(key) as string);
+            for (const object of saved?.world?.world?.placed ?? []) {
+              if (object.col === col && object.row === row && object.type === "hothouse") {
+                object.type = "sorter";
+                object.id = `sorter-${col}-${row}`;
+              }
+            }
+            localStorage.setItem(key, JSON.stringify(saved));
+          },
+          [at.col, at.row] as const,
+        );
+        // Without `materials`, which hands out more on every load and would
+        // make the payback impossible to count.
+        await game.reload("&hour=12&freezeNpcs&learned=all");
+        await game.settle(1600);
+
+        // Nothing standing, nothing remembered as a machine, and everything
+        // it cost and held back in her basket.
+        const cost = new Map(retiredRecipe("sorter"));
+        expect({
+          standing: await game.objectOn(at.col, at.row),
+          machines: await game.seam<unknown[]>("machines"),
+          wood: await game.held("wood"),
+          stone: await game.held("stone"),
+          carrots: await game.held("carrot"),
+        }).toEqual({
+          standing: null,
+          machines: [],
+          wood: wood + (cost.get("wood") ?? 0),
+          stone: stone + (cost.get("stone") ?? 0),
+          carrots: 7,
+        });
+
+        // And the cloud says what came back: the wood and the stone, which
+        // is the only picture of a sorter there still is.
+        const cloud = await game.seam<Cloud | null>("thought");
+        expect(cloud?.icons).toEqual(expect.arrayContaining(["material-wood", "material-stone"]));
       });
     },
     5 * MINUTES,

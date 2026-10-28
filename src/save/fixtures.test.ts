@@ -7,7 +7,7 @@ import { join } from "node:path";
 import type { SettingsStore } from "../settings";
 import { decorFromSave } from "../world/decor";
 import { WorldGrid } from "../world/grid";
-import { machinesFromSave } from "../world/machines";
+import { machinesFromSave, retiredRecipe } from "../world/machines";
 import { TerrainType } from "../world/terrain";
 import { wiresFromSave } from "../world/wires";
 import { loadGame } from "./games";
@@ -88,9 +88,16 @@ describe("saves from builds that are already history", () => {
 
       test("and everything the child put down is still on the grid", () => {
         const grid = WorldGrid.empty(500, 500, TerrainType.Grass);
-        restoreWorld(grid, raw.world.world);
+        const { retired } = restoreWorld(grid, raw.world.world);
         for (const object of raw.world.world.placed) {
           const back = grid.getObjectAt(object.col, object.row);
+          // Or, for a machine the game has since taken out, handed over to be
+          // paid back rather than dropped — see `RETIRED` in `machines.ts`.
+          if (retiredRecipe(object.type).length > 0) {
+            expect(back).toBeNull();
+            expect(retired).toContainEqual({ type: object.type, col: object.col, row: object.row });
+            continue;
+          }
           expect({ at: `${object.col},${object.row}`, type: back?.type }).toEqual({
             at: `${object.col},${object.row}`,
             type: object.type,

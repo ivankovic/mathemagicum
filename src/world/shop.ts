@@ -93,12 +93,10 @@ const COST_IN_CROPS: Record<FixtureType, number> = {
   "city-gate-side": Number.POSITIVE_INFINITY,
   // Not for sale, and the first thing in this table that is priced out
   // because of *how it is come by* rather than because it belongs to a
-  // place. A sorter is built out of fifteen wood and six stone — see
+  // place. A hothouse is built out of eight wood and twelve stone — see
   // `machines.ts` — and `SHOP_STOCK` below keeps it off the shelf, so this
   // infinity is the belt to that braces: whatever route reaches `priceOf`,
   // there is no coin figure for a machine.
-  sorter: Number.POSITIVE_INFINITY,
-  // And the same for the second machine, for the same reason.
   hothouse: Number.POSITIVE_INFINITY,
   sieve: Number.POSITIVE_INFINITY,
   tally: Number.POSITIVE_INFINITY,
@@ -174,7 +172,7 @@ const FURNITURE_COST_IN_CROPS: Record<DecorType, number> = {
  * sale — it is built out of what the clearing spell paid, see
  * `src/world/machines.ts` — so the two lists have come apart, and this is
  * the one the shop reads. Left as `PLACEABLE_FIXTURES` it would have put a
- * sorter on the shelf priced at infinity, which is a button that can only
+ * hothouse on the shelf priced at infinity, which is a button that can only
  * refuse.
  */
 export const SHOP_STOCK: readonly FixtureType[] = PLACEABLE_FIXTURES.filter(

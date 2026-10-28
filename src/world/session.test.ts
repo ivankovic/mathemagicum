@@ -263,31 +263,31 @@ describe("putting things down", () => {
    * anywhere she can point, and this measured the two sides added together
    * and refused anything past one — so a corner square that is one away to
    * her and to `withinReach` is two here. She answered the subtraction and
-   * the sorter stayed standing.
+   * the machine stayed standing.
    *
    * Both measures, in one test, because the bug was the gap between them.
    */
   test("a hand reaches its own corners, and a spell reaches further still", () => {
     const s = session();
-    s.inventory.add(FixtureType.Sorter, 1);
-    expect(s.place(FixtureType.Sorter).tile).toEqual({ col: 2, row: 3 });
+    s.inventory.add(FixtureType.Sieve, 1);
+    expect(s.place(FixtureType.Sieve).tile).toEqual({ col: 2, row: 3 });
 
     // At its corner: one step diagonally. Refused once, and reported from a
     // playtest a second time — *I can't pick it up* — because nothing on
     // screen says the game counts a corner as two steps. She is standing
     // next to it, so she can pick it up.
     s.setPosition(1, 2);
-    expect(s.takeBack(FixtureType.Sorter, 2, 3).ok).toBe(true);
-    expect(s.inventory.count(FixtureType.Sorter)).toBe(1);
+    expect(s.takeBack(FixtureType.Sieve, 2, 3).ok).toBe(true);
+    expect(s.inventory.count(FixtureType.Sieve)).toBe(1);
     expect(s.grid.isPassable(2, 3)).toBe(true);
 
     // Two away is still a spell's business and not a hand's, which is the
     // gap the two measures are for.
-    expect(s.place(FixtureType.Sorter).tile).toEqual({ col: 1, row: 3 });
+    expect(s.place(FixtureType.Sieve).tile).toEqual({ col: 1, row: 3 });
     s.setPosition(3, 1);
     expect(withinReach(s.tile, { col: 1, row: 3 })).toBe(true);
-    expect(s.takeBack(FixtureType.Sorter, 1, 3).outcome).toBe(Outcome.TooFar);
-    expect(s.takeBack(FixtureType.Sorter, 1, 3, withinReach).ok).toBe(true);
+    expect(s.takeBack(FixtureType.Sieve, 1, 3).outcome).toBe(Outcome.TooFar);
+    expect(s.takeBack(FixtureType.Sieve, 1, 3, withinReach).ok).toBe(true);
   });
 
   // The reason there is no connectivity check before placing: whatever she

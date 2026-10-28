@@ -10,9 +10,9 @@ const MINUTES = 60_000;
 /**
  * A machine standing asleep for want of a spell says which one, unasked.
  *
- * The crate offers a sorter from the first minute and the sorter is woken by
- * the sharing spell, which is taught on a quay most children will not see for
- * several afternoons. So the machine tutorial can hand a child a machine she
+ * The crate offers a hothouse from the first minute and the hothouse is woken
+ * by the array spell, which is taught in an old forest most children will not
+ * see for several afternoons. So the machine tutorial can hand a child a machine she
  * cannot wake, and until now the only thing that said so was a cloud she got
  * by tapping it — which is no use to a child who does not think to tap.
  *
@@ -41,14 +41,14 @@ async function machineMarks(game: Game): Promise<string[]> {
   return all.filter((one) => one.startsWith("machine:"));
 }
 
-/** Put a sorter on the first clear square beside her, and say where it went. */
-async function buildASorter(game: Game): Promise<{ col: number; row: number }> {
-  expect(await takeFromCrate(game, FixtureType.Sorter)).toBe(true);
+/** Put a hothouse on the first clear square beside her, and say where it went. */
+async function buildAHothouse(game: Game): Promise<{ col: number; row: number }> {
+  expect(await takeFromCrate(game, FixtureType.Hothouse)).toBe(true);
   await game.settle(400);
   const at = await game.squareBeside();
   await game.tapCell(at.col, at.row);
   await game.settle(600);
-  expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Sorter);
+  expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Hothouse);
   return at;
 }
 
@@ -60,17 +60,17 @@ describe("a machine waiting on a spell", () => {
     async () => {
       await play({ seams: A_NEW_CHILD, firstTime: true }, async (game) => {
         // A brand-new child knows the two spells she starts with and nothing
-        // else, so the sharing spell is owed and the quay is a long way off.
+        // else, so the array spell is owed and the old forest is a long way off.
         // No machine is marked before she has built one.
         expect(await machineMarks(game)).toEqual([]);
 
-        const first = await buildASorter(game);
+        const first = await buildAHothouse(game);
         await game.settle(600);
         expect(await machineMarks(game)).toEqual([`machine:${first.col},${first.row}`]);
 
         // A second one, and still one mark: a garden where every waiting
         // machine pleaded would be a chore list rather than an invitation.
-        const second = await buildASorter(game);
+        const second = await buildAHothouse(game);
         await game.settle(600);
         const both = await machineMarks(game);
         expect(both).toHaveLength(1);
@@ -87,12 +87,12 @@ describe("a machine waiting on a spell", () => {
   test(
     "wears nothing once she has been taught the spell",
     async () => {
-      // The same child and the same sorter, except that she has been to the
-      // quay. Nothing is owed, so nothing is asked for.
+      // The same child and the same hothouse, except that she has been to the
+      // old forest. Nothing is owed, so nothing is asked for.
       // `?learned=` is a dev seam and does not show up in the `spells` seam,
       // which reports the profile only — so the mark itself is the assertion.
-      await play({ seams: `${A_NEW_CHILD}&learned=share`, firstTime: true }, async (game) => {
-        const at = await buildASorter(game);
+      await play({ seams: `${A_NEW_CHILD}&learned=array`, firstTime: true }, async (game) => {
+        const at = await buildAHothouse(game);
         await game.settle(800);
         expect(await machineMarks(game)).toEqual([]);
         expect(at).toBeTruthy();

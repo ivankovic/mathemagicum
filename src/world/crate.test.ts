@@ -45,8 +45,8 @@ describe("how the crate is divided", () => {
   /**
    * The makers are the machines and the way of joining them.
    *
-   * The coil belongs here rather than in the garden group for the reason the
-   * sorter does: it is not furniture, and shelving it with the benches would
+   * The coil belongs here rather than in the garden group for the reason a
+   * machine does: it is not furniture, and shelving it with the benches would
    * say it was. It comes last, after the machines, because there is nothing
    * to wire together until two of them are standing there.
    */

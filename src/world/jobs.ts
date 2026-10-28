@@ -236,7 +236,7 @@ export function nextJob(done: readonly string[]): Job | null {
  * It simply cannot be got hold of.
  *
  * Empty now. The blueprint sat here for a while, because it is the odd one
- * out of the eleven — not an operation but a drawing of the others — and
+ * out of the ten — not an operation but a drawing of the others — and
  * its question wanted thinking about on its own. The thought was that the
  * mirror spell's parchment, which asks a child to make one half of a
  * picture match the other, is that question exactly; the spell went and

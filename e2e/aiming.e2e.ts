@@ -115,7 +115,7 @@ describe("the square she is pointing at", () => {
    * true of every machine that was not directly beside her. The cast is
    * gated on `withinReach` — three squares, diagonals free — and `takeBack`
    * measured the two sides added together and refused anything past one. So
-   * a sorter at her corner passed the gate at a distance of one, opened the
+   * a machine at her corner passed the gate at a distance of one, opened the
    * parchment, took the answer, spent the cast on the difficulty ladder, and
    * then refused to be lifted.
    *
@@ -132,12 +132,12 @@ describe("the square she is pointing at", () => {
 
         // Built out of the crate and put down on the corner square, which is
         // a placement the game already allows: pointing reaches it.
-        expect(await takeFromCrate(game, FixtureType.Sorter)).toBe(true);
+        expect(await takeFromCrate(game, FixtureType.Hothouse)).toBe(true);
         await game.settle(400);
         await game.tapCell(at.col, at.row);
         await game.settle(500);
-        expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Sorter);
-        expect(await game.held(FixtureType.Sorter)).toBe(0);
+        expect(await game.objectOn(at.col, at.row)).toBe(FixtureType.Hothouse);
+        expect(await game.held(FixtureType.Hothouse)).toBe(0);
 
         // And now the rune that undoes things, aimed at the same square she
         // was just allowed to put it on.
@@ -150,10 +150,10 @@ describe("the square she is pointing at", () => {
 
         // The sum was answered, so the machine is hers again and the square
         // is empty. This is what failed: the parchment closed on a correct
-        // answer and the sorter was still standing there.
+        // answer and the machine was still standing there.
         expect({
           standing: await game.objectOn(at.col, at.row),
-          held: await game.held(FixtureType.Sorter),
+          held: await game.held(FixtureType.Hothouse),
         }).toEqual({ standing: null, held: 1 });
       });
     },
@@ -251,7 +251,7 @@ describe("the square she is pointing at", () => {
     async () => {
       await play({ seams: WITH_TIMBER, viewport: PHONE, touch: true }, async (game) => {
         const at = await corner(game);
-        expect(await takeFromCrate(game, FixtureType.Sorter)).toBe(true);
+        expect(await takeFromCrate(game, FixtureType.Hothouse)).toBe(true);
         await game.settle(400);
         await game.tapCell(at.col, at.row);
         await game.settle(500);
@@ -262,7 +262,7 @@ describe("the square she is pointing at", () => {
         expect({
           standing: await game.objectOn(at.col, at.row),
           aimed: await game.seam<unknown>("aimed"),
-        }).toEqual({ standing: FixtureType.Sorter, aimed: null });
+        }).toEqual({ standing: FixtureType.Hothouse, aimed: null });
       });
     },
     5 * MINUTES,

@@ -20,9 +20,8 @@ import { isMachine } from "./machines";
  * down in the wrong one — the placing rules already refuse it — so the
  * grouping only says out loud what the game would have said with a cross.
  *
- * **The makers are their own group with one thing in it, on purpose.** A
- * sorter is not garden furniture and putting it with the benches would say
- * it was. It is also the group that is going to grow, and a group of one
+ * **The makers are their own group, on purpose.** A machine is not garden
+ * furniture and putting it with the benches would say it was. It is also the group that is going to grow, and a group of one
  * that becomes a group of four is a shelf that never has to be rearranged
  * under a child who has learned where things live.
  */

@@ -18,7 +18,7 @@ import { MachineType, recipeFor } from "./machines";
 import { MaterialType } from "./materials";
 
 const standing = [
-  { key: "10,10", type: MachineType.Sorter },
+  { key: "10,10", type: MachineType.Sieve },
   { key: "12,10", type: MachineType.Funnel },
   // Too far to be on this line.
   { key: "20,10", type: MachineType.Bell },
@@ -34,7 +34,7 @@ describe("drawing a line", () => {
   test("takes the machines within reach, and only the wires between them", () => {
     const plan = drawPlan({ col: 11, row: 11 }, standing, wires);
     expect(plan.machines).toEqual([
-      { dCol: -1, dRow: -1, type: MachineType.Sorter },
+      { dCol: -1, dRow: -1, type: MachineType.Sieve },
       { dCol: 1, dRow: -1, type: MachineType.Funnel },
     ]);
     expect(plan.wires).toEqual([{ from: [-1, -1], to: [1, -1] }]);
@@ -43,7 +43,7 @@ describe("drawing a line", () => {
   test("stamps down at the same offsets", () => {
     const plan = drawPlan({ col: 11, row: 11 }, standing, wires);
     expect(stampedAt(plan, { col: 30, row: 30 })).toEqual([
-      { col: 29, row: 29, type: MachineType.Sorter },
+      { col: 29, row: 29, type: MachineType.Sieve },
       { col: 31, row: 29, type: MachineType.Funnel },
     ]);
     expect(stampedWires(plan, { col: 30, row: 30 })).toEqual([{ from: "29,29", to: "31,29" }]);
@@ -54,7 +54,7 @@ describe("paying for a stamping", () => {
   const plan = drawPlan({ col: 11, row: 11 }, standing, wires);
 
   test("costs every machine's recipe added up, and refuses short", () => {
-    const wood = recipeFor(MachineType.Sorter).find(([m]) => m === MaterialType.Wood)?.[1] ?? 0;
+    const wood = recipeFor(MachineType.Sieve).find(([m]) => m === MaterialType.Wood)?.[1] ?? 0;
     expect(stampCost(plan).find(([m]) => m === MaterialType.Wood)?.[1]).toBe(wood);
     const held = new Inventory();
     expect(canStamp(held, plan)).toBe(false);
@@ -78,12 +78,14 @@ describe("what a save remembers of a drawing", () => {
     const saved = plansToSave(new Map([["11,11", plan]]));
     expect(plansFromSave(saved).get("11,11")).toEqual(plan);
     const mangled = plansFromSave({
-      "1,1": "sorter:1,0;trebuchet:2,0;blueprint:3,0|1,0>2,0;1,0>9,9",
-      nonsense: "sorter:1,0|",
+      // A sorter is a machine this game used to have, and is dropped like any
+      // other name it does not know — see `RETIRED` in `machines.ts`.
+      "1,1": "sieve:1,0;sorter:4,0;trebuchet:2,0;blueprint:3,0|1,0>2,0;1,0>4,0;1,0>9,9",
+      nonsense: "sieve:1,0|",
       "2,2": 7,
     });
     expect(mangled.get("1,1")).toEqual({
-      machines: [{ dCol: 1, dRow: 0, type: MachineType.Sorter }],
+      machines: [{ dCol: 1, dRow: 0, type: MachineType.Sieve }],
       wires: [],
     });
     expect(mangled.has("nonsense")).toBe(false);

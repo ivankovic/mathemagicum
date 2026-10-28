@@ -133,17 +133,9 @@ const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
     many: "strašila",
   },
   [FixtureType.Flowerpot]: { one: "tegla", acc: "teglu", few: "tegle", many: "tegli" },
-  // Masculine and inanimate, so the accusative is the nominative — the same
-  // shape as *bunar* above, and the reason neither needs a second form.
-  [FixtureType.Sorter]: {
-    one: "razvrstavač",
-    acc: "razvrstavač",
-    few: "razvrstavača",
-    many: "razvrstavača",
-  },
   // *Staklenik*, the everyday word for a glasshouse. Masculine and
-  // inanimate, so the accusative is the nominative — the same shape as the
-  // sorter above it.
+  // inanimate, so the accusative is the nominative — the same shape as
+  // *bunar* above, and the reason neither needs a second form.
   [FixtureType.Hothouse]: {
     one: "staklenik",
     acc: "staklenik",
@@ -167,7 +159,7 @@ const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
     many: "brojila",
   },
   // Feminine, so its accusative differs from its nominative — unlike the
-  // sorter and the tally, which are inanimate masculine and neuter.
+  // hothouse and the tally, which are inanimate masculine and neuter.
   [FixtureType.Press]: {
     one: "preša",
     acc: "prešu",
@@ -188,7 +180,7 @@ const FIXTURE_FORMS: Record<FixtureType, HrNoun> = {
   [FixtureType.Latch]: { one: "škrinja", acc: "škrinju", few: "škrinje", many: "škrinja" },
   [FixtureType.Blueprint]: { one: "nacrt", acc: "nacrt", few: "nacrta", many: "nacrta" },
   // One feminine and one masculine, and the masculine is inanimate, so its
-  // accusative is its nominative — the same shape as *bunar* and the sorter.
+  // accusative is its nominative — the same shape as *bunar* and the hothouse.
   [FixtureType.Windpump]: {
     one: "vjetrenjača",
     acc: "vjetrenjaču",
@@ -614,8 +606,6 @@ export const HR: Phrases = {
 
   thingDoes: (fixture: FixtureType) =>
     ({
-      [FixtureType.Sorter]:
-        "Dijeli hrpu na tri jednaka dijela, a što ne prođe ostaje mu u ždrijelu.",
       [FixtureType.Hothouse]: "Uđe jedna biljka, izađu tri daske.",
       [FixtureType.Sieve]: "Pokaži mu jednu stvar. Nju propušta, a sve ostalo pada u sanduk.",
       [FixtureType.Tally]: "Puni se i puni, pa prevrne sve čim dođe do crte.",

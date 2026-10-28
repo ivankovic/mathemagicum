@@ -34,6 +34,7 @@ import {
 import { type Profile, createProfile } from "../save/profiles";
 import {
   HEARTH_IS_FURNITURE,
+  type RetiredMachine,
   type WorldBaseline,
   type WorldSnapshot,
   readDecor,
@@ -373,6 +374,7 @@ import {
   mouthful,
   newMachine,
   recipeFor,
+  retiredRecipe,
   takeShare,
   tipBin,
   wake,
@@ -1740,7 +1742,7 @@ export class GameScene extends Phaser.Scene {
    * Its own map rather than a field on the placed object, for the reason
    * `machinesToSave` gives: a placed object is a fact about how the world was
    * generated and is diffed against the generator's own baseline, and what a
-   * sorter happens to have in its mouth this minute has no business in that
+   * machine happens to have in its mouth this minute has no business in that
    * comparison.
    */
   private machines = new Map<string, MachineState>();
@@ -1791,6 +1793,8 @@ export class GameScene extends Phaser.Scene {
   private wireInk?: Phaser.GameObjects.Graphics;
   /** Things a rebuilt world had nowhere to put, until her basket is back. */
   private refused: readonly PlacedObject[] = [];
+  /** Machines the game no longer has, found standing in the save. See `RETIRED`. */
+  private retired: readonly RetiredMachine[] = [];
   // Problems vary from cast to cast, so this is seeded from the clock rather
   // than from the world's seed: a world is meant to be reproducible, a lesson is
   // meant not to be. A driving script can pin it with `?seed=`, which is the
@@ -2647,8 +2651,8 @@ export class GameScene extends Phaser.Scene {
       );
       this.chunks.cullScenery();
     }
-    // Indoors as well as out: she is present either way, and a sorter in the
-    // garden goes on dealing while she is upstairs.
+    // Indoors as well as out: she is present either way, and a hothouse in
+    // the garden goes on turning while she is upstairs.
     this.workMachines();
     // Indoors as well as out, which it was not.
     //
@@ -4499,7 +4503,7 @@ export class GameScene extends Phaser.Scene {
    * Reported from a playtest: *why wasn't I able to use multiplication with
    * minus to pick up three machines?* Because the patch's minus knew about
    * trees and crops and nothing else — `clearableIn` asks the grid for
-   * scenery or a crop and a sorter is neither — while a *tap* with the same
+   * scenery or a crop and a machine is neither — while a *tap* with the same
    * rune has taken a machine back since the day machines were placeable.
    * One rune, one garden, two answers, and which one you got depended on
    * whether the times spell had drawn a box first.
@@ -5465,7 +5469,7 @@ export class GameScene extends Phaser.Scene {
    *
    * **Nothing in it is destroyed.** The heap in the mouth and every crate
    * come back to the basket along with the machine, because everything in
-   * there was put there by casting: a sorter that ate a child's wood when it
+   * there was put there by casting: a machine that ate a child's wood when it
    * was moved would be punishing them for changing their mind about where a
    * thing stands.
    */
@@ -7635,14 +7639,18 @@ export class GameScene extends Phaser.Scene {
     // Only remembered here. What is owed for them is worked out at the end of
     // the restore, once her basket and her machines are both back — see
     // `giveBackWhatDidNotFit`.
-    this.refused = restoreWorld(this.grid, world, moved).refused;
+    const restored = restoreWorld(this.grid, world, moved);
+    this.refused = restored.refused;
+    this.retired = restored.retired;
   }
 
   /** Put what could not stand into her basket, and say that it is there. */
   private giveBackWhatDidNotFit(): void {
     const refused = this.refused;
+    const retired = this.retired;
     this.refused = [];
-    if (refused.length === 0) return;
+    this.retired = [];
+    if (refused.length === 0 && retired.length === 0) return;
 
     for (const object of refused) {
       const fixture = fixtureFor(object.type);
@@ -7652,32 +7660,49 @@ export class GameScene extends Phaser.Scene {
       if (!fixture || !object.mine) continue;
       this.inventory.add(fixture, 1);
       if (!isMachine(fixture)) continue;
-      // And everything that was inside it. A machine's contents are held
-      // beside the grid rather than on it, so nothing else would have
-      // noticed them going.
-      const key = tileKey(object.col, object.row);
-      const state = this.machines.get(key);
-      this.machines.delete(key);
-      this.drawings.delete(key);
-      const item = state?.made ?? state?.holding;
-      if (!state || !item) continue;
-      const inside = state.heap + state.crates.reduce((all, count) => all + count, 0);
-      if (inside > 0) this.inventory.add(item, inside);
-      if (state.binned && state.bin > 0) this.inventory.add(state.binned, state.bin);
+      this.emptyIntoBasket(tileKey(object.col, object.row));
+    }
+    // A machine the game has taken out has no type to go back into the
+    // basket as, so what goes back is what it was made of — every one of
+    // them was built out of wood and stone she cleared herself.
+    const paid: ItemType[] = [];
+    for (const machine of retired) {
+      for (const [material, count] of retiredRecipe(machine.type)) {
+        this.inventory.add(material, count);
+        if (!paid.includes(material)) paid.push(material);
+      }
+      this.emptyIntoBasket(tileKey(machine.col, machine.row));
     }
     // Any line whose machine is now in her basket is a line to nowhere.
     this.wires = this.wires.filter(
       (wire) => this.machineAt(wire.from) !== null && this.machineAt(wire.to) !== null,
     );
     this.refreshCarried();
-    this.sayWhatCameBack(refused);
+    this.sayWhatCameBack(refused, paid);
+  }
+
+  /**
+   * Everything inside the machine that stood here, into her basket.
+   *
+   * A machine's contents are held beside the grid rather than on it, so
+   * nothing else would notice them going when the machine does.
+   */
+  private emptyIntoBasket(key: string): void {
+    const state = this.machines.get(key);
+    this.machines.delete(key);
+    this.drawings.delete(key);
+    const item = state?.made ?? state?.holding;
+    if (!state || !item) return;
+    const inside = state.heap + state.crates.reduce((all, count) => all + count, 0);
+    if (inside > 0) this.inventory.add(item, inside);
+    if (state.binned && state.bin > 0) this.inventory.add(state.binned, state.bin);
   }
 
   /**
    * Say that her things are in the basket, without a word of it.
    *
    * **Silent recovery and silent loss look the same from where she is
-   * sitting.** She left a sorter by the gate and it is not there; whether it
+   * sitting.** She left a hothouse by the gate and it is not there; whether it
    * is safe in her basket or gone for ever is the whole question, and a
    * garden that answers neither is a garden she has to guess about.
    *
@@ -7686,24 +7711,27 @@ export class GameScene extends Phaser.Scene {
    * the same one a crop that will not grow here uses. No words, because there
    * is no wording of "the coastline moved" that a five-year-old reads in
    * three languages, and because the useful half is not why it happened. The
-   * useful half is **where your sorter went**, and a picture of the sorter
+   * useful half is **where your hothouse went**, and a picture of the hothouse
    * over her head with the basket's number going up says exactly that.
    *
    * Held back a moment so it lands after the world is drawn rather than
    * during the frame that builds it: a cloud that appears before the garden
    * does is a cloud about nothing.
    */
-  private sayWhatCameBack(refused: readonly PlacedObject[]): void {
-    const kinds: FixtureType[] = [];
+  private sayWhatCameBack(refused: readonly PlacedObject[], paid: readonly ItemType[] = []): void {
+    const kinds: ItemType[] = [];
     for (const object of refused) {
       const fixture = fixtureFor(object.type);
       if (fixture && object.mine && !kinds.includes(fixture)) kinds.push(fixture);
     }
+    // And what a machine that is no longer in the game was paid back in: the
+    // wood and the stone, which is the only picture of it there still is.
+    for (const material of paid) if (!kinds.includes(material)) kinds.push(material);
     if (kinds.length === 0) return;
     // Three at most, which is what the cloud holds without spilling out of
     // its own sides. A child who has had six kinds of thing handed back does
     // not need all six named; they need to know to look in the basket.
-    const shown = kinds.slice(0, 3).map((fixture) => ({ ui: itemIcon(fixture) }));
+    const shown = kinds.slice(0, 3).map((kind) => ({ ui: iconForItem(kind) }));
     this.time.delayedCall(RETURNED_SAYS_MS, () => this.showThoughtOnPlayer(shown, false));
   }
 
@@ -8109,8 +8137,8 @@ export class GameScene extends Phaser.Scene {
   // --- Machines -----------------------------------------------------------
   //
   // A machine embodies arithmetic where a spell tests it — see `machines.ts`.
-  // So there is no parchment in any of this but one: the sorter is shown the
-  // sum it is about to spend its life doing, once, and after that it deals in
+  // So there is no parchment in any of this but one: the machine is shown the
+  // sum it is about to spend its life doing, once, and after that it works in
   // silence for ever.
 
   /**
@@ -8118,7 +8146,7 @@ export class GameScene extends Phaser.Scene {
    *
    * Unlike `watchPlacedFixture`, this is safe to do on the way back from a
    * save as well as on the way down, because the generator never puts a
-   * machine anywhere: every sorter in the world is one a child built, so
+   * machine anywhere: every machine in the world is one a child built, so
    * there is no village property to protect from a tap.
    *
    * **Instead of that one, never as well as it.** Phaser calls every handler
@@ -8321,7 +8349,7 @@ export class GameScene extends Phaser.Scene {
    * ask how much of it goes in.
    *
    * The biggest rather than a chosen one: a child with twelve wood and
-   * three stone taps a sorter and it is the wood that is offered, which is
+   * three stone taps a sieve and it is the wood that is offered, which is
    * what they meant — the reason to walk to a machine is the heap you are
    * carrying, and it is nearly always the big one. Only what this machine
    * will take, so the biggest heap she is carrying is the biggest heap *it
@@ -9016,7 +9044,7 @@ export class GameScene extends Phaser.Scene {
 
       // Banked by the round, exactly as a machine's work is. Carrying a
       // little on every frame instead made a wire sixty times faster than
-      // the machine feeding it — a line that emptied a sorter's crates in
+      // the machine feeding it — a line that emptied a hothouse's crates in
       // under two seconds, which is not a wire, it is a drain.
       const worked = (this.wireWork.get(key) ?? 0) + minutes;
       const rounds = Math.floor(worked / MINUTES_PER_ROUND);
@@ -10041,19 +10069,18 @@ export class GameScene extends Phaser.Scene {
    *
    * **The same case as the wood, word for word.** A square of thicket is not
    * somebody who can be asked, so it is marked while it stands; a sleeping
-   * sorter is not either. Both are things in the world that are *about* a
+   * hothouse is not either. Both are things in the world that are *about* a
    * rune, and the game already has one way of saying that.
    *
-   * **Why it is worth saying at all.** The crate offers a sorter and a
-   * hothouse from the first minute, and the sorter wants the sharing spell
-   * and the hothouse wants the array spell — the quay and the old forest,
-   * which are a long walk and, for most children, several afternoons away.
+   * **Why it is worth saying at all.** The crate offers a hothouse from the
+   * first minute, and the hothouse wants the array spell — the old forest,
+   * which is a long walk and, for most children, several afternoons away.
    * So the machine tutorial can hand a child a machine she cannot wake, and
    * until now the only thing that said so was a cloud she got by tapping it.
    * A machine that says what it is waiting for, without being asked, turns
    * the worst-timed thing in the game into the reason to go somewhere: she
-   * has the question standing in her own garden, and the answer is at the
-   * lighthouse.
+   * has the question standing in her own garden, and the answer is in the
+   * old forest.
    *
    * This is deliberately *not* a fix for the ordering itself. Whether the
    * machine guides should start later is a separate and still-open question
@@ -10087,7 +10114,7 @@ export class GameScene extends Phaser.Scene {
     const feet = this.toFeet(at.col, at.row);
     return [
       {
-        // Keyed by the square and not by the kind: two sleeping sorters in
+        // Keyed by the square and not by the kind: two sleeping hothouses in
         // one garden would otherwise share a mark, and the pool would move
         // the one mark between them every frame.
         part: `machine:${at.col},${at.row}`,
@@ -12703,8 +12730,8 @@ export class GameScene extends Phaser.Scene {
        *
        * Nothing else can see this. A machine's state is not an object on the
        * grid, not in the basket and not on screen beyond three little heaps
-       * of pixels in three crates — so a sorter that had quietly stopped
-       * dealing, or one that dealt without ever being woken, would look
+       * of pixels in three crates — so a machine that had quietly stopped
+       * working, or one that worked without ever being woken, would look
        * exactly like one that was working.
        */
       machines: () =>
@@ -13283,7 +13310,7 @@ export class GameScene extends Phaser.Scene {
       replayMachineGuides: () => {
         // The machines only, keeping the rest: the grown-up asking for this
         // has a child who can plant and sell and is stuck in front of a
-        // sorter, and starting from the pouch again would be twenty minutes
+        // hothouse, and starting from the pouch again would be twenty minutes
         // of pointing at things she knows before the first thing she does
         // not. The same forget-and-start-again as the row above, for the
         // same reason — the run holds its own list.

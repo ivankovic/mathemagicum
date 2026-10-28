@@ -107,24 +107,20 @@ export const FixtureType = {
   /**
    * The first machine, and the first fixture that is *for* something.
    *
-   * A hopper, a wheel and three crates. Everything else in this list is
-   * either a piece of a place or a thing a garden is dressed with; this one
-   * has a job, and it is the only fixture nobody sells — see
-   * `src/world/machines.ts` for why it is built out of what the clearing
-   * spell paid rather than bought with what the store paid.
-   */
-  Sorter: "sorter",
-  /**
-   * The second machine, and the sorter's other half.
+   * A glass frame with three shoots coming up in it: one crop in, three wood
+   * out. Everything else in this list is either a piece of a place or a
+   * thing a garden is dressed with; this one has a job, and machines are the
+   * only fixtures nobody sells — see `src/world/machines.ts` for why they
+   * are built out of what the clearing spell paid rather than bought with
+   * what the store paid.
    *
-   * A glass frame with three shoots coming up in it. Where a sorter deals a
-   * heap you already had into equal parts, this turns one thing into three
-   * of another — so between them they are the division and the
-   * multiplication, standing in a garden where they can be watched.
+   * It came second while there was a sorter, which dealt a heap into three
+   * equal piles and made nothing. The sorter is gone; a save that has one
+   * standing gets its wood and stone back — see `RETIRED` in `machines.ts`.
    */
   Hothouse: "hothouse",
   /**
-   * The third machine: a slanted mesh with a chute and a bin under it.
+   * The second machine: a slanted mesh with a chute and a bin under it.
    *
    * The one that decides rather than makes. A wire only carries, so this is
    * where a line is gated — shown one thing, it passes that and drops
@@ -132,7 +128,7 @@ export const FixtureType = {
    */
   Sieve: "sieve",
   /**
-   * The fourth machine: a bucket on a pivot with a scale up its side.
+   * The third machine: a bucket on a pivot with a scale up its side.
    *
    * It counts up. Holds what it is given until it reaches the mark and then
    * tips the lot — which is the first machine in the garden that asks
@@ -140,7 +136,7 @@ export const FixtureType = {
    */
   Tally: "tally",
   /**
-   * The fifth machine: two funnels over a bed, and an iron beam that comes
+   * The fourth machine: two funnels over a bed, and an iron beam that comes
    * down on it.
    *
    * The first with **two mouths**, and the first that can only be fed
@@ -156,7 +152,7 @@ export const FixtureType = {
   /**
    * Two mouths and one spout: whatever arrives at either goes on down.
    *
-   * The sixth machine, and the press's opposite. A press waits for both;
+   * The fifth machine, and the press's opposite. A press waits for both;
    * this never waits. That is *either*, and the first machine that decides
    * without counting.
    */
@@ -165,7 +161,7 @@ export const FixtureType = {
    * A bell in a gallows that rings for each thing that passes through it,
    * and passes the thing on.
    *
-   * The seventh, and the one that says something rather than making
+   * The sixth, and the one that says something rather than making
    * anything: a line with a bell at the end of it is a line a child can
    * hear working, and what the mechanic's jobs are checked by.
    */
@@ -228,7 +224,6 @@ export const PLACEABLE_FIXTURES: readonly FixtureType[] = [
   // and `SHOP_STOCK` now does. What "placeable" means here is that a player
   // may put it down and pick it up again — the crate, the world, the save.
   // How it got into the crate is the shop's business and the workshop's.
-  FixtureType.Sorter,
   FixtureType.Hothouse,
   FixtureType.Sieve,
   FixtureType.Tally,
@@ -285,7 +280,6 @@ export const FIXTURE_TURNS: Partial<Record<FixtureType, number>> = {
   [FixtureType.Flowerpot]: TURNS_DRAWN,
   [FixtureType.Gate]: TURNS_DRAWN,
   [FixtureType.Fence]: TURNS_DRAWN,
-  [FixtureType.Sorter]: TURNS_DRAWN,
   [FixtureType.Hothouse]: TURNS_DRAWN,
   [FixtureType.Sieve]: TURNS_DRAWN,
   [FixtureType.Tally]: TURNS_DRAWN,

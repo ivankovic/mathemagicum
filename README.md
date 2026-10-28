@@ -98,7 +98,7 @@ for p in carrot sunflower cactus tomato pepper wheat; do
   cp $OUT/terrain_plants/${p}{.json,_sheet.png} public/assets/plants/
 done
 for f in well fence fence-side table lamp gate stall bench scarecrow flowerpot \
-         sorter hothouse sieve tally press funnel bell inverter seesaw latch blueprint \
+         hothouse sieve tally press funnel bell inverter seesaw latch blueprint \
          windpump planter \
          fence-corner gate-side gate-side-lower glowcap \
          city-wall city-wall-side city-gate city-gate-side \

@@ -33,12 +33,13 @@ import { CLEARED_YIELD } from "./materials";
 import { PLANT_TYPES } from "./plants";
 
 const WOOD = "wood";
-/** Every test below this is about the sorter unless it says otherwise. */
-const SORTER = MachineType.Sorter;
+const CARROT = "carrot";
+/** Every test below this is about the hothouse unless it says otherwise. */
+const HOTHOUSE = MachineType.Hothouse;
 
-/** A woken sorter with a heap in its mouth. */
-function loaded(count: number, item: ItemType = WOOD) {
-  const fed = feed(wake(newMachine()), item, count, SORTER);
+/** A woken hothouse with a heap of crops in its mouth. */
+function loaded(count: number, item: ItemType = CARROT) {
+  const fed = feed(wake(newMachine()), item, count, HOTHOUSE);
   if (!fed) throw new Error("a woken machine refused a heap");
   return fed;
 }
@@ -50,13 +51,13 @@ describe("a machine that has not been woken", () => {
    * A machine embodies arithmetic where a spell tests it, so this is the one
    * moment a sum stands between a child and the thing: once, to be shown the
    * operation it is about to spend its life doing. If this stopped being
-   * true — if waking were free — the machine would be a source of dealt
-   * heaps that no cast ever paid for.
+   * true — if waking were free — the machine would be a source of timber
+   * that no cast ever paid for.
    */
   test("does nothing at all, however long it is left", () => {
     const asleep = newMachine();
-    expect(feed(asleep, WOOD, 12, SORTER)).toBeNull();
-    expect(advance(asleep, 10_000, SORTER)).toEqual(asleep);
+    expect(feed(asleep, CARROT, 12, HOTHOUSE)).toBeNull();
+    expect(advance(asleep, 10_000, HOTHOUSE)).toEqual(asleep);
   });
 
   test("and every machine names the spell that wakes it, or says it asks its own", () => {
@@ -71,88 +72,56 @@ describe("a machine that has not been woken", () => {
     expect(MACHINE_TYPES.filter((machine) => SPARK[machine] === null).sort()).toEqual(
       [MachineType.Funnel, MachineType.Blueprint].sort(),
     );
-    // The sorter divides, so division is what wakes it. A machine woken by
-    // some *other* spell would be a toll rather than a demonstration.
-    expect(SPARK[MachineType.Sorter]).toBe(Spell.Share);
+    // The hothouse multiplies, so rows and columns are what wake it. A
+    // machine woken by some *other* spell would be a toll rather than a
+    // demonstration.
+    expect(SPARK[MachineType.Hothouse]).toBe(Spell.Array);
   });
 });
 
-describe("a sorter dealing a heap", () => {
-  test("deals nothing until a whole round's work is done", () => {
-    const machine = loaded(12);
-    expect(advance(machine, MINUTES_PER_ROUND - 1, SORTER).crates).toEqual([0, 0, 0]);
-    expect(advance(machine, MINUTES_PER_ROUND, SORTER).crates).toEqual([1, 1, 1]);
-  });
-
-  /**
-   * Whole rounds only, which is the whole of the arithmetic.
-   *
-   * Thirteen dealt three ways is four each with one over, and the one over
-   * stays in the mouth where a child can see it. Dealing a partial round
-   * would empty the mouth into unequal piles — a sorter that did not sort,
-   * which is the single thing this machine must never look like.
-   */
-  test("and leaves the remainder in its mouth, in plain sight", () => {
-    const done = advance(loaded(13), MINUTES_PER_ROUND * 10, SORTER);
-    expect(done.crates).toEqual([4, 4, 4]);
-    expect(done.heap).toBe(1);
-  });
-
-  test("and a heap smaller than the crates is all remainder", () => {
-    const done = advance(loaded(2), MINUTES_PER_ROUND * 100, SORTER);
-    expect(done.crates).toEqual([0, 0, 0]);
-    expect(done.heap).toBe(2);
-  });
-
-  test("the three shares are always equal", () => {
-    for (const heap of [3, 7, 12, 25, 100]) {
-      const done = advance(loaded(heap), MINUTES_PER_ROUND * 1000, SORTER);
-      expect({ heap, crates: new Set(done.crates).size }).toEqual({ heap, crates: 1 });
-      expect({ heap, over: done.heap }).toEqual({ heap, over: heap % SHARES });
-    }
+describe("a machine at work", () => {
+  test("does nothing until a whole round's work is done", () => {
+    const machine = loaded(4);
+    expect(advance(machine, MINUTES_PER_ROUND - 1, HOTHOUSE).crates).toEqual([0, 0, 0]);
+    expect(advance(machine, MINUTES_PER_ROUND, HOTHOUSE).crates).toEqual([1, 1, 1]);
   });
 
   /**
    * And it does not store up work it had nothing to do.
    *
-   * A machine standing empty for a month and then dealing a whole heap the
+   * A machine standing empty for a month and then turning a whole heap the
    * instant something was tipped in would be an accrual mechanic wearing a
-   * sorter's hat: the reward would be for having left, not for having cast.
+   * hothouse's glass: the reward would be for having left, not for having
+   * cast.
    */
   test("and an empty machine banks no work against the next heap", () => {
-    const idle = advance(wake(newMachine()), MINUTES_PER_ROUND * 50, SORTER);
-    const fed = feed(idle, WOOD, 12, SORTER);
+    const idle = advance(wake(newMachine()), MINUTES_PER_ROUND * 50, HOTHOUSE);
+    const fed = feed(idle, CARROT, 4, HOTHOUSE);
     if (!fed) throw new Error("a woken machine refused a heap");
     expect(fed.crates).toEqual([0, 0, 0]);
-    expect(advance(fed, MINUTES_PER_ROUND - 1, SORTER).crates).toEqual([0, 0, 0]);
-  });
-
-  /** Nor while it is holding a remainder it can never deal. */
-  test("and nor does one holding less than it can deal", () => {
-    const stuck = advance(loaded(2), MINUTES_PER_ROUND * 50, SORTER);
-    const more = feed(stuck, WOOD, 1, SORTER);
-    if (!more) throw new Error("the mouth refused more of what it holds");
-    expect(advance(more, MINUTES_PER_ROUND - 1, SORTER).crates).toEqual([0, 0, 0]);
-    expect(advance(more, MINUTES_PER_ROUND, SORTER).crates).toEqual([1, 1, 1]);
+    expect(advance(fed, MINUTES_PER_ROUND - 1, HOTHOUSE).crates).toEqual([0, 0, 0]);
   });
 });
 
 describe("what goes in and what comes out", () => {
-  test("a hopper holds one kind of thing", () => {
-    const wood = loaded(6);
-    expect(feed(wood, "stone", 3, SORTER)).toBeNull();
-    expect(feed(wood, WOOD, 3, SORTER)?.heap).toBe(9);
+  test("a mouth holds one kind of thing", () => {
+    const carrots = loaded(6);
+    expect(feed(carrots, "wheat", 3, HOTHOUSE)).toBeNull();
+    expect(feed(carrots, CARROT, 3, HOTHOUSE)?.heap).toBe(9);
   });
 
   test("and nonsense is refused rather than rounded", () => {
     const machine = wake(newMachine());
     for (const count of [0, -4, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect({ count, fed: feed(machine, WOOD, count, SORTER) }).toEqual({ count, fed: null });
+      expect({ count, fed: feed(machine, CARROT, count, HOTHOUSE) }).toEqual({
+        count,
+        fed: null,
+      });
     }
   });
 
-  test("one tap takes one share, not the lot", () => {
-    const done = advance(loaded(12), MINUTES_PER_ROUND * 4, SORTER);
+  test("one tap takes one crate, not the lot", () => {
+    const done = advance(loaded(4), MINUTES_PER_ROUND * 4, HOTHOUSE);
     expect(done.crates).toEqual([4, 4, 4]);
     const taken = takeShare(done, fullestCrate(done));
     expect({ item: taken.item, count: taken.count }).toEqual({ item: WOOD, count: 4 });
@@ -167,29 +136,29 @@ describe("what goes in and what comes out", () => {
   /**
    * And a machine emptied out forgets what it held.
    *
-   * Otherwise a sorter that once held wood would go on refusing stone for
-   * ever, and a child would have to remember the history of every machine in
-   * the garden to know what it would accept.
+   * Otherwise a hothouse that once held carrots would go on refusing wheat
+   * for ever, and a child would have to remember the history of every
+   * machine in the garden to know what it would accept.
    */
   test("and a machine emptied right out will take anything next", () => {
-    let done = advance(loaded(3), MINUTES_PER_ROUND, SORTER);
+    let done = advance(loaded(3), MINUTES_PER_ROUND * 3, HOTHOUSE);
     for (let crate = 0; crate < SHARES; crate++) done = takeShare(done, crate).state;
     expect(done.holding).toBeNull();
-    expect(feed(done, "stone", 3, SORTER)?.heap).toBe(3);
+    expect(feed(done, "wheat", 3, HOTHOUSE)?.heap).toBe(3);
   });
 
-  test("but one with a remainder still in its mouth does not", () => {
-    let done = advance(loaded(4), MINUTES_PER_ROUND, SORTER);
+  test("but one with something still in its mouth does not", () => {
+    let done = advance(loaded(4), MINUTES_PER_ROUND * 3, HOTHOUSE);
     for (let crate = 0; crate < SHARES; crate++) done = takeShare(done, crate).state;
-    expect(done.holding).toBe(WOOD);
-    expect(feed(done, "stone", 3, SORTER)).toBeNull();
+    expect(done.holding).toBe(CARROT);
+    expect(feed(done, "wheat", 3, HOTHOUSE)).toBeNull();
   });
 });
 
 describe("what a save remembers about a machine", () => {
   test("a garden full of them survives the round trip", () => {
     const machines = new Map([
-      ["4,5", advance(loaded(13), MINUTES_PER_ROUND * 2, SORTER)],
+      ["4,5", advance(loaded(5), MINUTES_PER_ROUND * 2, HOTHOUSE)],
       ["-2,7", newMachine()],
       ["0,0", wake(newMachine())],
     ]);
@@ -230,13 +199,13 @@ describe("what a save remembers about a machine", () => {
 });
 
 /**
- * The second machine, and the half of it that is not the first.
+ * The first machine, and what makes it a maker.
  *
- * A sorter *deals*: it divides a heap that was already there, and nothing
- * comes out of it that did not go in. A hothouse *turns*: a crop goes in and
- * timber comes out. Everything below is about the difference, because the
- * two share every line of code that moves work along and the only thing
- * telling them apart is a table.
+ * Almost every other machine passes on what went in and decides only where
+ * it goes. A hothouse *turns*: a crop goes in and timber comes out.
+ * Everything below is about the difference, because they all share every
+ * line of code that moves work along and the only thing telling them apart
+ * is a table.
  */
 describe("a hothouse turning one thing into another", () => {
   const HOUSE = MachineType.Hothouse;
@@ -289,15 +258,11 @@ describe("a hothouse turning one thing into another", () => {
     expect(CLEARED_YIELD.woodland?.count).toBe(SHARES);
   });
 
-  test("and a sorter still deals what it was given", () => {
-    expect(WORK[MachineType.Sorter]).toEqual({
-      verb: Verb.Deal,
-      takes: SHARES,
-      puts: SHARES,
-      gives: null,
-      wants: "anything",
-    });
-    const done = advance(planted(SHARES), MINUTES_PER_ROUND, MachineType.Sorter);
+  test("and a machine that moves things passes on what it was given", () => {
+    const bell = feed(wake(newMachine()), CARROT, SHARES, MachineType.Bell);
+    if (!bell) throw new Error("a woken bell refused a heap");
+    const done = advance(bell, MINUTES_PER_ROUND * SHARES, MachineType.Bell);
+    expect(WORK[MachineType.Bell].gives).toBeNull();
     expect(takeShare(done, 0).item).toBe(CARROT);
   });
 
@@ -369,17 +334,17 @@ describe("a hothouse turning one thing into another", () => {
       expect({ plant, ok: accepts(HOUSE, plant) }).toEqual({ plant, ok: true });
   });
 
-  /** Where a sorter takes anything, because dealing cannot mint. */
-  test("and a sorter takes whatever it is given", () => {
+  /** Where a machine that moves things takes anything, because moving cannot mint. */
+  test("and a machine that moves things takes whatever it is given", () => {
     const anything: readonly ItemType[] = [MaterialType.Wood, MaterialType.Stone, CARROT];
     for (const item of anything) {
-      expect({ item, ok: accepts(MachineType.Sorter, item) }).toEqual({ item, ok: true });
+      expect({ item, ok: accepts(MachineType.Sieve, item) }).toEqual({ item, ok: true });
     }
   });
 });
 
 /**
- * The third machine, which decides rather than makes.
+ * The second machine, which decides rather than makes.
  *
  * A wire only carries — every choice belongs to a machine standing where a
  * child can see it — so this is where a line is gated. Shown one thing, it
@@ -493,18 +458,10 @@ describe("a sieve deciding which way things go", () => {
     const machines = new Map([["8,9", done]]);
     expect(machinesFromSave(machinesToSave(machines))).toEqual(machines);
   });
-
-  /** And the other two are unchanged by any of it. */
-  test("and dealing still puts exactly one in each crate a round", () => {
-    const fed = feed(wake(newMachine()), "wood", 9, MachineType.Sorter);
-    if (!fed) throw new Error("a woken sorter refused a heap");
-    expect(advance(fed, MINUTES_PER_ROUND, MachineType.Sorter).crates).toEqual([1, 1, 1]);
-    expect(advance(fed, MINUTES_PER_ROUND * 3, MachineType.Sorter).crates).toEqual([3, 3, 3]);
-  });
 });
 
 /**
- * The fourth machine, and the first that asks whether there is *enough*.
+ * The third machine, and the first that asks whether there is *enough*.
  *
  * Everything before it says how much of a thing there is. A tally holds what
  * it is given until the heap reaches a mark and then tips the lot — so a
@@ -594,21 +551,21 @@ describe("a tally counting up to its mark", () => {
    * there were four and one operation each — and was a coincidence rather
    * than the rule. The rule is written down in `SPARK`: "the spell whose
    * arithmetic it does". A press takes so many of one for every so many of
-   * the other, which is a division made permanent, so sharing is the spell
-   * that wakes it and the sorter both. Asserting one-each would have made
-   * the next honest machine look like a mistake.
+   * the other — and it is woken by the logic spell, as the machines that
+   * decide are, because what it does is wait for both. Asserting one-each
+   * would have made the next honest machine look like a mistake.
    */
   test("every machine does its own thing, woken by the spell that does it", () => {
     expect(new Set(MACHINE_TYPES.map((machine) => WORK[machine].verb)).size).toBe(
       MACHINE_TYPES.length,
     );
-    // Between them they still cover all four operations — and the logic
+    // Between them they still cover the operations — and the logic
     // that the machines which *decide* are woken by, which is the thing the
     // old assertion was really guarding: no machine is sparked by a spell
     // that has nothing to do with what it does. The two that ask their own
     // question are not in any spellbook, and say so with a null.
     expect(new Set(MACHINE_TYPES.map((machine) => SPARK[machine]))).toEqual(
-      new Set([Spell.Growth, Spell.Clearing, Spell.Array, Spell.Share, Spell.Logic, null]),
+      new Set([Spell.Growth, Spell.Clearing, Spell.Array, Spell.Logic, null]),
     );
   });
 });

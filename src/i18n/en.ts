@@ -46,11 +46,8 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Bench]: noun("bench", "benches"),
   [FixtureType.Scarecrow]: noun("scarecrow"),
   [FixtureType.Flowerpot]: noun("flowerpot"),
-  // The first machine. Named for what it does rather than for what it is
-  // made of, which is how a child will point at it.
-  [FixtureType.Sorter]: noun("sorter"),
-  // The second. Named for the glass rather than for the growing, because a
-  // child points at the box and not at what is happening inside it.
+  // The first machine. Named for the glass rather than for the growing,
+  // because a child points at the box and not at what is happening inside it.
   [FixtureType.Hothouse]: noun("hothouse"),
   // Named for the mesh, which is the part that does the work and the part
   // a child will point at.
@@ -466,8 +463,6 @@ export const EN: Phrases = {
 
   thingDoes: (fixture: FixtureType) =>
     ({
-      [FixtureType.Sorter]:
-        "It shares a heap out into three equal piles, and what will not go stays in its mouth.",
       [FixtureType.Hothouse]: "One crop goes in at the door, and three lengths of timber come out.",
       [FixtureType.Sieve]:
         "Show it one thing. It lets that through and drops everything else in its bin.",

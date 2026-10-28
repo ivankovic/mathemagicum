@@ -3152,8 +3152,9 @@ something other than what will grow on it.
 **There is no assembly puzzle in front of a machine, and that is
 deliberate.** No parts to fabricate, no stages, no sum standing between a
 child and the thing that teaches the sum. The arithmetic in a machine belongs
-to what it *does* — a sorter deals a heap into equal shares, which is the
-share spell — and a lock on the door of the classroom is not a lesson.
+to what it *does* — a hothouse turns one crop into three lengths of timber,
+which is the times spell — and a lock on the door of the classroom is not a
+lesson.
 
 **That rule was written absolutely and has since been narrowed, on purpose.**
 It said "no parts to fabricate, no stages" full stop, and there are parts
@@ -3232,7 +3233,7 @@ at every third city crossing. The lamp keeps the other two of every three,
 because it is the one that does something, and a city that swapped half its
 lamps for scenery would be a city that got darker to look nicer.
 
-**The first machine is a sorter**: a hopper, a wheel that turns, and three crates
+**The first machine was a sorter**: a hopper, a wheel that turns, and three crates
 under it. Its silhouette is its arithmetic — one mouth at the top, three
 boxes at the bottom, the wheel between them doing the dividing — and a child
 who has never tapped it should be able to guess what it is for. It is the
@@ -3301,16 +3302,37 @@ was eighty walks of the thicket and two hundred and forty tray refreshes in
 a frame. They are done once for the lot now, and a patch throws one icon per
 square rather than one per log: nobody counts a forest.
 
+**And then the sorter was taken out.** Machines come in two kinds: the ones
+that *make* something — the hothouse turns a crop into timber, the press
+turns two things into a third — and the ones that *move* things, passing on
+exactly what went in and deciding only where it goes and when. The sorter
+was a mover that decided nothing: it dealt a heap into three equal piles
+whatever the heap was, which a sieve, a seesaw or a tally does with a reason
+attached. It was the least useful thing in the crate, so it went, and the
+hothouse is now the first machine. The share spell keeps its place in the
+garden — it picks a ripe patch in one go — and simply wakes no machine.
+
+**A child who had built one is paid back, not robbed.** A save can still
+have a sorter standing in a garden or carried in a basket, and its type is a
+name this build has never heard of — which the guard on the way in would drop
+silently, with the fifteen wood and six stone it cost and whatever was
+tipped into it. So a taken-out machine is listed in `RETIRED` with its
+recipe: standing, it is lifted off its square and its recipe and contents
+go into the basket, with the wood and stone shown in the cloud over her
+head the way any other thing handed back is; carried, it comes back as its
+recipe. The next machine taken out is one line in that table.
+
 ### Machines that decide, and the mechanic who wakes them
 
 **Every machine is an operation, and the gates are the operations that are
-not arithmetic.** The first five machines were the four operations and a
-proportion: the sorter divides, the hothouse multiplies, the sieve takes
-away, the tally counts up to a mark, the press takes so many of one for
-every so many of the other. Read logically, three of them were already
+not arithmetic.** The first four machines are the operations and a
+proportion: the hothouse multiplies, the sieve takes away, the tally counts
+up to a mark, the press takes so many of one for every so many of the
+other. (A sorter that divided came first, and has since been taken out —
+see above.) Read logically, three of them were already
 gates — the press waits for *both*, the sieve passes what *is* and bins
 what is *not*, the tally is a threshold — and the machines that came next
-are the gates that were missing, built to the same rule as the first five:
+are the gates that were missing, built to the same rule as the first four:
 each does its logic where a child can watch it, and none of them ever poses
 a question.
 

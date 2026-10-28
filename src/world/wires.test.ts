@@ -21,14 +21,14 @@ import {
   wiresToSave,
 } from "./wires";
 
-const SORTER = MachineType.Sorter;
+const BELL = MachineType.Bell;
 const HOUSE = MachineType.Hothouse;
 
-/** A sorter with its crates full of something. */
+/** A bell with its crates full of something, passed straight through. */
 function fullOf(item: ItemType, heap: number) {
-  const fed = feed(wake(newMachine()), item, heap, SORTER);
-  if (!fed) throw new Error("a woken sorter refused a heap");
-  return advance(fed, MINUTES_PER_ROUND * 100, SORTER);
+  const fed = feed(wake(newMachine()), item, heap, BELL);
+  if (!fed) throw new Error("a woken bell refused a heap");
+  return advance(fed, MINUTES_PER_ROUND * 100, BELL);
 }
 
 describe("stringing a wire", () => {

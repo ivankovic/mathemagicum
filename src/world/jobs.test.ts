@@ -46,7 +46,7 @@ describe("the list of jobs", () => {
 
 describe("two lines into one funnel", () => {
   const funnel = at("5,5", MachineType.Funnel);
-  const sorter = at("2,5", MachineType.Sorter);
+  const sieve = at("2,5", MachineType.Sieve);
   const hothouse = at("8,5", MachineType.Hothouse);
   const tipped = at("5,8", MachineType.Tally, {
     ...wake(newMachine()),
@@ -59,11 +59,11 @@ describe("two lines into one funnel", () => {
     const progress = JOB_SPECS[Job.Either].progress;
     expect(progress({ machines: [funnel], wires: [] })).toBe(0);
     // One line in, nothing out: one of two.
-    expect(progress({ machines: [funnel, sorter], wires: [{ from: "2,5", to: "5,5" }] })).toBe(1);
+    expect(progress({ machines: [funnel, sieve], wires: [{ from: "2,5", to: "5,5" }] })).toBe(1);
     // Two lines in but nothing tipped yet: still one short, because a funnel
     // that goes nowhere is not a line.
     const twoIn: LineView = {
-      machines: [funnel, sorter, hothouse, waiting],
+      machines: [funnel, sieve, hothouse, waiting],
       wires: [
         { from: "2,5", to: "5,5" },
         { from: "8,5", to: "5,5" },
@@ -71,14 +71,14 @@ describe("two lines into one funnel", () => {
       ],
     };
     expect(progress(twoIn)).toBe(LINES_WANTED - 1);
-    expect(progress({ ...twoIn, machines: [funnel, sorter, hothouse, tipped] })).toBe(LINES_WANTED);
+    expect(progress({ ...twoIn, machines: [funnel, sieve, hothouse, tipped] })).toBe(LINES_WANTED);
   });
 
   test("the same machine wired twice is one line", () => {
     const progress = JOB_SPECS[Job.Either].progress;
     expect(
       progress({
-        machines: [funnel, sorter, tipped],
+        machines: [funnel, sieve, tipped],
         wires: [
           { from: "2,5", to: "5,5" },
           { from: "2,5", to: "5,5" },

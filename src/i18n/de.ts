@@ -67,7 +67,6 @@ const FIXTURES: Record<FixtureType, Noun> = {
   [FixtureType.Bench]: noun({ bare: "Bank", gender: "f", plural: "Bänke" }),
   [FixtureType.Scarecrow]: noun({ bare: "Vogelscheuche", gender: "f", plural: "Vogelscheuchen" }),
   [FixtureType.Flowerpot]: noun({ bare: "Blumentopf", gender: "m", plural: "Blumentöpfe" }),
-  [FixtureType.Sorter]: noun({ bare: "Sortierer", gender: "m", plural: "Sortierer" }),
   // *Gewächshaus*, the ordinary word for a glasshouse, which is the one a
   // child would hear at home rather than a compound built for this game.
   [FixtureType.Hothouse]: noun({ bare: "Gewächshaus", gender: "n", plural: "Gewächshäuser" }),
@@ -416,8 +415,6 @@ export const DE: Phrases = {
 
   thingDoes: (fixture: FixtureType) =>
     ({
-      [FixtureType.Sorter]:
-        "Er teilt einen Haufen in drei gleiche Stapel; was nicht aufgeht, bleibt im Trichter.",
       [FixtureType.Hothouse]: "Eine Pflanze kommt hinein, drei Bretter kommen heraus.",
       [FixtureType.Sieve]:
         "Zeig ihm eine Sache. Die lässt es durch, alles andere fällt in den Kasten.",
